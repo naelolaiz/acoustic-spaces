@@ -28,6 +28,11 @@ any recording as loud. A talk shorter than the walk and the turn need (about a m
 longer than some of the corpus's takes) is said again from its start, AGAIN_S after it
 ends, as often as they need.
 
+`--listeners` picks the parts and their order, by the listener each follows: `visitor`
+the walk, `standing` the head turn. `--listeners standing,visitor` turns the head
+first and walks after, `--listeners visitor` walks alone; the talk goes on from one
+part into the next, and the video plays those alone.
+
 The walk is the example's visitor's: it sets off 3 m in front of the guide and faces the
 way it goes, so the guide is behind it down the long arm; at the end it turns into the
 short arm, where the guide is out of sight and the voice reaches it bent round the
@@ -70,13 +75,17 @@ from acoustic_spaces import fetch
 from acoustic_spaces.demos import (
     Demo,
     Option,
+    Source,
     Step,
+    chosen_order,
     common_options,
     input_option,
+    listeners_option,
     pipeline,
     product,
     run_folder,
     sibling,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import envelope, mono, quiet_moment, read, write
 from acoustic_spaces.recordings import ACE, ACE_DOI
@@ -150,7 +159,7 @@ TURN = [
 #: (s), each up to a pause in the talk within PAUSE_S.
 LINGER_S = 4.0
 PAUSE_S = 1.5
-#: The silence before a talk too short for the walk and the turn is said again (s).
+#: The silence before a talk too short for the parts is said again (s).
 AGAIN_S = 2.0
 #: The rooms' tail kept after each part's talk ends, the fade at its end, and the
 #: silence between the parts (s).
@@ -161,6 +170,12 @@ WALK = "walk.json"
 TURNING = "turn.json"
 #: The listener of the example that walks.
 VISITOR = "visitor"
+#: The parts a run can play, in the demo's order, each by its step's name (which names
+#: its folder and its sound) and the listener it follows: the visitor's walk, then the
+#: head turn where the listener standing is.
+PARTS = {"walk": VISITOR, "turn": STANDING}
+#: The file of each part's facts, in its folder.
+FACTS = {"walk": WALK, "turn": TURNING}
 
 
 def speech_path(args) -> Path:
@@ -221,16 +236,43 @@ def talk_name(args) -> str:
     return what.name if what is not None else f"the talk of {args.talker}"
 
 
+def listeners(args) -> list[str]:
+    """The listeners a run can play (``--listeners``), a part of the video each: the
+    visitor walking, and standing, where the visitor turns its head."""
+    return list(PARTS.values())
+
+
+def order_of(args) -> list[str]:
+    """The parts a run plays, by their steps' names, in its order: as ``--listeners``
+    orders their listeners; the walk, then the turn, when it is not given."""
+    heard = chosen_order(args, listeners(args))
+    return [part for name in heard for part, who in PARTS.items() if who == name]
+
+
+def parts_words(args) -> str:
+    """The parts a run plays, in its order, in words: ``the walk and the turn``."""
+    return " and ".join(f"the {part}" for part in order_of(args))
+
+
+def length_of(args, room, part: str) -> float:
+    """How long the visitor walks (``walk``) or turns its head (``turn``), in s, before
+    it listens LINGER_S longer."""
+    if part == "walk":
+        return float(walk_points_of(room).times[-1])
+    return turn_of(args)[-1][0]
+
+
 def needed_s(args, room) -> float:
-    """How long a talk the walk and the turn need (s): each, the visitor's LINGER_S
+    """How long a talk the parts the run plays need (s): each, the visitor's LINGER_S
     after it and the PAUSE_S a cut may wait for a pause in the talk."""
-    walk_s = float(walk_points_of(room).times[-1])
-    return walk_s + turn_of(args)[-1][0] + 2 * (LINGER_S + PAUSE_S) + 1.0
+    order = order_of(args)
+    lengths = sum(length_of(args, room, part) for part in order)
+    return lengths + len(order) * (LINGER_S + PAUSE_S) + 1.0
 
 
 def said(args, room) -> tuple[np.ndarray, int, int]:
     """The talk as the guide says it (:func:`talk`), and how many times: once, or again
-    from its start AGAIN_S after it ends, as often as the walk and the turn need
+    from its start AGAIN_S after it ends, as often as the parts need
     (:func:`needed_s`)."""
     x, rate = talk(args)
     if not len(x):
@@ -247,8 +289,9 @@ def say_again(args, room, spoken: np.ndarray, rate: int, times: int) -> None:
     """Say so when the guide says the talk more than once (:func:`said`)."""
     if times > 1:
         once_s = (len(spoken) / rate - (times - 1) * AGAIN_S) / times
+        take = "take" if len(order_of(args)) > 1 else "takes"
         print(
-            f"{talk_name(args)} is {once_s:.0f} s long, and the walk and the turn take "
+            f"{talk_name(args)} is {once_s:.0f} s long, and {parts_words(args)} {take} "
             f"{needed_s(args, room):.0f} s: the guide says it {times} times, "
             f"{AGAIN_S:g} s apart"
         )
@@ -386,17 +429,38 @@ def pace_of(visitor) -> str:
     return f"at {length / path.duration_s:.1f} m/s on average"
 
 
-def cuts(args, room) -> tuple[float, float]:
-    """Where the talk passes from the walk to the turn and where it ends (s): at a pause
-    near the end of each, after the visitor has listened LINGER_S longer; in the talk
-    as said (:func:`said`), as often as they need it."""
+def segments(args, room) -> dict[str, tuple[float, float]]:
+    """The part of the talk each part of the run plays, by its step's name, in the
+    run's order (s, from and to): the first from the talk's start, each next from where
+    the one before ends, each to a pause near its end, after the visitor has listened
+    LINGER_S longer; in the talk as said (:func:`said`), as often as they need it."""
     x, rate, _ = said(args, room)
     step = 0.1
     env = envelope(x, rate, step)
-    walk_s = float(walk_points_of(room).times[-1])
-    first = quiet_moment(env, step, walk_s + LINGER_S, PAUSE_S)
-    turned = turn_of(args)[-1][0]
-    return first, quiet_moment(env, step, first + turned + LINGER_S, PAUSE_S)
+    out, start = {}, 0.0
+    for part in order_of(args):
+        stop = quiet_moment(env, step, start + length_of(args, room, part) + LINGER_S, PAUSE_S)
+        out[part], start = (start, stop), stop
+    return out
+
+
+def parts_before(args, part: str) -> list[str]:
+    """The parts the run plays before ``part`` (one it plays), by their steps' names."""
+    order = order_of(args)
+    return order[: order.index(part)]
+
+
+def own_before(part: str) -> list[str]:
+    """The parts before ``part`` in the demo's own order: the walk, then the turn."""
+    return list(PARTS)[: list(PARTS).index(part)]
+
+
+def facts_after(args, part: str) -> dict:
+    """What ``part``'s facts keep of the parts before it (``after``), when they are not
+    those of the demo's own order: files from before ``--listeners`` came in that
+    order, and the run of every part writes them as it did then."""
+    after = parts_before(args, part)
+    return {} if after == own_before(part) else {"after": after}
 
 
 def guide_of(room):
@@ -418,22 +482,26 @@ def facts_of(room, responses) -> dict:
 
 
 def walk(args) -> None:
-    """The walk: responses every 25 cm along it, the late part traced every 2 m, the
-    talk up to the first cut played through them; ``walk/walk.<label>.wav`` (binaural,
-    or binaural-<name> through ``--hrtf``) and walk.json (the places, the level and STI
-    at each), in the run's folder."""
+    """The walk, when the run plays the visitor (``--listeners``): responses every 25 cm
+    along it, the late part traced every 2 m, the walk's part of the talk
+    (:func:`segments`) played through them; ``walk/walk.<label>.wav`` (binaural, or
+    binaural-<name> through ``--hrtf``) and walk.json (the places, the level and STI at
+    each, the part of the talk), in the run's folder."""
     from acoustic_spaces.spatial import Binaural
     from acoustic_spaces.walkthrough import render_walk, simulate_walk
 
+    if "walk" not in order_of(args):
+        print(f"walk: --listeners leaves out the {VISITOR}: no walk to play")
+        return
     room = room_of(args)
     x, rate, times = said(args, room)
     say_again(args, room, x, rate, times)
-    first, _ = cuts(args, room)
+    start, stop = segments(args, room)["walk"]
     print("simulating the walk (the late part takes the longest)")
     walked = simulate_walk(room, VISITOR, progress=print)
     rate_out = walked.result.settings.sample_rate
     ears = Binaural(hrtf_of(args, rate_out))
-    wet = render_walk(walked, {"guide": (x[: int(first * rate)], rate)}, ears)
+    wet = render_walk(walked, {"guide": (x[int(start * rate) : int(stop * rate)], rate)}, ears)
     out = run_folder(args) / "walk"
     write(out / f"walk.{label_of(args)}.wav", wet, rate_out)
     pipeline.write_json(
@@ -441,14 +509,18 @@ def walk(args) -> None:
         {
             "talker": args.talker,
             "plays": played_by(args),
-            "talk_s": [0.0, first],
+            "talk_s": [start, stop],
+            **facts_after(args, "walk"),
             "times": walked.points.times.tolist(),
             "positions": walked.points.positions.tolist(),
             "yaws": yaws_of(walked, room).tolist(),
             **facts_of(room, [walked.result["guide", name] for name in walked.names]),
         },
     )
-    print(f"wrote {out}: {walked.duration_s:.1f} s of walking, the talk to {first:.1f} s")
+    print(
+        f"wrote {out}: {walked.duration_s:.1f} s of walking, the talk from {start:.1f} s "
+        f"to {stop:.1f} s"
+    )
 
 
 def yaws_of(walked, room) -> np.ndarray:
@@ -487,19 +559,23 @@ def turning(times, yaws, facing: float, length_s: float, every_s: float = 0.5):
 
 
 def turn(args) -> None:
-    """The turn: the visitor where the scene's listener standing is, simulated there
-    once, the talk from the first cut through its response in Ambisonics, turned against
-    the head as ``--turn`` scripts it and decoded to the ears (the engine's head
-    tracker); ``turn/turn.<label>.wav`` and turn.json."""
+    """The turn, when the run plays standing (``--listeners``): the visitor where the
+    scene's listener standing is, simulated there once, the turn's part of the talk
+    (:func:`segments`) through its response in Ambisonics, turned against the head as
+    ``--turn`` scripts it and decoded to the ears (the engine's head tracker);
+    ``turn/turn.<label>.wav`` and turn.json."""
     from acoustic_spaces import Room, simulate
     from acoustic_spaces.headtracking import HeadTrackedBinaural
     from acoustic_spaces.render import resample
     from acoustic_spaces.spatial import Ambisonics
 
+    if "turn" not in order_of(args):
+        print(f"turn: --listeners leaves out {STANDING}: no turn to play")
+        return
     room = room_of(args)
     x, rate, times = said(args, room)
     say_again(args, room, x, rate, times)
-    first, second = cuts(args, room)
+    start, stop = segments(args, room)["turn"]
     standing = [lis for lis in room.scene.listeners if lis.name == STANDING]
     if not standing:
         raise SystemExit(f"error: {args.scene} has no listener {STANDING!r}; run: scene")
@@ -513,7 +589,7 @@ def turn(args) -> None:
     tracker = HeadTrackedBinaural(field, rate_out, hrtf=hrtf_of(args, rate_out))
     keys = turn_of(args)
     times, yaws = [t for t, _ in keys], [yaw for _, yaw in keys]
-    dry = resample(x[int(first * rate) : int(second * rate)], rate, rate_out)
+    dry = resample(x[int(start * rate) : int(stop * rate)], rate, rate_out)
     facing = standing[0].orientation.yaw
     print(f"turning the head through {len(keys)} keys")
     length_s = (len(dry) + tracker.taps - 1) / rate_out  # the talk and the room's tail
@@ -525,7 +601,8 @@ def turn(args) -> None:
         {
             "talker": args.talker,
             "plays": played_by(args),
-            "talk_s": [first, second],
+            "talk_s": [start, stop],
+            **facts_after(args, "turn"),
             "facing": facing,
             "keys": [list(key) for key in keys],
             "times": times,
@@ -534,7 +611,7 @@ def turn(args) -> None:
             **facts_of(room, [response] * len(keys)),
         },
     )
-    print(f"wrote {out}: the talk to {second:.1f} s")
+    print(f"wrote {out}: the talk from {start:.1f} s to {stop:.1f} s")
 
 
 # --------------------------------------------------------------------------- the video
@@ -550,43 +627,45 @@ def part_audio(path: Path, talk_s: float) -> tuple[np.ndarray, int]:
 
 
 def video(args) -> None:
-    """The run's audio (``<run>.wav``: the walk, a breath of silence, the turn: one gain,
-    the loudest peak at -1 dBFS), and its video (``<run>.mp4``): the gallery from above,
-    the visitor walking and turning, and what they hear, with a scrolling spectrogram
-    (ffmpeg); stills of its moments."""
+    """The run's audio (``<run>.wav``: its parts in its order, the walk and the turn by
+    default, a breath of silence between them: one gain, the loudest peak at -1 dBFS),
+    and its video (``<run>.mp4``): the gallery from above, the visitor walking or
+    turning, and what they hear, with a scrolling spectrogram (ffmpeg); stills of its
+    moments."""
     from acoustic_spaces.demos.pictures import save, settings_lines
 
     pictures = sibling(__file__, "walk_pictures")
     label = label_of(args)
-    parts = {}
-    for name, info in (("walk", WALK), ("turn", TURNING)):
-        folder = part_folder(args, name, info) or run_folder(args) / name
+    order = order_of(args)
+    parts, pieces, rate = [], [], None
+    for name in order:
+        folder = part_folder(args, name) or run_folder(args) / name
         path = folder / f"{name}.{label}.wav"
         if not path.exists():
             raise SystemExit(f"error: no {path}; run first: {DEMO.command(name, args)}")
-        facts = pipeline.read_json(folder / info)
+        facts = pipeline.read_json(folder / FACTS[name])
         start, stop = facts["talk_s"]
-        parts[name] = (*part_audio(path, stop - start), facts)
-    (walk_x, rate, walked), (turn_x, _, turned) = parts["walk"], parts["turn"]
-    walk_x, turn_x = (np.atleast_2d(x.T).T for x in (walk_x, turn_x))
-    gap = np.zeros((int(GAP_S * rate), walk_x.shape[1]))
-    audio = np.concatenate([walk_x, gap, turn_x])
+        x, rate = part_audio(path, stop - start)
+        x = np.atleast_2d(x.T).T
+        if pieces:
+            pieces.append(np.zeros((int(GAP_S * rate), pieces[0].shape[1])))
+        at = sum(len(piece) for piece in pieces) / rate
+        pieces.append(x)
+        parts.append((name, facts, at, at + len(x) / rate))
+    audio = np.concatenate(pieces)
     audio *= 10.0 ** (-1.0 / 20.0) / float(np.abs(audio).max())
     sound = product(args, ".wav")
     write(sound, audio, rate)
     print(f"wrote {sound} ({len(audio) / rate:.1f} s)")
-    room = room_of(args)
+    pace = pace_of(visitor_of(room_of(args).scene)) if "walk" in order else ""
     scene_data = yaml.safe_load(args.scene.read_text(encoding="utf-8"))
     drawing = pictures.Pictures(
         scene_data,
-        walked,
-        turned,
-        walk_s=len(walk_x) / rate,
-        turn_at=(len(walk_x) + len(gap)) / rate,
+        parts,
         voice=(args.voice, VOICES[args.voice]),
         credit=credit_of(args),
         hrtf=args.hrtf,
-        pace=pace_of(visitor_of(room.scene)),
+        pace=pace,
         tool=settings_lines(DEMO, args, scene_data),
     )
     save(drawing.thumbnail(), product(args, "_thumbnail.png"))
@@ -620,28 +699,42 @@ def speech_done(args) -> bool:
     return guide_input(args) is not None or speech_path(args).exists()
 
 
-def part_done(args, name: str, info: str) -> bool:
+def part_done(args, name: str) -> bool:
     """Whether the walk's or the turn's sound the run plays is there
-    (:func:`part_folder`)."""
-    return part_folder(args, name, info) is not None
+    (:func:`part_folder`), or the run does not play that part (``--listeners``)."""
+    return name not in order_of(args) or part_folder(args, name) is not None
 
 
-def part_folder(args, name: str, info: str) -> Path | None:
+def part_folder(args, name: str) -> Path | None:
     """The folder of the walk's or the turn's sound the run plays, or None when it is
-    not there: the run's own, or that of the run with the same settings up to that step
-    (:meth:`~acoustic_spaces.demos.Demo.upstream`: the walk of a run with another
-    ``--turn`` is the same), when it is made for the ears this run asks for
+    not there: the run's own, or that of a run whose sound of it is the same, the part
+    of the talk too: the run of the demo's own order of the parts and the run of this
+    part alone (``--listeners``), and the run with the same settings up to that step of
+    each (:meth:`~acoustic_spaces.demos.Demo.upstream`: the walk of a run with another
+    ``--turn`` is the same). It is taken when it is made for the ears this run asks for
     (``--hrtf``), from what the guide says now (files written before they kept "plays"
-    said the talk of their "talker") and from that run's scene as it is now."""
-    for run in (args, DEMO.upstream(args, name)):
-        folder = run_folder(run) / name
-        path = folder / info
-        if not path.exists() or not (folder / f"{name}.{label_of(run)}.wav").exists():
-            continue  # not made yet, or only through another head
-        if run.scene.exists() and path.stat().st_mtime < run.scene.stat().st_mtime:
-            continue  # the scene changed since: the walk edited, say
-        facts = pipeline.read_json(path)
-        if facts.get("plays", f"ACE {facts.get('talker')}") == played_by(run):
+    said the talk of their "talker"), from that run's scene as it is now, after the
+    same parts (:func:`facts_after`) and, after the turn, the same ``--turn``."""
+    after, seen = parts_before(args, name), set()
+    alone = DEMO.sibling(args, listeners=PARTS[name])
+    for each in (args, DEMO.sibling(args, listeners=None), alone):
+        for run in (each, DEMO.upstream(each, name)):
+            folder = run_folder(run) / name
+            if folder in seen:
+                continue
+            seen.add(folder)
+            path = folder / FACTS[name]
+            if not path.exists() or not (folder / f"{name}.{label_of(run)}.wav").exists():
+                continue  # not made yet, or only through another head
+            if run.scene.exists() and path.stat().st_mtime < run.scene.stat().st_mtime:
+                continue  # the scene changed since: the walk edited, say
+            facts = pipeline.read_json(path)
+            if facts.get("plays", f"ACE {facts.get('talker')}") != played_by(run):
+                continue  # the guide said something else
+            if facts.get("after", own_before(name)) != after or (
+                "turn" in after and turn_of(run) != turn_of(args)
+            ):
+                continue  # another part of the talk
             return folder
     return None
 
@@ -653,9 +746,12 @@ def scene_done(args) -> bool:
 
 
 def moving(args) -> list[str]:
-    """Who the demo plays moving: the visitor, when the scene gives it a walk that is on."""
+    """Who the demo plays moving: the visitor, when the run plays its walk
+    (``--listeners``) and the scene gives it a walk that is on."""
     from acoustic_spaces.scene import Scene
 
+    if "walk" not in order_of(args):
+        return []
     try:
         visitor = visitor_of(Scene.from_yaml(args.source))
     except (Exception, SystemExit):
@@ -663,8 +759,14 @@ def moving(args) -> list[str]:
     return [VISITOR] if visitor.walk is not None and visitor.walk.enabled else []
 
 
+def sources(args) -> list[Source]:
+    """The sources a run can play (``--sources``): the guide, the gallery's only one."""
+    return [Source("guide")]
+
+
 def problems(demo, args) -> str | None:
-    """The visitor must walk: the example's scene gives it a walk that is on."""
+    """The visitor must walk, when the run plays its walk (``--listeners``): the
+    example's scene gives it a walk that is on."""
     from acoustic_spaces.scene import Scene
 
     source = Path(demo.resolved(args).source)
@@ -674,6 +776,8 @@ def problems(demo, args) -> str | None:
         scene = Scene.from_yaml(source)
     except Exception as exc:  # the scene's own message
         return f"{source.name}: {exc}"
+    if "walk" not in order_of(args):
+        return None
     visitor = next((lis for lis in scene.listeners if lis.name == VISITOR), None)
     if visitor is None:
         return f"{source.name} has no listener {VISITOR!r} to walk"
@@ -714,13 +818,13 @@ DEMO = Demo(
             "walk",
             walk,
             "simulate the walk and play the talk along it",
-            lambda args: part_done(args, "walk", WALK),
+            lambda args: part_done(args, "walk"),
         ),
         Step(
             "turn",
             turn,
             "simulate where the visitor stands and turn its head",
-            lambda args: part_done(args, "turn", TURNING),
+            lambda args: part_done(args, "turn"),
         ),
         Step("video", video, "the run's video, its audio and the stills, named after the run"),
     ],
@@ -771,20 +875,32 @@ DEMO = Demo(
             None,
             steps=("turn",),
         ),
+        listeners_option(
+            ("walk", "turn", "video"),
+            help="the parts to play, by the listener each follows, comma separated, in "
+            f"their order: {VISITOR} (the walk), {STANDING} (the head turn); the talk "
+            "goes on from one part into the next, each simulating its own listener "
+            f"(default: {VISITOR},{STANDING}, the walk then the turn)",
+        ),
         *[o for o in common_options() if o.name not in ("again", "format")],
         dataclasses.replace(
             input_option(("walk", "turn", "video")),
             help="a WAV file the guide says instead of the ACE talk, as guide=WAV: mixed "
-            "down to mono, said again from its start when shorter than the walk and the "
-            "turn; the captions' "
-            "level and STI are the scene's voice (--voice), as the video's one gain plays "
-            "any recording as loud",
+            "down to mono, said again from its start when shorter than the parts need; "
+            "the captions' level and STI are the scene's voice (--voice), as the video's "
+            "one gain plays any recording as loud",
+        ),
+        *sources_options(
+            help="the source that plays: guide, the gallery's only one (default: guide)",
+            steps=("walk", "turn", "video"),
         ),
     ],
     scene_from="scene",
     problems=problems,
     plays=plays,
     moving=moving,
+    listeners=listeners,
+    sources=sources,
 )
 
 

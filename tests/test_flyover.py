@@ -387,3 +387,63 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     assert not demo.step("mix").done(demo.resolved(singer))
     with pytest.raises(SystemExit, match="the concert has no mix at singer; run: python stad"):
         demo.main(["mix", "--step", "8", "--listeners", "singer"])
+
+
+def test_the_crossing_flies_over_the_concerts_sources_picked(tmp_path: Path) -> None:
+    """The crossing plays the stadium demo's run of the concert's sources ``--sources``
+    picks, every one by default (the runs named as before), and the helicopter always:
+    its ``--sources`` names the concert's sources alone, the stadium run it crosses is
+    that pick's (and its listeners'), and a pick of the helicopter is refused."""
+    from acoustic_spaces.demos import load, run_folder, sibling
+
+    folder = _stadium(tmp_path)
+    demo = load(folder / "helicopter_demo.py").at(folder)
+    crossing = sibling(folder / "helicopter_demo.py", "helicopter_demo")
+
+    def given(**values) -> argparse.Namespace:
+        return argparse.Namespace(**vars(demo.defaults()) | values)
+
+    args = demo.resolved(given())
+    concert = [s.name for s in Scene.from_yaml(folder / "scene.yaml").sources]
+    concert.remove("helicopter")
+    assert [s.name for s in demo.sources(args)] == concert
+    assert args.playing == tuple(concert) and run_folder(args).name == "crossing_binaural"
+    band = crossing.band_args(args)
+    assert band.sources is None and run_folder(band).name == "stadium_spicy_funk_cake_binaural"
+    pa = demo.resolved(given(sources="PA", listeners="singer,mix_position"))
+    assert run_folder(pa).name == "crossing_PA_singer+mix_position_binaural"
+    band = crossing.band_args(pa)
+    assert band.sources == "PA" and band.playing == pa.playing
+    assert run_folder(band).name == "stadium_spicy_funk_cake_PA_singer+mix_position_binaural"
+    assert demo.check(given(sources="helicopter")) == (
+        "--sources helicopter: left out of the concert's simulation, so it plays nothing "
+        "here; helicopter_demo.py flies it over the concert"
+    )
+    option = demo.option("sources")
+    assert option.steps == ("mix", "video") and "the helicopter always plays" in option.help
+    # The helicopter's walk is the same whatever of the concert plays: a pick's run
+    # plays the walk of the run of every source.
+    picked = demo.resolved(given(sources="PA", sources_play="in-turn"))
+    assert run_folder(demo.upstream(demo.resolved(given(sources="PA")), "walk")).name == (
+        "crossing_binaural"
+    )
+    assert all(
+        run_folder(demo.upstream(demo.resolved(part), "walk")).name == "crossing_binaural"
+        for part in demo.parts(picked)
+    )
+
+
+def test_the_crossing_takes_a_file_for_the_helicopter(tmp_path: Path) -> None:
+    """``--input helicopter=WAV`` plays a file of yours in place of the helicopter's
+    rotors, whatever of the concert plays."""
+    from acoustic_spaces.demos import load
+
+    folder = _stadium(tmp_path)
+    demo = load(folder / "helicopter_demo.py").at(folder)
+    wav = tmp_path / "rotors.wav"
+    audio.write(wav, np.zeros(1600), 16_000)
+    for picked in (None, "PA"):
+        args = argparse.Namespace(
+            **vars(demo.defaults()) | {"inputs": {"helicopter": wav}, "sources": picked}
+        )
+        assert demo.check(args) is None

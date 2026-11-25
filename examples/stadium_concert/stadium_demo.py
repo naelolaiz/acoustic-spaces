@@ -60,15 +60,22 @@ that time and the level there against the loudest listener's. On stage it is 6 t
 dB(A) louder than in the audience, too much to hear both in one video, so each stop is
 turned up to the loudness of the loudest one (K-weighted, as loudness meters weigh it)
 and its caption says by how much; the mixes of a run keep one gain for all.
-`--listeners mix_position,east_stand` mixes those listeners alone, and the video tours
-them alone, each stop of the tour there with its phrases and the last to the end.
+`--listeners east_stand,mix_position` mixes those listeners alone, and the video tours
+them in that order, each stop with its phrases and the last to the end of the song.
+`--sources PA` mixes the sound system alone (or `Monitors`, `Band`, a group such as
+`PA/Delays` or a source by its name, comma separated), each at the level the scene
+gives it against all the others, from the same simulation and feeds;
+`--sources-play in-turn` plays the sound system, the monitors and the band one after
+another, each alone, in one video.
 """
 
 from __future__ import annotations
 
+import functools
 import math
 import sys
 import urllib.parse
+from collections.abc import Collection, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -78,18 +85,24 @@ from acoustic_spaces.demos import (
     SIMULATE,
     Demo,
     Option,
+    Source,
     Step,
     common_options,
+    given_names,
     input_option,
+    listener_names,
     listeners_in,
     listeners_option,
     music,
     name_part,
     picked,
     pipeline,
+    playing,
     product,
     run_folder,
     sibling,
+    source_matches,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import (
     channels_rms,
@@ -288,8 +301,34 @@ TITLES = {
     "drummer": ("On stage: the drummer", "beside the drum fill"),
     "guitarist": ("On stage: the guitarist", "in the side fills' sound"),
 }
+#: What the stills call the concert's groups of sources (the scene's ``group``), and
+#: shorter, for the thumbnail.
+GROUP_WORDS = {
+    "PA": "sound system",
+    "PA/Mains": "main arrays",
+    "PA/Subwoofers": "subwoofers",
+    "PA/Fills": "fills",
+    "PA/Delays": "delays",
+    "Monitors": "stage monitors",
+    "Band": "band",
+}
+SHORT_WORDS = {"Monitors": "monitors"}
 CROSSFADE_S = 1.0
 FADE_OUT_S = 4.0
+#: What ``--sources`` and ``--listeners`` say of the stadium demo.
+SOURCES_HELP = (
+    "only these sources, by name or by the scene's group, comma separated: PA (its groups "
+    "PA/Mains, PA/Subwoofers, PA/Fills and PA/Delays), Monitors, Band (default: every "
+    "source of the concert; the helicopter is helicopter_demo.py's); the simulation and "
+    "the feeds keep every source, so another pick needs neither again, and each source "
+    "plays as loud against the others as the scene has it"
+)
+LISTENERS_HELP = (
+    "only these listeners, in this order, comma separated (default: every one, the tour "
+    "in the demo's order): the demo mixes those alone and its video tours them in this "
+    "order, each for its phrases and the last to the end of the song; the simulation "
+    "keeps every listener, so another choice needs no new one"
+)
 
 
 # --------------------------------------------------------------------------- the music
@@ -422,6 +461,103 @@ def in_use(sources: list[dict]) -> list[dict]:
     return [s for s in sources if s.get("enabled", True) is not False]
 
 
+def concert_file(args) -> tuple[Path, bool] | None:
+    """The scene the concert's sources are read from, and whether its band is to be
+    taken in: the scene with the band (``--scene``), or before ``band`` writes it,
+    ``--from``; None without either."""
+    if args.scene.exists():
+        return args.scene, False
+    if args.source.exists():
+        return args.source, True
+    return None
+
+
+def every_source(args) -> list[dict]:
+    """Every source of the concert's scene (:func:`concert_file`), the band in use, those
+    left out of its simulations too (the helicopter); none without a scene."""
+    found = concert_file(args)
+    if found is None:
+        return []
+    path, band = found
+    sources = yaml.safe_load(path.read_text(encoding="utf-8"))["sources"]
+    return with_band(sources, path) if band else sources
+
+
+def sources(args) -> list[Source]:
+    """The sources a run can play (``--sources``): those the concert's simulation takes
+    (:func:`in_use`), each with its group in the scene (``PA/Mains``, ``Monitors``,
+    ``Band``), all on. The simulation and the feeds keep every one, so a pick needs
+    neither again, and each plays at the level the scene gives it against the loudest
+    of them all."""
+    found = concert_file(args)
+    if found is None:
+        return []
+    path, band = found
+    stat = path.stat()
+    named = _sources_in(str(path.resolve()), band, stat.st_mtime_ns, stat.st_size)
+    return [Source(name, group) for name, group in named]
+
+
+@functools.lru_cache(maxsize=8)
+def _sources_in(path: str, band: bool, _mtime_ns: int, _size: int) -> tuple:
+    sources = yaml.safe_load(Path(path).read_text(encoding="utf-8"))["sources"]
+    if band:
+        sources = with_band(sources, Path(path))
+    return tuple((s["name"], s.get("group")) for s in in_use(sources))
+
+
+def silent(what: str, stems: Collection[str]) -> bool:
+    """Whether a feed of the kind ``what`` (:func:`role`) plays nothing of a song with
+    ``stems``: a monitor mix or a player none of whose stems it has (a song of your own
+    given without them)."""
+    return (what in BAND_MIX or what in MONITOR_MIXES) and not stems_of(what, set(stems))
+
+
+def sources_problem(args) -> str | None:
+    """What is wrong with the sources ``--sources`` picks (``args`` resolved): one left
+    out of the concert's simulations (the helicopter, which helicopter_demo.py flies
+    over it), or a pick of none but silent feeds (the monitors and the band of a song
+    of your own given without its stems)."""
+    names = given_names(getattr(args, "sources", None))
+    if not names:
+        return None
+    try:
+        every = every_source(args)
+    except SystemExit as exc:  # a scene with no band
+        return str(exc).removeprefix("error: ")
+    used = in_use(every)
+    known = [Source(s["name"], s.get("group")) for s in used]
+    left_out = [Source(s["name"], s.get("group")) for s in every if s not in used]
+    for name in names:
+        if any(source_matches(source, name) for source in known):
+            continue
+        hit = [source.name for source in left_out if source_matches(source, name)]
+        if hit:
+            fly = "; helicopter_demo.py flies it over the concert" if "helicopter" in hit else ""
+            return (
+                f"--sources {name}: left out of the concert's simulation, so it plays "
+                f"nothing here{fly}"
+            )
+    chosen = getattr(args, "playing", None)
+    if not chosen:
+        return None
+    song = song_of(args)
+    if all(silent(role(s), song["stems"]) for s in used if s["name"] in chosen):
+        return (
+            f"--sources {','.join(names)}: every source it picks is silent, as "
+            f"{song['name']} has no stem for them: give the stems (--stem), or pick the "
+            "sound system (PA) too"
+        )
+    return None
+
+
+def problems(demo: Demo, args) -> str | None:
+    """A song of your own given as it should be (:func:`music.own_song_problems`), and
+    sources to play that the concert has and that play something
+    (:func:`sources_problem`)."""
+    return music.own_song_problems(demo, args) or sources_problem(demo.resolved(args))
+
+
 def simulations(args) -> list[pipeline.Simulation]:
     """The one simulation the demo mixes from: the scene with the band, the mixes' output,
     into that output's folder in ``--results``
@@ -472,20 +608,17 @@ ROLES = {
 
 
 def plays(args) -> dict[str, str]:
-    """What each source plays unless ``--input`` gives it a file (:func:`role`): the
-    sources of the scene with the band, or, before ``band`` writes it, of ``--from`` and
-    the band."""
-    if args.scene.exists():
-        sources = in_use(scene_of(args)["sources"])
-    elif args.source.exists():
-        data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
-        sources = in_use(with_band(data["sources"], args.source))
-    else:
-        return {}
+    """What each source that plays (``--sources``) plays unless ``--input`` gives it a
+    file (:func:`role`): the sources of the scene with the band, or, before ``band``
+    writes it, of ``--from`` and the band."""
+    used = in_use(every_source(args))
+    chosen = set(playing(args, [source["name"] for source in used]))
     song = song_of(args)
     stems = set(song["stems"])
     out = {}
-    for source in sources:
+    for source in used:
+        if source["name"] not in chosen:
+            continue
         what = role(source)
         if what in BAND_MIX:
             have = stems_of(what, stems)
@@ -494,7 +627,7 @@ def plays(args) -> dict[str, str]:
                 if have
                 else f"nothing: {song['name']} has no {', '.join(BAND_MIX[what])} stem"
             )
-        elif what in MONITOR_MIXES and not stems_of(what, stems):
+        elif silent(what, stems):
             out[source["name"]] = f"nothing: {song['name']} has no stem for {ROLES[what]}"
         else:
             out[source["name"]] = f"{song['name']}, {ROLES[what]}"
@@ -638,9 +771,11 @@ def feeds_table(args) -> dict:
 
 
 def render(args) -> None:
-    """Every listener's mix (``--format``, binaural by default), with one gain for all:
-    the loudest peak at -1 dBFS. The feeds carry each source's level_db already, so
-    auralize is not to apply it (``--equal-power``)."""
+    """Every listener's mix (``--format``, binaural by default) of the sources that play
+    (``--sources``: the others left out of the mixes, their feeds and their weights),
+    with one gain for all: the loudest peak at -1 dBFS. The feeds carry each source's
+    level_db against the loudest source's already, so auralize is not to apply it
+    (``--equal-power``) and some sources keep the balance they have with them all."""
     table = feeds_table(args)
     listeners = picked(args, sorted({e["listener"] for e in responses_of(args)}))
     feeds = {name: feeds_folder(args) / f"{name}.wav" for name in table["sources"]}
@@ -652,20 +787,34 @@ def render(args) -> None:
     )
 
 
+def listeners_tour(names: Sequence[str], song: dict) -> list[tuple[str, float]]:
+    """The tour at the listeners ``names`` (``--listeners``) in their order: each for as
+    many phrases as the song's tour gives it, else the default tour (:data:`TOUR`), else
+    one, a stop the song's tour leaves out (0) included as it is named; the last runs to
+    the end of the song."""
+    default = {name: n for name, n in reversed(TOUR) if n > 0}  # each one's first stop
+    own = song.get("tour", {})
+    return [(name, own[name] if own.get(name, 0) > 0 else default.get(name, 1.0)) for name in names]
+
+
 def tour_of(args, rendered) -> list[tuple[str, float, float]]:
     """(listener, start, end) in the master's time, leaving out the listeners of the
-    default tour that have no mix (a scene without the stage's players, say). The stops
-    end on the song's phrase boundaries, half a crossfade before a downbeat, so that each
+    tour that have no mix (a scene without the stage's players, say). The stops end on
+    the song's phrase boundaries, half a crossfade before a downbeat, so that each
     crossfade ends on one; the first stop also takes what comes before the first. The
-    stops at the listeners ``--listeners`` leaves out are left out too, and stops at one
-    listener in a row are joined."""
+    tour is ``--tour``'s, at the listeners ``--listeners`` names among them; else with
+    ``--listeners``, those listeners in its order (:func:`listeners_tour`); else the
+    default tour, as the song changes it. Stops at one listener in a row are joined."""
     table = feeds_table(args)
     song = table["song"]
+    named = listener_names(args.listeners)
     if args.tour:
         steps = [
             (part.split(":")[0], float(part.split(":")[1]) if ":" in part else 1.0)
             for part in args.tour.split(",")
         ]
+    elif named is not None:
+        steps = listeners_tour(named, song)
     else:
         steps = [(name, song.get("tour", {}).get(name, n)) for name, n in TOUR]
         steps = [(name, n) for name, n in steps if n > 0 or name == TOUR[-1][0]]
@@ -691,6 +840,81 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
     """The gain (dB) each listener of the tour plays at: up to the loudness of the
     loudest one (K-weighted, see :func:`pipeline.gains_of`)."""
     return pipeline.gains_of(seats, [listener for listener, _, _ in tour])
+
+
+def sounding_of(args, table: dict) -> list[str]:
+    """The sources heard in a run (``args`` resolved), in the feeds' order (``table``,
+    feeds.json): those that play (``--sources``) whose feed is not silence."""
+    fed = table["sources"]
+    return [name for name in playing(args, list(fed)) if not fed[name].get("silent")]
+
+
+def in_words(parts: Sequence[str]) -> str:
+    """``parts`` as a list in words: ``a, b and c``."""
+    return " and ".join(part for part in [", ".join(parts[:-1]), *parts[-1:]] if part)
+
+
+def concert_parts(sources: Sequence[dict], sounding: Collection[str], short: bool = False) -> list:
+    """What of the concert plays, in words, in the scene's order: a group of
+    :data:`GROUP_WORDS` whose sources (of ``sources``) all play (``sounding``) by its
+    name, ``sound system``; else its groups' that all do, then its other sources that
+    do, by their names (``main arrays``, ``drum kit``). ``short``: as the thumbnail
+    names them (:data:`SHORT_WORDS`)."""
+    words = GROUP_WORDS | (SHORT_WORDS if short else {})
+
+    def parts(prefix: str, members: list[dict]) -> list[str]:
+        heard = [s for s in members if s["name"] in sounding]
+        if not heard:
+            return []
+        if prefix in words and len(heard) == len(members):
+            return [words[prefix]]
+        out: list[str] = []
+        below: dict[str, list[dict]] = {}
+        for source in members:
+            group = source.get("group") or ""
+            rest = group[len(prefix) :].lstrip("/") if prefix else group
+            if rest:
+                inner = f"{prefix}/{rest.split('/')[0]}" if prefix else rest.split("/")[0]
+                below.setdefault(inner, []).append(source)
+            elif source["name"] in sounding:
+                below.setdefault("", []).append(source)
+        for inner, group in below.items():
+            if inner:
+                out += parts(inner, group)
+            else:
+                out += [source["name"].replace("_", " ") for source in group]
+        return out
+
+    return parts("", list(sources))
+
+
+def heard_as(args) -> str:
+    """How the mixes are heard, in words: binaurally, or in the format they take
+    (``in ambix3``; the tour decodes it to the two ears)."""
+    label = pipeline.output_label(args)
+    return "heard binaurally" if label.startswith("binaural") else f"heard in {label}"
+
+
+def heading_of(args, sources: Sequence[dict], sounding: Collection[str], toured: int) -> tuple:
+    """The stills' title and the line under it: what of the concert plays
+    (:func:`concert_parts`), how it is heard and where, at its listeners or at the
+    ``toured`` that ``--listeners`` names."""
+    where = "its listeners"
+    if listener_names(getattr(args, "listeners", None)) is not None:
+        where = f"{'one' if toured == 1 else toured} of its listeners"
+    return (
+        "A concert in a stadium, simulated",
+        f"The stadium example's {in_words(concert_parts(sources, sounding))}, "
+        f"{heard_as(args)} at {where}",
+    )
+
+
+def titles_of(sounding: Collection[str]) -> dict[str, tuple[str, str]]:
+    """The stops' names and where each is (:data:`TITLES`), the guitarist between the
+    side fills rather than in their sound when they do not play."""
+    if any(name.startswith("side_fill") for name in sounding):
+        return TITLES
+    return TITLES | {"guitarist": ("On stage: the guitarist", "between the side fills")}
 
 
 def video(
@@ -728,23 +952,27 @@ def video(
     write(sound, audio, seats["rate"])
     print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
     results = simulations(args)[0].results
+    scene, table = scene_of(args), feeds_table(args)
+    sounding = sounding_of(args, table)
+    used = in_use(scene["sources"])
+    toured = len({name for name, _, _ in tour})
     drawing = pictures.Pictures(
-        scene_of(args),
+        scene,
         args.scene.parent,
         pictures.levels_at(results),
         seats["seats"],
         tour,
-        TITLES,
+        titles_of(sounding),
         gains,
-        credit=pipeline.credited(
-            feeds_table(args)["song"]["credit"], seats, list(feeds_table(args)["sources"])
-        )
-        + also,
+        credit=pipeline.credited(table["song"]["credit"], seats, sounding) + also,
         hrtf=args.hrtf,
         tool=settings_lines(
-            demo, run_args, scene_of(args), pipeline.read_json(results / pipeline.PARAMETERS)
+            demo, run_args, scene, pipeline.read_json(results / pipeline.PARAMETERS)
         ),
-        heading=heading or pictures.HEADING,
+        heading=heading or heading_of(args, used, sounding, toured),
+        playing=sounding,
+        plays=", ".join(concert_parts(used, sounding, short=True)),
+        binaural=heard_as(args) == "heard binaurally",
     )
     save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     pipeline.video(
@@ -816,20 +1044,22 @@ DEMO = Demo(
         ),
         *common_options(),
         input_option(),
-        listeners_option(),
+        listeners_option(help=LISTENERS_HELP),
         Option(
             "tour",
             "listener:phrases,... (8 bars each, 0.5 is 4; the last runs to the end)",
             None,
             steps=("video",),
         ),
+        *sources_options(help=SOURCES_HELP, steps=("render", "video")),
     ],
     simulations=simulations,
     scene_from="band",
     plays=plays,
-    problems=music.own_song_problems,
+    problems=problems,
     # The band step keeps the example's listeners as they are.
     listeners=lambda args: listeners_in(args.source),
+    sources=sources,
 )
 
 

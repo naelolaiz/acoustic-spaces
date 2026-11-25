@@ -42,6 +42,7 @@ from acoustic_spaces.demos.pictures import (
     tool_line,
     tour_column,
 )
+from acoustic_spaces.demos.scene_pictures import counted
 from acoustic_spaces.scene import Material
 
 GROUND = (20, 30, 30)
@@ -179,8 +180,13 @@ class Pictures:
         hrtf=None,
         tool=None,
         heading=HEADING,
+        playing=None,
+        plays="sound system, monitors, band",
+        binaural=True,
     ):
         self.heading = heading  # the title and the line under it
+        self.plays = plays  # what of the concert plays, for the thumbnail
+        self.binaural = binaural  # whether the mixes are binaural, as the badges say
         self.scene, self.levels, self.seats, self.tour, self.titles = (
             scene,
             levels,
@@ -194,6 +200,10 @@ class Pictures:
         # Not those left out of the simulations (the helicopter until it flies, the
         # singer's microphone).
         self.sources = [s for s in scene["sources"] if s.get("enabled", True) is not False]
+        # The sources heard in the run (all of them unless given): the others are drawn
+        # muted, without a cone or a line to the listener.
+        names = [s["name"] for s in self.sources]
+        self.playing = set(names if playing is None else playing) & set(names)
         self.listeners = {
             item["name"]: item
             for item in scene["listeners"]
@@ -301,19 +311,29 @@ class Pictures:
         img.alpha_composite(layer)
 
     def rays(self, img, plan: Plan, listener: str) -> None:
-        """A line from each loudspeaker to the listener, brighter the louder it is there."""
-        here = {s: v for (s, lis), v in self.levels.items() if lis == listener}
+        """A line from each loudspeaker that plays to the listener, brighter the louder it
+        is there."""
+        here = self.heard_at(listener)
         to = plan(*self.listeners[listener]["position"][:2])
         rays(img, plan, here, self.sources, to, lambda name: COLOURS[kind(name)])
 
+    def heard_at(self, listener: str) -> dict[str, float]:
+        """The level (dB(A)) of each source that plays at ``listener``, as simulated."""
+        return {
+            s: v for (s, lis), v in self.levels.items() if lis == listener and s in self.playing
+        }
+
     def loudspeakers(self, img, plan: Plan, r: float) -> None:
         """Each loudspeaker as a dot with a see-through cone the way it aims (the band's
-        aimed sources too); the subwoofers as squares, the band as diamonds."""
+        aimed sources too); the subwoofers as squares, the band as diamonds; those that do
+        not play muted, without a cone."""
         layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
         cones = ImageDraw.Draw(layer)
         for source in self.sources:
             what = kind(source["name"])
             if what == "sub" or (what == "band" and "orientation" not in source):
+                continue
+            if source["name"] not in self.playing:
                 continue
             x, y = plan(*source["position"][:2])
             yaw = math.radians(source.get("orientation", {}).get("yaw", 0.0))
@@ -324,7 +344,7 @@ class Pictures:
         for source in self.sources:
             x, y = plan(*source["position"][:2])
             what = kind(source["name"])
-            colour = COLOURS[what]
+            colour = COLOURS[what] if source["name"] in self.playing else MUTED
             if what == "band":
                 d = r * 1.1
                 draw.polygon(
@@ -410,15 +430,28 @@ class Pictures:
         )
 
     def legend(self, draw, x: int, y: int) -> None:
+        """What the plan's marks are: the kinds of source that play, those that do not,
+        the listeners and the lines to the listener."""
         f = font("Medium", 18)
-        for colour, label, step in ((SOURCE, "sound system", 205), (MONITOR, "monitors", 160)):
+        kinds = {kind(name) for name in self.playing}
+        for colour, label, step, shown in (
+            (SOURCE, "sound system", 205, kinds & {"pa", "sub"}),
+            (MONITOR, "monitors", 160, "monitor" in kinds),
+        ):
+            if not shown:
+                continue
             cone(draw, (x + 5, y + 7), (1.0, 0.0), 22, 28.0, tuple(c // 2 for c in colour))
             draw.ellipse([x, y + 2, x + 10, y + 12], fill=colour)
             text(draw, (x + 32, y - 2), label, f, MUTED)
             x += step
-        draw.polygon([(x + 7, y), (x + 14, y + 7), (x + 7, y + 14), (x, y + 7)], fill=PLAYER)
-        text(draw, (x + 24, y - 2), "band", f, MUTED)
-        x += 95
+        if "band" in kinds:
+            draw.polygon([(x + 7, y), (x + 14, y + 7), (x + 7, y + 14), (x, y + 7)], fill=PLAYER)
+            text(draw, (x + 24, y - 2), "band", f, MUTED)
+            x += 95
+        if len(self.playing) < len(self.sources):
+            draw.ellipse([x, y + 2, x + 10, y + 12], fill=MUTED)
+            text(draw, (x + 22, y - 2), "not playing", f, MUTED)
+            x += 145
         draw.ellipse([x, y, x + 14, y + 14], fill=LISTENER)
         arrow(draw, (x + 14, y + 7), (1.0, 0.0), 14, 7, LISTENER, 2)
         text(draw, (x + 36, y - 2), "you, facing", f, MUTED)
@@ -480,16 +513,18 @@ class Pictures:
         self.surfaces(draw, 80, 172 + int(plan.size[1]) + 46)
 
         x = 1010
-        badge(draw, x, 172)
+        if self.binaural:
+            badge(draw, x, 172)
         y = place(draw, x, 244, *self.title(listener))
         seat = self.seats.get(listener, {})
-        here = sorted(
-            ((v, s) for (s, lis), v in self.levels.items() if lis == listener), reverse=True
-        )
+        here = sorted(((v, s) for s, v in self.heard_at(listener).items()), reverse=True)
         names = ", ".join(s.replace("_", " ") for _, s in here[:3])
         relative = seat.get("relative_db", 0.0)
+        lag = f"{seat.get('lag_s', 0.0) * 1e3:.0f} ms"
         lines = [
-            f"The sound system reaches you {seat.get('lag_s', 0.0) * 1e3:.0f} ms after the desk",
+            f"The sound system reaches you {lag} after the desk"
+            if any(kind(name) in ("pa", "sub") for name in self.playing)
+            else f"The sound reaches you {lag} after it leaves the stage",
             "The loudest place of the tour"
             if relative > -0.05
             else f"{relative:.1f} dB(A) against the loudest place of the tour",
@@ -512,18 +547,23 @@ class Pictures:
         img = canvas(THUMBNAIL)
         scale = min(700 / (self.box[2] - self.box[0]), 580 / (self.box[3] - self.box[1]))
         plan = Plan(540, 70, scale, self.box)
-        self.stadium(img, plan, "mix_position" if "mix_position" in self.listeners else None)
+        # At the tour's first stop (the mix position, by default).
+        first = self.tour[0][0] if self.tour else "mix_position"
+        self.stadium(img, plan, first if first in self.listeners else None)
         draw = ImageDraw.Draw(img)
         text(draw, (50, 70), "Stadium", font("Black", 92, display=True))
         text(draw, (50, 180), "concert,", font("Bold", 56, display=True), MUTED)
         text(draw, (50, 244), "simulated", font("Bold", 56, display=True), MUTED)
-        thumbnail_badge(draw, 50, 340)
+        if self.binaural:
+            thumbnail_badge(draw, 50, 340)
+        # The places of the run's mixes, or every one of the scene's before there are any.
+        places = {seat.get("listener", key) for key, seat in self.seats.items()}
         text(
             draw,
             (50, 430),
-            f"{len(self.listeners)} places, one song",
+            f"{counted(len(places or self.listeners), 'place')}, one song",
             font("SemiBold", 32),
             LISTENER,
         )
-        text(draw, (50, 655), "sound system, monitors, band", font("Medium", 26), MUTED)
+        text(draw, (50, 655), self.plays, font("Medium", 26), MUTED)
         return img

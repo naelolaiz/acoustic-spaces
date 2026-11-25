@@ -343,8 +343,8 @@ class Pictures:
         return lines
 
     def title(self, listener: str) -> tuple[str, str]:
-        """The listener's name, and where it comes among the scene's listeners in use."""
-        names = [n for n, lis in self.listeners.items() if lis.get("enabled", True) is not False]
+        """The listener's name, and where its stop comes in the tour."""
+        names = [stop.key for stop in self.stops]
         k = names.index(listener) + 1 if listener in names else 0
         return listener.replace("_", " "), f"Listener {k} of {len(names)}"
 

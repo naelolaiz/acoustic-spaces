@@ -50,11 +50,24 @@ ORGAN = SOURCE
 WOMEN = (186, 236, 120)
 MEN = (110, 190, 90)
 
-CREDIT = (
-    "Singers: VocalSet (Wilkins, Seetharaman, Wahl, Pardo 2018), CC BY 4.0 · "
-    "Organ: VCSL pipe organ (Ivy Audio, Versilian Studios), CC0 · "
-    '"Dona nobis pacem", traditional; organ harmonisation for this demo'
-)
+
+def credit_of(choir: bool = True, organ: bool = True) -> str:
+    """The credit line of the recordings heard: the singers' when ``choir``, the organ's
+    and its harmonisation's when ``organ``, and the tune's."""
+    parts = []
+    if choir:
+        parts.append("Singers: VocalSet (Wilkins, Seetharaman, Wahl, Pardo 2018), CC BY 4.0")
+    if organ:
+        parts.append("Organ: VCSL pipe organ (Ivy Audio, Versilian Studios), CC0")
+    tune = '"Dona nobis pacem", traditional'
+    parts.append(f"{tune}; organ harmonisation for this demo" if organ else tune)
+    return " · ".join(parts)
+
+
+#: The credit line when the whole choir and the organ play.
+CREDIT = credit_of()
+#: The number of places a tour visits, in words, as the heading gives it.
+COUNTS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
 CHOIR_BOX = (28.9, -3.6, 33.0, 3.6)  # x0, y0, x1, y1 of the close-up
 #: The rays of the church: fainter and thinner than the stadium's, as there are 23.
 RAY_ALPHA = (30, 150)
@@ -120,17 +133,29 @@ class Pictures:
         tour,
         titles,
         what_plays,
-        playing,
+        sounding,
         voices,
         credit: str = CREDIT,
         hrtf: str | Path | None = None,
         tool=None,
+        heard=None,
+        who: dict[str, str] | None = None,
+        fmt: str = "binaural",
     ):
+        """``what_plays`` and ``sounding`` give, from a time (s), what plays then in
+        words and the sources that do; ``heard``, the sources the run plays (every one
+        of the scene's by default) and ``who``, those of the choir and of the organ in
+        words (``{"choir": "the choir", "organ": "the organ"}`` by default); ``fmt``, the
+        output the mixes take."""
         self.scene, self.seats, self.tour, self.titles = scene, seats, tour, titles
-        self.what_plays, self.playing, self.voices = what_plays, playing, voices
-        self.credit = credit
-        self.now = ("choir", "organ")  # what plays in the picture being drawn
-        self.sources = scene["sources"]
+        self.what_plays, self.sounding, self.voices = what_plays, sounding, voices
+        self.credit, self.fmt = credit, fmt
+        self.who = who if who is not None else {"choir": "the choir", "organ": "the organ"}
+        kept = None if heard is None else set(heard)
+        #: The sources the run plays, as the scene has them: the others are not drawn.
+        self.sources = [s for s in scene["sources"] if kept is None or s["name"] in kept]
+        self.heard = {s["name"] for s in self.sources}
+        self.now = set(self.heard)  # what plays in the picture being drawn
         self.listeners = {item["name"]: item for item in scene["listeners"]}
         self.plan_xy = [tuple(p) for p in scene["geometry"]["floor_plan"]]
         self.height = float(scene["geometry"]["height"])
@@ -190,11 +215,7 @@ class Pictures:
     def rays(self, img, view: View, listener: str) -> None:
         """A line from each source that plays to the listener, brighter the louder it is
         there."""
-        here = {
-            s: v
-            for (s, lis), v in self.levels.items()
-            if lis == listener and ("organ" if s.startswith("organ") else "choir") in self.now
-        }
+        here = {s: v for (s, lis), v in self.levels.items() if lis == listener and s in self.now}
         to = view(*self.listeners[listener]["position"])
         rays(img, view, here, self.sources, to, colour_of, alpha=RAY_ALPHA, width=RAY_WIDTH)
 
@@ -289,9 +310,12 @@ class Pictures:
         text(draw, (x0 - bar / 2, y0 + 22), "10 m", font("Medium", 15), MUTED, "ma")
 
     def close_up(self, img, left: int, top: int, width: int, listener: str) -> None:
-        """The choir from above, as the nave sees it: women in front, men behind."""
+        """The choir from above, as the nave sees it: women in front, men behind (those
+        that sing in the run)."""
         draw = ImageDraw.Draw(img)
-        text(draw, (left, top), "The choir, seen from the nave", font("SemiBold", 22), MUTED)
+        what = self.who.get("choir", "the altar")
+        title = f"{what[0].upper()}{what[1:]}, seen from the nave"
+        text(draw, (left, top), title, font("SemiBold", 22), MUTED)
         scale = width / (CHOIR_BOX[3] - CHOIR_BOX[1])
         view = View("nave", left, top + 44, scale, CHOIR_BOX)
         w, h = view.size
@@ -352,14 +376,19 @@ class Pictures:
         )
 
     def legend(self, draw, x: int, y: int) -> None:
+        """What the colours and marks stand for: the kinds of source that play, the
+        listeners and the rays."""
         f = font("Medium", 17)
+        kinds = [k for k in COLOURS if any(kind(s["name"]) == k for s in self.sources)]
         for colour, label, step in ((WOMEN, "women", 112), (MEN, "men", 98)):
-            draw.ellipse([x, y + 1, x + 12, y + 13], fill=colour)
-            text(draw, (x + 20, y - 2), label, f, MUTED)
-            x += step
-        draw.rectangle([x + 2, y, x + 12, y + 14], fill=ORGAN)
-        text(draw, (x + 20, y - 2), "organ pipes", f, MUTED)
-        x += 135
+            if label in kinds:
+                draw.ellipse([x, y + 1, x + 12, y + 13], fill=colour)
+                text(draw, (x + 20, y - 2), label, f, MUTED)
+                x += step
+        if "organ" in kinds:
+            draw.rectangle([x + 2, y, x + 12, y + 14], fill=ORGAN)
+            text(draw, (x + 20, y - 2), "organ pipes", f, MUTED)
+            x += 135
         draw.ellipse([x, y, x + 14, y + 14], fill=LISTENER)
         arrow(draw, (x + 14, y + 7), (1.0, 0.0), 14, 7, LISTENER, 2)
         text(draw, (x + 36, y - 2), "you, facing", f, MUTED)
@@ -368,12 +397,13 @@ class Pictures:
         arrow(draw, (x + 14, y + 7), (1.0, 0.0), 10, 6, MUTED, 2)
         text(draw, (x + 32, y - 2), "other places", f, MUTED)
         x += 150
-        draw.line([(x, y + 7), (x + 26, y + 7)], fill=WOMEN, width=3)
+        ray = WOMEN if "women" in kinds or not kinds else COLOURS[kinds[0]]
+        draw.line([(x, y + 7), (x + 26, y + 7)], fill=ray, width=3)
         text(draw, (x + 34, y - 2), "playing; brighter: louder here", f, MUTED)
 
     def where(self, listener: str) -> str:
-        """Where the choir and the organ are from the listener: distance, and in front,
-        behind or to a side as the listener faces."""
+        """Where the choir and the organ are from the listener (those of them that play):
+        distance, and in front, behind or to a side as the listener faces."""
         item = self.listeners[listener]
         px, py, pz = item["position"]
         yaw = math.radians(item.get("orientation", {}).get("yaw", 0.0))
@@ -393,18 +423,37 @@ class Pictures:
             up = f", {dz:.0f} m up" if dz > 3.0 else ""
             return f"{distance:.0f} m {side}{up}" if distance >= 1.5 else "all round you"
 
-        choir = [s["position"] for s in self.sources if s["name"].startswith("singer_")]
-        organ = [s["position"] for s in self.sources if s["name"].startswith("organ")]
-        return f"The choir: {describe(choir)} · the organ: {describe(organ)}"
+        parts = []
+        for part in self.who:
+            points = [s["position"] for s in self.sources if self.part(s["name"]) == part]
+            parts.append(f"{self.short(part)}: {describe(points)}")
+        line = " · ".join(parts)
+        return line[0].upper() + line[1:]
+
+    def short(self, part: str) -> str:
+        """The part (``choir``, ``organ``) in a word or two, for a line with others: as
+        :attr:`who` gives it when the whole part or one singer plays, else ``the singers``
+        or ``the pipes`` (the first line of the facts says which play)."""
+        who = self.who[part]
+        if who in ("the choir", "the organ") or who.startswith("singer "):
+            return who
+        return "the singers" if part == "choir" else "the pipes"
+
+    @staticmethod
+    def part(name: str) -> str:
+        """The part of the music the source ``name`` plays: ``organ`` or ``choir``."""
+        return "organ" if kind(name) == "organ" else "choir"
 
     def lines(self, listener: str, start: float) -> list[tuple[str, tuple]]:
         """The facts of a stop: what plays, where the sources are, the clarity and the
         level there, and the way the listener faces."""
         relative = self.seats.get(listener, {}).get("relative_db", 0.0)
 
-        def c80(prefix: str) -> float:
+        def c80(part: str) -> float:
             values = [
-                v for (s, lis), v in self.c80.items() if lis == listener and s.startswith(prefix)
+                v
+                for (s, lis), v in self.c80.items()
+                if lis == listener and s in self.heard and self.part(s) == part
             ]
             return sum(values) / len(values)
 
@@ -414,8 +463,11 @@ class Pictures:
             (self.what_plays(start), LISTENER),
             (self.where(listener), TEXT),
             (
-                f"Clarity C80 here (0.5-2 kHz): choir {c80('singer_'):+.1f} dB, "
-                f"organ {c80('organ'):+.1f} dB",
+                "Clarity C80 here (0.5-2 kHz): "
+                + ", ".join(
+                    f"{self.short(part).removeprefix('the ')} {c80(part):+.1f} dB"
+                    for part in self.who
+                ),
                 TEXT,
             ),
             (
@@ -429,15 +481,10 @@ class Pictures:
 
     def still(self, k: int) -> Image.Image:
         listener, start, _stop = self.tour[k]
-        self.now = self.playing(start)
+        self.now = set(self.sounding(start))
         img = canvas(SIZE)
         draw = ImageDraw.Draw(img)
-        heading(
-            draw,
-            "A choir and an organ in a church, simulated",
-            "The church example of acoustic_spaces (a stone nave, 9500 m³), "
-            "heard binaurally at six places",
-        )
+        heading(draw, self.title_line(), self.subtitle())
         scale = 19.5
         x0, y0, x1, y1 = self.box
         plan = View("plan", MARGIN, 200, scale, self.box)
@@ -461,6 +508,29 @@ class Pictures:
         footer(draw, self.credit, self.tool, size=18)
         return img
 
+    def title_line(self) -> str:
+        """The stills' title: the choir and the organ, those of them that play, and
+        whether all of each does (the facts of each still say what of it)."""
+        parts = []
+        if "choir" in self.who:
+            whole = self.who["choir"] == "the choir"
+            single = self.who["choir"].startswith("singer ")
+            parts.append(
+                "a choir" if whole else "a singer of a choir" if single else "singers of a choir"
+            )
+        if "organ" in self.who:
+            parts.append("an organ" if self.who["organ"] == "the organ" else "part of an organ")
+        line = " and ".join(parts)
+        return f"{line[0].upper()}{line[1:]} in a church, simulated"
+
+    def subtitle(self) -> str:
+        """The line under the title: the places the tour visits, as many as it does, and
+        the output the mixes take (the tour decodes another than binaural to the ears)."""
+        count = len({name for name, _start, _stop in self.tour})
+        places = f"{COUNTS.get(count, count)} place{'s' if count != 1 else ''}"
+        how = "heard binaurally" if self.fmt == "binaural" else f"mixed as {self.fmt}, heard"
+        return f"The church example of acoustic_spaces (a stone nave, 9500 m³), {how} at {places}"
+
     def thumbnail(self) -> Image.Image:
         img = canvas(THUMBNAIL)
         x0, y0, x1, y1 = self.box
@@ -469,21 +539,32 @@ class Pictures:
         section = View(
             "section", 600, 90 + (y1 - y0) * scale + 30, scale, (x0, 0.0, x1, self.height)
         )
-        listener = "nave-middle" if "nave-middle" in self.listeners else None
-        self.now = ("choir", "organ")
+        toured = [name for name, _start, _stop in self.tour]
+        listener = "nave-middle" if "nave-middle" in toured else (toured or [None])[0]
+        self.now = set(self.heard)
         self.church(img, plan, listener, 5)
         self.church(img, section, listener, 5)
         draw = ImageDraw.Draw(img)
-        text(draw, (50, 70), "Choir", font("Black", 92, display=True))
-        text(draw, (50, 170), "& organ", font("Black", 92, display=True))
-        text(draw, (50, 282), "in a church, simulated", font("Bold", 44, display=True), MUTED)
+        lines = [
+            label for part, label in (("choir", "Choir"), ("organ", "Organ")) if part in self.who
+        ]
+        if len(lines) == 2:
+            lines = ["Choir", "& organ"]
+        for k, line in enumerate(lines):
+            text(draw, (50, 70 + 100 * k), line, font("Black", 92, display=True))
+        y = 70 + 100 * len(lines) + 12
+        text(draw, (50, y), "in a church, simulated", font("Bold", 44, display=True), MUTED)
         thumbnail_badge(draw, 50, 360)
-        singers = sum(1 for s in self.sources if s["name"].startswith("singer_"))
-        text(draw, (50, 452), f"{singers} real singers, one organ", font("SemiBold", 32), LISTENER)
+        singers = sum(1 for s in self.sources if kind(s["name"]) != "organ")
+        voices = [f"{singers} real singer{'s' if singers != 1 else ''}"] if singers else []
+        if "organ" in self.who:
+            voices.append("one organ" if self.who["organ"] == "the organ" else "part of an organ")
+        text(draw, (50, 452), ", ".join(voices), font("SemiBold", 32), LISTENER)
+        count = len(set(toured))
         text(
             draw,
             (50, 496),
-            f"{len(self.listeners)} places in the nave and the choir",
+            f"{count} place{'s' if count != 1 else ''} in the nave and the choir",
             font("SemiBold", 32),
             LISTENER,
         )
@@ -497,4 +578,4 @@ class Pictures:
         return img
 
 
-__all__ = ["CREDIT", "Pictures", "View", "save"]
+__all__ = ["CREDIT", "Pictures", "View", "credit_of", "save"]

@@ -29,8 +29,8 @@ or `python flight_demo.py all --vehicle arrival`, every step, leaving out what i
 already; the editor's Simulation > Run demo… runs it too. Each run goes to a folder in
 ./demo named after its settings (demo/flight_departure_binaural/: the scene, the sound,
 the passes, the stills), with the video, its audio and its thumbnail beside it, so that
-the arrival writes over nothing of the departure's; `python flight_demo.py join` plays
-the finished runs one after another in one video. Use headphones; `--hrtf
+the arrival writes over nothing of the departure's; `--vehicle departure,arrival` plays
+the two one after the other in one video. Use headphones; `--hrtf
 me.sofa` plays it through your own or measured HRTFs instead of a spherical head.
 
 Each listener hears the jet's direct sound and its reflection off the ground, each

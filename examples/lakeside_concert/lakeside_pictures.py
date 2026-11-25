@@ -201,6 +201,7 @@ class Pictures:
         folder: Path | None = None,
         hrtf: str | Path | None = None,
         tool=None,
+        playing: str | None = None,
     ):
         self.scenes, self.seats, self.tour, self.titles, self.gains = (
             scenes,
@@ -210,6 +211,9 @@ class Pictures:
             gains,
         )
         self.credit = credit
+        #: What plays when not the whole sound system, for the facts of each still (the
+        #: scenes give only the loudspeakers that play, the sources drawn); None: it all.
+        self.playing = playing
         #: Where the scene's files (the arrays' directivity) are.
         self.folder = Path(folder) if folder is not None else Path(".")
         scene = scenes["evening"]
@@ -226,8 +230,8 @@ class Pictures:
         self.sources = scene["sources"]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
         self.weather = {w: Weather(s) for w, s in scenes.items()}
-        # The rays and the distances start from the flown loudspeakers (the arrays), or
-        # from every source when none is flown.
+        # The rays and the distances start from the flown loudspeakers that play (the
+        # arrays), or from every one that plays when none is flown (the subwoofers).
         flown = [s for s in self.sources if s["position"][2] > 2.0] or self.sources
         stage = np.mean([s["position"] for s in flown], axis=0)
         self.stage = stage
@@ -341,9 +345,9 @@ class Pictures:
         return source["position"][2] < 2.0
 
     def stage_marks(self, img, plan: Plan) -> None:
-        """The stage and its loudspeakers: a dot each, the arrays with a wide cone the
-        way they aim (their boxes cover 90 degrees across), the subwoofers a narrower one
-        (cardioids), as long as the plan's scale allows."""
+        """The stage and the loudspeakers that play: a dot each, the arrays with a wide
+        cone the way they aim (their boxes cover 90 degrees across), the subwoofers a
+        narrower one (cardioids), as long as the plan's scale allows."""
         draw = ImageDraw.Draw(img, "RGBA")
         draw.rectangle([*plan(-10, 12), *plan(0, -12)], fill=STAGE, outline=SOURCE)
         cones = ImageDraw.Draw(img, "RGBA")
@@ -498,8 +502,8 @@ class Pictures:
             font("Medium", 14),
             FAINT,
         )
-        # The stage and its loudspeakers: each array hung from the roof, its boxes'
-        # aims from the top one's to the bottom one's as a wedge to the lawn; the
+        # The stage and the loudspeakers that play: each array hung from the roof, its
+        # boxes' aims from the top one's to the bottom one's as a wedge to the lawn; the
         # subwoofers on the ground. Then the listeners.
         draw.rectangle([*cut(-10, 1.5), *cut(0, 0.0)], fill=STAGE)
         for source in self.sources:
@@ -517,10 +521,14 @@ class Pictures:
             draw.line(mast, fill=SOURCE + (120,), width=1)
             draw.line([cut(x, z + half), cut(x, z - half)], fill=SOURCE, width=5)
             draw.line([cut(x, z + half), cut(x, z - half)], fill=BG, width=1)
-        px, py = cut(self.stage[0], self.stage[2])
-        text(draw, (px - 12, py), "line arrays", font("Medium", 14), SOURCE, "rm")
-        px, py = cut(self.stage[0], 0.0)
-        text(draw, (px - 12, py - 8), "subwoofers", font("Medium", 14), SOURCE, "rm")
+        arrays = sum(not self.is_sub(source) for source in self.sources)
+        if arrays:
+            px, py = cut(self.stage[0], self.stage[2])
+            words = "line arrays" if arrays > 1 else "line array"
+            text(draw, (px - 12, py), words, font("Medium", 14), SOURCE, "rm")
+        if any(self.is_sub(source) for source in self.sources):
+            px, py = cut(self.stage[0], 0.0)
+            text(draw, (px - 12, py - 8), "subwoofers", font("Medium", 14), SOURCE, "rm")
         for name, item in self.listeners.items():
             x, _y, z = item["position"]
             px, py = cut(x, z)
@@ -563,6 +571,8 @@ class Pictures:
             lines.append("Turned up as much as in the evening's weather, to compare")
         elif gain > 0.5:
             lines.append(f"Turned up {gain:.0f} dB here so you can hear it")
+        if self.playing:
+            lines.append(self.playing)
         lines.append("Facing the stage · L and R mark your ears")
         return lines
 

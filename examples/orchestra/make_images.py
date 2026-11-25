@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import argparse
 import math
+from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
 from PIL import Image, ImageDraw
 
+from acoustic_spaces.demos import sibling
 from acoustic_spaces.demos.pictures import (
     BG,
     LINE,
@@ -45,6 +47,8 @@ from acoustic_spaces.demos.pictures import (
 )
 
 HERE = Path(__file__).resolve().parent
+#: The demo, whose sections (``SECTIONS``) the pictures colour.
+orchestra = sibling(__file__, "orchestra_demo")
 HALL_X, HALL_Y, STAGE_X = 32.0, 20.0, 8.0  # the concert hall: 32 x 20 m, stage 8 m deep
 CONDUCTOR = (7.3, 10.0)
 MOVEMENTS = {
@@ -57,20 +61,20 @@ STAGE = (58, 44, 34)
 STAGE_EDGE = (120, 90, 64)
 SEATS = (30, 38, 58)
 
-SECTIONS = [  # source name prefix, label, colour
-    ("vl1_", "Violins I", (246, 195, 91)),
-    ("vl2_", "Violins II", (245, 152, 87)),
-    ("vla_", "Violas", (232, 109, 96)),
-    ("vc_", "Cellos", (214, 94, 156)),
-    ("db_", "Double basses", (157, 110, 222)),
-    ("fl", "Flutes", (99, 196, 238)),
-    ("ob", "Oboes", (88, 168, 238)),
-    ("cl", "Clarinets", (96, 140, 240)),
-    ("bn", "Bassoons", (126, 120, 236)),
-    ("hn", "Horns", (110, 214, 146)),
-    ("tp", "Trumpets", (196, 226, 104)),
-    ("timpani", "Timpani", (236, 236, 236)),
-]
+COLOURS = {  # each section's, by its label (the last part of its group)
+    "Violins I": (246, 195, 91),
+    "Violins II": (245, 152, 87),
+    "Violas": (232, 109, 96),
+    "Cellos": (214, 94, 156),
+    "Double basses": (157, 110, 222),
+    "Flutes": (99, 196, 238),
+    "Oboes": (88, 168, 238),
+    "Clarinets": (96, 140, 240),
+    "Bassoons": (126, 120, 236),
+    "Horns": (110, 214, 146),
+    "Trumpets": (196, 226, 104),
+    "Timpani": (236, 236, 236),
+}
 LABELS = {  # where the seating picture writes each section's name, scene x and y
     "Violins I": (7.05, 6.3),
     "Violins II": (7.05, 13.25),
@@ -91,15 +95,15 @@ CREDIT = (
 )
 
 
+def label_of(group: str) -> str:
+    """How the pictures name a section, by its group: ``Violins I`` for ``Strings/Violins I``."""
+    return group.rsplit("/", 1)[-1]
+
+
 def section(name: str) -> tuple[str, tuple[int, int, int]]:
-    for prefix, label, colour in SECTIONS:
-        if name.startswith(prefix):
-            return label, colour
-    raise ValueError(f"no section for source {name!r}")
-
-
-def colour_of(label: str) -> tuple[int, int, int]:
-    return next(colour for _, name, colour in SECTIONS if name == label)
+    """The label and the colour of the section of the player ``name``."""
+    label = label_of(orchestra.section_of(name)[0])
+    return label, COLOURS[label]
 
 
 def hall_plan(left, top, scale, *, y0=0.0, rotated=False) -> Plan:
@@ -129,33 +133,48 @@ class Pictures:
         hrtf: str | Path | None = None,
         tool=None,
         credit: str = CREDIT,
+        heard: Sequence[str] | None = None,
+        played: str | None = None,
     ):
+        """``heard``: the players that play (``--sources``), lit up and counted, the
+        others drawn as empty chairs; every one when None. ``played``: what plays, in
+        words (``59 anechoic tracks and 2 of yours``); the anechoic tracks of those heard
+        when None."""
         self.lines = facts or []  # lines under the seat on the cover (orchestra_demo.py)
         self.credit = credit
         self.tool = tool or tool_line("orchestra", scene, hrtf=hrtf)
         self.players = [
             (s["name"], s["position"], s.get("orientation", {})) for s in scene["sources"]
         ]
+        every = [name for name, _, _ in self.players]
+        self.heard = set(every if heard is None else heard) & set(every)
+        self.played = played or f"{len(self.heard)} anechoic tracks"
         listeners = {item["name"]: item for item in scene["listeners"]}
         if seat not in listeners:
             raise SystemExit(f"no seat {seat!r}; the scene has {', '.join(listeners)}")
         self.listener = listeners[seat]
         self.seat = "on the conductor's podium" if seat == "conductor" else seat.replace("-", ", ")
         self.movement = MOVEMENTS[movement]
-        self.counts: dict[str, int] = {}
-        for name, _, _ in self.players:
+        self.counts: dict[str, int] = {}  # of the players heard, by section
+        for name in self.heard:
             label = section(name)[0]
             self.counts[label] = self.counts.get(label, 0) + 1
 
     def players_on(self, img, plan, r, halo=True) -> None:
+        """The players where they sit, each facing the conductor, those heard in their
+        section's colour with a halo, the others as empty rings."""
         if halo:
             shapes = []
             for name, (x, y, _), _ in self.players:
-                shapes.append((*plan(x, y), r * 2.6, section(name)[1] + (110,)))
+                if name in self.heard:
+                    shapes.append((*plan(x, y), r * 2.6, section(name)[1] + (110,)))
             glow(img, shapes, r * 1.6)
         draw = ImageDraw.Draw(img)
         for name, (x, y, _), orientation in self.players:
             cx, cy = plan(x, y)
+            if name not in self.heard:
+                draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=MUTED, width=2)
+                continue
             colour = section(name)[1]
             yaw = math.radians(orientation.get("yaw", 0.0))
             vx, vy = plan.vec(math.cos(yaw), math.sin(yaw))
@@ -180,7 +199,10 @@ class Pictures:
         draw.line([plan(STAGE_X, 0), plan(STAGE_X, HALL_Y)], fill=STAGE_EDGE, width=3)
         draw.rectangle(plan.rect(0, 0, HALL_X, HALL_Y), outline=LINE, width=3)
         # The direct sound and the first reflections off the walls, leader to seat.
-        source = next((p for n, p, _ in self.players if n == "vl1_01"), self.players[0][1])[:2]
+        heard = [(n, p) for n, p, _ in self.players if n in self.heard] or [
+            (n, p) for n, p, _ in self.players
+        ]
+        source = next((p for n, p in heard if n == "vl1_01"), heard[0][1])[:2]
         seat = tuple(self.listener["position"][:2])
         layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
         lines = ImageDraw.Draw(layer)
@@ -212,9 +234,15 @@ class Pictures:
         head(img, at, forward, left, r, pointer=False, letters=False)
 
     def legend(self, draw, x, y, size, gap) -> int:
-        for _, label, colour in SECTIONS:
-            draw.ellipse([x, y + 4, x + size - 6, y + size - 2], fill=colour)
-            text(draw, (x + size + 8, y), label, font("Medium", size - 2))
+        for _, group, _ in orchestra.SECTIONS:
+            label = label_of(group)
+            dot = [x, y + 4, x + size - 6, y + size - 2]
+            if self.counts.get(label):
+                draw.ellipse(dot, fill=COLOURS[label])
+                text(draw, (x + size + 8, y), label, font("Medium", size - 2))
+            else:  # a section that does not play
+                draw.ellipse(dot, outline=MUTED, width=2)
+                text(draw, (x + size + 8, y), label, font("Medium", size - 2), MUTED)
             text(
                 draw,
                 (x + 300, y),
@@ -232,7 +260,7 @@ class Pictures:
         heading(
             draw,
             "Beethoven · Symphony No. 8 in F major, op. 93",
-            f"{self.movement}  ·  {len(self.players)} anechoic tracks in a simulated concert hall",
+            f"{self.movement}  ·  {self.played} in a simulated concert hall",
             y=60,
         )
         self.hall(img, hall_plan(MARGIN, 205, 33), 7)
@@ -240,13 +268,10 @@ class Pictures:
         x = 1250
         badge(draw, x, 205, size=26)
         text(draw, (x, 290), f"Seat: {self.seat}", font("SemiBold", 30))
-        text(
-            draw,
-            (x, 330),
-            f"German seating, {len(self.players)} players",
-            font("Regular", 26),
-            MUTED,
-        )
+        seating = f"German seating, {len(self.players)} players"
+        if len(self.heard) < len(self.players):
+            seating = f"German seating, {len(self.heard)} of the {len(self.players)} players play"
+        text(draw, (x, 330), seating, font("Regular", 26), MUTED)
         y = facts(draw, x, 372, self.lines, size=24, step=34)
         self.legend(draw, x, y + 18, 26, 34)
         footer(draw, self.credit, self.tool)
@@ -271,7 +296,8 @@ class Pictures:
         cx, cy = plan(*CONDUCTOR)
         text(draw, (cx, cy + 22), "conductor", font("SemiBold", 21), anchor="ma")
         for label, (x, y) in LABELS.items():
-            text(draw, plan(x, y), label, font("SemiBold", 21), colour_of(label), "mm")
+            colour = COLOURS[label] if self.counts.get(label) else MUTED
+            text(draw, plan(x, y), label, font("SemiBold", 21), colour, "mm")
         x = 1300
         text(draw, (x, 215), "Who plays where", font("SemiBold", 34))
         y = self.legend(draw, x, 275, 27, 38) + 22
@@ -299,7 +325,7 @@ class Pictures:
         text(draw, (50, 225), "concert hall", font("Bold", 52, display=True), MUTED)
         thumbnail_badge(draw, 50, 320)
         text(draw, (50, 410), "use headphones", font("SemiBold", 34), LISTENER)
-        tracks = note or f"{len(self.players)} anechoic tracks · simulated room"
+        tracks = note or f"{self.played} · simulated room"
         text(draw, (50, 655), tracks, font("Medium", 28), MUTED)
         return img
 

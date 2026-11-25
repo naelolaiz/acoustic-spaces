@@ -57,24 +57,28 @@ from __future__ import annotations
 
 import argparse
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from acoustic_spaces.demos import Option, indoors, pipeline, run_folder
+from acoustic_spaces.demos import Source as Playable
 from acoustic_spaces.demos.audio import read, resampled
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import (
     FADE_S,
     Trail,
     Vehicle,
+    and_list,
     car_input,
     car_of,
     faded,
     forced_speed,
     kmh,
     pass_s,
+    picked_parts,
     speed_of,
 )
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
@@ -803,9 +807,15 @@ PARTS: dict[float, tuple[str, str]] = {
     4.0: ("_roof", "its roof's fans and pantograph's foot, 4 m up"),
     5.0: ("_pantograph", "its pantograph's head, 5 m up"),
 }
-#: What ``--horn`` lets a train's horn do: stay off, sound its notes in blasts one after
-#: the other, or sound them together, as a chord, in the same blasts.
-HORN_PLAYS = ("off", "blasts", "chord")
+#: Each height's points in a word, one and several, for the stills' lines.
+POINT_WORDS: dict[str, tuple[str, str]] = {
+    "": ("bogie", "bogies"),
+    "_roof": ("roof", "roof"),
+    "_pantograph": ("pantograph", "pantograph"),
+}
+#: How ``--horn`` has a train's horn sound when it plays (``--sources`` with its horn):
+#: its notes in blasts one after the other, or together, as a chord, in the same blasts.
+HORN_PLAYS = ("blasts", "chord")
 
 
 class TrainVehicle(Vehicle):
@@ -817,12 +827,12 @@ class TrainVehicle(Vehicle):
     behind the front (:class:`~acoustic_spaces.demos.passby.Trail`), each with its own
     sound (:func:`point_sound`) at its own sound power. The train is the option of the
     vehicle's name (one of ``trains``, :data:`TRAINS`), on ``track`` (the option
-    ``--track`` when there are ``tracks`` to choose). With a ``horn``, ``--horn
-    blasts`` sounds it too: the source of its name with ``_horn``, at its front
-    TRAIN_HORN_HEIGHT_M above the rail top along the same walk
-    (:data:`~acoustic_spaces.demos.horn.TRAIN_HORN`, with the measured siren's
-    directivity, facing the way it goes), off by default; ``--horn chord`` sounds its
-    notes together (:data:`~acoustic_spaces.demos.horn.TRAIN_CHORD`)."""
+    ``--track`` when there are ``tracks`` to choose). With a ``horn``, the source of its
+    name with ``_horn``, at its front TRAIN_HORN_HEIGHT_M above the rail top along the
+    same walk (:data:`~acoustic_spaces.demos.horn.TRAIN_HORN`, with the measured siren's
+    directivity, facing the way it goes), off unless ``--sources`` picks it; ``--horn
+    chord`` sounds its notes together (:data:`~acoustic_spaces.demos.horn.TRAIN_CHORD`).
+    It plays every height its train has points at, unless ``--sources`` picks some."""
 
     demo_name = "passby"
     go, goes, going, way = "run", "runs", "passing", "the track"
@@ -900,13 +910,14 @@ class TrainVehicle(Vehicle):
             out.append(
                 Option(
                     "horn",
-                    f"the {self.noun}'s warning horn: off; blasts, its high note "
-                    f"({high:g} Hz) and its low note ({low:g} Hz) in turn, "
-                    f"{kind.blast_s:g} s each, every {kind.every_s:g} s, each "
-                    f"{kind.on_axis_db:g} dB(C) {kind.at_m:g} m ahead (the most EN "
-                    "15153-2 allows); or chord, the two notes together in the same "
-                    f"blasts, {kind.on_axis_db:g} dB(C) together (EN 15153-2 allows it); "
-                    f"from its front {TRAIN_HORN_HEIGHT_M:g} m above the rail top",
+                    f"how the {self.noun}'s warning horn ({self.horn.part}, off unless "
+                    f"--sources picks it) sounds, from its front {TRAIN_HORN_HEIGHT_M:g} m "
+                    f"above the rail top: blasts, its high note ({high:g} Hz) and its low "
+                    f"note ({low:g} Hz) in turn, {kind.blast_s:g} s each, every "
+                    f"{kind.every_s:g} s, each {kind.on_axis_db:g} dB(C) {kind.at_m:g} m "
+                    "ahead (the most EN 15153-2 allows); or chord, the two notes together "
+                    f"in the same blasts, {kind.on_axis_db:g} dB(C) together (EN 15153-2 "
+                    "allows it); it changes nothing while the horn does not play",
                     HORN_PLAYS[0],
                     "choice",
                     HORN_PLAYS,
@@ -950,12 +961,13 @@ class TrainVehicle(Vehicle):
         )
 
     def horn_on(self, args: argparse.Namespace) -> bool:
-        """Whether its horn sounds: ``--horn blasts`` or ``--horn chord``."""
-        return self.horn is not None and getattr(args, "horn", None) in HORN_PLAYS[1:]
+        """Whether its horn sounds: ``--sources`` picks it."""
+        return self.horn is not None and self.horn.part in self.parts(args)
 
     def horn_of(self, args: argparse.Namespace) -> str:
-        """How its horn sounds (one of :data:`HORN_PLAYS`): ``--horn``, or off."""
-        return str(args.horn) if self.horn_on(args) else HORN_PLAYS[0]
+        """How its horn sounds when it plays (one of :data:`HORN_PLAYS`): ``--horn``, or
+        in blasts."""
+        return str(getattr(args, "horn", None) or HORN_PLAYS[0])
 
     def train_of(self, args: argparse.Namespace) -> str:
         """Which train runs: the option of its name, or its first."""
@@ -994,25 +1006,40 @@ class TrainVehicle(Vehicle):
         }
         return tuple(part for part, height in self.heights().items() if height in there)
 
+    def sources(self, args: argparse.Namespace) -> list[Playable]:
+        """Its sources at the heights its train has points at, and its horn, off by
+        default."""
+        own = [Playable(part) for part in self._parts_of((self.train_of(args),))]
+        return own + ([Playable(self.horn.part, on=False)] if self.horn is not None else [])
+
     def parts(self, args: argparse.Namespace) -> tuple[str, ...]:
-        horn = (self.horn.part,) if self.horn is not None and self.horn_on(args) else ()
-        return (*self._parts_of((self.train_of(args),)), *horn)
+        return picked_parts(self, args)
 
     def every_part(self) -> tuple[str, ...]:
         horn = (self.horn.part,) if self.horn is not None else ()
         return (*self._parts_of(self.trains), *horn)
 
+    def idle(self, parts) -> tuple[str, ...]:
+        """Without its horn, ``--horn`` changes nothing; with its horn alone, the track
+        neither (Schall 03's corrections are its other sources')."""
+        horn = self.horn is not None and self.horn.part in parts
+        heights = [part for part in parts if part in self.heights()]
+        return (*(() if horn else ("horn",)), *(() if heights else ("track",)))
+
     def info(self, args: argparse.Namespace, scene, speed_kmh: float) -> dict:
         """What its sound is made of, at ``speed_kmh`` in ``scene``: the train, the
-        track, the speed, the pass's length and rate, each of its sources' points (how
-        far behind the front, of which unit, their sound power per octave band), and
-        the sound power of the whole train; with its horn on, the horn's sound power,
-        averaged over its blasts and pauses."""
+        track, the speed, the pass's length and rate, each of its sources' points at
+        every height (how far behind the front, of which unit, their sound power per
+        octave band: its wheels shake the ground whichever play), the sources that play,
+        and the sound power of those of them at its heights (of its horn, when that
+        alone plays); with its horn on, the horn's sound power, averaged over its blasts
+        and pauses."""
         from acoustic_spaces.parameters import a_weighted
 
         key, track = self.train_of(args), self.track_of(args)
         train = TRAINS[key]
         points = train_points(train, speed_kmh, track)
+        playing = self.parts(args)
         parts = {}
         for part, height in self.heights().items():
             mine = [p for p in points if p.height_m == height]
@@ -1025,15 +1052,20 @@ class TrainVehicle(Vehicle):
                     }
                     for p in mine
                 ]
-        total = train_power_db(points)
+        heights = {self.heights()[part] for part in playing if part in parts}
         rate = int(scene.simulation.sample_rate)
         horn: dict = {}
-        if self.horn is not None:
+        level = None
+        if self.horn is not None and self.horn_on(args):
             horn["horn"] = self.horn_of(args)
-            if self.horn_on(args):
-                level = self.horn.power(horn["horn"], rate)
-                horn["horn_level_db"] = [round(float(v), 1) for v in level]
-                horn["horn_sound_power_a_db"] = round(a_weighted(level), 2)
+            level = self.horn.power(horn["horn"], rate)
+            horn["horn_level_db"] = [round(float(v), 1) for v in level]
+            horn["horn_sound_power_a_db"] = round(a_weighted(level), 2)
+        # The sound power of its points that play; of its horn when that alone plays.
+        sounding = [p for p in points if p.height_m in heights]
+        total = train_power_db(sounding) if sounding else level
+        if total is None:  # the framework refuses a pick of nothing
+            raise SystemExit(f"error: the {self.noun} plays none of its sources here")
         return {
             "train": key,
             "track": track,
@@ -1043,13 +1075,17 @@ class TrainVehicle(Vehicle):
             "length_m": round(train.length_m, 4),
             "units": len(train.units),
             "parts": parts,
+            "playing": list(playing),
             "sound_power_db": round(float(10.0 * np.log10(np.sum(10.0 ** (total / 10.0)))), 2),
             "sound_power_a_db": round(a_weighted(total), 2),
             **horn,
         }
 
     def levels(self, info: dict) -> dict[str, list[float]]:
-        own = {part: points[0]["level_db"] for part, points in info["parts"].items()}
+        playing = info.get("playing", list(info["parts"]))
+        own = {
+            part: points[0]["level_db"] for part, points in info["parts"].items() if part in playing
+        }
         if self.horn is not None and "horn_level_db" in info:
             own[self.horn.part] = info["horn_level_db"]
         return own
@@ -1105,6 +1141,8 @@ class TrainVehicle(Vehicle):
         rate, duration = info["rate"], info["duration_s"]
         said = []
         for i, (part, points) in enumerate(info["parts"].items()):
+            if part not in info["playing"]:
+                continue
             reference = np.asarray(points[0]["level_db"])
             # The file's 32-bit samples, a point a column, filled as each point's sound
             # is made: the railway example's freight train, 50 points at the rail top
@@ -1120,20 +1158,22 @@ class TrainVehicle(Vehicle):
                 )
             write_wav(folder / f"{part}.wav", columns, rate)
             said.append(f"{len(points)} at {self.heights()[part]:g} m")
-        out = (
-            f"{duration:.1f} s of {TRAINS[info['train']].title} at "
-            f"{kmh(info['speed_kmh'])} km/h, its points {', '.join(said)}, "
-            f"{info['sound_power_a_db']:.1f} dB(A) of sound power"
-        )
+        made = []
+        if said:
+            made.append(
+                f"{duration:.1f} s of {TRAINS[info['train']].title} at "
+                f"{kmh(info['speed_kmh'])} km/h, its points {', '.join(said)}, "
+                f"{info['sound_power_a_db']:.1f} dB(A) of sound power"
+            )
         if self.horn is not None and "horn_level_db" in info:
-            plays = info.get("horn", HORN_PLAYS[1])
+            plays = info["horn"]
             write_wav(folder / self.horn.file, self.horn.sound(plays, rate, duration), rate)
             chord = " of its chord" if plays == "chord" else ""
-            out += (
-                f"; its horn's blasts{chord}, {info['horn_sound_power_a_db']:.1f} dB(A) of "
+            made.append(
+                f"its horn's blasts{chord}, {info['horn_sound_power_a_db']:.1f} dB(A) of "
                 "sound power on average"
             )
-        return out
+        return "; ".join(made)
 
     def trail(self, args: argparse.Namespace, part: str, played, rate: int) -> Trail:
         """Its points at the height of ``part`` behind the front one, each its made sound
@@ -1201,41 +1241,62 @@ class TrainVehicle(Vehicle):
         return f"{TRAINS[self.train_of(args)].title} {speed}made to Schall 03's sound power"
 
     def feeds(self, args: argparse.Namespace, speed: str) -> dict[str, str]:
-        out = {}
+        """What each source it plays plays, the first said with the train and its
+        speed."""
+        out: dict[str, str] = {}
         train = TRAINS[self.train_of(args)]
         for part in self.parts(args):
             if self.horn is not None and part == self.horn.part:
                 chord = ", its notes together" if self.horn_of(args) == "chord" else ""
-                out[part] = f"its horn {self.horn.place}, in blasts{chord}"
+                alone = "" if out else f"{train.title} {speed}"
+                horn = "its horn alone" if alone else "its horn"
+                out[part] = f"{alone}{horn} {self.horn.place}, in blasts{chord}"
                 continue
             height = self.heights()[part]
             what = PARTS[height][1]
             # Sources 3 and 4 (Tabelle 5) ring in tank wagons' bodies alone.
             if height == SOURCES[3].height_m and any(unit.tank for unit in train.units):
                 what += ", and its tank wagons' bodies there"
-            out[part] = f"{self.plays(args, speed)}: {what}" if part == self.name else f"{what}"
+            out[part] = f"{self.plays(args, speed)}: {what}" if not out else what
         return out
 
     def played_by(self, args: argparse.Namespace) -> str:
         speed = f"{round(speed_of(args, self), 4):g} km/h"
-        horn = {"off": "", "blasts": " horn", "chord": " horn chord"}[self.horn_of(args)]
-        return f"{self.name} {self.train_of(args)} {speed} {self.track_of(args)}{horn}"
+        horn = f" {self.horn_of(args)}" if self.horn_on(args) else ""
+        parts = "+".join(self.parts(args))
+        return f"{self.name} {self.train_of(args)} {speed} {self.track_of(args)} {parts}{horn}"
+
+    def played_heights(self, train: str, playing: Sequence[str] | None) -> list[str]:
+        """Its sources at the heights the train ``train`` (None: any of its trains) has
+        points at, those of ``playing`` alone when it is given (None: all of them)."""
+        own = self._parts_of((train,) if train else self.trains)
+        return [part for part in own if playing is None or part in playing]
+
+    def point_words(self, parts: Sequence[str], several: bool) -> str:
+        """Its points at the heights of ``parts`` in words: "bogie, roof and pantograph"
+        (``several``: "bogies")."""
+        return and_list([POINT_WORDS[part[len(self.name) :]][several] for part in parts])
 
     def facts(self, args: argparse.Namespace, info: dict) -> dict:
+        """What walk.json says of it, with the stills' line ``about``: the sound power of
+        the sources it plays, said of those heights alone when not every one plays."""
         train = TRAINS[info["train"]]
         lay = (TRAM_TRACKS if train.units[0].kind.tram else TRACKS)[info["track"]].what
-        about = (
-            f"{train.short}, {info['length_m']:.0f} m long, at "
-            f"{kmh(info['speed_kmh'])} km/h on {lay},\n"
-            f"{info['sound_power_a_db']:.1f} dB(A) of sound power (Schall 03)"
-        )
+        every = self.played_heights(info["train"], None)
+        heights = self.played_heights(info["train"], info.get("playing"))
+        speed = kmh(info["speed_kmh"])
+        about = f"{train.short}, {info['length_m']:.0f} m long, at {speed} km/h on {lay},\n"
+        if heights:
+            about += f"{info['sound_power_a_db']:.1f} dB(A) of sound power (Schall 03)"
+            if heights != every:
+                about += f" at its {self.point_words(heights, True)} alone"
         horn = {}
-        if "horn" in info:
-            horn["horn"] = info["horn"]
         if "horn_sound_power_a_db" in info:
+            horn["horn"] = info["horn"]
             horn["horn_sound_power_a_db"] = info["horn_sound_power_a_db"]
-            chord = "'s chord" if info.get("horn") == "chord" else ""
-            about += f", its horn{chord} in blasts {info['horn_sound_power_a_db']:.1f} dB(A)"
+            chord = "'s chord" if info["horn"] == "chord" else ""
+            power = f"in blasts {info['horn_sound_power_a_db']:.1f} dB(A)"
+            about += f", its horn{chord} {power}" if heights else f"its horn{chord} alone {power}"
         return {
             "train": info["train"],
             "track": info["track"],
@@ -1249,20 +1310,33 @@ class TrainVehicle(Vehicle):
         return self.credits(facts, {})
 
     def credits(self, facts: dict, files: dict[str, Path | None]) -> str:
+        """The stills' credit line of the sources it plays (``parts`` of ``facts``,
+        walk.json's; without them, every height of its train and its horn when ``facts``
+        says how it sounds)."""
         given = [f"{part}: {file.name}" for part, file in files.items() if file is not None]
-        horn = ""
+        parts = facts.get("parts")
+        heights = self.played_heights(facts.get("train", ""), parts)
+        horn = self.horn if facts.get("horn") in HORN_PLAYS else None
+        if horn is not None and parts is not None and horn.part not in parts:
+            horn = None
+        said = []
         fade = f"faded in and out over {FADE_S:g} s"
-        if self.horn is not None and facts.get("horn") in HORN_PLAYS[1:]:
+        if horn is not None:
             # Its blasts rise and fall of themselves, unfaded (:meth:`fade_s`).
-            fade += ", not the horn"
-            if files.get(self.horn.part) is None:
-                horn = f"; {self.horn.credit(facts['horn'])}"
+            fade = f"{fade}, not the horn" if heights else ""
+            if files.get(horn.part) is None:
+                said.append(horn.credit(facts["horn"]))
         if given:
-            return f"Playing {'; '.join(given)}{horn}, {fade}"
-        return (
-            f"{self.noun.capitalize()}'s sound made up: noise at each bogie, roof and "
-            "pantograph with the octave spectrum of Schall 03's sources there "
-            f"(16. BImSchV, Anlage 2, 2014) at {kmh(facts['speed_kmh'])} km/h{horn}; {fade}"
+            return f"Playing {'; '.join(given + said)}" + (f", {fade}" if fade else "")
+        if heights:
+            said.insert(
+                0,
+                f"noise at each {self.point_words(heights, False)} with the octave spectrum "
+                "of Schall 03's sources there (16. BImSchV, Anlage 2, 2014) at "
+                f"{kmh(facts['speed_kmh'])} km/h",
+            )
+        return f"{self.noun.capitalize()}'s sound made up: {'; '.join(said)}" + (
+            f"; {fade}" if fade else ""
         )
 
     def texts(self) -> dict[str, str]:

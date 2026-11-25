@@ -33,8 +33,12 @@ or `python helicopter_demo.py all`; the editor's Simulation > Run demo… runs i
 Each run writes in a folder of ./demo (--work) named after its settings
 (demo/crossing_binaural/: the scenes, the helicopter's sound, its passes, the mixes and
 the stills), with the video, its audio and its thumbnail beside it. Use
-headphones. `--listeners mix_position,east_stand` flies it past those listeners alone,
-which the stadium demo's mixes must have, and the video tours them alone.
+headphones. `--listeners east_stand,mix_position` flies it past those listeners alone,
+which the stadium demo's mixes must have, and the video tours them in that order.
+`--sources PA` has it fly over the sound system alone (or `Monitors`, `Band`, a group
+such as `PA/Delays` or a source by its name, comma separated): the crossing plays the
+stadium demo's run of those (`python stadium_demo.py render --sources PA`); the
+helicopter always plays.
 
 Both play at their simulated levels: the loudspeakers' feeds stand for their sound
 power (stadium_demo.py's feeds step), the helicopter's sound is in pascals 1 m from its
@@ -61,8 +65,8 @@ import numpy as np
 import yaml
 
 from acoustic_spaces.demos import (
-    JOIN,
     Option,
+    Source,
     Step,
     listener_names,
     listeners_in,
@@ -71,6 +75,7 @@ from acoustic_spaces.demos import (
     pipeline,
     run_folder,
     sibling,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import level_db, loudness_db, mmss, read, write
 from acoustic_spaces.demos.helicopter import HELICOPTER, Helicopter
@@ -207,8 +212,9 @@ def flight_done(args) -> bool:
 
 def band_args(args, crossing: bool = False):
     """The stadium demo's arguments (resolved) for this run: its work folder, the scene
-    with the band, its results, and the format, the HRTFs and the listeners of this
-    run, which name the stadium's run whose mixes the crossing plays. ``crossing``: the
+    with the band, its results, and the format, the HRTFs, the listeners and the
+    concert's sources (``--sources``) of this run, which name the stadium's run whose
+    mixes the crossing plays. ``crossing``: the
     arguments the stadium demo's video takes for the crossing's own, in this run's
     folder (:func:`~acoustic_spaces.demos.run_folder`), with its feeds' table
     (``feeds_at``), the tour and ``--no-mp4``."""
@@ -216,7 +222,7 @@ def band_args(args, crossing: bool = False):
     band.work = args.work
     band.scene, band.results, band.source = args.band, args.results, args.stadium
     band.format, band.hrtf = args.format, args.hrtf
-    band.listeners = args.listeners
+    band.listeners, band.sources = args.listeners, args.sources
     band = stadium.DEMO.resolved(band)
     if crossing:
         band.run_folder, band.run_plays = run_folder(args), None
@@ -416,12 +422,15 @@ def video(args) -> None:
         f" · Helicopter: {file.name if file else plays}, {crossing['height_m']:g} m up, "
         f"overhead at {mmss(crossing['at_s'])}"
     )
+    band = band_args(args, crossing=True)
+    sounding = stadium.sounding_of(band, pipeline.read_json(feeds))
+    parts = stadium.concert_parts(stadium.in_use(stadium.scene_of(band)["sources"]), sounding)
     heading = (
         "A helicopter over a stadium concert, simulated",
         f"An {facts['helicopter']} {crossing['height_m']:g} m up, over the stadium example's "
-        "sound system, stage monitors and band, heard binaurally",
+        f"{stadium.in_words(parts)}, {stadium.heard_as(args)}",
     )
-    stadium.video(band_args(args, crossing=True), run_by=(DEMO, args), also=also, heading=heading)
+    stadium.video(band, run_by=(DEMO, args), also=also, heading=heading)
 
 
 # --------------------------------------------------------------------------- the demo
@@ -433,9 +442,18 @@ def moving(args) -> list[str]:
     return passby.moving(argparse.Namespace(**vars(args) | {"source": args.stadium}), VEHICLE)
 
 
+def concert_sources(args) -> list[Source]:
+    """The concert's sources the crossing can play (``--sources``): the stadium demo's
+    (:func:`stadium_demo.sources`), of the scene with the band (``--band``) or, before
+    it is written, of the stadium's (``--stadium``) and its band. The helicopter is not
+    among them: it always flies over."""
+    return stadium.sources(argparse.Namespace(scene=args.band, source=args.stadium))
+
+
 def problems(demo, args) -> str | None:
     """The stadium's scene has the helicopter, its flight is over the stadium (above its
-    roof) and ``--at`` is a time; once the flight's scene is there, the helicopter must
+    roof), ``--at`` is a time and the concert's sources ``--sources`` picks play
+    (:func:`stadium_demo.sources_problem`); once the flight's scene is there, the helicopter must
     fly as the flyover demo's does (:func:`acoustic_spaces.demos.passby.problems`)."""
     if args.height is not None:
         height = float(args.height)
@@ -444,19 +462,22 @@ def problems(demo, args) -> str | None:
     if args.at is not None and not (math.isfinite(float(args.at)) and float(args.at) >= 0.0):
         return f"--at is a time into the song (s), not {args.at!r}"
     resolved = demo.resolved(args)
-    stadium = Path(resolved.stadium)
-    if not stadium.exists():
-        return f"no {stadium}"
+    scene = Path(resolved.stadium)
+    if not scene.exists():
+        return f"no {scene}"
     try:
-        flown = flight_of(helicopter_of(yaml.safe_load(stadium.read_text("utf-8"))), args.height)
+        flown = flight_of(helicopter_of(yaml.safe_load(scene.read_text("utf-8"))), args.height)
     except SystemExit as exc:
         return str(exc).removeprefix("error: ")
     lowest = float(places_of(flown)[:, 2].min())
     if lowest <= ROOF_M:
         return (
-            f"the helicopter in {stadium.name} flies {lowest:g} m up, but the stadium's roof "
+            f"the helicopter in {scene.name} flies {lowest:g} m up, but the stadium's roof "
             f"is {ROOF_M:g} m up"
         )
+    concert = stadium.sources_problem(band_args(resolved))
+    if concert:
+        return concert
     if Path(resolved.source).exists():
         return passby.problems(demo, args, VEHICLE)
     for name in ("speed", "step_m"):
@@ -474,6 +495,7 @@ DEMO.problems = problems
 DEMO.moving = moving
 # The flight's scenes keep the stadium's listeners as they are.
 DEMO.listeners = lambda args: listeners_in(args.stadium)
+DEMO.sources = concert_sources
 _FLIGHT = Option(
     "source",
     "the stadium with the helicopter's flight over it, which flight writes",
@@ -489,12 +511,16 @@ _REPLACED = {
     "listeners": dataclasses.replace(
         DEMO.option("listeners"),
         steps=("walk", "mix", "video"),
-        help="only these listeners, comma separated (default: every listener in use): the "
-        "helicopter is simulated along its flight and heard at those alone, over the "
-        "stadium demo's mixes there, and the video's tour leaves the others out",
+        help="only these listeners, in this order, comma separated (default: every "
+        "listener in use, the tour in the stadium demo's order): the helicopter is "
+        "simulated along its flight and heard at those alone, over the stadium demo's "
+        "mixes there, and the video tours them in this order, each for its phrases and "
+        "the last to the end",
     ),
 }
-DEMO.options = [_REPLACED.get(o.name, o) for o in DEMO.options] + [
+# The concert's sources take the place of any the pass-by demo gives its vehicle.
+OWN_SOURCES = ("sources", "sources_play")
+DEMO.options = [_REPLACED.get(o.name, o) for o in DEMO.options if o.name not in OWN_SOURCES] + [
     Option(
         "stadium",
         "the stadium example's scene",
@@ -540,6 +566,13 @@ DEMO.options = [_REPLACED.get(o.name, o) for o in DEMO.options] + [
         None,
         steps=("video",),
     ),
+    *sources_options(
+        help="the concert's sources the helicopter flies over, by name or by the scene's "
+        "group, comma separated: PA (its groups PA/Mains, PA/Subwoofers, PA/Fills and "
+        "PA/Delays), Monitors, Band (default: every one); the crossing plays the stadium "
+        "demo's run of these, which must have its mixes; the helicopter always plays",
+        steps=("mix", "video"),
+    ),
 ]
 _OVERHEAD = "scene_overhead.yaml: the helicopter alone over the stadium, at --speed, with Doppler"
 DEMO.steps = [
@@ -549,11 +582,10 @@ DEMO.steps = [
     *(
         dataclasses.replace(step, help=_OVERHEAD) if step.name == "scene" else step
         for step in DEMO.steps
-        if step.name not in ("video", JOIN.name)
+        if step.name != "video"
     ),
     Step("mix", mix, "the concert's mixes with the helicopter's pass in each", mix_done),
     Step("video", video, "the run's video, its audio and the stills, named after the run"),
-    JOIN,
 ]
 
 __all__ = ["DEMO"]

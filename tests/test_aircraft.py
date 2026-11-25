@@ -260,3 +260,28 @@ def test_a_walk_rising_straight_up_first_flies_as_without_that_place(tmp_path) -
     down = np.asarray(flights[("arrival", True)].positions)
     assert down[0, 0] == pytest.approx(-2000.0)
     assert down[int(np.argmax(down[:, 2] <= 1.0 + 1e-9)), 0] == pytest.approx(290.0)
+
+
+def test_the_departure_and_the_arrival_play_as_one_series() -> None:
+    """--vehicle departure,arrival: a run of two parts, each an ordinary run of one jet
+    whose hooks (what it plays, what moves, how it flies, its check) take that jet
+    alone; its video joins the two."""
+    from acoustic_spaces.demos import load
+
+    demo = load(Path(example_path("airport")).parent / "flight_demo.py")
+    args = demo.parser().parse_args(["all", "--vehicle", "departure,arrival"])
+    assert demo.check(args) is None
+    assert demo.run_folder(args).name == "flight_departure+arrival_binaural"
+    parts = demo.each(args)
+    assert [p.vehicle for p in parts] == ["departure", "arrival"]
+    assert [demo.run_name(p) for p in parts] == [
+        "flight_departure_binaural",
+        "flight_arrival_binaural",
+    ]
+    for part in parts:
+        assert list(demo.plays(part)) == [part.vehicle]
+        assert demo.moving(part) == [part.vehicle]
+        assert demo.summary(part)
+        assert demo.check(part) is None
+    # Its mixes are named after each jet, as a run of one is.
+    assert [p.run_plays for p in parts] == ["departure", "arrival"]

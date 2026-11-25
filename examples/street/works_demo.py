@@ -24,9 +24,10 @@ environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 or `python works_demo.py all`, every step, leaving out what is there already; the
 editor's Simulation > Run demo… runs it too. Each run's mixes and stills go to a folder
 in demo_works named after its settings (demo_works/works_binaural/), with the video
-beside it; `python works_demo.py join` plays finished runs in one video. Use
-headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
-spherical head.
+beside it. `--sources breaker,dumper` plays those alone, the others silent
+(demo_works/works_breaker+dumper_binaural.mp4), and `--sources-play in-turn` each
+machine and the alarm alone, one after another in one video. Use headphones; `--hrtf
+me.sofa` plays it through your own or measured HRTFs instead of a spherical head.
 """
 
 from __future__ import annotations

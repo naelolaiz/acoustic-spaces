@@ -1,5 +1,6 @@
 """Pictures for walk_demo.py's video: the gallery from above with the guide, the walk and
-the place the visitor looks round from; the visitor going along, then turning its head;
+the place the visitor looks round from (those of them the run plays); the visitor going
+along, turning its head, or both, in the run's order;
 the way the voice reaches them, straight or bent round the corner; and what they hear,
 as simulated. Needs Pillow (which the viz extra brings); Inter is used when installed,
 else DejaVu Sans.
@@ -110,26 +111,31 @@ def rating(sti: float) -> str:
     return "excellent"
 
 
+#: What each part is, for the heading (after "you" or "then") and for the thumbnail.
+DOES = {"walk": "walk away round the corner", "turn": "stand and look round"}
+SHORT = {"walk": "walk away", "turn": "turn round"}
+
+
 class Pictures:
     """The video's frames: :meth:`frame` at any time of the video's sound, :meth:`moments` for
-    its chapters and stills, and :meth:`thumbnail`."""
+    its chapters and stills, and :meth:`thumbnail`. ``parts`` are those the video plays,
+    in its order: each ``walk`` or ``turn``, its facts (walk.json, turn.json), and where
+    its sound starts and ends in the video's (s)."""
 
     def __init__(
         self,
         scene: dict,
-        walked: dict,
-        turned: dict,
+        parts: list[tuple[str, dict, float, float]],
         *,
-        walk_s: float,
-        turn_at: float,
         voice: tuple[str, float],
         credit: str,
         hrtf=None,
         pace: str = "at 1.2 m/s",
         tool=None,
     ):
-        self.scene, self.walked, self.turned = scene, walked, turned
-        self.walk_s, self.turn_at, self.voice, self.pace = walk_s, turn_at, voice, pace
+        self.scene, self.parts, self.voice, self.pace = scene, parts, voice, pace
+        found = {name: facts for name, facts, _, _ in parts}
+        self.walked, self.turned = found.get("walk"), found.get("turn")
         self.credit, self.hrtf = credit, hrtf
         self.tool = tool or tool_line("gallery", scene, hrtf=hrtf)
         self.polygon = np.array(scene["geometry"]["floor_plan"], dtype=float)
@@ -137,7 +143,7 @@ class Pictures:
         self.box = (float(x0), float(y0), float(x1), float(y1))
         self.guide = next(s for s in scene["sources"] if s["name"] == "guide")
         self.corners = inner_corners(self.polygon)
-        for part in (walked, turned):
+        for _, part, _, _ in parts:
             part["times"] = np.asarray(part["times"], dtype=float)
             part["positions"] = np.asarray(part["positions"], dtype=float)
             part["unwrapped"] = np.degrees(np.unwrap(np.radians(part["yaws"])))
@@ -151,18 +157,17 @@ class Pictures:
 
     def state(self, t: float) -> dict:
         """Where the visitor is at ``t`` (s of the video's sound), the way it faces, and what the
-        simulation says it hears there."""
-        if t < self.walk_s:
-            part, local = self.walked, t
-        else:
-            part, local = self.turned, max(0.0, t - self.turn_at)
+        simulation says it hears there: in the first part whose sound goes on after ``t``
+        (at its start in the silence before it), else at the end of the last."""
+        name, part, at, _ = next((each for each in self.parts if t < each[3]), self.parts[-1])
+        local = max(0.0, t - at)
         times = part["times"]
         k = int(np.clip(np.searchsorted(times, local, side="right") - 1, 0, len(times) - 1))
         if k + 1 < len(times) and local - times[k] > times[k + 1] - local:
             k += 1  # the nearest place, as the sound has it
         where = [float(np.interp(local, times, part["positions"][:, j])) for j in range(3)]
         return {
-            "part": "walk" if part is self.walked else "turn",
+            "part": name,
             "local": local,
             "at": where,
             "yaw": float(np.interp(local, times, part["unwrapped"])),
@@ -184,27 +189,15 @@ class Pictures:
         return f"{self.guide['name']} -> {heard}"
 
     def moments(self) -> list[tuple[str, float, str]]:
-        """The tour's moments (a name, the time in the video's sound, a title): setting off, the
-        corner, out of sight, standing; then each hold and turn of the head."""
-        walked, found = self.walked, [("setting-off", 0.0, "Setting off, the guide behind you")]
-        yaws, times = walked["unwrapped"], walked["times"]
-        turning = np.flatnonzero(np.abs(yaws - yaws[0]) > 1.0)
-        if turning.size:
-            found.append(("corner", float(times[turning[0]]), "Into the short arm"))
-        lost = [k for k, seen in enumerate(walked["sight"]) if not seen]
-        if lost:
-            found.append(("out-of-sight", float(times[lost[0]]), "The guide out of sight"))
-        found.append(("standing", float(times[-1]), "Standing round the corner"))
-        keys = self.turned["keys"]
-        position = self.turned["positions"][0]
-        for (t0, y0), (_t1, y1) in zip(keys, [*keys[1:], keys[-1]], strict=True):
-            at = self.turn_at + t0
-            if y1 != y0:
-                way = "left" if y1 > y0 else "right"
-                found.append((f"turning-{way}", at, f"Turning {way}"))
+        """The tour's moments (a name, the time in the video's sound, a title), of the parts
+        it plays: of the walk, setting off, the corner, out of sight, standing; of the
+        turn, each hold and turn of the head."""
+        found = []
+        for name, part, start, _ in self.parts:
+            if name == "walk":
+                found += self._walk_moments(part, start)
             else:
-                words, _ = bearing(position, self.turned["facing"] + y0, self.guide["position"])
-                found.append(("still", at, f"Still, the guide {words}"))
+                found += self._turn_moments(part, start)
         found.sort(key=lambda m: m[1])
         kept = []
         for moment in found:
@@ -214,6 +207,35 @@ class Pictures:
                 kept.append(moment)
         return kept
 
+    @staticmethod
+    def _walk_moments(walked: dict, start: float) -> list[tuple[str, float, str]]:
+        """The walk's moments, its sound starting at ``start`` (s of the video's)."""
+        found = [("setting-off", start + 0.0, "Setting off, the guide behind you")]
+        yaws, times = walked["unwrapped"], walked["times"]
+        turning = np.flatnonzero(np.abs(yaws - yaws[0]) > 1.0)
+        if turning.size:
+            found.append(("corner", start + float(times[turning[0]]), "Into the short arm"))
+        lost = [k for k, seen in enumerate(walked["sight"]) if not seen]
+        if lost:
+            found.append(("out-of-sight", start + float(times[lost[0]]), "The guide out of sight"))
+        found.append(("standing", start + float(times[-1]), "Standing round the corner"))
+        return found
+
+    def _turn_moments(self, turned: dict, start: float) -> list[tuple[str, float, str]]:
+        """The turn's moments, each hold and turn of the head, its sound starting at
+        ``start`` (s of the video's)."""
+        found = []
+        keys, position = turned["keys"], turned["positions"][0]
+        for (t0, y0), (_t1, y1) in zip(keys, [*keys[1:], keys[-1]], strict=True):
+            at = start + t0
+            if y1 != y0:
+                way = "left" if y1 > y0 else "right"
+                found.append((f"turning-{way}", at, f"Turning {way}"))
+            else:
+                words, _ = bearing(position, turned["facing"] + y0, self.guide["position"])
+                found.append(("still", at, f"Still, the guide {words}"))
+        return found
+
     # ------------------------------------------------------------------ drawing
 
     def _plan(self, left, top, width, height) -> Plan:
@@ -221,19 +243,22 @@ class Pictures:
         return Plan(left, top, min(width / (x1 - x0), height / (y1 - y0)), self.box)
 
     def gallery(self, img, plan: Plan, labels: bool = True) -> None:
-        """The floor, the walls, the walk, where the visitor looks round, the guide."""
+        """The floor, the walls, the walk and where the visitor looks round (those the
+        run plays), the guide."""
         draw = ImageDraw.Draw(img)
         outline = [plan(x, y) for x, y in self.polygon]
         draw.polygon(outline, fill=FLOOR)
         draw.line([*outline, outline[0]], fill=WALL, width=4)
-        path = [plan(*p[:2]) for p in self.walked["positions"]]
-        for k in range(0, len(path) - 1, 2):  # dotted
-            draw.line([path[k], path[k + 1]], fill=MUTED, width=3)
-        stand = plan(*self.turned["positions"][0][:2])
-        r = 0.55 * plan.s
-        draw.ellipse(
-            [stand[0] - r, stand[1] - r, stand[0] + r, stand[1] + r], outline=MUTED, width=2
-        )
+        if self.walked is not None:
+            path = [plan(*p[:2]) for p in self.walked["positions"]]
+            for k in range(0, len(path) - 1, 2):  # dotted
+                draw.line([path[k], path[k + 1]], fill=MUTED, width=3)
+        stand, r = None, 0.55 * plan.s
+        if self.turned is not None:
+            stand = plan(*self.turned["positions"][0][:2])
+            draw.ellipse(
+                [stand[0] - r, stand[1] - r, stand[0] + r, stand[1] + r], outline=MUTED, width=2
+            )
         layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
         gx, gy = plan(*self.guide["position"][:2])
         yaw = math.radians(self.guide.get("orientation", {}).get("yaw", 0.0))
@@ -272,14 +297,15 @@ class Pictures:
             anchor="mm",
             **outline_text,
         )
-        draw.text(
-            (stand[0], stand[1] + r + 16),
-            "where you look round",
-            font=font("Medium", 15),
-            fill=MUTED,
-            anchor="ma",
-            **outline_text,
-        )
+        if stand is not None:
+            draw.text(
+                (stand[0], stand[1] + r + 16),
+                "where you look round",
+                font=font("Medium", 15),
+                fill=MUTED,
+                anchor="ma",
+                **outline_text,
+            )
 
     def voice_path(self, img, plan: Plan, state: dict) -> None:
         """The way the voice reaches the visitor: straight while the guide is in sight,
@@ -305,14 +331,16 @@ class Pictures:
         head(img, plan(*state["at"][:2]), forward, left, size)
 
     def legend(self, draw, x: float, y: float) -> None:
-        """In the empty corner of the L: what the marks are, and a scale."""
+        """In the empty corner of the L: what the marks are (the walk's dots when the run
+        plays it), and a scale."""
         f = font("Medium", 18)
         rows = [
             ("guide", "the guide, the way they face"),
             ("you", "you, the way you face"),
             ("voice", "the voice: straight, or round the corner"),
-            ("path", "the walk"),
         ]
+        if self.walked is not None:
+            rows.append(("path", "the walk"))
         for what, label in rows:
             if what == "guide":
                 cone(draw, (x + 6, y + 9), (1.0, 0.0), 22, 40.0, tuple(c // 2 for c in GUIDE))
@@ -332,11 +360,11 @@ class Pictures:
     def _base(self) -> Image.Image:
         img = canvas()
         draw = ImageDraw.Draw(img)
+        does = [DOES[name] for name, _, _, _ in self.parts]
         heading(
             draw,
             "A walk through a gallery, simulated",
-            "The gallery example: a guide talks, you walk away round the corner, "
-            "then stand and look round",
+            f"The gallery example: a guide talks, you {', then '.join(does)}",
         )
         self.gallery(img, self.plan)
         draw = ImageDraw.Draw(img)
@@ -395,19 +423,23 @@ class Pictures:
         img = canvas(THUMBNAIL)
         plan = self._plan(560, 60, 680, 600)
         self.gallery(img, plan, labels=False)
-        k = len(self.walked["times"]) * 3 // 4
+        part = self.walked if self.walked is not None else self.turned
+        k = len(part["times"]) * 3 // 4  # well along the walk, or the turn
         state = {
-            "at": list(self.walked["positions"][k]),
-            "yaw": float(self.walked["unwrapped"][k]),
-            "sight": self.walked["sight"][k],
+            "at": list(part["positions"][k]),
+            "yaw": float(part["unwrapped"][k]),
+            "sight": part["sight"][k],
         }
         self.voice_path(img, plan, state)
         self.visitor(img, plan, state, 0.45 * plan.s)
         draw = ImageDraw.Draw(img)
         text(draw, (50, 70), "Gallery", font("Black", 92, display=True))
-        text(draw, (50, 180), "walk,", font("Bold", 56, display=True), MUTED)
+        what = "walk," if self.walked is not None else "look round,"
+        text(draw, (50, 180), what, font("Bold", 56, display=True), MUTED)
         text(draw, (50, 244), "simulated", font("Bold", 56, display=True), MUTED)
         thumbnail_badge(draw, 50, 340)
-        text(draw, (50, 430), "walk away, turn round", font("SemiBold", 32), LISTENER)
-        text(draw, (50, 655), "a guide's voice round a corner", font("Medium", 26), FAINT)
+        does = ", ".join(SHORT[name] for name, _, _, _ in self.parts)
+        text(draw, (50, 430), does, font("SemiBold", 32), LISTENER)
+        where = "round a corner" if self.walked is not None else "as you look round"
+        text(draw, (50, 655), f"a guide's voice {where}", font("Medium", 26), FAINT)
         return img

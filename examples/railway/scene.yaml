@@ -11,7 +11,8 @@
 # heights; each plays the train's points at that height one behind the other (its
 # bogies, its cars' roofs, its pantograph), so the train goes by as long as it is. They
 # are left out of simulations until ticked, as is the train's horn at its front, and
-# passby_demo.py runs one of four trains past, its horn sounding with --horn blasts.
+# passby_demo.py runs one of four trains past, its horn sounding with --sources
+# train,train_roof,train_pantograph,train_horn.
 name: Railway across a meadow
 geometry:
   ground:

@@ -46,7 +46,7 @@ from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces.demos import Option, pipeline, run_folder
+from acoustic_spaces.demos import Option, Source, pipeline, run_folder
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import (
     CYLINDER_WORDS,
@@ -56,6 +56,7 @@ from acoustic_spaces.demos.passby import (
     car_of,
     kmh,
     pass_s,
+    picked_parts,
     speed_of,
 )
 
@@ -63,9 +64,6 @@ from acoustic_spaces.demos.passby import (
 #: 0.05 m above the road; and its siren, on its roof, along the same walk.
 POLICE_CAR = "police_car"
 SIREN = "police_car_siren"
-#: What the police car plays (``--police-car``): the car with its siren on, or the siren
-#: alone.
-PLAYS = ("car_and_siren", "siren")
 #: The siren's patterns.
 PATTERNS = ("wail", "yelp", "two_tone")
 #: The patterns in words.
@@ -106,14 +104,6 @@ SIREN_FILE = "siren.wav"
 FIRE_ENGINE = "fire_engine"
 FIRE_SIREN = "fire_engine_siren"
 FIRE_HORN = "fire_engine_horn"
-#: What the fire engine plays (``--fire-engine``), and the sources of each choice.
-FIRE_PLAYS = ("truck_siren_and_horn", "truck_and_siren", "siren_and_horn", "siren")
-FIRE_PARTS = (
-    (FIRE_ENGINE, FIRE_SIREN, FIRE_HORN),
-    (FIRE_ENGINE, FIRE_SIREN),
-    (FIRE_SIREN, FIRE_HORN),
-    (FIRE_SIREN,),
-)
 #: The most the Swiss rule lets two tones be on a vehicle (dB(A)), 7 m in front of it at
 #: the loudest of 0.5 to 1.5 m up; the fire engine's siren FIRE_SIREN_HEIGHT_M up (m,
 #: assumed), as in the street example; and how much louder than the police car's its
@@ -125,11 +115,9 @@ FIRE_SIREN_DB_A = 115.0
 FIRE_SIREN_HEIGHT_M = 3.0
 FIRE_SIREN_GAIN_DB = 6.0
 #: The sources of the street example's car: the car itself and its horn, along one
-#: walk; what it plays (``--car``), and the sources of each choice.
+#: walk, the horn off unless ``--sources`` picks it.
 CAR = "car"
 CAR_HORN_PART = "car_horn"
-CAR_PLAYS = ("car", "car_and_horn", "horn")
-CAR_PARTS = ((CAR,), (CAR, CAR_HORN_PART), (CAR_HORN_PART,))
 
 
 def fundamental_hz(pattern: str, times: np.ndarray) -> np.ndarray:
@@ -372,9 +360,9 @@ class EmergencyVehicle(Vehicle):
     :class:`~acoustic_spaces.demos.passby.RoadVehicle` makes it) 0.05 m above the road,
     and its ``devices`` (:class:`Device`), each a source of its own along the same walk,
     facing the way it drives, with the directivity of the siren NBS measured
-    (:func:`directivity`). What it plays is the option of its name (``plays``: a choice
-    to the sources it plays, the first by default); each source is simulated alone and
-    they are heard together (:mod:`acoustic_spaces.demos.passby`)."""
+    (:func:`directivity`). It plays the sources ``--sources`` picks, by default all but
+    those ``off`` names; each is simulated alone and they are heard together
+    (:mod:`acoustic_spaces.demos.passby`)."""
 
     demo_name = "passby"
     sound_file = SIREN_FILE
@@ -383,35 +371,20 @@ class EmergencyVehicle(Vehicle):
         self,
         body: RoadVehicle,
         devices: tuple[Device, ...],
-        plays: dict[str, tuple[str, ...]],
         title: str,
         itself: str,
-        plays_help: str,
         header: str,
         script: str,
+        off: tuple[str, ...] = (),
     ) -> None:
-        self.body, self.devices, self.plays_to = body, devices, plays
+        self.body, self.devices, self.off = body, devices, off
         self.name, self.noun, self.title, self.itself = body.name, body.noun, title, itself
-        self.plays_help, self.header, self.script = plays_help, header, script
+        self.header, self.script = header, script
         self.info_file = f"{self.name}.json"
         self.steady = body.steady
 
     def options(self) -> list[Option]:
-        return [
-            Option(
-                self.name,
-                self.plays_help,
-                next(iter(self.plays_to)),
-                "choice",
-                tuple(self.plays_to),
-                steps=(self.sound_step, "scene", "walk"),
-            ),
-            *self.body.options(),
-        ]
-
-    def plays_of(self, args: argparse.Namespace) -> str:
-        """What it plays: the option of its name, or its first choice."""
-        return getattr(args, self.name, None) or next(iter(self.plays_to))
+        return self.body.options()
 
     def with_body(self, args: argparse.Namespace) -> bool:
         """Whether the vehicle itself plays along with its devices."""
@@ -423,24 +396,26 @@ class EmergencyVehicle(Vehicle):
         return tuple(d for d in self.devices if d.part in parts)
 
     def check(self, args: argparse.Namespace) -> None:
-        if self.plays_of(args) not in self.plays_to:
-            flag = "--" + self.name.replace("_", "-")
-            raise SystemExit(
-                f"error: {flag} is one of {', '.join(self.plays_to)}, not {self.plays_of(args)!r}"
-            )
         self.body.check(args)
 
+    def sources(self, args: argparse.Namespace) -> list[Source]:
+        return [Source(part, on=part not in self.off) for part in self.every_part()]
+
     def parts(self, args: argparse.Namespace) -> tuple[str, ...]:
-        return self.plays_to.get(self.plays_of(args), ())
+        return picked_parts(self, args)
 
     def every_part(self) -> tuple[str, ...]:
         return (self.name, *(d.part for d in self.devices))
+
+    def idle(self, parts) -> tuple[str, ...]:
+        """Without the vehicle itself, its engine's ``--rpm`` changes nothing."""
+        return () if self.name in parts else ("rpm",)
 
     def engines(self) -> tuple[RoadVehicle, ...]:
         return (self.body,)
 
     def info(self, args: argparse.Namespace, scene, speed_kmh: float) -> dict:
-        """What its sounds are made of, at ``speed_kmh`` in ``scene``: what it plays, the
+        """What its sounds are made of, at ``speed_kmh`` in ``scene``: the sources it plays, the
         speed, the length, each device's pattern and sound power, and the vehicle's
         (CNOSSOS-EU's, with its engine) unless it does not play; ``sound_power_db`` and
         ``sound_power_a_db`` of what it plays, in all."""
@@ -448,7 +423,7 @@ class EmergencyVehicle(Vehicle):
 
         rate = int(scene.simulation.sample_rate)
         out: dict = {
-            "plays": self.plays_of(args),
+            "parts": list(self.parts(args)),
             "speed_kmh": round(speed_kmh, 6),
             "rate": rate,
             "duration_s": round(pass_s(car_of(scene, self), args.speed), 6),
@@ -559,12 +534,12 @@ class EmergencyVehicle(Vehicle):
         speed = f"{round(speed_of(args, self), 4):g} km/h"
         patterns = " ".join(d.pattern(args) for d in self.devices)
         rpm = f" {self.body.rpm_of(args):g} rpm" if self.with_body(args) else ""
-        return f"{self.name} {speed} {patterns} {self.plays_of(args)}{rpm}"
+        return f"{self.name} {speed} {patterns} {'+'.join(self.parts(args))}{rpm}"
 
     def facts(self, args: argparse.Namespace, info: dict) -> dict:
         devices = [d for d in self.devices if d.key in info]
         speed = kmh(info["speed_kmh"])
-        facts = {"plays": info["plays"], "sound_power_a_db": info["sound_power_a_db"]}
+        facts = {"sound_power_a_db": info["sound_power_a_db"]}
         for device in devices:
             facts[device.key] = info[device.key]
             facts[f"{device.key}_sound_power_a_db"] = info[f"{device.key}_sound_power_a_db"]
@@ -592,7 +567,9 @@ class EmergencyVehicle(Vehicle):
         return self.credits(facts, {})
 
     def credits(self, facts: dict, files: dict[str, Path | None]) -> str:
-        parts = self.plays_to.get(facts.get("plays", ""), self.every_part())
+        """The stills' credit line of the sources it plays (``parts`` of ``facts``,
+        walk.json's; all of them when it does not say)."""
+        parts = tuple(facts.get("parts") or self.every_part())
         if parts == (self.name,):
             # The vehicle alone, its devices off: as the road vehicle alone says it.
             return self.body.credits(facts, files)
@@ -655,12 +632,13 @@ class PoliceCar(EmergencyVehicle):
     :class:`~acoustic_spaces.demos.passby.RoadVehicle` makes it) 0.05 m above the road,
     and ``police_car_siren`` along the same walk at the height of a siren on its roof,
     facing the way it drives, playing :func:`siren_sound` in ``--siren``'s pattern with
-    :func:`siren_power` and the measured siren's directivity; ``--police-car siren``
-    plays the siren alone. At 50 km/h the car's sound power is some 32 dB(A) under the
-    wail's, but the siren sends next to nothing under its fundamental (a square wave has
-    its odd harmonics alone): in the octaves of 63 to 250 Hz the police car's sound is
-    the car's, the rumble of it going by (:func:`siren_power` gives those octaves 44 to
-    55 dB under the siren's whole power)."""
+    :func:`siren_power` and the measured siren's directivity; ``--sources
+    police_car_siren`` plays the siren alone. At 50 km/h the car's sound power is some
+    32 dB(A) under the wail's, but the siren sends next to nothing under its
+    fundamental (a square wave has its odd harmonics alone): in the octaves of 63 to 250
+    Hz the police car's sound is the car's, the rumble of it going by
+    (:func:`siren_power` gives those octaves 44 to 55 dB under the siren's whole
+    power)."""
 
     def __init__(self, script: str = "passby_demo.py") -> None:
         #: The car itself: a passenger car, its engine four cylinders at 2000 rpm.
@@ -671,13 +649,8 @@ class PoliceCar(EmergencyVehicle):
         super().__init__(
             car,
             (Siren(SIREN, SIREN_FILE, "on its roof", loudness),),
-            dict(zip(PLAYS, ((POLICE_CAR, SIREN), (SIREN,)), strict=True)),
             "a police car with its siren on",
             "car",
-            "what the police car plays: car_and_siren, the car itself (tyres and its "
-            "engine, CNOSSOS-EU's passenger car at --speed, from 0.05 m above the road) "
-            "and its siren on its roof, as a police car going by sounds; siren, the "
-            "siren alone",
             "# The example with its police car driving past alone with its siren on, at "
             "the speed\n# of the pass-by demo, written by passby_demo.py.\n",
             script,
@@ -703,6 +676,10 @@ class PoliceCar(EmergencyVehicle):
             *super().options(),
         ]
 
+    def idle(self, parts) -> tuple[str, ...]:
+        """Without its siren, ``--siren`` changes nothing; without the car, ``--rpm``."""
+        return (*super().idle(parts), *(() if SIREN in parts else ("siren",)))
+
     def pattern_of(self, args: argparse.Namespace) -> str:
         """The siren's pattern: ``--siren``, or PATTERN."""
         return self.devices[0].pattern(args)
@@ -717,8 +694,8 @@ class FireEngine(EmergencyVehicle):
     in front of the siren (taken at the vehicle's front), the most the Swiss rule allows
     on a vehicle, with the siren FIRE_SIREN_HEIGHT_M up; and ``fire_engine_horn``, an
     air horn (:mod:`acoustic_spaces.demos.horn`) as loud as the rule for horns lets one
-    be on its bench; all three along one walk. ``--fire-engine`` plays them all, or
-    leaves out the horn, the vehicle itself, or both."""
+    be on its bench; all three along one walk, all three playing unless ``--sources``
+    picks some."""
 
     def __init__(self, script: str = "passby_demo.py") -> None:
         from acoustic_spaces.demos.horn import AT_M, HEIGHT_M, HORN_FILE, ON_AXIS_DB_A
@@ -745,15 +722,8 @@ class FireEngine(EmergencyVehicle):
         super().__init__(
             truck,
             (siren, horn),
-            dict(zip(FIRE_PLAYS, FIRE_PARTS, strict=True)),
             "a fire engine with its siren on and its air horn in blasts",
             "truck",
-            "what the fire engine plays: truck_siren_and_horn, the truck itself (tyres and "
-            "its engine, CNOSSOS-EU's medium heavy vehicle at --speed, from 0.05 m above "
-            "the road), its siren's two tones on its cab's roof and its air horn's blasts "
-            "1.2 m up, as a fire engine going by on a call sounds; truck_and_siren, "
-            "without the horn; siren_and_horn, the siren and the horn alone; siren, the "
-            "siren alone",
             "# The example with its fire engine driving past alone with its siren on and "
             "its air\n# horn in blasts, at the speed of the pass-by demo, written by "
             "passby_demo.py.\n",
@@ -762,23 +732,23 @@ class FireEngine(EmergencyVehicle):
 
 
 class HonkingCar(EmergencyVehicle):
-    """The street example's car, its horn off unless ``--car`` says: the source ``car``,
+    """The street example's car, its horn off unless ``--sources`` picks it: the source
+    ``car``,
     the car itself (tyres and engine, CNOSSOS-EU's passenger car, as
     :class:`~acoustic_spaces.demos.passby.RoadVehicle` makes it) 0.05 m above the road,
     as :data:`~acoustic_spaces.demos.passby.THE_CAR` is; and ``car_horn``, its pair of
     disc horns (:data:`~acoustic_spaces.demos.horn.CAR_HORN`) behind its front bumper,
     CAR_HEIGHT_M up, along the same walk, facing the way it drives, with the measured
-    siren's directivity, in two short blasts every few seconds. ``--car car`` plays the
-    car alone, as it plays without a horn; ``car_and_horn`` both; ``horn`` the horn
-    alone."""
+    siren's directivity, in two short blasts every few seconds. By default the car plays
+    alone, as it plays without a horn; ``--sources car,car_horn`` plays both,
+    ``--sources car_horn`` the horn alone."""
 
     def __init__(self, script: str = "passby_demo.py") -> None:
-        from acoustic_spaces.demos.horn import CAR_HEIGHT_M, CAR_HORN
+        from acoustic_spaces.demos.horn import CAR_HORN
 
         #: The car itself: a passenger car, its engine four cylinders at 2000 rpm, as
         #: the car's of the roadside.
         car = RoadVehicle(CAR, "1", "a passenger car", rpm=2000.0, cylinders=4)
-        hz = " and ".join(f"{f:g}" for f in CAR_HORN.hz)
         horn = Horn(
             CAR_HORN_PART,
             CAR_HORN.file,
@@ -790,19 +760,13 @@ class HonkingCar(EmergencyVehicle):
         super().__init__(
             car,
             (horn,),
-            dict(zip(CAR_PLAYS, CAR_PARTS, strict=True)),
             "a passenger car",
             "car",
-            "what the car plays: car, the car itself (tyres and its engine, CNOSSOS-EU's "
-            "passenger car at --speed, from 0.05 m above the road), as a car going by "
-            "sounds; car_and_horn, the car with its horn in two short blasts every "
-            f"{CAR_HORN.every_s:g} s ({hz} Hz, {CAR_HORN.on_axis_db:g} dB(A) 2 m in "
-            f"front of it, {CAR_HEIGHT_M:g} m up), as a driver warning of it sounds; "
-            "horn, the horn alone",
             "# The example with its car driving past alone, at the speed and with the "
-            "sound\n# power of the pass-by demo (CNOSSOS-EU; its horn as --car says), "
+            "sound\n# power of the pass-by demo (CNOSSOS-EU; its horn as --sources says), "
             "written by\n# passby_demo.py.\n",
             script,
+            off=(CAR_HORN_PART,),
         )
 
 
@@ -824,13 +788,9 @@ __all__ = [
     "AT_M",
     "CAR",
     "CAR_HORN_PART",
-    "CAR_PARTS",
-    "CAR_PLAYS",
     "FIRE_ENGINE",
     "FIRE_ENGINE_VEHICLE",
     "FIRE_HORN",
-    "FIRE_PARTS",
-    "FIRE_PLAYS",
     "FIRE_SIREN",
     "FIRE_SIREN_DB_A",
     "FIRE_SIREN_GAIN_DB",
@@ -840,7 +800,6 @@ __all__ = [
     "LOW_HZ",
     "ON_AXIS_DB_A",
     "PATTERNS",
-    "PLAYS",
     "POLICE_CAR",
     "POLICE_CAR_VEHICLE",
     "POLAR_DB",

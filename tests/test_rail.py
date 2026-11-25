@@ -331,9 +331,9 @@ def test_a_fifth_of_the_freight_trains_wagons_are_tank_wagons() -> None:
     assert a_weighted(rail.train_power_db(points)) == pytest.approx(131.86, abs=0.01)
     tanks_there = "and its tank wagons' bodies there"
     for name in ("freight", "regional"):
-        roofs = rail.TRAIN_VEHICLE.feeds(argparse.Namespace(train=name, horn="off"), "")
+        roofs = rail.TRAIN_VEHICLE.feeds(argparse.Namespace(train=name), "")
         assert (tanks_there in roofs["train_roof"]) == (name == "freight"), name
-    tram = rail.TRAM_VEHICLE.feeds(argparse.Namespace(horn="off"), "")
+    tram = rail.TRAM_VEHICLE.feeds(argparse.Namespace(), "")
     assert tanks_there not in tram["tram_roof"]
 
 
@@ -539,12 +539,13 @@ def test_the_train_horn_sounds_its_notes_together_as_a_chord() -> None:
         f = np.fft.rfftfreq(len(blast), 1.0 / RATE)
         assert sorted(f[np.argsort(spectrum)[-2:]]) == pytest.approx([370.0, 660.0], abs=1.5)
     vehicle = rail.TRAIN_VEHICLE
-    chord = argparse.Namespace(horn="chord")
+    every = ("train", "train_roof", "train_pantograph", "train_horn")
+    chord = argparse.Namespace(horn="chord", playing=every)
     assert vehicle.horn_on(chord) and vehicle.horn_of(chord) == "chord"
     np.testing.assert_array_equal(vehicle.horn.power("chord", RATE), horn.horn_power(RATE, kind))
     made = horn.horn_sound(RATE, kind.power_s, kind)
     assert vehicle.input_gain(chord, "train_horn", made, RATE) == pytest.approx(1.0, rel=1e-12)
-    blasts = argparse.Namespace(horn="blasts")
+    blasts = argparse.Namespace(horn="blasts", playing=every)
     assert vehicle.input_gain(blasts, "train_horn", made, RATE) != pytest.approx(1.0, rel=1e-3)
     assert vehicle.played_by(chord) != vehicle.played_by(blasts)
     facts = {"speed_kmh": 160.0, "horn": "chord"}
@@ -725,11 +726,11 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
 
 
 def test_the_railway_demo_sounds_the_trains_horn(tmp_path, monkeypatch) -> None:
-    """--horn blasts on the quick railway: the horn's sound beside the train's, its
-    source in the scene at its front at its sound power with the measured siren's
-    directivity, facing the way it goes, and in the mix as far over the rail top's
-    sound as its SEL is, its captions following its blasts. Without --horn it stays
-    off."""
+    """--sources with train_horn on the quick railway: the horn's sound beside the
+    train's, its source in the scene at its front at its sound power with the measured
+    siren's directivity, facing the way it goes, and in the mix as far over the rail
+    top's sound as its SEL is, its captions following its blasts. Without it the horn
+    stays off."""
     pytest.importorskip("PIL")
     from acoustic_spaces import Scene
     from acoustic_spaces.demos import audio, load, passby, pipeline
@@ -748,7 +749,7 @@ def test_the_railway_demo_sounds_the_trains_horn(tmp_path, monkeypatch) -> None:
     run = ["all", "--train", "s_bahn", "--speed", "80", "--step", "8", "--no-mp4"]
     parts = ["train", "train_roof", "train_pantograph"]
     assert demo.moving(demo.resolved(demo.parser().parse_args(run))) == parts
-    run += ["--horn", "blasts"]
+    run += ["--sources", ",".join([*parts, "train_horn"])]
     args = demo.resolved(demo.parser().parse_args(run))
     assert demo.check(args) is None
     assert demo.moving(args) == [*parts, "train_horn"]

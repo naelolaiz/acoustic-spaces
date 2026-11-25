@@ -24,9 +24,9 @@ or `python passby_demo.py all --vehicle truck`, every step, leaving out what is 
 already; the editor's Simulation > Run demo… runs it too. Each run goes to a folder in
 ./demo named after its settings (demo/passby_truck_binaural/: the scene, the sound, the
 passes, the stills), with the video, its audio and its thumbnail beside it, so that a run
-with other settings writes over none of them; `python passby_demo.py join` plays finished
-runs one after another in one video. Use headphones; `--hrtf me.sofa` plays it through
-your own or measured HRTFs instead of a spherical head.
+with other settings writes over none of them; `--vehicle car,truck` plays the two one
+after the other in one video, each run in its own folder. Use headphones; `--hrtf
+me.sofa` plays it through your own or measured HRTFs instead of a spherical head.
 
 Each listener hears the vehicle through every early path, the direct sound and its
 reflection off the ground, each through its own delay as it changes, so the pitch falls

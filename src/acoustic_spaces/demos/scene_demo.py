@@ -13,11 +13,16 @@ A file mixed down is brought to one gated RMS; its left and right channels share
 gain that brings their mean square to it, so a recording's stereo balance stays; then
 each source's sound power in the scene (``level_db``) sets how loud it is against the
 others, as the simulation says and not as the recordings happen to be. Sources with
-neither stay silent. Every listener in use is heard in turn, in the scene's order (or
-only those ``--listeners`` names, in its order), for ``--seconds`` each while the piece
-runs on, with one gain for all the stops and a crossfade between them, binaural through
-the HRTFs of the scene's binaural output (or ``--hrtf``, or a spherical head model when
-neither names any). The stills show the scene from above with the listener of the moment, the
+neither stay silent. ``--sources`` plays some of them alone, by name or by the scene's
+group (``--sources PA`` takes ``PA/Mains`` and ``PA/Fills``), the others silent, from
+the same feeds and simulation; ``--sources-play in-turn`` plays each name it gives (or,
+without it, each top group of those that play, a source of no group by its name) in a
+part of its own, one after another in one video, and ``--series`` orders the parts.
+Every listener in use is heard in turn, in the scene's order (or only those
+``--listeners`` names, in its order), for ``--seconds`` each while the piece runs on,
+with one gain for all the stops and a crossfade between them, binaural through the HRTFs
+of the scene's binaural output (or ``--hrtf``, or a spherical head model when neither
+names any). The stills show the scene from above with the listener of the moment, the
 level there, how long the sound takes to arrive and T30 at mid frequencies, and say how
 the sound was made. The simulation keeps every listener in use, so another choice of
 ``--listeners`` needs no new one.
@@ -28,9 +33,10 @@ listener is heard as it walks or as the sources walk past it, and the video move
 as they go, its captions giving the level at each moment. ``--moving`` picks the walks
 of a run without changing the scene: ``--moving visitor,guide`` moves those two and
 leaves every other walker standing where it starts, ``--moving none`` keeps them all
-still, so one scene serves both. A walk with Doppler (a car going past) moves alone:
-every listener hears each early path through its own delay as it changes, so the pitch
-shifts as it passes, the late sound crossfaded from place to place
+still, so one scene serves both; without it, a source ``--sources`` leaves out stands
+where it starts, as it plays nothing. A walk with Doppler (a car going past) moves
+alone: every listener hears each early path through its own delay as it changes, so the
+pitch shifts as it passes, the late sound crossfaded from place to place
 (:func:`acoustic_spaces.walkthrough.render_movement`), all from one simulation.
 
     acoustic-spaces demo scene.yaml              # every step, into demo/ beside the scene
@@ -39,11 +45,14 @@ shifts as it passes, the late sound crossfaded from place to place
     acoustic-spaces demo scene.yaml --hrtf me.sofa --seconds 15 --listeners front,back
     acoustic-spaces demo scene.yaml --input talker=other_take.wav
     acoustic-spaces demo scene.yaml --moving none   # every walker standing where it starts
+    acoustic-spaces demo scene.yaml --sources PA     # the sources of the group PA alone
+    acoustic-spaces demo scene.yaml --sources PA,band --sources-play in-turn
 
 The editor runs it from **Simulation > Run demo…** as *This scene*, with a tick for each
-walk in its Movement table and for each listener in its Listeners list. The video needs
-ffmpeg on the PATH and Pillow (the ``viz`` extra). The five demos of the examples are
-scripts of their own, with their recordings; this one takes any scene.
+walk in its Movement table, for each listener in its Listeners list and for each source
+in its Sources list. The video needs ffmpeg on the PATH and Pillow (the ``viz`` extra).
+The five demos of the examples are scripts of their own, with their recordings; this one
+takes any scene.
 """
 
 from __future__ import annotations
@@ -63,6 +72,7 @@ from acoustic_spaces.demos import (
     SIMULATE,
     Demo,
     Option,
+    Source,
     Step,
     common_options,
     input_option,
@@ -73,9 +83,11 @@ from acoustic_spaces.demos import (
     moving_names,
     name_part,
     pipeline,
+    playing,
     product,
     run_folder,
     run_plays,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import (
     channel_weights,
@@ -105,6 +117,14 @@ FEED_LEVELS = "channels gated together"
 HRTF_HELP = (
     "binaural mixes through this SOFA file of HRTFs, your own or measured, instead of the "
     "one the scene's binaural output names (or a spherical head model when it names none)"
+)
+#: --sources here: every source in use that has something to play, by default.
+SOURCES_HELP = (
+    "only these sources, by name or by the scene's group (PA takes PA/Mains and "
+    "PA/Fills), comma separated (default: every source in use that has something to "
+    "play: its signal, an --input file or a channel of the scene's recording); the others "
+    "stay silent, and as the feeds and the simulation keep every source, another pick "
+    "needs neither again"
 )
 #: What a source plays: the file, and the channel of it (None: mixed down to mono).
 Played = tuple[Path, str | None]
@@ -218,6 +238,21 @@ def plays(args: argparse.Namespace) -> dict[str, str]:
     return out
 
 
+def sources_of(args: argparse.Namespace) -> list[Source]:
+    """The sources a run can play (``--sources``): every source in use, in the scene's
+    order, with its group; those with something to play (:func:`signals_of`) play unless
+    ``--sources`` leaves them out. None at all when the scene cannot be read
+    (:func:`problems` says why)."""
+    found = _current(getattr(args, "scene", None))
+    if found is None:
+        return []
+    groups = {source.name: source.group for source in found.sources}
+    return [
+        Source(name, groups[name], played is not None)
+        for name, played in signals_of(args, found).items()
+    ]
+
+
 def recording_needed(args: argparse.Namespace) -> recordings.Recording | None:
     """The free recording the run plays and has not downloaded yet, or None."""
     scene = _current(getattr(args, "scene", None))
@@ -268,25 +303,43 @@ def completed(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
+def walking(args: argparse.Namespace, scene: Scene) -> list[str] | None:
+    """Who walks in this run, as :func:`~acoustic_spaces.walkthrough.with_moving` takes
+    it: those ``--moving`` names; without it, when ``--sources`` leaves out a source
+    whose walk is on, every walker of the scene but that one, which stands where it
+    starts, as it plays nothing; None: the scene's own walkers."""
+    from acoustic_spaces.walkthrough import movers
+
+    names = moving_names(getattr(args, "moving", None))
+    chosen = getattr(args, "playing", None)
+    if names is not None or chosen is None:
+        return names
+    walkers = movers(scene)
+    kept = [item.name for kind, item in walkers if kind == "listeners" or item.name in chosen]
+    return None if len(kept) == len(walkers) else kept
+
+
 def moving_scene(args: argparse.Namespace) -> Scene:
     """The scene as this run plays it: with ``--moving``, those walk and every other
-    walker stands where it starts (:func:`~acoustic_spaces.walkthrough.with_moving`)."""
+    walker stands where it starts (:func:`~acoustic_spaces.walkthrough.with_moving`); a
+    source ``--sources`` leaves out stands too (:func:`walking`)."""
     from acoustic_spaces.walkthrough import with_moving
 
-    return with_moving(scene_of(args), moving_names(getattr(args, "moving", None)))
+    found = scene_of(args)
+    return with_moving(found, walking(args, found))
 
 
 def moving_of(args: argparse.Namespace) -> list[str]:
-    """Who moves in this run: the sources and listeners in use whose walks are on, by
-    name, listeners first; none when the scene cannot be read or ``--moving`` names
-    what does not walk (:func:`problems` says why)."""
+    """Who moves in this run (:func:`walking`): the sources and listeners in use whose
+    walks are on, by name, listeners first; none when the scene cannot be read or
+    ``--moving`` names what does not walk (:func:`problems` says why)."""
     from acoustic_spaces.walkthrough import movers, with_moving
 
     scene = _current(getattr(args, "scene", None))
     if scene is None:
         return []
     try:
-        scene = with_moving(scene, moving_names(getattr(args, "moving", None)))
+        scene = with_moving(scene, walking(args, scene))
     except ValueError:
         return []
     return [item.name for _kind, item in movers(scene)]
@@ -315,7 +368,8 @@ def responses_of(args: argparse.Namespace, demo: Demo | None = None) -> list[dic
 
 def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     """A scene is needed, it must be there, and a source of it must play a WAV file
-    that is there (its signal, or the one ``--input`` gives it)."""
+    that is there (its signal, or the one ``--input`` gives it); one of those
+    ``--sources`` picks must play something."""
     if not getattr(args, "scene", None):
         return "give the scene to demo (--scene)"
     resolved = demo.resolved(args)
@@ -333,6 +387,12 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
             "editor, signal: in the scene file, or --input SOURCE=WAV), or give the scene "
             "a recording and the sources that play it a channel"
         )
+    chosen = getattr(resolved, "playing", None)
+    if chosen and not any(name in chosen for name in signals):
+        return (
+            f"--sources picks only sources that play nothing ({', '.join(chosen)}); "
+            f"those that play: {', '.join(signals)}"
+        )
     free = free_of(scene)
     downloaded = recordings.file_of(free) if free is not None else None
     for name, (signal, _channel) in signals.items():
@@ -347,7 +407,7 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     from acoustic_spaces.walkthrough import movers, with_moving
 
     try:
-        moving = with_moving(scene, moving_names(getattr(resolved, "moving", None)))
+        moving = with_moving(scene, walking(resolved, scene))
     except ValueError as exc:
         return f"--moving: {exc}"
     walkers = [item for _kind, item in movers(moving)]
@@ -487,8 +547,9 @@ def listeners_of(args: argparse.Namespace, entries: list[dict]) -> list[str]:
 
 def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> None:
     """Every listener's mix (``--format``, binaural by default) with one gain for all, the
-    loudest peak at -1 dBFS; ``auralize`` plays each feed at its source's sound power.
-    The arrival time counts the sources that play, each at its sound power. When
+    loudest peak at -1 dBFS; ``auralize`` plays the feed of each source that plays in
+    the run (``--sources``, :func:`~acoustic_spaces.demos.pipeline.only_playing`) at its
+    sound power. The arrival time counts those sources, each at its sound power. When
     something moves, :func:`render_moving` makes the mixes instead. ``demo``, this one by
     default, is the demo that runs it, whose commands the messages give. ``indoors``
     (a :class:`~acoustic_spaces.demos.indoors.StillHouses`) hears each mix in the house
@@ -582,16 +643,16 @@ def levels_along(movement, source, listener: str) -> list[float | None]:
 
 
 def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None = None) -> None:
-    """Every listener's mix with ``moving`` walking, all on one clock: the scene simulated
-    with every mover at each moment of its walk
-    (:func:`~acoustic_spaces.walkthrough.simulate_movement`), each feed played through
-    it at its source's sound power, one gain for all (the loudest peak at -1 dBFS), into
-    ``moving/`` with seats.json; a walk with Doppler, which moves alone, with each early
-    path through its changing delay. That also keeps the moments and, at each, the
-    A-weighted level of each source that plays at every listener, for the pictures; the
-    arrival time (``arrival_s``) is left out where something moves, as it changes along
-    the way, and the tour shifts no mix by it (``lag_s`` 0), so that the stops keep one
-    clock."""
+    """Every listener's mix with ``moving`` walking, all on one clock: the scene
+    simulated with every mover at each moment of its walk
+    (:func:`~acoustic_spaces.walkthrough.simulate_movement`), the feed of each source
+    that plays in the run (``--sources``) played through it at its sound power, one gain
+    for all (the loudest peak at -1 dBFS), into ``moving/`` with seats.json; a walk with
+    Doppler, which moves alone, with each early path through its changing delay. That
+    also keeps the moments and, at each, the A-weighted level of each source that plays
+    at every listener, for the pictures; the arrival time (``arrival_s``) is left out
+    where something moves, as it changes along the way, and the tour shifts no mix by it
+    (``lag_s`` 0), so that the stops keep one clock."""
     from acoustic_spaces.room import Room
     from acoustic_spaces.walkthrough import render_movement, simulate_movement
 
@@ -606,8 +667,11 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     scene = moving_scene(args)
     room = Room.from_scene(scene)
     rate = int(scene.simulation.sample_rate)
-    feeds = {name: read(feeds_folder(args) / f"{name}.wav") for name in table["sources"]}
-    playing = [s for s in scene.sources if s.name in feeds]
+    feeds = {
+        name: read(feeds_folder(args) / f"{name}.wav")
+        for name in playing(args, list(table["sources"]))
+    }
+    sounding = [s for s in scene.sources if s.name in feeds]
     fmt = format_of(args, scene)
     print(f"simulating the movement of {', '.join(moving)}, on one clock")
     movement = simulate_movement(room, progress=print)
@@ -615,11 +679,11 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     print(f"mixing {len(names)} listeners through {len(movement.times)} moments{with_doppler}")
     mixes = render_movement(movement, feeds, fmt, sample_rate=rate)
     times, places = movement.times, movement.places
-    levels = {name: {s.name: levels_along(movement, s, name) for s in playing} for name in names}
+    levels = {name: {s.name: levels_along(movement, s, name) for s in sounding} for name in names}
     peak = max(float(abs(mixes[name]).max(initial=0.0)) for name in names)
     gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
-    weights = {s.name: s.sound_power_db for s in playing}
-    sources_move = any(s.name in moving for s in playing)
+    weights = {s.name: s.sound_power_db for s in sounding}
+    sources_move = any(s.name in moving for s in sounding)
     entries = responses_of(args, demo)
     info = {}
     for name in names:
@@ -658,6 +722,15 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
 
 
 # --------------------------------------------------------------------------- the video
+
+
+def length_of(table: dict, names: list[str]) -> float:
+    """How long the feeds of the sources ``names`` play (s), by ``table`` (the feeds'
+    FEEDS): the longest of them; that of every feed when ``names`` is empty."""
+    return max(
+        (float(table["sources"][name]["length_s"]) for name in names),
+        default=float(table["length_s"]),
+    )
 
 
 def tour_of(
@@ -712,7 +785,8 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
             f"error: the mixes in {folder} were made for another --indoors; "
             f"run first: {demo.command('render', args)}"
         )
-    stops = tour_of(args, seats, float(table["length_s"]), demo)
+    fed = playing(args, list(table["sources"]))  # those that play in the run (--sources)
+    stops = tour_of(args, seats, length_of(table, fed), demo)
     audio = pipeline.tour_audio(
         stops,
         folder,
@@ -746,8 +820,8 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         report if indoors is None else indoors.report(report),
         seats["seats"],
         stops,
-        playing=list(table["sources"]),
-        credit=args.credit or plays_line(table, free_of(scene)),
+        playing=fed,
+        credit=args.credit or plays_line(table, free_of(scene), fed),
         tool=pictures.settings_lines(demo, args, data, report),
         fmt=args.format,
         paths={(kind, item.name): knots(item) for kind, item in movers(scene)},
@@ -778,21 +852,20 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
     )
 
 
-def plays_line(table: dict, free: recordings.Recording | None = None) -> str:
-    """What the sources play, for the stills when ``--credit`` says nothing: the credit
-    the free recording's licence asks for, when one plays, and each other file by
-    source."""
+def plays_line(
+    table: dict,
+    free: recordings.Recording | None = None,
+    names: list[str] | None = None,
+) -> str:
+    """What the sources ``names`` play (None: every one fed), for the stills when
+    ``--credit`` says nothing: the credit the free recording's licence asks for, when
+    one of them plays it, and each other file by source."""
     kept = str(recordings.file_of(free)) if free is not None else None
+    fed = {name: v for name, v in table["sources"].items() if names is None or name in names}
     parts = (
-        [free.credit]
-        if free is not None and any(v["signal"] == kept for v in table["sources"].values())
-        else []
+        [free.credit] if free is not None and any(v["signal"] == kept for v in fed.values()) else []
     )
-    others = [
-        f"{name}: {Path(v['signal']).name}"
-        for name, v in table["sources"].items()
-        if v["signal"] != kept
-    ]
+    others = [f"{name}: {Path(v['signal']).name}" for name, v in fed.items() if v["signal"] != kept]
     if others:
         parts.append("Playing " + ", ".join(others))
     return " · ".join(parts)
@@ -847,6 +920,7 @@ DEMO = Demo(
             "choice needs no new one",
             aliases=("--tour",),
         ),
+        *sources_options(help=SOURCES_HELP, steps=("render", "video")),
         Option(
             "credit",
             "a line on the stills about the recordings: who made them, under which licence",
@@ -858,7 +932,8 @@ DEMO = Demo(
             "moving",
             "the sources and listeners that move along their walks in this run, by name, "
             "comma separated, every other walker standing where it starts; none keeps them "
-            "all still (default: those whose walk is on in the scene)",
+            "all still (default: those whose walk is on in the scene, but a source "
+            "--sources leaves out, which stands)",
             None,
             "movers",
             steps=("render", "video"),
@@ -893,6 +968,7 @@ DEMO = Demo(
     moving=moving_of,
     walks=moving_scene,
     listeners=lambda args: listeners_in(args.scene),
+    sources=sources_of,
 )
 
 if __name__ == "__main__":

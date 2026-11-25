@@ -473,3 +473,69 @@ def test_the_rumble_indoors_needs_something_that_shakes_the_ground(tmp_path) -> 
     data["listeners"] = [each for each in data["listeners"] if each["name"] != "balcony"]
     scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     assert works.houses(args) is not None
+
+
+def test_the_works_demo_plays_the_machines_picked(tmp_path) -> None:
+    """``--sources``: every machine and the alarm play by default, under the run's name
+    of today; a pick plays those alone, named after them: the stills' line credits
+    them alone, the houses hear them alone (their loudest the reference of the rumble),
+    and a pick with nothing that shakes the ground is refused the rumble indoors before
+    anything runs, in each part of a run in turn too."""
+    from acoustic_spaces.demos import load, pipeline, run_folder, scene_demo
+
+    folder = _street(tmp_path)
+    demo = load(folder / "works_demo.py").at(folder)
+
+    def run(*argv: str) -> tuple[argparse.Namespace, argparse.Namespace]:
+        args = demo.parser().parse_args(["render", *argv])
+        return args, demo.resolved(args)
+
+    args, resolved = run()
+    assert [(s.name, s.group, s.on) for s in demo.source_list(resolved)] == [
+        (name, None, True) for name in works.SOURCES
+    ]
+    assert resolved.playing == works.SOURCES and demo.check(args) is None
+    assert run_folder(resolved).name == "works_binaural"
+    args, resolved = run("--sources", "generator,dumper_alarm")
+    assert run_folder(resolved).name == "works_generator+dumper_alarm_binaural"
+    assert resolved.playing == ("generator", "dumper_alarm") and demo.check(args) is None
+    # The feeds are every source's, shared by every pick.
+    assert scene_demo.feeds_folder(resolved) == scene_demo.feeds_folder(run()[1])
+    feeds = scene_demo.feeds_folder(resolved)
+    pipeline.write_json(
+        feeds / works.WORKS,
+        {"rate": RATE, "length_s": 12.0, "blows_per_minute": 480.0, "inputs": {}},
+    )
+    assert works.credit(resolved) == (
+        "Made to Defra's noise database (2005): generator: its engine at "
+        f"{plant.GENERATOR.rpm:g} rpm; alarm: {plant.ALARM_HZ:g} Hz beeps, SAE J994 Type B"
+    )
+    assert works.credit(run()[1]).count(";") == 3  # all four
+    # The rumble indoors needs a machine that shakes the ground among those picked.
+    args, _ = run("--sources", "generator,dumper_alarm", "--indoors", "rumble")
+    assert demo.check(args) == (
+        "--indoors rumble hears the rumble of the ground's vibration, but nothing that "
+        "plays shakes it (breaker, dumper do); try --indoors works"
+    )
+    args, _ = run("--sources", "generator,dumper", "--indoors", "rumble")
+    assert demo.check(args) is None
+    args, _ = run("--sources-play", "in-turn", "--indoors", "works_and_rumble")
+    assert [run_folder(part).name for part in demo.each(args)] == [
+        f"works_{name}_indoors-works_and_rumble_binaural" for name in works.SOURCES
+    ]
+    assert demo.check(args).startswith(
+        "works_generator_indoors-works_and_rumble_binaural: --indoors works_and_rumble hears "
+        "the rumble"
+    )
+    # The houses hear the machines picked alone: outdoors, nothing then shakes the
+    # ground unless the breaker or the dumper plays.
+    works.scene(argparse.Namespace(source=folder / "scene.yaml", scene=folder / "scene_works.yaml"))
+    assert works.houses(run("--sources", "generator")[1]) is None
+    heard = works.houses(run("--sources", "generator,breaker")[1])
+    assert [p.source for p in heard.plant] == ["breaker"]
+    assert heard.loudest_db == pytest.approx(max(_power(n) for n in ("generator", "breaker")))
+
+
+def _power(name: str) -> float:
+    """The sound power of a source of the works (dB re 1 pW), all bands together."""
+    return 10.0 * math.log10(sum(10.0 ** (v / 10.0) for v in works.level_of(name, RATE)))

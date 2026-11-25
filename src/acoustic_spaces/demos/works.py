@@ -10,11 +10,13 @@ breaker strikes; ``--input NAME=WAV`` a dry recording of yours instead), ``simul
 simulates the scene, and ``render`` and ``video`` are the scene demo's
 (:mod:`acoustic_spaces.demos.scene_demo`): every listener for ``--seconds`` while the
 works go on, binaural, one gain for all, each stop's caption giving the level there.
-``--indoors`` hears them inside the house a listener stands in front of instead:
-through its closed window, with the rumble of the breaker's and the dumper's vibration,
-or either alone (:class:`acoustic_spaces.demos.indoors.StillHouses`); a room whose
-listener does not stand 2 m in front of its wall takes its level outdoors at the point
-there, which ``scene`` writes to a scene of its own (:func:`front_scene`) and
+``--sources`` plays some of them alone (``--sources breaker,dumper``), the others
+silent, from the same feeds and simulation, and ``--sources-play in-turn`` each in a
+part of its own. ``--indoors`` hears them inside the house a listener stands in front of
+instead: through its closed window, with the rumble of the breaker's and the dumper's
+vibration, or either alone (:class:`acoustic_spaces.demos.indoors.StillHouses`); a room
+whose listener does not stand 2 m in front of its wall takes its level outdoors at the
+point there, which ``scene`` writes to a scene of its own (:func:`front_scene`) and
 ``simulate`` simulates too. What is felt at each listener, the ground's or the house's
 floor's vibration, is a track for a bass shaker too (``.shaker.wav`` beside each mix,
 and the run's ``<run>_shaker.wav``).
@@ -31,10 +33,10 @@ import numpy as np
 import yaml
 
 from acoustic_spaces.demos import (
-    JOIN,
     SIMULATE,
     Demo,
     Option,
+    Source,
     Step,
     common_options,
     indoors,
@@ -42,7 +44,9 @@ from acoustic_spaces.demos import (
     listeners_in,
     pipeline,
     plant,
+    playing,
     scene_demo,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import mono, read, resampled, write
 from acoustic_spaces.parameters import OCTAVE_BANDS_HZ
@@ -53,6 +57,12 @@ SOURCES = (plant.BREAKER.name, plant.GENERATOR.name, plant.DUMPER.name, plant.AL
 WORKS = "works.json"
 #: What ``--indoors`` calls the works.
 NOUN = "works"
+#: --sources here: the works' sources, all of them by default.
+SOURCES_HELP = (
+    f"only these of the works, by name ({', '.join(SOURCES)}) or by their group in the "
+    "example's scene, comma separated (default: all of them); the others stay silent, and "
+    "as the feeds and the simulation keep every one, another pick needs neither again"
+)
 
 
 def machine_of(name: str) -> plant.Machine | None:
@@ -82,16 +92,46 @@ def plays(args: argparse.Namespace) -> dict[str, str]:
     return {name: what_plays(name, args) for name in SOURCES}
 
 
+def sources_of(args: argparse.Namespace) -> list[Source]:
+    """The works' sources a run can play (``--sources``), each with its group in the
+    example's scene (``--from``), every one playing unless ``--sources`` leaves it
+    out."""
+    found = scene_demo._current(getattr(args, "source", None))
+    groups = {} if found is None else {s.name: s.group for s in found.sources}
+    return [Source(name, groups.get(name)) for name in SOURCES]
+
+
+def rumble_problem(choice: str | None, names: list[str]) -> str | None:
+    """What is wrong with hearing the rumble of the ground's vibration indoors
+    (``--indoors`` ``choice``) with the sources ``names`` playing: none of them shakes
+    the ground; None when nothing is wrong."""
+    house = indoors.House.of(choice, NOUN)
+    if house is None or not house.rumble:
+        return None
+    machines = [machine_of(name) for name in names]
+    if any(m is not None and m.vibration is not None for m in machines):
+        return None
+    shakers = ", ".join(n for n, m in plant.MACHINES.items() if m.vibration is not None)
+    return (
+        f"--indoors {choice} hears the rumble of the ground's vibration, but nothing that "
+        f"plays shakes it ({shakers} do); try --indoors {NOUN}"
+    )
+
+
 def problems(demo: Demo, args: argparse.Namespace) -> str | None:
+    """A rate of blows and a time per listener that are positive, an ``--indoors``
+    choice the works have, and for the rumble, a machine that shakes the ground among
+    those ``--sources`` picks."""
     if float(args.blows) <= 0.0:
         return f"{demo.option('blows').option} is a positive number, not {args.blows!r}"
     if float(args.seconds) <= 0.0:
         return f"{demo.option('seconds').option} is a positive number, not {args.seconds!r}"
+    choice = getattr(args, "indoors", None)
     try:
-        indoors.House.of(getattr(args, "indoors", None), NOUN)
+        indoors.House.of(choice, NOUN)
     except ValueError as exc:
         return str(exc)
-    return None
+    return rumble_problem(choice, playing(demo.resolved(args), SOURCES))
 
 
 def _point(position) -> tuple[float, float, float]:
@@ -141,37 +181,36 @@ def _total_db(levels) -> np.ndarray:
 
 
 def houses(args: argparse.Namespace, demo: Demo | None = None) -> indoors.StillHouses | None:
-    """The works at each listener: in the house it stands in front of, as ``--indoors``
-    asks (the works heard through its window, the rumble of the breaker's and the
-    dumper's vibration, or both), or outdoors, with what is felt there; None when
-    nothing of them shakes the ground and they are heard outdoors. Through the window,
-    a room whose listener does not stand 2 m out takes its level outdoors from
-    :func:`front_scene`'s simulation. ``demo`` gives the commands to run first."""
+    """The works that play (``--sources``) at each listener: in the house it stands in
+    front of, as ``--indoors`` asks (the works heard through its window, the rumble of
+    the breaker's and the dumper's vibration, or both), or outdoors, with what is felt
+    there; None when nothing of them shakes the ground and they are heard outdoors.
+    Through the window, a room whose listener does not stand 2 m out takes its level
+    outdoors from :func:`front_scene`'s simulation. ``demo`` gives the commands to run
+    first."""
     from acoustic_spaces import Scene
 
     choice = getattr(args, "indoors", None)
     house = indoors.House.of(choice, NOUN)
     found = Scene.from_yaml(args.scene)
-    playing = [s for s in found.sources if s.in_use and s.name in SOURCES]
+    picked = playing(args, SOURCES)
+    heard = [s for s in found.sources if s.in_use and s.name in picked]
     shaking = []
-    for source in playing:
+    for source in heard:
         machine = machine_of(source.name)
         if machine is not None and machine.vibration is not None:
             shaking.append(indoors.Plant(source.name, machine.vibration, _point(source.position)))
-    if (house is None and not shaking) or not playing:
+    if (house is None and not shaking) or not heard:
         return None
-    if house is not None and house.rumble and not shaking:
-        shakers = ", ".join(n for n, m in plant.MACHINES.items() if m.vibration is not None)
-        raise SystemExit(
-            f"error: --indoors {choice} hears the rumble of the ground's vibration, but "
-            f"nothing that plays shakes it ({shakers} do); try --indoors {NOUN}"
-        )
+    problem = rumble_problem(choice, [s.name for s in heard])
+    if problem:
+        raise SystemExit(f"error: {problem}")
     names = [lis.name for lis in found.listeners if lis.in_use]
     inside = indoors.houses_heard(found, names, house, NOUN, args.scene.name)
     fronts, shifts = {}, {}
     points = front_points(found) if house is not None and house.airborne else {}
     if points:
-        sources = [s.name for s in playing]
+        sources = [s.name for s in heard]
         first = "the scene step" if demo is None else demo.command("scene", args)
         if not front_scene(args).exists():
             # The scene was written without these points (by an earlier works_demo.py).
@@ -190,7 +229,7 @@ def houses(args: argparse.Namespace, demo: Demo | None = None) -> indoors.StillH
         tuple(shaking),
         {lis.name: _point(lis.position) for lis in found.listeners if lis.in_use},
         inside,
-        max(s.sound_power_db for s in playing),
+        max(s.sound_power_db for s in heard),
         scene_demo.format_of(args, found),
         fronts,
         shifts,
@@ -363,10 +402,11 @@ def feeds_done(args: argparse.Namespace) -> bool:
 
 
 def credit(args: argparse.Namespace) -> str:
-    """The stills' line on what plays: each source's made sound or file."""
+    """The stills' line on what plays: the made sound or file of each source that plays
+    (``--sources``)."""
     facts = pipeline.read_json(scene_demo.feeds_folder(args) / WORKS)
     said = []
-    for name in SOURCES:
+    for name in playing(args, SOURCES):
         given = facts["inputs"].get(name)
         machine = machine_of(name)
         if given is not None:
@@ -420,6 +460,7 @@ def demo(script: Path, example: str = "street") -> Demo:
                 steps=("render", "video"),
             ),
             shared["listeners"],
+            *sources_options(help=SOURCES_HELP, steps=("render", "video")),
             shared["credit"],
             Option(
                 "source",
@@ -447,6 +488,7 @@ def demo(script: Path, example: str = "street") -> Demo:
         scene_from="scene",
         problems=problems,
         plays=plays,
+        sources=sources_of,
         # The works' scene keeps the street's listeners: read them before it is made.
         listeners=lambda args: listeners_in(args.source),
         # Its render step plays what walks in the works' scene, as the scene demo does.
@@ -472,7 +514,6 @@ def demo(script: Path, example: str = "street") -> Demo:
             lambda args: video(made, args),
             "the run's video, its audio and the stills, named after the run",
         ),
-        JOIN,
     ]
     return made
 

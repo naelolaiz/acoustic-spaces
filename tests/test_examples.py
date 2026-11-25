@@ -477,14 +477,27 @@ def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
     assert {item.name for item in room.scene.listeners} == {name for name, _ in demo.TOUR}
     assert demo.DEMO.listeners(args) == [name for name, _ in demo.TOUR]
     assert room.scene.simulation.ir_length_s >= 9.0
-    # --listeners: the tour at those places alone, from the start to the end of the
-    # music, each place left out giving its time to the one before.
-    tour = demo.tour_of(argparse.Namespace(**vars(args) | {"listeners": "conductor,nave-back"}))
+    # The tour's own, without --listeners: its places at its times, to the end of the music.
     starts = dict(demo.TOUR)
+    ends = [t for _, t in demo.TOUR[1:]] + [demo.end_of_music()]
+    assert demo.tour_of(args) == [(n, t, e) for (n, t), e in zip(demo.TOUR, ends, strict=True)]
+    # --listeners: the tour at those places alone, from the start to the end of the
+    # music, on the times the tour keeps for them (each place left out giving its time
+    # to the one before), taken in the order --listeners gives them.
+    tour = demo.tour_of(argparse.Namespace(**vars(args) | {"listeners": "conductor,nave-back"}))
+    assert tour == [
+        ("conductor", 0.0, starts["conductor"]),
+        ("nave-back", starts["conductor"], demo.end_of_music()),
+    ]
+    tour = demo.tour_of(argparse.Namespace(**vars(args) | {"listeners": "nave-back,conductor"}))
     assert tour == [
         ("nave-back", 0.0, starts["conductor"]),
         ("conductor", starts["conductor"], demo.end_of_music()),
     ]
+    # --tour gives its own order and times: --listeners only leaves places out of it.
+    given = {"tour": "nave-back:0,side-aisle:10,conductor:30", "listeners": "conductor,nave-back"}
+    tour = demo.tour_of(argparse.Namespace(**vars(args) | given))
+    assert tour == [("nave-back", 0.0, 30.0), ("conductor", 30.0, demo.end_of_music())]
     with pytest.raises(SystemExit, match="visits none of the listeners"):
         demo.tour_of(
             argparse.Namespace(**vars(args) | {"tour": "nave-back:0", "listeners": "conductor"})
@@ -511,6 +524,159 @@ def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
     assert list(plays) == names
     assert plays["singer_f5"] == "VocalSet singer f5 (mezzo-soprano), verses 2 and 3"
     assert plays["organ_pedal_cis"] == "the organ's pedal, C# side, verses 1 and 3"
+
+
+def test_church_demo_plays_the_sources_picked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """church_demo.py's --sources: every singer (Choir) and every side of the organ
+    (Organ pipes) by default, the run named as before; a pick mixes those sources alone,
+    with their weights, names the run after it, takes --input for them alone, shares the
+    feeds of every source, and its captions, stills and credit say what plays."""
+    demo = _script("church", "church_demo")
+    pictures = _script("church", "church_pictures")
+    paths = {
+        "source": example_path("church"),
+        "scene": tmp_path / "scene_choir.yaml",
+        "results": tmp_path / "results_choir",
+        "work": tmp_path / "demo",
+    }
+    every = _demo_args(demo.DEMO, **paths)
+    assert every.run_folder.name == "church_binaural"
+    assert list(every.playing) == demo.SOURCE_NAMES and len(demo.SOURCE_NAMES) == 23
+    groups = {source.group for source in demo.DEMO.sources(every)}
+    assert groups == {"Choir", "Organ pipes"}
+    assert all(source.on for source in demo.DEMO.sources(every))
+    demo.scene(every)
+    table = {"sources": demo.SOURCE_NAMES}
+    mixes = demo.mixes_of(every, table)
+    assert [mix.key for mix in mixes] == [name for name, _ in demo.TOUR]
+    assert pipeline.only_playing(mixes, every) == mixes  # every feed and weight, as before
+
+    choir = _demo_args(demo.DEMO, **paths, sources="Choir")
+    assert choir.run_folder.name == "church_Choir_binaural"
+    singers = [f"singer_{singer}" for singer in demo.SINGERS]
+    assert list(choir.playing) == singers
+    for mix in pipeline.only_playing(demo.mixes_of(choir, table), choir):
+        assert list(mix.feeds) == singers and set(mix.weights) == set(singers)
+        assert mix.info["sources"] == singers
+    assert list(demo.plays(choir)) == singers
+    wav = tmp_path / "take.wav"
+    wav.write_bytes(b"")
+    assert "no such source plays here" in demo.DEMO.check(
+        argparse.Namespace(**vars(choir) | {"inputs": {"organ_pedal_c": wav}})
+    )
+    assert demo.DEMO.check(argparse.Namespace(**vars(choir) | {"sources": "Bells"})).startswith(
+        "--sources Bells: no such source or group here"
+    )
+    # The feeds are of every source, whatever plays: a pick never makes them again.
+    feeds = every.work / "feeds"
+    feeds.mkdir(parents=True)
+    for name in demo.SOURCE_NAMES:
+        (feeds / f"{name}.wav").write_bytes(b"")
+    results = demo.simulations(choir)[0].results
+    results.mkdir(parents=True)
+    pipeline.write_json(results / pipeline.PARAMETERS, {"responses": [{}]})
+    monkeypatch.setattr(demo.pipeline, "response_rate", lambda simulation, entries: 48_000)
+    pipeline.write_json(feeds / "feeds.json", {"rate": 48_000, "sources": demo.SOURCE_NAMES})
+    assert demo.feeds_done(choir) and demo.feeds_done(every)
+    pipeline.write_json(feeds / "feeds.json", {"rate": 48_000, "sources": singers})
+    assert not demo.feeds_done(choir)
+
+    # In turn: the choir, then the organ, each a run of its own.
+    turns = argparse.Namespace(**vars(demo.DEMO.defaults()) | paths | {"sources_play": "in-turn"})
+    assert demo.DEMO.resolved(turns).run_folder.name == "church_each-source_binaural"
+    names = [part.run_folder.name for part in demo.DEMO.each(turns)]
+    assert names == ["church_Choir_binaural", "church_Organ-pipes_binaural"]
+
+    # What plays when, in words: as before for every source; a part left out says so.
+    who = demo.who_plays(demo.SOURCE_NAMES)
+    verses = [demo.VERSES[1] + 1.0, demo.VERSES[2] + 1.0, demo.VERSES[3] + 1.0]
+    assert [demo.what_plays(t, who) for t in verses] == [
+        "Verse 1: the organ alone, full",
+        "Verse 2: the choir alone",
+        "Verse 3: the choir with the organ, quiet",
+    ]
+    organ = demo.who_plays(list(demo.ORGAN_SOURCES))
+    assert [demo.what_plays(t, organ) for t in verses] == [
+        "Verse 1: the organ alone, full",
+        "Verse 2: the choir alone, left out of this run: nothing plays",
+        "Verse 3: the organ, quiet; the choir left out of this run",
+    ]
+    assert demo.who_plays(singers[:3]) == {"choir": "3 of the 19 singers"}
+    some = ["singer_f1", "organ_pedal_c"]
+    assert demo.who_plays(some) == {
+        "choir": "singer f1",
+        "organ": "the C side of the organ's pedal",
+    }
+    assert demo.who_plays(["organ_pedal_c", "organ_pedal_cis"]) == {"organ": "the organ's pedal"}
+    assert demo.what_plays(verses[0], demo.who_plays(singers)).endswith("nothing plays")
+    assert demo.sounding(some, verses[0]) == ["organ_pedal_c"]
+    assert demo.sounding(some, verses[2]) == some
+
+    # The stills: drawn of the sources that play, credited to the recordings heard.
+    pytest.importorskip("PIL")
+    scene = demo.scene_of(every)
+    report = {
+        "responses": [
+            {
+                "source": s["name"],
+                "listener": item["name"],
+                "spl_a_db": 60.0 - 0.1 * k,
+                "parameters": {"c80": [1.0 if s["name"].startswith("organ") else -1.0] * 8},
+            }
+            for k, s in enumerate(scene["sources"])
+            for item in scene["listeners"]
+        ]
+    }
+    tour = demo.tour_of(every)
+
+    def drawing(names, fmt="binaural", stops=tour):
+        who = demo.who_plays(names)
+        return pictures.Pictures(
+            scene,
+            report,
+            {},
+            stops,
+            demo.TITLES,
+            lambda t: demo.what_plays(t, who),
+            lambda t: demo.sounding(names, t),
+            demo.VOICES,
+            heard=names,
+            who=who,
+            fmt=fmt,
+        )
+
+    whole = drawing(demo.SOURCE_NAMES)
+    assert whole.title_line() == "A choir and an organ in a church, simulated"
+    assert whole.subtitle() == (
+        "The church example of acoustic_spaces (a stone nave, 9500 m³), heard binaurally at "
+        "six places"
+    )
+    lines = [line for line, _ in whole.lines("conductor", verses[2])]
+    assert lines[0] == "Verse 3: the choir with the organ, quiet"
+    assert lines[1].startswith("The choir: ") and " · the organ: " in lines[1]
+    assert lines[2] == "Clarity C80 here (0.5-2 kHz): choir -1.0 dB, organ +1.0 dB"
+    assert pictures.CREDIT == pictures.credit_of(True, True)
+    assert "VocalSet" in pictures.CREDIT and "VCSL" in pictures.CREDIT
+
+    two = argparse.Namespace(**vars(choir) | {"listeners": "conductor,nave-back"})
+    alone = drawing(singers, "mono", demo.tour_of(two))
+    assert {s["name"] for s in alone.sources} == set(singers)
+    assert alone.title_line() == "A choir in a church, simulated"
+    assert alone.subtitle().endswith("mixed as mono, heard at two places")
+    lines = [line for line, _ in alone.lines("conductor", verses[0])]
+    assert lines[0] == "Verse 1: the organ alone, left out of this run: nothing plays"
+    assert " organ" not in lines[1] and lines[2] == "Clarity C80 here (0.5-2 kHz): choir -1.0 dB"
+    assert alone.still(0).size == (1920, 1080) and alone.thumbnail().size == (1280, 720)
+    credit = pictures.credit_of(choir=True, organ=False)
+    assert "VocalSet" in credit and "VCSL" not in credit and "harmonisation" not in credit
+    both = drawing(some)
+    assert both.title_line() == "A singer of a choir and part of an organ in a church, simulated"
+    lines = [line for line, _ in both.lines("nave-back", verses[2])]
+    assert lines[0] == "Verse 3: singer f1 with the C side of the organ's pedal, quiet"
+    assert lines[1].startswith("Singer f1: ") and " · the pipes: " in lines[1]
+    assert both.still(5).size == (1920, 1080)
 
 
 def test_church_demo_tunes_and_times_a_take() -> None:
@@ -639,21 +805,24 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert tour[1][1] == pytest.approx(phrase) and tour[-1][2] == 195.0
     seats = {"seats": {"mix_position": {"rms_db": -40.0}, "singer": {"rms_db": -22.0}}}
     assert demo.gains_of(seats, tour) == {"mix_position": 18.0, "singer": 0.0}
-    # --listeners: the stops there alone, each with its phrases, the last to the end of
-    # the song, without the note on the mixes the others lack.
+    # --listeners: the stops there alone, in its order, each with its phrases, the last
+    # to the end of the song, without the note on the mixes the others lack.
     full = demo.tour_of(_demo_args(demo.DEMO, work=work), set(demo.TITLES))
     two = _demo_args(demo.DEMO, work=work, listeners="east_stand,mix_position")
     tour = demo.tour_of(two, {"mix_position", "east_stand"})
-    assert [name for name, _, _ in tour] == ["mix_position", "east_stand", "mix_position"]
-    assert (
-        tour[0] == full[0]
-        and tour[1][1:] == full[1][1:]
-        and tour[-1][1:]
-        == (
-            full[2][1],
-            195.0,
-        )
-    )
+    assert tour == [("east_stand", *full[0][1:]), ("mix_position", full[0][2], 195.0)]
+    # A stop the song's tour leaves out (0) plays as it is named, for the default tour's
+    # phrases; the song's own count wins where it gives one.
+    side = _demo_args(demo.DEMO, work=work, listeners="pitch_side,singer")
+    tour = demo.tour_of(side, {"pitch_side", "singer"})
+    assert tour == [("pitch_side", *full[0][1:]), ("singer", full[0][2], 195.0)]
+    named = ["east_stand", "pitch_side", "singer", "mix_position"]
+    assert demo.listeners_tour(named, demo.SONGS["francium"]) == [
+        ("east_stand", 2),
+        ("pitch_side", 1),
+        ("singer", 1),
+        ("mix_position", 1),
+    ]
     # One listener: the whole song there, in one stop.
     assert demo.tour_of(
         _demo_args(demo.DEMO, work=work, listeners="mix_position"), {"mix_position"}
@@ -774,6 +943,134 @@ def test_stadium_demo_plays_a_song_of_your_own(tmp_path: Path) -> None:
     assert not demo.feeds_done(argparse.Namespace(**vars(args) | {"credit": "Music: mine"}))
 
 
+def test_stadium_demo_plays_the_sources_picked(tmp_path: Path, monkeypatch) -> None:
+    """``--sources`` picks what of the concert plays, by name or by the scene's group,
+    every source the concert simulates by default (the run named as before): the mixes
+    keep the feeds and the weights of those alone, at the levels the feeds give them
+    against all the sources; ``--input`` takes those alone; a pick of the helicopter
+    (left out of the concert) or of silent feeds alone is refused; and
+    ``--sources-play in-turn`` plays the sound system, the monitors and the band each
+    in a part of its own."""
+    demo = _script("stadium_concert", "stadium_demo")
+    folder = copy_examples(tmp_path, ["stadium_concert"])[0].parent
+    stadium = demo.DEMO.at(folder)
+    used = [s for s in Scene.from_yaml(folder / "scene.yaml").sources if s.name != "helicopter"]
+
+    def given(**values) -> argparse.Namespace:
+        return argparse.Namespace(**vars(stadium.defaults()) | values)
+
+    # Before band writes its scene: --from's sources with the band, all on.
+    args = stadium.resolved(given())
+    assert [(s.name, s.group, s.on) for s in stadium.sources(args)] == [
+        (s.name, s.group, True) for s in used
+    ]
+    assert args.playing == tuple(s.name for s in used) and len(used) == 22
+    assert args.run_folder.name == "stadium_spicy_funk_cake_binaural"
+    assert stadium.check(given()) is None and list(demo.plays(args)) == list(args.playing)
+    demo.band(args)  # and from the scene with the band alike
+    assert stadium.resolved(given()).playing == args.playing
+    pa = stadium.resolved(given(sources="PA"))
+    assert pa.run_folder.name == "stadium_spicy_funk_cake_PA_binaural"
+    assert pa.playing == tuple(s.name for s in used if s.group.startswith("PA/"))
+    picked = stadium.resolved(given(sources="Band,PA/Mains"))
+    assert picked.playing == ("main_left", "main_right", "drum_kit", "singer_voice", "guitar_amp")
+    assert list(demo.plays(picked)) == list(picked.playing)
+    wav = tmp_path / "mine.wav"
+    write_wav(wav, np.zeros(800), 8000)
+    assert stadium.check(given(sources="PA", inputs={"drum_kit": wav})).startswith(
+        "--input drum_kit: no such source plays here; it has main_left, main_right, subs"
+    )
+    for name in ("helicopter", "Helicopter"):
+        assert stadium.check(given(sources=name)) == (
+            f"--sources {name}: left out of the concert's simulation, so it plays nothing "
+            "here; helicopter_demo.py flies it over the concert"
+        )
+    assert stadium.check(given(sources="flute")).startswith(
+        "--sources flute: no such source or group here; it has main_left"
+    )
+    # A song of your own without stems: the monitors and the band are silent, so a pick
+    # of them alone plays nothing.
+    write_wav(tmp_path / "song.wav", np.zeros((800, 2)), 8000)
+    own = {"music": tmp_path / "song.wav", "bpm": 120.0}
+    assert stadium.check(given(sources="Monitors,drum_kit", **own)) == (
+        "--sources Monitors,drum_kit: every source it picks is silent, as song has no stem "
+        "for them: give the stems (--stem), or pick the sound system (PA) too"
+    )
+    assert stadium.check(given(sources="Monitors,PA/Subwoofers", **own)) is None
+    vocal = own | {"stems": {"vocal": wav}}
+    assert stadium.check(given(sources="singer_voice", **vocal)) is None
+    assert stadium.check(given(sources="drum_kit", **vocal)).startswith("--sources drum_kit: every")
+    # render: the mixes of every listener hold the feeds of every source, at their gains
+    # against the loudest of all; render_mixes keeps those that play.
+    work = tmp_path / "demo"
+    args = stadium.resolved(given(sources="PA/Mains,drum_kit", work=work))
+    table = {s.name: {"gain_db": -float(k)} for k, s in enumerate(used)}
+    pipeline.write_json(demo.feeds_folder(args) / "feeds.json", {"sources": table})
+    results = demo.simulations(args)[0].results
+    responses = [
+        {"source": "main_left", "listener": name, "outputs": [{"format": "binaural", "wav": "x"}]}
+        for name in ("mix_position", "singer")
+    ]
+    pipeline.write_json(results / "parameters.json", {"responses": responses})
+    made = []
+    monkeypatch.setattr(demo.pipeline, "render_mixes", lambda mixes, *a, **k: made.extend(mixes))
+    demo.render(args)
+    assert [mix.listener for mix in made] == ["mix_position", "singer"]
+    assert all(list(mix.feeds) == [s.name for s in used] for mix in made)
+    for mix in pipeline.only_playing(made, args):
+        assert list(mix.feeds) == list(mix.weights) == ["main_left", "main_right", "drum_kit"]
+        assert mix.weights == {"main_left": 0.0, "main_right": -1.0, "drum_kit": -19.0}
+        assert mix.info["sources"] == ["main_left", "main_right", "drum_kit"]
+    # One after another: the groups of the concert, each a run of its own.
+    turns = stadium.resolved(given(sources_play="in-turn"))
+    assert turns.run_folder.name == "stadium_spicy_funk_cake_each-source_binaural"
+    assert [part.run_folder.name for part in turns.series_parts] == [
+        f"stadium_spicy_funk_cake_{group}_binaural" for group in ("PA", "Monitors", "Band")
+    ]
+
+
+def test_stadium_demo_says_what_plays(tmp_path: Path) -> None:
+    """The stills of a run of some of the concert's sources say what plays: the heading
+    names the groups, or their parts, that play (as before at its defaults), how the
+    mixes are heard and at how many listeners; the guitarist's place does not lean on
+    side fills that do not play; and silent feeds are not counted as heard."""
+    demo = _script("stadium_concert", "stadium_demo")
+    folder = copy_examples(tmp_path, ["stadium_concert"])[0].parent
+    args = _demo_args(demo.DEMO.at(folder))
+    used = demo.in_use(demo.every_source(args))
+    every = [s["name"] for s in used]
+    assert demo.heading_of(args, used, every, 11) == (
+        "A concert in a stadium, simulated",
+        "The stadium example's sound system, stage monitors and band, heard binaurally at its "
+        "listeners",
+    )
+    assert demo.concert_parts(used, every, short=True) == ["sound system", "monitors", "band"]
+    assert demo.titles_of(every) is demo.TITLES
+    some = [name for name in every if name.startswith("main_") or name == "drum_kit"]
+    two = _demo_args(demo.DEMO.at(folder), listeners="east_stand,mix_position", format="ambix3")
+    assert demo.heading_of(two, used, some, 2)[1] == (
+        "The stadium example's main arrays and drum kit, heard in ambix3 at 2 of its listeners"
+    )
+    no_subs = [name for name in every if name != "subs" and not name.startswith("side_fill")]
+    assert demo.concert_parts(used, no_subs) == [
+        "main arrays",
+        "fills",
+        "delays",
+        "vocal wedges",
+        "drum fill",
+        "band",
+    ]
+    assert demo.titles_of(no_subs)["guitarist"] == (
+        "On stage: the guitarist",
+        "between the side fills",
+    )
+    assert demo.in_words(["band"]) == "band" and demo.in_words(["a", "b"]) == "a and b"
+    table = {"sources": {"subs": {}, "drum_kit": {"silent": True}, "vocal_wedges": {}}}
+    picked = argparse.Namespace(playing=("subs", "drum_kit"))
+    assert demo.sounding_of(picked, table) == ["subs"]
+    assert demo.sounding_of(argparse.Namespace(), table) == ["subs", "vocal_wedges"]
+
+
 def test_orchestra_demo_tour(tmp_path: Path) -> None:
     """orchestra_demo.py names a track for every source of the orchestra, cuts between
     seats at the quietest moment near each share's end, and plays the movements one
@@ -833,20 +1130,137 @@ def test_orchestra_demo_tour(tmp_path: Path) -> None:
     assert np.abs(pause).max() == 0.0  # between the movements
     assert np.abs(audio[int(5 * rate) : int(6 * rate)]).max() > 0.4  # playing before the cut
     assert np.abs(audio[int(20 * rate) : int(21 * rate)]).max() > 0.4  # and after it
-    # --listeners: each movement at the seats of its tour among them, or at all of them
-    # when it has none of them; the seats the scene has in use, by their names.
+    # The default tour, as it was before --listeners and --sources took part in it.
+    assert demo.stops_of(_demo_args(demo.DEMO, work=work)) == [
+        (movement, seat) for movement, seats in demo.TOUR for seat in seats
+    ]
+    # --listeners: each movement at the seats of its tour among them, in its order, or
+    # at all of them when it has none of them; the seats the scene has in use, by their
+    # names. --tour keeps its own order.
     picked = _demo_args(demo.DEMO, work=work, listeners="stalls-rear,conductor")
     assert demo.stops_of(picked) == [
         (1, "conductor"),
         (2, "stalls-rear"),
-        (4, "conductor"),
         (4, "stalls-rear"),
+        (4, "conductor"),
     ]
+    toured = _demo_args(
+        demo.DEMO, work=work, listeners="stalls-rear,conductor", tour="4:conductor,4:stalls-rear"
+    )
+    assert demo.stops_of(toured) == [(4, "conductor"), (4, "stalls-rear")]
     front = _demo_args(demo.DEMO, work=work, listeners="stalls-front")
     assert demo.stops_of(front) == [(1, "stalls-front"), (2, "stalls-front"), (4, "stalls-front")]
     assert demo.DEMO.listeners(demo.DEMO.resolved(demo.DEMO.defaults())) == [
         seat["name"] for seat in scene["listeners"]
     ]
+
+
+def test_orchestra_demo_plays_the_players_it_picks(tmp_path: Path) -> None:
+    """--sources picks the orchestra's players by name or by section (the demo's groups,
+    the scene having none), all 61 by default as before; a run of some mixes their feeds
+    and weights alone, lists them alone for --input, says who plays in its facts, and
+    leaves out a movement they all rest through. --movements picks the movements the
+    run plays, in its order; what neither plays nor exists is refused."""
+    demo = _script("orchestra", "orchestra_demo")
+    scene = yaml.safe_load(example_path("orchestra").read_text(encoding="utf-8"))
+    assert not any(source.get("group") for source in scene["sources"])  # its simulation holds
+    sources = demo.sources(demo.DEMO.defaults())
+    assert sorted(s.name for s in sources) == sorted(demo.TRACKS) and all(s.on for s in sources)
+    groups = [s.group for s in sources]
+    assert list(dict.fromkeys(groups)) == [group for _, group, _ in demo.SECTIONS]
+    assert groups.count("Strings/Violins I") == 14 and groups.count("Winds/Flutes") == 2
+    work = tmp_path / "demo"
+    # By default every player plays, and the run's name is as it was.
+    every = _demo_args(demo.DEMO, work=work)
+    assert every.run_folder.name == "orchestra_binaural" and len(every.playing) == 61
+    assert set(demo.plays(every)) == set(demo.TRACKS)
+    assert demo.facts_of({"relative_db": 0.0, "lag_s": 0.01}, every.playing)[1] == (
+        "The orchestra reaches you 10 ms after it plays"
+    )
+    # The winds: their feeds and weights alone, from their tracks alone.
+    winds = _demo_args(demo.DEMO, work=work, sources="Winds")
+    assert winds.run_folder.name == "orchestra_Winds_binaural"
+    wind = ["fl1", "fl2", "ob1", "ob2", "cl1", "cl2", "bn1", "bn2"]
+    assert list(winds.playing) == wind and list(demo.plays(winds)) == wind
+    for movement in demo.MOVEMENTS:
+        for name in wind:
+            path = demo.tracks_folder(winds, movement) / demo.TRACKS[name]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+    mixes = pipeline.only_playing(demo.mixes_of(winds), winds)
+    assert len(mixes) == len(demo.stops_of(every)) == 9
+    for mix in mixes:
+        assert list(mix.feeds) == wind and list(mix.weights) == wind
+        assert mix.info["sources"] == wind
+    with pytest.raises(SystemExit, match="no tracks"):
+        demo.mixes_of(every)  # the strings' tracks are not there
+    facts = demo.facts_of({"relative_db": -3.0, "lag_s": 0.0504}, winds.playing)
+    assert facts == [
+        "-3.0 dB(A) against the loudest stop",
+        "The winds reach you 50 ms after they play",
+    ]
+    assert demo.who_plays(["fl1"]) == ("1 of the 2 flutes", True)
+    brass = ["hn1", "hn2", "tp1", "tp2", "timpani"]
+    assert demo.who_plays(brass) == ("the brass and the timpani", False)
+    assert demo.who_plays(["fl1", "ob1", "cl1", "bn1", "hn1"]) == ("5 of the 61 players", False)
+    assert pipeline.credited("credit", {"seats": {}}, winds.playing) == "credit"
+    problem = demo.DEMO.check(_demo_args(demo.DEMO, sources="Winds", inputs={"vl1_01": __file__}))
+    assert problem.startswith("--input vl1_01: no such source plays here; it has fl1, fl2")
+    # The timpani rest through movement II: a run of them leaves it out.
+    timpani = _demo_args(demo.DEMO, work=work, sources="Percussion/Timpani")
+    assert [m for m, _ in demo.stops_of(timpani)] == [1, 1, 1, 4, 4, 4, 4]
+    assert demo.movements_of(timpani) == [1, 4]
+    assert demo.DEMO.check(_demo_args(demo.DEMO, sources="Percussion", movements="2")) == (
+        "--sources Percussion: the players it picks rest through movement II, all the tour plays"
+    )
+    # Each section family in turn: a part each, named after it.
+    turns = demo.DEMO.resolved(_demo_args(demo.DEMO, work=work, sources_play="in-turn"))
+    assert turns.run_folder.name == "orchestra_each-source_binaural"
+    assert [part.run_folder.name for part in turns.series_parts] == [
+        f"orchestra_{family}_binaural" for family in ("Strings", "Winds", "Brass", "Percussion")
+    ]
+    # --movements: those movements alone, in its order, downloaded, mixed and toured.
+    some = _demo_args(demo.DEMO, work=work, movements="4,1")
+    assert some.run_folder.name == "orchestra_movements-4+1_binaural"
+    assert demo.movements_of(some) == [4, 1]
+    assert demo.stops_of(some) == [
+        *((4, seat) for seat in dict(demo.TOUR)[4]),
+        *((1, seat) for seat in dict(demo.TOUR)[1]),
+    ]
+    assert (
+        demo.DEMO.step("tracks").downloads(some).startswith("the 61 tracks of movements IV and I")
+    )
+    for given, refused in [
+        ({"movements": "3"}, "--movements 3: the recording has the movements 1, 2, 4"),
+        ({"movements": "first"}, "--movements takes the movements' numbers (1, 2, 4), not 'first'"),
+        ({"movements": "2", "tour": "1:conductor"}, "--movements 2: the tour (--tour) plays none"),
+        ({"tour": "1:balcony"}, "--tour 1:balcony: no such seat here; it has conductor, "),
+        ({"tour": "3:conductor"}, "--tour 3:conductor: the recording has the movements 1, 2, 4"),
+        ({"sources": "Choir"}, "--sources Choir: no such source or group here"),
+    ]:
+        assert demo.DEMO.check(_demo_args(demo.DEMO, **given)).startswith(refused), given
+
+
+def test_orchestra_pictures_show_the_players_that_play() -> None:
+    """The orchestra's stills light up and count the players that play, the others empty
+    chairs, and say so; with every one playing they are as before."""
+    pytest.importorskip("PIL")
+    from acoustic_spaces.demos import sibling
+
+    pictures = sibling(EXAMPLES / "orchestra" / "orchestra_demo.py", "make_images")
+    scene = yaml.safe_load(example_path("orchestra").read_text(encoding="utf-8"))
+    every = pictures.Pictures(scene, "stalls-middle", 1)
+    assert sum(every.counts.values()) == 61 and every.counts["Violins I"] == 14
+    assert every.played == "61 anechoic tracks"
+    winds = ["fl1", "fl2", "ob1", "ob2", "cl1", "cl2", "bn1", "bn2"]
+    some = pictures.Pictures(scene, "conductor", 4, heard=winds)
+    assert some.counts == {"Flutes": 2, "Oboes": 2, "Clarinets": 2, "Bassoons": 2}
+    assert some.played == "8 anechoic tracks"
+    assert some.cover().size == (1920, 1080) and some.thumbnail().getbbox() is not None
+    assert (
+        every.cover().tobytes()
+        != pictures.Pictures(scene, "stalls-middle", 1, heard=winds).cover().tobytes()
+    )
 
 
 def test_orchestra_demo_downloads_the_tracks(tmp_path: Path, monkeypatch) -> None:
@@ -928,6 +1342,33 @@ def test_stadium_pictures_show_the_crowd() -> None:
         drawing.surfaces(pictures.ImageDraw.Draw(img), 0, 10)
         lines.append(img.tobytes())
     assert lines[0] == lines[1] and [area.people for area in drawing.areas] == people
+
+
+def test_stadium_pictures_draw_the_sources_that_play(tmp_path: Path) -> None:
+    """With some of the concert's sources playing, the stills give the lines to the
+    listener and the loudest sources there of those alone, the others drawn muted; every
+    source plays unless they are given, and the thumbnail counts the places mixed."""
+    pytest.importorskip("PIL")
+    demo = _script("stadium_concert", "stadium_demo")
+    pictures = _script("stadium_concert", "stadium_pictures")
+    folder = copy_examples(tmp_path, ["stadium_concert"])[0].parent
+    args = _demo_args(demo.DEMO.at(folder))
+    demo.band(args)
+    scene = demo.scene_of(args)
+    names = [s["name"] for s in demo.in_use(scene["sources"])]
+    levels = {(name, "mix_position"): 90.0 - k for k, name in enumerate(names)}
+    tour = [("mix_position", 0.0, 10.0)]
+    seats = {"mix_position": {"listener": "mix_position", "lag_s": 0.1}}
+    every = pictures.Pictures(scene, folder, levels, seats, tour, demo.TITLES)
+    assert every.playing == set(names) and len(every.heard_at("mix_position")) == len(names)
+    band = ["drum_kit", "singer_voice", "guitar_amp"]
+    some = pictures.Pictures(
+        scene, folder, levels, seats, tour, demo.TITLES, playing=band, plays="band"
+    )
+    assert some.heard_at("mix_position") == {name: levels[name, "mix_position"] for name in band}
+    for drawing in (every, some):
+        assert drawing.still(0).getbbox() is not None
+        assert drawing.thumbnail().getbbox() is not None
 
 
 def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
@@ -1033,30 +1474,65 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     assert [(name, weather) for name, weather, _, _ in tour] == [s[:2] for s in demo.TOUR]
     assert tour[1][2] == pytest.approx(2 * phrase)
     assert tour[-1][3] - tour[-1][2] == pytest.approx(2 * phrase)
-    # --listeners: the stops at those places alone, in both weathers, each with its
-    # phrases. The places: the example's in use and the one behind the stage, which the
-    # demo puts in its scenes.
+    # --listeners: the tour visits those places alone, in its order, each with its stops
+    # of the default tour and its phrases, and closes at the first. The places: the
+    # example's in use and the one behind the stage, which the demo puts in its scenes,
+    # in the order the default tour first visits them.
+    assert demo.listeners(args) == ["audience", "behind_stage", "boat", "garden", "bedroom_window"]
     two = _demo_args(demo.DEMO, work=work, listeners="bedroom_window,audience")
     tour = demo.tour_of(two)
     assert [stop[:2] for stop in tour] == [
+        ("bedroom_window", "evening"),
+        ("bedroom_window", "still"),
+        ("bedroom_window", "evening"),
+        ("audience", "evening"),
+        ("bedroom_window", "evening"),
+    ]
+    assert tour[1][2] == pytest.approx(phrase) and tour[3][2] == pytest.approx(3 * phrase)
+    assert tour[-1][2] == pytest.approx(5 * phrase)
+    assert tour[-1][3] - tour[-1][2] == pytest.approx(2 * phrase)
+    flipped = demo.tour_of(_demo_args(demo.DEMO, work=work, listeners="audience,bedroom_window"))
+    assert [stop[:2] for stop in flipped] == [
         ("audience", "evening"),
         ("bedroom_window", "evening"),
         ("bedroom_window", "still"),
         ("bedroom_window", "evening"),
         ("audience", "evening"),
     ]
-    assert tour[1][2] == pytest.approx(2 * phrase) and tour[-1][2] == pytest.approx(5 * phrase)
-    assert tour[-1][3] - tour[-1][2] == pytest.approx(2 * phrase)
+    # Every place in the default tour's order: the default tour itself.
+    every = _demo_args(demo.DEMO, work=work, listeners=",".join(demo.listeners(args)))
+    assert demo.tour_of(every) == demo.tour_of(_demo_args(demo.DEMO, work=work))
+    # A place the default tour does not visit gets one stop in the evening's weather.
+    assert demo.tour_steps(["dock", "boat"]) == [
+        ("dock", "evening", 1.0),
+        ("boat", "evening", 1),
+        ("dock", "evening", 0),
+    ]
     # One place: its stops in a row joined into one.
     alone = demo.tour_of(_demo_args(demo.DEMO, work=work, listeners="audience"))
     assert alone == [("audience", "evening", 0.0, pytest.approx(4 * phrase))]
-    assert demo.listeners(args) == ["audience", "boat", "garden", "bedroom_window", "behind_stage"]
     custom = _demo_args(
         demo.DEMO, work=work, tour="bedroom_window:still:1,audience", last_phrases=0
     )
     tour = demo.tour_of(custom)
     assert [stop[:2] for stop in tour] == [("bedroom_window", "still"), ("audience", "evening")]
     assert tour[-1][3] == pytest.approx(195.0)
+    # With --tour, --listeners only leaves out the stops at the other places.
+    thinned = _demo_args(
+        demo.DEMO,
+        work=work,
+        tour="bedroom_window:still:1,audience,boat",
+        listeners="audience,bedroom_window",
+    )
+    assert [stop[:2] for stop in demo.tour_of(thinned)] == [
+        ("bedroom_window", "still"),
+        ("audience", "evening"),
+    ]
+    with pytest.raises(SystemExit, match="visits none of the listeners"):
+        demo.tour_of(
+            _demo_args(demo.DEMO, work=work, tour="bedroom_window:still:1", listeners="boat")
+        )
+    tour = demo.tour_of(custom)
     # The gains: the audience's loudness (K-weighted, not the dB(A)) everywhere, still
     # air at the evening's gain.
     levels = {"audience": -10.0, "bedroom_window": -30.0}
@@ -1125,6 +1601,108 @@ def test_lakeside_demo_plays_a_song_of_your_own(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/ffmpeg")
     assert demo.DEMO.check(compressed) is None
     assert music.own_song_problems(demo.DEMO, compressed) is None
+
+
+def test_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path, monkeypatch) -> None:
+    """``--sources`` picks the loudspeakers that play, by name or as the PA group, all
+    three by default (the run named as before); the mixes feed only those, their
+    arrival counts only those, and the stills draw only those and say so."""
+    demo = _script("lakeside_concert", "lakeside_demo")
+    pictures = _script("lakeside_concert", "lakeside_pictures")
+    folder = copy_examples(tmp_path, ["lakeside_concert"])[0].parent
+    work = tmp_path / "demo"
+    every = _demo_args(demo.DEMO, work=work)
+    assert [(s.name, s.group, s.on) for s in demo.sources(every)] == [
+        ("main_left", "PA", True),
+        ("main_right", "PA", True),
+        ("subs", "PA", True),
+    ]
+    assert every.playing == tuple(demo.CHANNELS)
+    assert demo.DEMO.run_name(every) == "lakeside_spicy_funk_cake_binaural"
+    assert demo.DEMO.run_name(_demo_args(demo.DEMO, work=work, sources="PA")) == (
+        "lakeside_spicy_funk_cake_binaural"
+    )
+    subs = _demo_args(demo.DEMO, work=work, sources="subs")
+    assert subs.playing == ("subs",) and subs.run_plays == "spicy_funk_cake"
+    assert demo.DEMO.run_name(subs) == "lakeside_spicy_funk_cake_subs_binaural"
+    # The example's own source on the stage is no loudspeaker of the demo's scenes.
+    assert demo.DEMO.check(_demo_args(demo.DEMO, work=work, sources="stage")) == (
+        "--sources stage: no such source or group here; it has main_left, main_right, subs, PA"
+    )
+    (tmp_path / "bass.wav").write_bytes(b"")
+    fed = _demo_args(demo.DEMO, sources="subs", inputs={"main_left": tmp_path / "bass.wav"})
+    assert demo.DEMO.check(fed) == "--input main_left: no such source plays here; it has subs"
+    # The mixes: every loudspeaker fed and weighed alike; those not picked left out.
+    entries = [{"listener": name} for name in ("audience", "boat")]
+    monkeypatch.setattr(demo, "responses_of", lambda args, weather: entries)
+    made = []
+    monkeypatch.setattr(pipeline, "render_mixes", lambda mixes, *a, **k: made.append(mixes))
+    for args in (every, subs):
+        demo.render(args)
+    default, picked = made
+    assert len(default) == 4 and all(list(mix.feeds) == list(demo.CHANNELS) for mix in default)
+    assert all(mix.weights == dict.fromkeys(demo.CHANNELS, 0.0) for mix in default)
+    assert pipeline.only_playing(default, every) == default
+    for mix in pipeline.only_playing(picked, subs):
+        assert list(mix.feeds) == ["subs"] and mix.weights == {"subs": 0.0}
+        assert mix.info["sources"] == ["subs"]
+    # When the sound arrives: alike weights count every loudspeaker exactly as none do
+    # (the default run's lags as before); the subwoofers' alone, theirs.
+    rate = 1000
+    for name, at, height in (("main_left", 100, 1.0), ("main_right", 100, 1.0), ("subs", 300, 0.5)):
+        h = np.zeros(500)
+        h[at] = height
+        write_wav(tmp_path / f"{name}.wav", h, rate)
+    responses = [
+        {"listener": "audience", "source": name, "wav": f"{name}.wav"} for name in demo.CHANNELS
+    ]
+    weights = dict.fromkeys(demo.CHANNELS, 0.0)
+    lag = pipeline.arrival_s(tmp_path, responses, "audience", weights)
+    assert lag == pipeline.arrival_s(tmp_path, responses, "audience") == pytest.approx(0.1)
+    assert pipeline.arrival_s(tmp_path, responses, "audience", {"subs": 0.0}) == pytest.approx(0.3)
+    # The stills: the loudspeakers that play alone, and a line that says so.
+    assert demo.what_plays(list(demo.CHANNELS)) is None
+    assert demo.what_plays(["main_left", "subs"]) == (
+        "Playing only the left line array and the subwoofers"
+    )
+    scene_args = _demo_args(
+        demo.DEMO,
+        source=folder / "scene.yaml",
+        scene=folder / "scene_demo.yaml",
+        still=folder / "scene_still.yaml",
+    )
+    demo.scenes(scene_args)
+    scenes = {
+        "evening": yaml.safe_load(scene_args.scene.read_text(encoding="utf-8")),
+        "still": yaml.safe_load(scene_args.still.read_text(encoding="utf-8")),
+    }
+    tour = [("audience", "evening", 0.0, 10.0), ("bedroom_window", "still", 10.0, 20.0)]
+    seats = {
+        f"{name}.{weather}": {"lag_s": 0.1, "relative_db": -1.0, "rms_db": -20.0}
+        for name in ("audience", "bedroom_window")
+        for weather in ("evening", "still")
+    }
+    gains = {"audience.evening": 0.0, "bedroom_window.still": 20.0}
+    tool = {w: ["Simulated", "Run as"] for w in scenes}
+    drawing = pictures.Pictures(
+        {w: s | {"sources": demo.playing_sources(s, ["subs"])} for w, s in scenes.items()},
+        seats,
+        tour,
+        demo.TITLES,
+        gains,
+        pipeline.credited("Music: a song", {"seats": seats}, ["subs"]),
+        folder=folder,
+        tool=tool,
+        playing=demo.what_plays(["subs"]),
+    )
+    assert [s["name"] for s in drawing.sources] == ["subs"]
+    assert list(drawing.stage) == scenes["evening"]["sources"][2]["position"]  # rays from them
+    assert "Playing only the subwoofers" in drawing.facts("audience", "evening")
+    for picture in (drawing.still(0), drawing.still(1), drawing.thumbnail()):
+        assert picture.getbbox() is not None
+    whole = pictures.Pictures(scenes, seats, tour, demo.TITLES, gains, "Music", folder=folder)
+    assert [s["name"] for s in whole.sources] == list(demo.CHANNELS)
+    assert not any(line.startswith("Playing") for line in whole.facts("audience", "evening"))
 
 
 def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
@@ -1198,7 +1776,10 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
         talk[int((pause - 0.5) * rate) : int((pause + 0.7) * rate)] = 0.0
     (args.work / "speech").mkdir(parents=True)
     write_wav(args.work / "speech" / f"{args.talker}.wav", talk, rate)
-    first, second = demo.cuts(args, room)
+    cuts = demo.segments(args, room)
+    assert list(cuts) == ["walk", "turn"] and cuts["walk"][0] == 0.0
+    (_, first), (start, second) = cuts["walk"], cuts["turn"]
+    assert start == first  # the turn's talk goes on from the walk's
     assert first == pytest.approx(pauses[0], abs=demo.PAUSE_S)
     assert second == pytest.approx(pauses[1], abs=demo.PAUSE_S)
     assert second - first >= turn_s
@@ -1214,7 +1795,7 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     assert len(spoken) / rate >= demo.needed_s(short, room)
     np.testing.assert_allclose(spoken[len(half) + gap :][: len(half)], half, atol=1e-6)
     assert not spoken[len(half) : len(half) + gap].any()
-    first, second = demo.cuts(short, room)
+    (_, first), (_, second) = demo.segments(short, room).values()
     assert second - first >= turn_s and second <= len(spoken) / rate
     write_wav(args.work / "speech" / "silent.wav", np.zeros(0), rate)
     with pytest.raises(SystemExit, match="silent is empty"):
@@ -1240,20 +1821,218 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     assert other.run_folder.name == "walk_M4_from-off_binaural"
     walked.mkdir(parents=True)
     pipeline.write_json(walked / demo.WALK, {"talker": args.talker})
-    assert not demo.part_done(args, "walk", demo.WALK)  # no sound for these ears yet
+    assert not demo.part_done(args, "walk")  # no sound for these ears yet
     write_wav(walked / f"walk.{demo.label_of(args)}.wav", np.zeros((8, 2)), rate)
-    assert demo.part_done(args, "walk", demo.WALK)
+    assert demo.part_done(args, "walk")
     # A run with another --turn walks the same: it plays this run's walk.
     turned = demo.DEMO.resolved(argparse.Namespace(**vars(args) | {"turn": "0:0,2:90"}))
     assert turned.run_folder != args.run_folder
-    assert demo.part_folder(turned, "walk", demo.WALK) == walked
-    assert not demo.part_done(turned, "turn", demo.TURNING)
+    assert demo.part_folder(turned, "walk") == walked
+    assert not demo.part_done(turned, "turn")
     # Through another head (--hrtf) the walk is made again, not taken as done.
     kemar = argparse.Namespace(**vars(args) | {"hrtf": tmp_path / "kemar.sofa"})
     assert demo.label_of(kemar) != demo.label_of(args)
-    assert not demo.part_done(kemar, "walk", demo.WALK)
-    assert not demo.part_done(given, "walk", demo.WALK)
-    assert not demo.part_done(args, "turn", demo.TURNING)
+    assert not demo.part_done(kemar, "walk")
+    assert not demo.part_done(given, "walk")
+    assert not demo.part_done(args, "turn")
+
+
+def test_walk_demo_listeners_order_the_parts(tmp_path: Path, capsys) -> None:
+    """walk_demo.py's --listeners picks its parts by the listener each follows, the
+    visitor's walk and standing's head turn, and their order: by default the walk, then
+    the turn, under the run's old name; in another order the talk goes on from one part
+    into the next in that order; a part left out is neither simulated nor needed; and a
+    part's sound is taken from another run only when it holds the same part of the talk.
+    Its one source, the guide, is all --sources takes."""
+    demo = _script("gallery", "walk_demo")
+    source = EXAMPLES / "gallery" / "scene.yaml"
+
+    def run(**values) -> argparse.Namespace:
+        given = {"source": source, "scene": tmp_path / "scene_demo.yaml", "work": tmp_path}
+        return _demo_args(demo.DEMO, **(given | values))
+
+    args = run()
+    assert args.run_folder.name == "walk_M4_binaural" and args.playing == ("guide",)
+    assert demo.DEMO.listeners(args) == ["visitor", "standing"]
+    assert [(s.name, s.group, s.on) for s in demo.DEMO.sources(args)] == [("guide", None, True)]
+    assert demo.order_of(args) == ["walk", "turn"] and demo.parts_words(args) == (
+        "the walk and the turn"
+    )
+    turn_first = run(listeners="standing,visitor")
+    assert turn_first.run_folder.name == "walk_M4_standing+visitor_binaural"
+    assert demo.order_of(turn_first) == ["turn", "walk"]
+    alone = run(listeners="visitor")
+    assert alone.run_folder.name == "walk_M4_visitor_binaural"
+    assert demo.order_of(alone) == ["walk"] and demo.parts_words(alone) == "the walk"
+    standing = run(listeners="standing")
+    # The guide alone plays, together or in turn: the run is the same, its name too.
+    assert run(sources="guide").run_folder == args.run_folder
+    assert run(sources_play="in-turn").run_folder == args.run_folder
+    assert demo.DEMO.check(run(sources="band")) == (
+        "--sources band: no such source or group here; it has guide"
+    )
+    assert demo.DEMO.check(run(listeners="in sight")) == (
+        "--listeners in sight: no such listener here; it has visitor, standing"
+    )
+    # --series listeners: a part each, an ordinary run of one listener, in that order.
+    series = run(listeners="standing,visitor", series="listeners")
+    assert [each.run_folder.name for each in demo.DEMO.each(series)] == [
+        "walk_M4_standing_binaural",
+        "walk_M4_visitor_binaural",
+    ]
+    # With the visitor's walk off, a run of the turn alone needs no walk and moves nobody.
+    data = yaml.safe_load(source.read_text(encoding="utf-8"))
+    next(lis for lis in data["listeners"] if lis["name"] == "visitor")["walk"]["enabled"] = False
+    off = tmp_path / "off.yaml"
+    off.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert "walk is off" in demo.DEMO.check(run(source=off))
+    assert demo.DEMO.check(run(source=off, listeners="standing")) is None
+    assert demo.moving(run(source=off, listeners="standing")) == []
+    assert demo.moving(standing) == [] and demo.moving(alone) == ["visitor"]
+    # The talk, cut in the run's order: the turn first, then the walk from its cut.
+    demo.scene(args)
+    room = Room.from_yaml(args.scene)
+    walk_s = float(demo.walk_points_of(room).times[-1])
+    turn_s = demo.turn_of(args)[-1][0]
+    rate = 8000
+    t = np.arange(int((walk_s + turn_s + 4 * demo.LINGER_S) * rate)) / rate
+    talk = 0.3 * np.sin(2 * np.pi * 180 * t) * (1.0 + np.sin(2 * np.pi * 3 * t))
+    pauses = (turn_s + demo.LINGER_S, turn_s + walk_s + 2 * demo.LINGER_S)
+    for pause in pauses:
+        talk[int((pause - 0.5) * rate) : int((pause + 0.7) * rate)] = 0.0
+    (tmp_path / "speech").mkdir()
+    write_wav(tmp_path / "speech" / "M4.wav", talk, rate)
+    cuts = demo.segments(turn_first, room)
+    assert list(cuts) == ["turn", "walk"]
+    assert cuts["turn"][0] == 0.0 and cuts["walk"][0] == cuts["turn"][1]
+    assert cuts["turn"][1] == pytest.approx(pauses[0], abs=demo.PAUSE_S)
+    assert cuts["walk"][1] == pytest.approx(pauses[1], abs=demo.PAUSE_S)
+    assert demo.segments(alone, room) == {"walk": demo.segments(args, room)["walk"]}
+    assert demo.needed_s(alone, room) == pytest.approx(walk_s + demo.LINGER_S + demo.PAUSE_S + 1.0)
+    assert demo.needed_s(args, room) == pytest.approx(
+        walk_s + turn_s + 2 * (demo.LINGER_S + demo.PAUSE_S) + 1.0
+    )
+    # A part left out does nothing and is done; the facts say what came before a part
+    # only out of the demo's own order, so a default run writes them as before.
+    capsys.readouterr()
+    demo.turn(alone)
+    demo.walk(standing)
+    assert capsys.readouterr().out == (
+        "turn: --listeners leaves out standing: no turn to play\n"
+        "walk: --listeners leaves out the visitor: no walk to play\n"
+    )
+    assert demo.part_done(alone, "turn") and demo.part_done(standing, "walk")
+    assert demo.facts_after(args, "walk") == {} and demo.facts_after(args, "turn") == {}
+    assert demo.facts_after(turn_first, "walk") == {"after": ["turn"]}
+    assert demo.facts_after(turn_first, "turn") == {"after": []}
+    assert demo.facts_after(standing, "turn") == {"after": []}
+
+    def made(run_args, part: str, **facts) -> Path:
+        folder = run_args.run_folder / part
+        folder.mkdir(parents=True)
+        pipeline.write_json(folder / demo.FACTS[part], {"talker": "M4", **facts})
+        write_wav(folder / f"{part}.{demo.label_of(run_args)}.wav", np.zeros((8, 2)), rate)
+        return folder
+
+    # The default run's walk (as written before --listeners) starts the talk: the walk
+    # alone plays it, a walk after the turn does not.
+    walked = made(args, "walk")
+    assert demo.part_folder(alone, "walk") == walked
+    assert demo.part_folder(turn_first, "walk") is None
+    # Its turn follows the walk: the turn alone, from the talk's start, is made anew.
+    turned = made(args, "turn")
+    assert demo.part_folder(args, "turn") == turned
+    assert demo.part_folder(standing, "turn") is None
+    # A walk after the turn follows that --turn: a run with another turns anew.
+    after = made(turn_first, "walk", after=["turn"])
+    assert demo.part_folder(turn_first, "walk") == after
+    other = run(listeners="standing,visitor", turn="0:0,2:90")
+    assert demo.DEMO.upstream(other, "walk").run_folder == turn_first.run_folder
+    assert demo.part_folder(other, "walk") is None
+    # The turn alone is the turn first of the run that walks after it.
+    first = made(standing, "turn", after=[])
+    assert demo.part_folder(turn_first, "turn") == first
+
+
+def test_walk_demo_video_plays_its_parts_in_order(tmp_path: Path) -> None:
+    """walk_demo.py's video step (stills only, no ffmpeg) plays the parts the run has, in
+    its --listeners order, a breath of silence between them, and marks their moments:
+    the walk then the turn by default, the turn first when standing comes first, and one
+    part alone with no silence."""
+    pytest.importorskip("PIL")
+    demo = _script("gallery", "walk_demo")
+
+    def run(**values) -> argparse.Namespace:
+        given = {
+            "source": EXAMPLES / "gallery" / "scene.yaml",
+            "scene": tmp_path / "scene_demo.yaml",
+            "work": tmp_path,
+            "no_mp4": True,
+        }
+        return _demo_args(demo.DEMO, **(given | values))
+
+    args = run()
+    demo.scene(args)
+    rate = 8000
+    facts = {
+        "walk": {
+            "talker": "M4",
+            "talk_s": [0.0, 1.0],
+            "times": [0.0, 1.0, 2.0],
+            "positions": [[17.0, 4.0, 1.6], [10.0, 4.0, 1.6], [4.0, 16.0, 1.6]],
+            "yaws": [180.0, 180.0, 90.0],
+            "level_a_db": [56.0, 52.0, 48.0],
+            "sti": [0.7, 0.6, 0.5],
+        },
+        "turn": {
+            "talker": "M4",
+            "talk_s": [1.0, 3.0],
+            "facing": 0.0,
+            "keys": [[0.0, 0.0], [1.0, 90.0]],
+            "times": [0.0, 1.0],
+            "positions": [[16.0, 4.0, 1.6]] * 2,
+            "yaws": [0.0, 90.0],
+            "level_a_db": [60.0, 60.0],
+            "sti": [0.8, 0.8],
+        },
+    }
+    for part, data in facts.items():
+        folder = args.run_folder / part
+        folder.mkdir(parents=True)
+        pipeline.write_json(folder / demo.FACTS[part], data)
+        write_wav(folder / f"{part}.binaural.wav", np.full((5 * rate, 2), 0.1), rate)
+    walk_n = int((1.0 + demo.TAIL_S) * rate)
+    turn_n = int((2.0 + demo.TAIL_S) * rate)
+    gap = int(demo.GAP_S * rate)
+
+    def stills(run_args) -> list[str]:
+        found = sorted((run_args.run_folder / "stills").glob("*.png"))
+        return [re.sub(r"^\d+_", "", p.stem) for p in found]
+
+    demo.video(args)
+    audio, _ = read_wav(tmp_path / "walk_M4_binaural.wav")
+    assert len(audio) == walk_n + gap + turn_n
+    assert not audio[walk_n : walk_n + gap].any()  # the breath between the parts
+    assert stills(args)[0] == "setting-off" and stills(args)[-1] == "still"  # the turn's
+    # The turn first: it starts the talk, so the run plays its own turn, not the default
+    # run's, and its own walk after it.
+    first = run(listeners="standing,visitor")
+    for part, after in (("turn", []), ("walk", ["turn"])):
+        folder = first.run_folder / part
+        folder.mkdir(parents=True)
+        pipeline.write_json(folder / demo.FACTS[part], facts[part] | {"after": after})
+        write_wav(folder / f"{part}.binaural.wav", np.full((5 * rate, 2), 0.1), rate)
+    demo.video(first)
+    audio, _ = read_wav(tmp_path / "walk_M4_standing+visitor_binaural.wav")
+    assert len(audio) == turn_n + gap + walk_n
+    assert not audio[turn_n : turn_n + gap].any()
+    assert stills(first)[0] == "turning-left" and "setting-off" in stills(first)
+    # The walk alone plays the default run's walk, which starts the talk too: no silence.
+    alone = run(listeners="visitor")
+    demo.video(alone)
+    audio, _ = read_wav(tmp_path / "walk_M4_visitor_binaural.wav")
+    assert len(audio) == walk_n
+    assert not any(name.startswith(("turning", "still")) for name in stills(alone))
 
 
 def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
@@ -1295,13 +2074,11 @@ def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
         "level_a_db": [44.0] * len(keys),
         "sti": [0.38] * len(keys),
     }
+    voice = ("normal", demo.VOICES["normal"])
     drawing = pictures.Pictures(
         scene,
-        walked,
-        turned,
-        walk_s=16.0,
-        turn_at=16.6,
-        voice=("normal", demo.VOICES["normal"]),
+        [("walk", walked, 0.0, 16.0), ("turn", turned, 16.6, 31.6)],
+        voice=voice,
         credit="Speech: a corpus",
     )
     assert walked["sight"] == [True, True, False, False]
@@ -1330,6 +2107,41 @@ def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
     assert drawing.shown(16.6 + 12.0, "visitor", "standing") == (
         "guide -> standing facing 180.0 deg"
     )
+    # --listeners standing,visitor: the turn, then the walk; the moments and the states
+    # follow that order, each part's from where its sound starts.
+    first = pictures.Pictures(
+        scene,
+        [("turn", turned, 0.0, 15.0), ("walk", walked, 15.6, 31.6)],
+        voice=voice,
+        credit="Speech: a corpus",
+    )
+    moments = first.moments()
+    assert [name for name, _, _ in moments] == [
+        "still",
+        "turning-left",
+        "still",
+        "still",
+        "setting-off",
+        "corner",
+        "out-of-sight",
+        "standing",
+    ]
+    assert [t for _, t, _ in moments][4:] == pytest.approx([15.6, 20.6, 25.6, 30.6])
+    assert first.state(0.0)["part"] == "turn" and first.state(15.3)["part"] == "walk"
+    assert first.state(15.3)["local"] == 0.0  # in the silence before the walk: its start
+    assert first.shown(15.6 + 5.0, "visitor", "standing") == "guide -> visitor @ 5.00 s"
+    # One part alone: its moments, and pictures of it alone (no walk drawn for the turn).
+    alone = pictures.Pictures(
+        scene, [("turn", turned, 0.0, 15.0)], voice=voice, credit="Speech: a corpus"
+    )
+    assert alone.walked is None and {name for name, _, _ in alone.moments()} == {
+        "still",
+        "turning-left",
+    }
+    assert alone.state(40.0)["part"] == "turn"  # after its end, the end of the last part
+    for drawn in (first, alone):
+        for picture in (drawn.frame(0.0), drawn.frame(20.0), drawn.thumbnail()):
+            assert picture.getbbox() is not None
 
 
 # --------------------------------------------------------------------------- the demo code

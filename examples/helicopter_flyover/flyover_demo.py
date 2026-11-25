@@ -26,8 +26,8 @@ environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 or `python flyover_demo.py all`, every step, leaving out what is there already; the
 editor's Simulation > Run demo… runs it too. Each run goes to a folder in ./demo named
 after its settings (demo/flyover_binaural/), with the video, its audio and its
-thumbnail beside it; `python flyover_demo.py join` plays finished runs in one video.
-Use headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of
+thumbnail beside it; `--speed 150,250` plays a pass at each speed in one video. Use
+headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of
 a spherical head.
 
 Each listener hears the helicopter through its direct sound and its reflection off the

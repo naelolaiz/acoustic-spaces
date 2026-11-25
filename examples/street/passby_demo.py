@@ -10,30 +10,30 @@ The vehicles are the example's own (the sources `car` with `car_horn`, `bus`,
 simulations until ticked), at 50 km/h (--speed); --vehicle picks the one that goes past.
 The car, the bus and the motorcycle send their sound from 0.05 m above the road with
 CNOSSOS-EU's sound power per octave band for that speed and their category (Directive
-2002/49/EC, Annex II, Appendix F, Table F-1, as amended in 2021): a passenger car, a
-city bus with two axles, a motorcycle. Their sound is made to that power: tyre noise
-(none for the motorcycle), and the firing of their engine (four cylinders at 2000 rpm,
-six at 1500 and two at 4000; --rpm), each with the spectrum of its part; `--input
-NAME=WAV` plays a dry recording of yours instead (one of a vehicle going past has its
-Doppler and the road in it already). `--car car_and_horn` sounds the car's horn too, in
-two short blasts every 3 s: a pair of disc horns at 360 and 430 Hz, their tone discs
-ringing near 3 kHz, 0.5 m up, 110 dB(A) 2 m in front of them, as Hella's S77 (approved
-to UN Regulation 28), with the siren's directivity; `--car horn` plays the horn alone.
-The police car is a passenger car made as the car is, with its siren on its roof, 1.5 m
-up (--siren: wail, yelp or two-tone), at the level and with the directivity of a 100 W
-electronic siren the National Bureau of Standards measured; --police-car siren plays the
-siren alone. The fire engine is a medium heavy vehicle with two axles made as the bus
-is, its siren on its cab's roof, 3.0 m up, playing the two tones as loud as the Swiss
-rule lets them be on a vehicle, and its air horn 1.2 m up, in blasts as loud as the rule
-for vehicles' horns lets one be on its bench; --fire-engine leaves out the horn, the
-vehicle itself, or both. The tram is a low-floor tram with air conditioning, 30 m long,
-on its track set in the street, its sound power Schall 03's (Germany's method for the
-noise of railways and tramways, 2014) at the rail top, shared out between its four
-bogies, and on its roof, between its two halves; each of its two sources plays its
-points at its height one behind the other, so it goes by as long as it is. Run it from
-the folder of the street example
-(`acoustic-spaces examples --copy . street && cd street`), in the Python environment
-acoustic-spaces is installed in, with ffmpeg on the PATH:
+2002/49/EC, Annex II, Appendix F, Table F-1, as amended in 2021): a passenger car, a city
+bus with two axles, a motorcycle. Their sound is made to that power: tyre noise (none for
+the motorcycle), and the firing of their engine (four cylinders at 2000 rpm, six at 1500
+and two at 4000; --rpm), each with the spectrum of its part; `--input NAME=WAV` plays a
+dry recording of yours instead (one of a vehicle going past has its Doppler and the road
+in it already). The car's horn plays only when `--sources` picks it (`--sources
+car,car_horn`), in two short blasts every 3 s: a pair of disc horns at 360 and 430 Hz,
+their tone discs ringing near 3 kHz, 0.5 m up, 110 dB(A) 2 m in front of them, as Hella's
+S77 (approved to UN Regulation 28), with the siren's directivity; `--sources car_horn`
+plays the horn alone. The police car is a passenger car made as the car is, with its
+siren on its roof, 1.5 m up (--siren: wail, yelp or two-tone), at the level and with the
+directivity of a 100 W electronic siren the National Bureau of Standards measured;
+`--sources police_car_siren` plays the siren alone. The fire engine is a medium heavy
+vehicle with two axles made as the bus is, its siren on its cab's roof, 3.0 m up, playing
+the two tones as loud as the Swiss rule lets them be on a vehicle, and its air horn 1.2 m
+up, in blasts as loud as the rule for vehicles' horns lets one be on its bench;
+`--sources` leaves out any of the three (`--sources fire_engine_siren,fire_engine_horn`,
+the truck itself left out). The tram is a low-floor tram with air conditioning, 30 m
+long, on its track set in the street, its sound power Schall 03's (Germany's method for
+the noise of railways and tramways, 2014) at the rail top, shared out between its four
+bogies, and on its roof, between its two halves; each of its two sources plays its points
+at its height one behind the other, so it goes by as long as it is. Run it from the
+folder of the street example (`acoustic-spaces examples --copy . street && cd street`),
+in the Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
     python passby_demo.py sound   # NAME/NAME.wav (and NAME/siren.wav, horn.wav): dry
     python passby_demo.py scene   # scene_demo.yaml: the vehicle alone, at --speed, with Doppler
@@ -44,8 +44,9 @@ or `python passby_demo.py all --vehicle bus`, every step, leaving out what is th
 already; the editor's Simulation > Run demo… runs it too. Each run goes to a folder in
 ./demo named after its settings (demo/passby_bus_binaural/: the scene, the sound, the
 passes, the stills), with the video, its audio and its thumbnail beside it, so that a run
-with other settings writes over none of them; `python passby_demo.py join` plays finished
-runs one after another in one video. Use headphones; `--hrtf me.sofa` plays it through
+with other settings writes over none of them; `--vehicle car,bus` plays the two one after
+the other in one video, and `--sources-play in-turn` each of the vehicle's sources alone,
+one after the other. Use headphones; `--hrtf me.sofa` plays it through
 your own or measured HRTFs instead of a spherical head.
 
 Each listener hears the vehicle through every early path the scene traces (reflections

@@ -54,8 +54,18 @@ organ sits 11 dB below its full one inside its feeds.
 `video` tours six places over the three verses with 1 s crossfades. Every place keeps
 one gain, so the levels between them are the church's; each mix is shifted earlier by
 the time the sound takes to reach that place, so that the music runs on across a cut.
-`--listeners nave-back,conductor` mixes those places alone, and the video tours them
-alone, each place left out giving its time to the one before.
+`--listeners conductor,nave-back` mixes those places alone, and the video tours them
+alone and in that order, on the tour's times: each place left out gives its time to the
+one before, and the places given take those times in turn (the conductor from the start,
+the back of the nave from the conductor's time on).
+
+`--sources Choir` plays the choir alone, `--sources "Organ pipes"` the organ alone (the
+scene's groups), `--sources singer_f1,organ_pedal_c` those sources alone; every one plays
+by default. The feeds and the simulation keep every source, so another pick needs
+neither again. A verse whose part is left out plays nothing, and its caption says so;
+the stills draw and credit what plays. `--sources-play in-turn` plays the choir, then
+the organ (or each source or group `--sources` names), each alone, one after another in
+one video.
 """
 
 from __future__ import annotations
@@ -75,15 +85,19 @@ from acoustic_spaces.demos import (
     SIMULATE,
     Demo,
     Option,
+    Source,
     Step,
+    chosen_order,
     common_options,
     input_option,
     listeners_option,
     picked,
     pipeline,
+    playing,
     product,
     run_folder,
     sibling,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import gated_rms, mono, read, resampled, write
 
@@ -191,8 +205,12 @@ ORGAN_SOURCES = {
     "organ_pedal_c": {"division": "pedal", "side": 0},
     "organ_pedal_cis": {"division": "pedal", "side": 1},
 }
+#: Every source of the demo, in the order the scene's groups have them: the singers, then
+#: the organ.
+SOURCE_NAMES = [f"singer_{singer}" for singer in SINGERS] + list(ORGAN_SOURCES)
 #: The tour: the scene's listener and from when (s); each runs until the next one starts.
-#: The demo's scene has these listeners, in this order.
+#: The demo's scene has these listeners, in this order; ``--listeners`` takes them to
+#: these times in its own order.
 TOUR = [
     ("nave-back", 0.0),
     ("side-aisle", 11.5),
@@ -402,8 +420,7 @@ def scene(args) -> None:
         if s.get("group") in (CHOIR, ORGAN_PIPES)
     ]
     names = {s["name"] for s in sources}
-    wanted = [f"singer_{singer}" for singer in SINGERS] + list(ORGAN_SOURCES)
-    missing = [name for name in wanted if name not in names]
+    missing = [name for name in SOURCE_NAMES if name not in names]
     listeners = {item["name"]: item for item in base["listeners"]}
     missing += [name for name, _ in TOUR if name not in listeners]
     if missing:
@@ -747,12 +764,13 @@ def feeds(args) -> None:
 
 def feeds_done(args) -> bool:
     """Whether the feeds are there, of every source, at the rate of the responses: they
-    hang on nothing else, so that every run at that rate shares them."""
+    hang on nothing else (not on the sources ``--sources`` picks either), so that every
+    run at that rate shares them."""
     path = args.work / "feeds" / "feeds.json"
     if not path.exists():
         return False
     table = pipeline.read_json(path)
-    if sorted(table.get("sources", [])) != sorted(plays(args)):
+    if sorted(table.get("sources", [])) != sorted(SOURCE_NAMES):
         return False
     if not all((path.parent / f"{name}.wav").exists() for name in table["sources"]):
         return False
@@ -765,15 +783,26 @@ def feeds_done(args) -> bool:
 
 
 def plays(args) -> dict[str, str]:
-    """What each source plays unless ``--input`` gives it a file."""
-    out = {
-        f"singer_{name}": f"VocalSet singer {name} ({VOICES[name]}), verses 2 and 3"
-        for name in SINGERS
-    }
-    for name, organ in ORGAN_SOURCES.items():
-        side = "C" if organ["side"] == 0 else "C#"
-        out[name] = f"the organ's {organ['division']}, {side} side, verses 1 and 3"
+    """What each source that plays in the run (``--sources``) plays unless ``--input``
+    gives it a file."""
+    out = {}
+    for name in playing(args, SOURCE_NAMES):
+        if name in ORGAN_SOURCES:
+            organ = ORGAN_SOURCES[name]
+            side = "C" if organ["side"] == 0 else "C#"
+            out[name] = f"the organ's {organ['division']}, {side} side, verses 1 and 3"
+        else:
+            singer = name.removeprefix("singer_")
+            out[name] = f"VocalSet singer {singer} ({VOICES[singer]}), verses 2 and 3"
     return out
+
+
+def sources(args) -> list[Source]:
+    """The sources ``--sources`` picks from, every one played by default: each singer in
+    the scene's Choir group and each side of the organ's divisions in its Organ pipes
+    group (from the demo's own lists, so that they are known before the scene is
+    written)."""
+    return [Source(name, ORGAN_PIPES if name in ORGAN_SOURCES else CHOIR) for name in SOURCE_NAMES]
 
 
 def feeds_table(args) -> dict:
@@ -783,18 +812,25 @@ def feeds_table(args) -> dict:
     return pipeline.read_json(path)
 
 
-def render(args) -> None:
-    """Every listener's mix (``--format``, binaural by default), with one gain for all:
-    the loudest peak at -1 dBFS. auralize gives each source its level_db; when the sound
-    arrives counts each source as loud as that."""
-    table = feeds_table(args)
-    listeners = picked(args, [item["name"] for item in scene_of(args)["listeners"]])
+def mixes_of(args, table: dict) -> list[pipeline.Mix]:
+    """A mix of every feed (``table``, feeds.json) at each listener the run plays, each
+    source weighed by its level_db, as when the sound arrives counts it: render_mixes
+    keeps the sources that play in the run alone (``--sources``), their feeds and their
+    weights (:func:`~acoustic_spaces.demos.pipeline.only_playing`)."""
+    scene = scene_of(args)
+    listeners = picked(args, [item["name"] for item in scene["listeners"]])
     feeds = {name: args.work / "feeds" / f"{name}.wav" for name in table["sources"]}
-    weights = {source["name"]: source["level_db"] for source in scene_of(args)["sources"]}
+    weights = {source["name"]: source["level_db"] for source in scene["sources"]}
     simulation = simulations(args)[0]
-    mixes = [pipeline.Mix(name, simulation, name, feeds, weights) for name in listeners]
+    return [pipeline.Mix(name, simulation, name, feeds, weights) for name in listeners]
+
+
+def render(args) -> None:
+    """Every listener's mix (``--format``, binaural by default) of the sources that play
+    (``--sources``), with one gain for all: the loudest peak at -1 dBFS. auralize gives
+    each source its level_db; when the sound arrives counts each source as loud as that."""
     pipeline.render_mixes(
-        mixes,
+        mixes_of(args, feeds_table(args)),
         run_folder(args) / "seats",
         args,
         first=DEMO.command("scene", args),
@@ -804,7 +840,10 @@ def render(args) -> None:
 
 def tour_of(args) -> list[tuple[str, float, float]]:
     """(listener, start, end) of each stop: the tour's own, or ``--tour``'s, without
-    the places ``--listeners`` leaves out, each giving its time to the stop before."""
+    the places ``--listeners`` leaves out, each giving its time to the stop before. The
+    tour's own takes the places in the order ``--listeners`` gives them to its times
+    (``--listeners conductor,nave-back``: the conductor from the start, under the organ
+    from the conductor's time on); ``--tour`` keeps its own order."""
     steps = TOUR
     if args.tour:
         steps = [(part.split(":")[0], float(part.split(":")[1])) for part in args.tour.split(",")]
@@ -817,11 +856,19 @@ def tour_of(args) -> list[tuple[str, float, float]]:
     tour = pipeline.picked_tour(tour, lambda stop: stop[0] in kept)
     if not tour:
         raise SystemExit("error: the tour visits none of the listeners --listeners names")
+    if not args.tour:  # each place of the tour once: the same times, in the order given
+        order = chosen_order(args, [name for name, _, _ in tour])
+        tour = [(name, start, stop) for name, (_, start, stop) in zip(order, tour, strict=True)]
     return tour
 
 
-def playing(t: float) -> tuple[str, ...]:
-    """Who plays in the verse at ``t`` (s)."""
+def part_of(name: str) -> str:
+    """The part of the music the source ``name`` plays: ``organ`` or ``choir``."""
+    return "organ" if name in ORGAN_SOURCES else "choir"
+
+
+def parts_at(t: float) -> tuple[str, ...]:
+    """The parts of the music in the verse at ``t`` (s)."""
     if t < VERSES[2] - 1.0:
         return ("organ",)
     if t < VERSES[3] - 1.0:
@@ -829,12 +876,57 @@ def playing(t: float) -> tuple[str, ...]:
     return ("choir", "organ")
 
 
-def what_plays(t: float) -> str:
+def sounding(names: list[str], t: float) -> list[str]:
+    """Those of ``names`` (the sources that play in the run) that play in the verse at
+    ``t`` (s)."""
+    return [name for name in names if part_of(name) in parts_at(t)]
+
+
+def who_plays(names: list[str]) -> dict[str, str]:
+    """The parts ``names`` (the sources that play in the run) play, in words: ``the
+    choir`` and ``the organ`` when every source of the part plays, else what of it does
+    (``3 of the 19 singers``, ``singer f1``, ``the organ's pedal``, ``the C side of the
+    organ's pedal``, ``3 of the organ's 4 sources``); a part none of them plays is left
+    out."""
+    out = {}
+    singers = [name.removeprefix("singer_") for name in names if part_of(name) == "choir"]
+    if len(singers) == len(SINGERS):
+        out["choir"] = "the choir"
+    elif len(singers) == 1:
+        out["choir"] = f"singer {singers[0]}"
+    elif singers:
+        out["choir"] = f"{len(singers)} of the {len(SINGERS)} singers"
+    organ = [ORGAN_SOURCES[name] for name in names if part_of(name) == "organ"]
+    divisions = {o["division"] for o in organ}
+    if len(organ) == len(ORGAN_SOURCES):
+        out["organ"] = "the organ"
+    elif len(organ) == 1:
+        side = "C" if organ[0]["side"] == 0 else "C#"
+        out["organ"] = f"the {side} side of the organ's {organ[0]['division']}"
+    elif len(organ) == 2 and len(divisions) == 1:
+        out["organ"] = f"the organ's {divisions.pop()}"
+    elif organ:
+        out["organ"] = f"{len(organ)} of the organ's {len(ORGAN_SOURCES)} sources"
+    return out
+
+
+def what_plays(t: float, who: dict[str, str]) -> str:
+    """What plays in the verse at ``t`` (s), of the parts ``who`` (:func:`who_plays`):
+    a verse whose part the run leaves out says so."""
+    choir, organ = who.get("choir"), who.get("organ")
     if t < VERSES[2] - 1.0:
-        return "Verse 1: the organ alone, full"
+        if organ is None:
+            return "Verse 1: the organ alone, left out of this run: nothing plays"
+        return f"Verse 1: {organ} alone, full"
     if t < VERSES[3] - 1.0:
-        return "Verse 2: the choir alone"
-    return "Verse 3: the choir with the organ, quiet"
+        if choir is None:
+            return "Verse 2: the choir alone, left out of this run: nothing plays"
+        return f"Verse 2: {choir} alone"
+    if choir is None:
+        return f"Verse 3: {organ}, quiet; the choir left out of this run"
+    if organ is None:
+        return f"Verse 3: {choir}; the organ left out of this run"
+    return f"Verse 3: {choir} with {organ}, quiet"
 
 
 def video(args) -> None:
@@ -860,17 +952,26 @@ def video(args) -> None:
     sound = product(args, ".wav")
     write(sound, audio, seats["rate"])
     print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
+    heard = playing(args, SOURCE_NAMES)
+    who = who_plays(heard)
+    # The recordings heard: of the sources that play, those --input gives no file.
+    recorded = {part_of(name) for name in heard if name not in (args.inputs or {})}
     drawing = pictures.Pictures(
         scene_of(args),
         pipeline.read_json(simulations(args)[0].results / pipeline.PARAMETERS),
         seats["seats"],
         tour,
         TITLES,
-        what_plays,
-        playing,
+        lambda t: what_plays(t, who),
+        lambda t: sounding(heard, t),
         VOICES,
-        credit=pipeline.credited(pictures.CREDIT, seats, feeds_table(args)["sources"]),
+        credit=pipeline.credited(
+            pictures.credit_of("choir" in recorded, "organ" in recorded), seats, heard
+        ),
         hrtf=args.hrtf,
+        heard=heard,
+        who=who,
+        fmt=args.format,
         tool=settings_lines(
             DEMO,
             args,
@@ -937,12 +1038,24 @@ DEMO = Demo(
         ),
         *common_options(),
         input_option(),
-        listeners_option(),
+        listeners_option(
+            help="only these listeners, comma separated (default: every one): the demo mixes "
+            "those alone and its video tours them in the order given, on the tour's times; "
+            "the simulation keeps every listener, so another choice needs no new one"
+        ),
+        *sources_options(
+            help="only these sources, by name (singer_f1, organ_pedal_c) or by the scene's "
+            "group (Choir, Organ pipes), comma separated (default: every one); a verse whose "
+            "part is left out plays nothing; the feeds and the simulation keep every source, "
+            "so another pick needs neither again",
+            steps=("render", "video"),
+        ),
         Option("tour", "listener:start_s,... (each runs until the next)", None, steps=("video",)),
     ],
     simulations=simulations,
     scene_from="scene",
     plays=plays,
+    sources=sources,
     # The scene step puts the tour's places in the scene it writes, and them alone.
     listeners=lambda args: [name for name, _ in TOUR],
 )

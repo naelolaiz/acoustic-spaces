@@ -41,8 +41,14 @@ keep one gain (the loudest peak at -1 dBFS): the hall's differences are heard as
 simulation gives them, from the podium, 2 m from the first violins, to the back row,
 and the captions give each stop's level against the loudest. Every source has the same
 power, so the balance between the instruments is the recording's own.
-`--listeners conductor,stalls-rear` plays each movement at the seats of its tour among
-those, or at all of them when its tour has none of them.
+`--listeners stalls-rear,conductor` plays each movement at the seats of its tour among
+those, in that order (the finale from the back, then the podium), or at all of them when
+its tour has none of them. `--sources Winds` plays the winds alone (by section,
+`Strings/Violins I` to `Percussion/Timpani`, or by player, `fl1`), in a run of its own
+(demo/orchestra_Winds_binaural/); the stills, their credit and the thumbnail count and
+light up those players only. A movement every picked player rests through (the
+trumpets and the timpani in II) is left out of the tour. `--movements 4,1` plays the
+finale, then the first movement.
 """
 
 from __future__ import annotations
@@ -59,16 +65,22 @@ from acoustic_spaces.demos import (
     SIMULATE,
     Demo,
     Option,
+    Source,
     Step,
+    chosen_order,
     common_options,
+    given_names,
     input_option,
     listener_names,
     listeners_in,
     listeners_option,
+    picked,
     pipeline,
+    playing,
     product,
     run_folder,
     sibling,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import envelope, mmss, quiet_moment, read, write
 
@@ -122,6 +134,27 @@ TRACKS = {
     **{f"vc_{k}": f"{49 + k}_Vc_{k}.wav" for k in range(1, 7)},
     **{f"db_{k}": f"{55 + k}_Db_{k}.wav" for k in range(1, 7)},
 }
+#: The sections of the orchestra, in the order ``--sources`` lists them: the prefix of
+#: their players' names, their group (``--sources Strings`` picks the five groups under
+#: it, ``--sources Winds/Flutes`` the flutes) and what the stills call them in a
+#: sentence. The scene has no groups (its simulation stays as it is): the demo's own.
+SECTIONS = [
+    ("vl1_", "Strings/Violins I", "first violins"),
+    ("vl2_", "Strings/Violins II", "second violins"),
+    ("vla_", "Strings/Violas", "violas"),
+    ("vc_", "Strings/Cellos", "cellos"),
+    ("db_", "Strings/Double basses", "double basses"),
+    ("fl", "Winds/Flutes", "flutes"),
+    ("ob", "Winds/Oboes", "oboes"),
+    ("cl", "Winds/Clarinets", "clarinets"),
+    ("bn", "Winds/Bassoons", "bassoons"),
+    ("hn", "Brass/Horns", "horns"),
+    ("tp", "Brass/Trumpets", "trumpets"),
+    ("timpani", "Percussion/Timpani", "timpani"),
+]
+#: The players who rest through a whole movement: the Allegretto scherzando is scored
+#: without trumpets and timpani. A run of only them leaves that movement out.
+RESTS = {2: ("tp1", "tp2", "timpani")}
 #: The default tour: the movements in order, each with the seats that hear it in turn,
 #: for equal shares of it (the cuts moved to the quietest moment near each share's end).
 TOUR = [
@@ -151,10 +184,64 @@ FADE_OUT_S = 4.0
 # --------------------------------------------------------------------------- the tracks
 
 
+def section_of(name: str) -> tuple[str, str]:
+    """The group of the player ``name`` (``Strings/Violins I``) and what the stills call
+    their section (``first violins``)."""
+    for prefix, group, called in SECTIONS:
+        if name.startswith(prefix):
+            return group, called
+    raise ValueError(f"no section for the player {name!r}")
+
+
+def sources(args) -> list[Source]:
+    """The players ``--sources`` picks from, by name or by section (:data:`SECTIONS`),
+    section by section, every one played by default."""
+    groups = [group for _, group, _ in SECTIONS]
+    order = sorted(TRACKS, key=lambda name: groups.index(section_of(name)[0]))
+    return [Source(name, section_of(name)[0]) for name in order]
+
+
+def who_plays(heard) -> tuple[str, bool]:
+    """The players ``heard`` in words, and whether they are one: ``the orchestra`` for
+    all of them, else each whole family (``the strings``) and section (``the flutes``)
+    or how many of a section (``1 of the 2 flutes``), or for more than three of those,
+    how many of the orchestra."""
+    heard = set(heard)
+    if heard >= set(TRACKS):
+        return "the orchestra", True
+    groups = {name: section_of(name)[0] for name in TRACKS}
+    parts = []
+    for family in dict.fromkeys(group.split("/")[0] for _, group, _ in SECTIONS):
+        sections = [(g, called) for _, g, called in SECTIONS if g.startswith(family + "/")]
+        everyone = {name for name, g in groups.items() if g.startswith(family + "/")}
+        if len(sections) > 1 and everyone <= heard:
+            parts.append(f"the {family.lower()}")
+            continue
+        for group, called in sections:
+            members = [name for name, g in groups.items() if g == group]
+            n = len(heard.intersection(members))
+            if n == len(members):
+                parts.append(f"the {called}")
+            elif n:
+                parts.append(f"{n} of the {len(members)} {called}")
+    if len(parts) > 3:
+        return f"{len(heard)} of the {len(TRACKS)} players", False
+    words = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    return words, len(parts) == 1 and parts[0].startswith("1 of ")
+
+
+def movements_given(args) -> list[int] | None:
+    """The movements ``--movements`` names, in its order (by number: 1, 2, 4), or None
+    when it names none."""
+    names = given_names(args.movements)
+    if not names:
+        return None
+    return [int(name) for name in names]
+
+
 def movements_of(args) -> list[int]:
-    return (
-        [m for m, _ in TOUR] if not args.movements else [int(m) for m in args.movements.split(",")]
-    )
+    """The movements of the run's tour, in its order (:func:`stops_of`)."""
+    return list(dict.fromkeys(movement for movement, _ in stops_of(args)))
 
 
 def tracks_folder(args, movement: int) -> Path:
@@ -247,25 +334,84 @@ def responses_of(args) -> list[dict]:
     return pipeline.responses_of(simulations(args)[0], args)
 
 
+def tour_given(args) -> list[tuple[int, str]]:
+    """(movement, seat) for each stop of the tour, ``--tour``'s or the default one."""
+    if not args.tour:
+        return [(movement, seat) for movement, seats in TOUR for seat in seats]
+    stops = []
+    for part in args.tour.split(","):
+        movement, seat = part.split(":")
+        stops.append((int(movement), seat.strip()))
+    return stops
+
+
+def of_movements(args) -> list[tuple[int, str]]:
+    """The stops of the tour (:func:`tour_given`) of the movements ``--movements`` names,
+    in its order; all of them when it names none."""
+    stops = tour_given(args)
+    chosen = movements_given(args)
+    if chosen is None:
+        return stops
+    return [(movement, seat) for m in chosen for movement, seat in stops if movement == m]
+
+
 def stops_of(args) -> list[tuple[int, str]]:
-    """(movement, seat) for each stop of the tour, ``--tour``'s or the default one, at
-    the seats ``--listeners`` names: each movement at the seats of its tour among them,
-    or at all of them, in that option's order, when its tour has none of them."""
-    if args.tour:
-        stops = []
-        for part in args.tour.split(","):
-            movement, seat = part.split(":")
-            stops.append((int(movement), seat))
-    else:
-        stops = [(movement, seat) for movement, seats in TOUR for seat in seats]
+    """(movement, seat) for each stop of the run's tour: ``--tour``'s or the default one,
+    of the movements ``--movements`` names, in its order, and of those not every player
+    that plays (``--sources``) rests through (:data:`RESTS`); at the seats ``--listeners``
+    names: each movement at the seats of its tour among them, in that option's order
+    (``--tour``'s order, when it is given), or at all of them when its tour has none of
+    them."""
+    heard = set(playing(args, list(TRACKS)))
+    stops = [(m, seat) for m, seat in of_movements(args) if not heard <= set(RESTS.get(m, ()))]
     names = listener_names(args.listeners)
     if names is None:
         return stops
     kept = []
     for movement in dict.fromkeys(m for m, _ in stops):
-        here = [seat for m, seat in stops if m == movement and seat in names]
-        kept += [(movement, seat) for seat in here or names]
+        here = [seat for m, seat in stops if m == movement]
+        seats = picked(args, here) if args.tour else chosen_order(args, here)
+        kept += [(movement, seat) for seat in seats or names]
     return kept
+
+
+def stops_problem(args) -> str | None:
+    """What keeps the run from a tour (``args`` resolved): a movement ``--movements`` or
+    ``--tour`` names that the recording lacks, a seat ``--tour`` names that the scene
+    lacks, or no stop left of the tour."""
+    have = ", ".join(str(m) for m in MOVEMENTS)
+    try:
+        chosen = movements_given(args)
+    except ValueError:
+        return f"--movements takes the movements' numbers ({have}), not {args.movements!r}"
+    for movement in chosen or []:
+        if movement not in MOVEMENTS:
+            return f"--movements {movement}: the recording has the movements {have}"
+    try:
+        tour = tour_given(args)
+    except ValueError:
+        return f"--tour takes movement:seat,... (as 1:conductor), not {args.tour!r}"
+    seats = listeners_in(args.scene) if Path(args.scene).is_file() else None
+    for movement, seat in tour:
+        if movement not in MOVEMENTS:
+            return f"--tour {movement}:{seat}: the recording has the movements {have}"
+        if seats is not None and seat not in seats:
+            return f"--tour {movement}:{seat}: no such seat here; it has {', '.join(seats)}"
+    stops = of_movements(args)
+    if not stops:
+        return f"--movements {args.movements}: the tour (--tour) plays none of them"
+    if getattr(args, "playing", None) and not stops_of(args):  # none: --sources says why
+        numerals = [MOVEMENTS[m][0] for m in dict.fromkeys(m for m, _ in stops)]
+        return (
+            f"--sources {args.sources}: the players it picks rest through movement "
+            f"{', '.join(numerals)}, all the tour plays"
+        )
+    return None
+
+
+def problems(demo: Demo, args) -> str | None:
+    """The movements and the tour the run plays (:func:`stops_problem`)."""
+    return stops_problem(demo.resolved(args))
 
 
 def key_of(movement: int, seat: str) -> str:
@@ -275,13 +421,16 @@ def key_of(movement: int, seat: str) -> str:
 
 def mixes_of(args) -> list[pipeline.Mix]:
     """A mix per stop: the movement's tracks heard at the seat. Every source plays as
-    loud as the next, so the arrival time counts them all alike."""
+    loud as the next, so the arrival time counts them all alike. render_mixes keeps the
+    players that play in the run alone (``--sources``), their feeds and their weights
+    (:func:`~acoustic_spaces.demos.pipeline.only_playing`)."""
     simulation = simulations(args)[0]
     weights = dict.fromkeys(TRACKS, 0.0)
+    heard = [TRACKS[name] for name in playing(args, list(TRACKS))]
     mixes = []
     for movement, seat in stops_of(args):
         folder = tracks_folder(args, movement)
-        if not all((folder / track).exists() for track in TRACKS.values()):
+        if not all((folder / track).exists() for track in heard):
             raise SystemExit(f"error: no tracks in {folder}; run: {DEMO.command('tracks', args)}")
         feeds = {name: folder / track for name, track in TRACKS.items()}
         mixes.append(
@@ -298,8 +447,9 @@ def mixes_of(args) -> list[pipeline.Mix]:
 
 
 def plays(args) -> dict[str, str]:
-    """What each player plays unless ``--input`` gives them a file: their track."""
-    return {name: f"{track} of each movement" for name, track in TRACKS.items()}
+    """What each player that plays in the run (``--sources``) plays unless ``--input``
+    gives them a file: their track."""
+    return {name: f"{TRACKS[name]} of each movement" for name in playing(args, list(TRACKS))}
 
 
 def render(args) -> None:
@@ -344,13 +494,18 @@ def tour_of(args, seats: dict) -> list[pipeline.TourStop]:
     return tour
 
 
-def facts_of(stop: dict) -> list[str]:
+def facts_of(stop: dict, heard) -> list[str]:
+    """The lines under the seat on a stop's still: its level against the loudest stop's,
+    and when the sound of the players ``heard`` reaches it (:func:`who_plays`)."""
     relative = stop["relative_db"]
+    who, one = who_plays(heard)
+    reaches = "reaches you" if one else "reach you"
     return [
         "The loudest stop of the tour"
         if relative > -0.05
         else f"{relative:.1f} dB(A) against the loudest stop",
-        f"The orchestra reaches you {stop['lag_s'] * 1e3:.0f} ms after it plays",
+        f"{who[0].upper()}{who[1:]} {reaches} {stop['lag_s'] * 1e3:.0f} ms after "
+        f"{'it plays' if one else 'they play'}",
     ]
 
 
@@ -379,7 +534,12 @@ def video(args) -> None:
     print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
     scene = yaml.safe_load(args.scene.read_text(encoding="utf-8"))
     report = pipeline.read_json(simulations(args)[0].results / pipeline.PARAMETERS)
-    credit = pipeline.credited(pictures.CREDIT, seats, list(TRACKS))
+    heard = playing(args, list(TRACKS))
+    credit = pipeline.credited(pictures.CREDIT, seats, heard)
+    replaced = len({name for v in seats["seats"].values() for name in v.get("inputs", {})})
+    played = f"{len(heard) - replaced} anechoic tracks" + (
+        f" and {replaced} of yours" if replaced else ""
+    )
 
     def frame(k: int):
         stop = tour[k]
@@ -388,10 +548,12 @@ def video(args) -> None:
             scene,
             info["seat"],
             info["movement"],
-            facts=facts_of(info),
+            facts=facts_of(info, heard),
             hrtf=args.hrtf,
             tool=settings_lines(DEMO, args, scene, report),
             credit=credit,
+            heard=heard,
+            played=played,
         )
         img = drawing.cover()
         tour_bar(img, tour, k, seats, pictures)
@@ -405,13 +567,11 @@ def video(args) -> None:
         numeral = MOVEMENTS[info["movement"]][0]
         chapters.append(f"{mmss(stop.at)} {numeral} · {TITLES[info['seat']][0]}")
     first = seats["seats"][tour[0].key]
-    replaced = len({name for v in seats["seats"].values() for name in v.get("inputs", {})})
-    played = f"{len(TRACKS) - replaced} anechoic tracks" + (
-        f" and {replaced} of yours" if replaced else ""
-    )
     movements = len({seats["seats"][stop.key]["movement"] for stop in tour})
     places = len({seats["seats"][stop.key]["seat"] for stop in tour})
-    thumbnail = pictures.Pictures(scene, first["seat"], first["movement"], credit=credit).thumbnail(
+    thumbnail = pictures.Pictures(
+        scene, first["seat"], first["movement"], credit=credit, heard=heard, played=played
+    ).thumbnail(
         note=f"{movements} movement{'s' * (movements != 1)} · {places} seat"
         f"{'s' * (places != 1)} · {played}"
     )
@@ -505,22 +665,37 @@ DEMO = Demo(
         *common_options(),
         input_option(),
         listeners_option(
-            help="only these seats, comma separated (default: every one): each movement is "
-            "heard at the seats of its tour among them, or at all of them when its tour has "
-            "none of them; the simulation keeps every seat, so another choice needs no new "
-            "one"
+            help="only these seats, comma separated, in the order each movement visits "
+            "them (default: every one, in the tour's order): each movement is heard at the "
+            "seats of its tour among them, or at all of them when its tour has none of "
+            "them; the simulation keeps every seat, so another choice needs no new one"
         ),
-        Option("movements", "only these movements, comma separated", None, steps=("tracks",)),
+        *sources_options(
+            help="only these players, by name (fl1, vl1_01) or by section (Strings takes "
+            "Strings/Violins I to Strings/Double basses; Winds, Brass, Percussion), comma "
+            "separated (default: all 61); the simulation keeps every player, so another "
+            "pick needs no new one",
+            steps=("render", "video"),
+        ),
+        Option(
+            "movements",
+            "only these movements, by number (1, 2, 4), comma separated, in this order "
+            "(default: the tour's, 1,2,4)",
+            None,
+            steps=("tracks", "render", "video"),
+        ),
         Option(
             "tour",
             "movement:seat,... (the seats of a movement take equal shares of it)",
             None,
-            steps=("render", "video"),
+            steps=("tracks", "render", "video"),
         ),
     ],
     simulations=simulations,
+    problems=problems,
     plays=plays,
     listeners=lambda args: listeners_in(args.scene),
+    sources=sources,
 )
 
 __all__ = ["DEMO"]

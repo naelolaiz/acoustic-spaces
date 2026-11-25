@@ -53,8 +53,8 @@ sources:
   # places it. Its horn, a pair of disc horns (360 and 430 Hz, 110 dB(A) 2 m in front
   # of them, as Hella's S77, their tone discs ringing near 3 kHz), 0.5 m up, goes along
   # its walk facing the way it drives, with the directivity of siren.csv, in two short
-  # blasts every 3 s, its sound power their average (passby_demo.py --car car_and_horn
-  # sounds it).
+  # blasts every 3 s, its sound power their average (passby_demo.py --sources
+  # car,car_horn sounds it).
   - name: car
     enabled: false
     position: [-55, -2, 0.05]
@@ -98,8 +98,8 @@ sources:
   # above the road with CNOSSOS-EU's sound power (as the car's); and its siren, wailing:
   # a 100 W electronic siren on its roof, 1.5 m up, along the same walk, facing the way
   # it drives, at the level and with the directivity the National Bureau of Standards
-  # measured (siren.csv; passby_demo.py --siren picks the pattern, --police-car siren
-  # plays the siren alone). The car is some 32 dB(A) under the siren, but under the
+  # measured (siren.csv; passby_demo.py --siren picks the pattern, --sources
+  # police_car_siren plays the siren alone). The car is some 32 dB(A) under the siren, but under the
   # siren's pitch, in the octaves of 63 to 250 Hz, it is all the police car's sound.
   - name: police_car
     enabled: false
@@ -126,7 +126,7 @@ sources:
   # in front of it); and its air horn, 1.2 m up, in blasts, as loud as the rule for
   # horns lets one be on its bench (118 dB(A) 2 m away). The three go along one walk;
   # the siren and the horn face the way it drives, with the directivity of siren.csv
-  # (passby_demo.py --fire-engine picks which play).
+  # (passby_demo.py --sources picks which play).
   - name: fire_engine
     enabled: false
     position: [-55, -2, 0.05]

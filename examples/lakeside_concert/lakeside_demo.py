@@ -43,8 +43,12 @@ much quieter it really is. The window in still air keeps the gain of the window 
 evening's weather, so the difference the weather makes is heard as the simulation gives
 it. Each place's mix is shifted earlier by the time the sound takes to reach it (1.6 s
 across the lake), so that the beat carries on across the cuts. `--listeners
-audience,bedroom_window` mixes those places alone, in both weathers, and the video tours
-them alone, each stop of the tour there with its phrases.
+bedroom_window,audience` mixes those places alone, in both weathers, and the video tours
+them in that order, each place with its stops of the tour (the window in the evening, in
+still air and in the evening again), and back to the first at the end; `--tour` gives a
+tour of your own, which --listeners then only thins out. `--sources subs` plays the
+subwoofers alone (`main_left`, `main_right` and `subs`, or `PA` for all three, which is
+the default): the simulations keep every loudspeaker, so another pick needs no new ones.
 """
 
 from __future__ import annotations
@@ -59,17 +63,22 @@ from acoustic_spaces.demos import (
     SIMULATE,
     Demo,
     Option,
+    Source,
     Step,
+    chosen_order,
     common_options,
     input_option,
+    listener_names,
     listeners_option,
     music,
     name_part,
     picked,
     pipeline,
+    playing,
     product,
     run_folder,
     sibling,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import channels_rms, gated_rms, mono, read, stereo, write
 from acoustic_spaces.demos.scene_demo import FEED_LEVELS, FEED_RMS
@@ -100,6 +109,12 @@ SONG_KEPT = ("name", "bpm", "credit")
 #: simulations, and the channel of the song each plays (the subwoofers both, in mono).
 PA = "PA"
 CHANNELS = {"main_left": 0, "main_right": 1, "subs": "mono"}
+#: Each loudspeaker in words, for the stills of a run that plays some of them.
+LOUDSPEAKERS = {
+    "main_left": "the left line array",
+    "main_right": "the right line array",
+    "subs": "the subwoofers",
+}
 #: The scene's listener behind the stage, as far upwind as the park reaches, left out of
 #: its own simulations.
 UPWIND = "behind_stage"
@@ -108,7 +123,9 @@ UPWIND = "behind_stage"
 IR_LENGTH_S = 3.5
 
 #: The default tour: listener, weather ("evening" or "still") and how many phrases it
-#: lasts; the last one runs to the end of the song.
+#: lasts; the last one, the closing stop, runs to the end of the song. ``--listeners``
+#: tours its places in its order, each with its stops here but the closing one, and
+#: closes at the first (:func:`tour_steps`).
 TOUR = [
     ("audience", "evening", 2),
     ("behind_stage", "evening", 1),
@@ -216,6 +233,20 @@ def music_step(args) -> None:
     print(f"wrote {', '.join(CHANNELS)} ({len(x) / rate:.0f} s of {song['name']}) to {folder}")
 
 
+def sources(args) -> list[Source]:
+    """The loudspeakers a run can play (``--sources``), all of them by default: the
+    stage's sound system, its PA group."""
+    return [Source(name, PA) for name in CHANNELS]
+
+
+def what_plays(names) -> str | None:
+    """What the stills say of a run that plays only the loudspeakers ``names`` of the
+    sound system; None when they all play."""
+    if set(CHANNELS) <= set(names):
+        return None
+    return "Playing only " + " and ".join(LOUDSPEAKERS[name] for name in names)
+
+
 def plays(args) -> dict[str, str]:
     """What each loudspeaker plays unless ``--input`` gives it a file: its channel of the
     song."""
@@ -304,8 +335,11 @@ def responses_of(args, weather: str) -> list[dict]:
 
 def render(args) -> None:
     """Every listener's mix in both weathers (``--format``, binaural by default), with one
-    gain for all: the loudest peak at -1 dBFS; and each one's level and delay."""
+    gain for all: the loudest peak at -1 dBFS; and each one's level and delay. Only the
+    loudspeakers ``--sources`` picks play, and only their sound counts in when it
+    arrives (the weights, all alike)."""
     feeds = {name: feeds_folder(args) / f"{name}.wav" for name in CHANNELS}
+    weights = {name: 0.0 for name in CHANNELS}
     mixes = []
     for weather, simulation in weathers(args).items():
         simulated = sorted({e["listener"] for e in responses_of(args, weather)})
@@ -316,6 +350,7 @@ def render(args) -> None:
                     simulation,
                     listener,
                     feeds,
+                    weights,
                     info={"weather": weather},
                 )
             )
@@ -328,19 +363,37 @@ def render(args) -> None:
     )
 
 
+def tour_steps(names) -> list[tuple[str, str, float]]:
+    """The tour of the places ``names``, in their order: each one's stops of the default
+    tour (TOUR) but its closing stop, one in the evening's weather for a place it does
+    not visit, then the closing stop at the first. The default tour for its own places
+    in its own order."""
+    *stops, (_, _, closing) = TOUR
+    steps = []
+    for name in names:
+        own = [step for step in stops if step[0] == name]
+        steps += own or [(name, "evening", 1.0)]
+    return [*steps, (names[0], "evening", closing)]
+
+
 def tour_of(args) -> list[tuple[str, str, float, float]]:
     """(listener, weather, start, end) in the song's time; the stops end on the song's
-    phrase boundaries (8 bars). The stops at the places ``--listeners`` leaves out are
-    left out too, and stops at one place in one weather in a row are joined."""
-    steps = TOUR
+    phrase boundaries (8 bars). The places ``--listeners`` names, in its order
+    (:func:`tour_steps`), or with ``--tour``, its stops at those places; stops at one
+    place in one weather in a row are joined."""
     if args.tour:
         steps = []
         for part in args.tour.split(","):
             fields = part.split(":")
             weather = fields[1] if len(fields) > 1 and fields[1] else "evening"
             steps.append((fields[0], weather, float(fields[2]) if len(fields) > 2 else 1.0))
-    kept = set(picked(args, [listener for listener, _, _ in steps]))
-    steps = [step for step in steps if step[0] in kept]
+        kept = set(picked(args, [listener for listener, _, _ in steps]))
+        steps = [step for step in steps if step[0] in kept]
+    elif listener_names(args.listeners) is None:
+        steps = TOUR
+    else:
+        names = chosen_order(args, listeners(args))
+        steps = tour_steps(names) if names else []
     if not steps:
         raise SystemExit("error: the tour visits none of the listeners --listeners names")
     song = played(args)
@@ -356,15 +409,18 @@ def tour_of(args) -> list[tuple[str, str, float, float]]:
 
 
 def listeners(args) -> list[str]:
-    """The places the scenes step puts in the demo's scenes, in the example's order: its
-    listeners in use, and the one behind the stage, which the example leaves out of its
-    own simulations."""
+    """The places the scenes step puts in the demo's scenes: its listeners in use, and
+    the one behind the stage, which the example leaves out of its own simulations; in
+    the order the default tour first visits them, then any other in the example's
+    order."""
     data = yaml.safe_load(args.source.read_text(encoding="utf-8")) or {}
-    return [
+    names = [
         item["name"]
         for item in data.get("listeners") or []
         if item.get("enabled", True) is not False or item["name"] == UPWIND
     ]
+    toured = [name for name in dict.fromkeys(step[0] for step in TOUR) if name in names]
+    return toured + [name for name in names if name not in toured]
 
 
 def gains_of(seats: dict, tour) -> dict[str, float]:
@@ -377,6 +433,12 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
     known = {key: twin if twin in seats["seats"] else key for key, twin in evening.items()}
     gains = pipeline.gains_of(seats, sorted(set(known.values()) | set(seats["seats"])))
     return {key: gains[twin] for key, twin in known.items()}
+
+
+def playing_sources(scene: dict, names) -> list[dict]:
+    """The sources of the scene ``scene`` (as read) among ``names``, the loudspeakers
+    that play: what the stills draw."""
+    return [source for source in scene["sources"] if source["name"] in names]
 
 
 def video(args) -> None:
@@ -410,13 +472,14 @@ def video(args) -> None:
     scenes = {
         w: yaml.safe_load(s.scene.read_text(encoding="utf-8")) for w, s in weathers(args).items()
     }
+    names = playing(args, list(CHANNELS))
     drawing = pictures.Pictures(
-        scenes,
+        {w: scene | {"sources": playing_sources(scene, names)} for w, scene in scenes.items()},
         seats["seats"],
         tour,
         TITLES,
         gains,
-        pipeline.credited(played(args)["credit"], seats, list(CHANNELS)),
+        pipeline.credited(played(args)["credit"], seats, names),
         folder=args.scene.parent,
         hrtf=args.hrtf,
         tool={
@@ -425,6 +488,7 @@ def video(args) -> None:
             )
             for w, s in weathers(args).items()
         },
+        playing=what_plays(names),
     )
     save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     pipeline.video(
@@ -504,14 +568,25 @@ DEMO = Demo(
         ),
         *common_options(),
         input_option(),
+        *sources_options(
+            help="only these loudspeakers, main_left, main_right or subs, or PA for all "
+            "three, comma separated (default: all three): the demo mixes them alone and its "
+            "stills draw them alone; the simulations keep every loudspeaker, so another "
+            "pick needs no new ones",
+            steps=("render", "video"),
+        ),
         listeners_option(
-            help="only these places, comma separated (default: every one): the demo mixes "
-            "those alone, in both weathers, and its video's tour leaves the others out; the "
-            "simulations keep every place, so another choice needs no new ones"
+            help="only these places, comma separated, in the order the video's tour visits "
+            "them (default: every one, in the default tour's order): the demo mixes those "
+            "alone, in both weathers, and the tour gives each its stops of the default tour "
+            "and ends back at the first; the simulations keep every place, so another "
+            "choice needs no new ones"
         ),
         Option(
             "tour",
-            "listener:weather:phrases,... (weather evening or still; 8 bars a phrase)",
+            "listener:weather:phrases,... (weather evening or still; 8 bars a phrase), in "
+            "place of the default tour; --listeners then leaves out the stops at the other "
+            "places",
             None,
             steps=("video",),
         ),
@@ -528,6 +603,7 @@ DEMO = Demo(
     plays=plays,
     problems=music.own_song_problems,
     listeners=listeners,
+    sources=sources,
 )
 
 __all__ = ["DEMO"]

@@ -23,7 +23,9 @@ car=WAV`` gives. The police car is two sources along one walk, the car's sound a
 siren on its roof, with the level and the directivity of a measured one
 (:mod:`acoustic_spaces.demos.siren`); the fire engine three, the vehicle, its siren and
 its air horn (:mod:`acoustic_spaces.demos.horn`); a helicopter plays the sound its rotors send each
-way (:mod:`acoustic_spaces.demos.helicopter`).
+way (:mod:`acoustic_spaces.demos.helicopter`). Of a vehicle of several sources the run plays
+those ``--sources`` picks (:meth:`Vehicle.sources`: by default the police car and its siren,
+the street's car without its horn, a train at every height without its horn).
 
 Each listener in use (or each ``--listeners`` names) is simulated with the vehicle every
 ``--step`` along its walk
@@ -48,9 +50,9 @@ import numpy as np
 import yaml
 
 from acoustic_spaces.demos import (
-    JOIN,
     Demo,
     Option,
+    Source,
     Step,
     chosen_order,
     common_options,
@@ -60,8 +62,10 @@ from acoustic_spaces.demos import (
     listeners_option,
     mix_stem,
     pipeline,
+    playing,
     product,
     run_folder,
+    sources_options,
 )
 from acoustic_spaces.demos.audio import (
     channel_weights,
@@ -222,15 +226,27 @@ class Vehicle:
         """Write its sound, dry, into ``folder``, made to ``info``; what to print."""
         raise NotImplementedError
 
+    def sources(self, args: argparse.Namespace) -> list[Source]:
+        """The example's sources it can play with ``args``, all along one walk, its own
+        first, each on when a run plays it unless ``--sources`` says: its own alone,
+        unless it carries more (the police car's siren, :func:`picked_parts`)."""
+        return [Source(self.name)]
+
     def parts(self, args: argparse.Namespace) -> tuple[str, ...]:
-        """The example's sources it plays, all along one walk: its own alone, unless it
-        carries more (the police car's siren)."""
+        """The example's sources a run with ``args`` plays: its own alone, unless it
+        carries more (those ``--sources`` picks, :func:`picked_parts`)."""
         return (self.name,)
 
     def every_part(self) -> tuple[str, ...]:
         """Every source of the example it can play, its own first: each goes along its
         walk."""
         return (self.name,)
+
+    def idle(self, parts: Sequence[str]) -> tuple[str, ...]:
+        """Its own options (by name) that change nothing while only its sources
+        ``parts`` play (the police car's ``--siren`` without its siren): none, unless it
+        carries more than its own source."""
+        return ()
 
     def engines(self) -> tuple[RoadVehicle, ...]:
         """The road vehicles of it whose engines ``--rpm`` turns."""
@@ -345,6 +361,22 @@ class Vehicle:
         """The help of a demo of several vehicles, this one the first, as :meth:`texts`
         (None: a road vehicle's, :func:`road_texts`)."""
         return None
+
+
+def picked_parts(vehicle: Vehicle, args: argparse.Namespace) -> tuple[str, ...]:
+    """The sources of ``vehicle`` (:meth:`Vehicle.sources`) a run with ``args`` plays, in
+    its order: those ``--sources`` picks (:func:`~acoustic_spaces.demos.playing`, once
+    the demo has resolved the arguments), or else those it plays by default."""
+    offered = vehicle.sources(args)
+    if getattr(args, "playing", None) is None:
+        return tuple(source.name for source in offered if source.on)
+    return tuple(playing(args, [source.name for source in offered]))
+
+
+def and_list(words: Sequence[str]) -> str:
+    """``words`` in a list, the last after "and": "bogie, roof and pantograph"."""
+    words = list(words)
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
 
 
 #: Engines with their cylinders in words, for the stills.
@@ -1473,9 +1505,10 @@ def moving(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> list[str]:
 
 
 def problems(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> str | None:
-    """The vehicle must go: the example's scene gives it a walk that is on, at one
-    steady speed unless ``--speed`` gives one, and the speed, the step and the vehicle's
-    own numbers are positive."""
+    """The vehicle must go: ``--sources`` picks one of its sources at least, the
+    example's scene gives it a walk that is on, at one steady speed unless ``--speed``
+    gives one, and the speed, the step and the vehicle's own numbers are positive. (A
+    name ``--sources`` gives that is none of the vehicle's the demo refuses itself.)"""
     from acoustic_spaces.scene import Scene
 
     numbers = ["speed", *(o.name for o in vehicle.options() if o.kind == "float"), "step_m"]
@@ -1483,7 +1516,11 @@ def problems(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -
         value = getattr(args, option, None)
         if value is not None and not (math.isfinite(float(value)) and float(value) > 0.0):
             return f"{demo.option(option).option} is a positive number, not {value!r}"
-    source = Path(demo.resolved(args).source)
+    resolved = demo.resolved(args)
+    if not vehicle.parts(resolved):
+        offered = ", ".join(s.name for s in vehicle.sources(resolved))
+        return f"--sources {args.sources}: none of them is the {vehicle.noun}'s; it has {offered}"
+    source = Path(resolved.source)
     if not source.exists():
         return f"no {source}"
     try:
@@ -1545,6 +1582,47 @@ def problems_of_speed(args: argparse.Namespace, scene, vehicle: Vehicle = THE_CA
     return None
 
 
+def sources_help(vehicles: Sequence[Vehicle]) -> str:
+    """The help of ``--sources`` for a demo of ``vehicles``: the sources of each that
+    carries more than its own, those it leaves out by default marked so."""
+    offered = []
+    for vehicle in vehicles:
+        if len(vehicle.every_part()) < 2:
+            continue
+        on = {s.name: s.on for s in vehicle.sources(argparse.Namespace())}
+        offered.append(
+            ", ".join(
+                f"{part}{'' if on.get(part, True) else ' (off)'}" for part in vehicle.every_part()
+            )
+        )
+    alone = [f"the {v.noun}" for v in vehicles if len(v.every_part()) < 2]
+    plays = "plays its own source" if len(alone) == 1 else "each play their own source"
+    each = f"; {and_list(alone)} {plays} alone" if alone else ""
+    noun = "vehicle" if len(vehicles) > 1 else vehicles[0].noun
+    return (
+        f"which of the {noun}'s sources play, by name, comma separated (default: every one "
+        f"but those marked off): {'; '.join(offered)}{each}. The {noun} is simulated along "
+        "its walk with these alone, so another pick makes its sound, its scene and its "
+        "walk again"
+    )
+
+
+def settled(demo: Demo, args: argparse.Namespace, vehicle: Vehicle | None) -> argparse.Namespace:
+    """``args`` (paths resolved) with the options of ``vehicle`` that change nothing with
+    the sources the run plays (:meth:`Vehicle.idle`: the police car's ``--siren`` without
+    its siren) at their defaults, as an option that matters only with some values of
+    another is in a run of several parts: the run is named, and its command given,
+    without them."""
+    parts = None if vehicle is None else demo.picked_sources(args)
+    if vehicle is None or parts is None:
+        return args
+    known = {option.name: option.default for option in demo.options}
+    reset = {name: known[name] for name in vehicle.idle(parts) if name in known}
+    if all(getattr(args, name, None) == value for name, value in reset.items()):
+        return args
+    return argparse.Namespace(**vars(args) | reset)
+
+
 def demo(
     script: Path,
     example: str,
@@ -1560,8 +1638,11 @@ def demo(
         raise ValueError("a pass-by demo has a vehicle at least, all with one sound step")
     by_name = {v.name: v for v in vehicles}
 
+    def vehicle_of(args: argparse.Namespace) -> str:
+        return getattr(args, "vehicle", None) or vehicles[0].name
+
     def pick(args: argparse.Namespace) -> Vehicle:
-        name = getattr(args, "vehicle", None) or vehicles[0].name
+        name = vehicle_of(args)
         if name not in by_name:
             raise SystemExit(f"error: --vehicle is one of {', '.join(by_name)}, not {name!r}")
         return by_name[name]
@@ -1600,6 +1681,14 @@ def demo(
             else dataclasses.replace(o, only=("vehicle", having[o.name]))
             for o in own
         ]
+    # A vehicle of several sources (the police car and its siren) plays those --sources
+    # picks; one of a single source has nothing to pick.
+    carrying = [v for v in vehicles if len(v.every_part()) > 1]
+    picks = (
+        sources_options(help=sources_help(vehicles), steps=(first.sound_step, "scene", "walk"))
+        if carrying
+        else []
+    )
     choice = [
         Option(
             "vehicle",
@@ -1644,6 +1733,7 @@ def demo(
             *(choice if several else []),
             *speed,
             *own,
+            *picks,
             Option(
                 "step_m",
                 f"how far apart the {noun} is simulated along its walk (m)",
@@ -1686,6 +1776,10 @@ def demo(
         summary=lambda args: summary(args, pick(args)),
         # The scene step keeps the example's listeners as they are.
         listeners=lambda args: listeners_in(args.source),
+        sources=(lambda args: pick(args).sources(args)) if carrying else None,
+        completes=(lambda args: settled(made, args, by_name.get(vehicle_of(args))))
+        if carrying
+        else None,
     )
     made.steps = [
         Step(
@@ -1713,7 +1807,6 @@ def demo(
             lambda args: video(made, args, pick(args)),
             "the run's video, its audio and the stills, named after the run",
         ),
-        JOIN,
     ]
     return made
 
