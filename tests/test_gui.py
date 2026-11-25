@@ -5195,6 +5195,333 @@ def test_a_demo_prints_any_text_whatever_the_code_page(qapp, tmp_path: Path, mon
     assert env["PYTHONIOENCODING"] == "utf-8" and env["ACOUSTIC_SPACES_TEST_KEPT"] == "kept"
 
 
+def _demo_doing(tmp_path: Path, *code: str):
+    """The waiting demo with the lines ``code`` in place of its wait, writing into a work
+    folder of its own."""
+    demo, args = _waiting_demo(tmp_path, 0.0)
+    body = "\n    ".join(code)
+    demo.script.write_text(WAITING_DEMO.replace("time.sleep(args.seconds)", body), "utf-8")
+    args.work = tmp_path / "waiting" / "work"
+    return demo, args
+
+
+def _ended(pid: int) -> bool:
+    """Whether the process ``pid`` has ended (a zombie that nothing has reaped yet has)."""
+    import subprocess
+
+    if sys.platform == "win32":  # bytes: the console's code page may not be ASCII's
+        listed = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True
+        ).stdout
+        return f" {pid} ".encode() not in listed
+    state = subprocess.run(
+        ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True
+    ).stdout.strip()
+    return state == "" or state.startswith("Z")
+
+
+def test_a_demo_whose_process_does_not_end_after_its_steps_is_stopped(
+    qapp, tmp_path: Path, monkeypatch
+) -> None:
+    """A demo that said every step has run, but whose process does not end (a thread of
+    its own keeps it here, as a driver that hangs while the process ends would), is
+    stopped DEMO_EXIT_S later; the run is done all the same, as what it wrote is
+    complete, and the editor says meanwhile that it waits."""
+    from acoustic_spaces.demos import DONE
+    from acoustic_spaces.gui import worker
+
+    monkeypatch.setattr(worker, "DEMO_EXIT_S", 2.0)
+    monkeypatch.setattr(worker, "DEMO_DRAIN_S", 0.3)
+    demo, args = _demo_doing(
+        tmp_path,
+        "import threading",
+        "threading.Thread(target=time.sleep, args=(120,)).start()",
+    )
+    job = worker.DemoJob(demo, "wait", args)
+    said: list[str] = []
+    job.progress.connect(said.append)
+    started = time.monotonic()
+    report = job.compute()
+    took = time.monotonic() - started
+    assert report["stopped"] == "not ending" and report["waited_s"] == 2.0
+    assert job.lines[-1] == f"{DONE}: wait"
+    assert said[-1] == "waiting up to 2 s for the demo's process to end"
+    assert (args.work / "waited").read_text() == "done"
+    assert 2.0 < took < 2.0 + 3 * worker.DEMO_KILL_S
+    assert _ended(report["pid"])
+
+
+def test_a_process_a_demo_left_holding_its_output_ends_the_wait(
+    qapp, tmp_path: Path, monkeypatch
+) -> None:
+    """A demo that ended, but left a process of its own holding its output open, ends
+    the run DEMO_DRAIN_S later rather than never; on Linux and macOS that process is
+    stopped too, as a process of the demo's own session."""
+    from acoustic_spaces.gui import worker
+
+    monkeypatch.setattr(worker, "DEMO_DRAIN_S", 0.5)
+    monkeypatch.setattr(worker, "DEMO_KILL_S", 1.0)
+    demo, args = _demo_doing(
+        tmp_path,
+        "import subprocess",
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])",
+        "Path(__file__).with_name('child').write_text(str(child.pid))",
+    )
+    job = worker.DemoJob(demo, "wait", args)
+    try:
+        started = time.monotonic()
+        report = job.compute()
+        assert time.monotonic() - started < 30.0
+        assert report["stopped"] == "output held"
+        assert (args.work / "waited").read_text() == "done"
+        child = int((demo.script.parent / "child").read_text())
+        if sys.platform != "win32":
+            assert _ended(child)
+    finally:
+        if sys.platform == "win32":  # out of the editor's reach there
+            import signal
+
+            os.kill(int((demo.script.parent / "child").read_text()), signal.SIGTERM)
+
+
+def test_cancel_stops_a_demo_that_ignores_sigterm(qapp, tmp_path: Path, monkeypatch) -> None:
+    """Cancel stops the demo where it is even when it ignores SIGTERM: SIGKILL follows
+    DEMO_KILL_S later, and the run is cancelled."""
+    from acoustic_spaces.gui import worker
+
+    monkeypatch.setattr(worker, "DEMO_KILL_S", 0.5)
+    demo, args = _demo_doing(
+        tmp_path,
+        "import signal",
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)",
+        "print('ignoring SIGTERM', flush=True)",
+        "time.sleep(120)",
+    )
+    job = worker.DemoJob(demo, "wait", args)
+    job.progress.connect(lambda text: job.cancel() if text == "ignoring SIGTERM" else None)
+    started = time.monotonic()
+    with pytest.raises(worker.Cancelled):
+        job.compute()
+    assert time.monotonic() - started < 30.0
+    assert not (args.work / "waited").exists()
+
+
+def test_a_demo_that_keeps_writing_after_its_steps_is_stopped_all_the_same(
+    qapp, tmp_path: Path, monkeypatch
+) -> None:
+    """Output that never pauses runs out the editor's time as silence does: a demo whose
+    process keeps writing after every step has run is stopped DEMO_EXIT_S later, and a
+    process it left that keeps writing into its output no longer keeps the run going
+    DEMO_DRAIN_S after the demo ended."""
+    from acoustic_spaces.gui import worker
+
+    monkeypatch.setattr(worker, "DEMO_EXIT_S", 1.5)
+    monkeypatch.setattr(worker, "DEMO_DRAIN_S", 0.5)
+    monkeypatch.setattr(worker, "DEMO_KILL_S", 1.0)
+    demo, args = _demo_doing(
+        tmp_path,
+        "import threading",
+        "def chatter():",
+        "    for _ in range(1200):",
+        "        print('still here', flush=True)",
+        "        time.sleep(0.05)",
+        "threading.Thread(target=chatter).start()",
+    )
+    job = worker.DemoJob(demo, "wait", args)
+    said: list[str] = []
+    job.progress.connect(said.append)
+    started = time.monotonic()
+    report = job.compute()
+    assert report["stopped"] == "not ending"
+    assert time.monotonic() - started < 30.0
+    assert "waiting up to 2 s for the demo's process to end" in said
+    assert _ended(report["pid"])
+
+    demo, args = _demo_doing(
+        tmp_path,
+        "import subprocess",
+        "code = 'import time\\nfor _ in range(1200): print(1, flush=True); time.sleep(0.05)'",
+        "child = subprocess.Popen([sys.executable, '-c', code])",
+        "Path(__file__).with_name('child').write_text(str(child.pid))",
+    )
+    job = worker.DemoJob(demo, "wait", args)
+    try:
+        started = time.monotonic()
+        report = job.compute()
+        assert report["stopped"] == "output held"
+        assert time.monotonic() - started < 30.0
+    finally:
+        if sys.platform == "win32":  # out of the editor's reach there
+            import signal
+
+            os.kill(int((demo.script.parent / "child").read_text()), signal.SIGTERM)
+
+
+def test_a_demo_that_fails_after_its_steps_is_done_with_its_exit_code(qapp, tmp_path: Path) -> None:
+    """A demo whose process fails once every step has run (a library failing as the
+    process ends) wrote everything all the same: the run is done, with the exit code to
+    warn of; failing before that line is a failure of the run, as before."""
+    from acoustic_spaces.demos import DONE
+    from acoustic_spaces.gui import worker
+
+    demo, args = _demo_doing(tmp_path, "import atexit, os", "atexit.register(os._exit, 3)")
+    job = worker.DemoJob(demo, "wait", args)
+    report = job.compute()
+    assert job.lines[-1] == f"{DONE}: wait"
+    assert report["stopped"] is None and report["exit_code"] == 3
+    assert (args.work / "waited").read_text() == "done"
+
+    demo, args = _demo_doing(tmp_path, "import os", "os._exit(3)")
+    with pytest.raises(RuntimeError, match=r"the demo stopped \(3\)"):
+        worker.DemoJob(demo, "wait", args).compute()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM cannot be ignored there")
+def test_cancel_while_a_finished_demo_is_stopped_leaves_the_run_done(
+    qapp, tmp_path: Path, monkeypatch
+) -> None:
+    """A Cancel that comes while the editor is already stopping a demo that ran every
+    step (and ignores SIGTERM) leaves the run done, with the warning that the process
+    did not end: what the demo wrote is complete."""
+    import threading
+
+    from acoustic_spaces.gui import worker
+
+    monkeypatch.setattr(worker, "DEMO_EXIT_S", 1.0)
+    monkeypatch.setattr(worker, "DEMO_DRAIN_S", 0.2)
+    monkeypatch.setattr(worker, "DEMO_KILL_S", 4.0)
+    demo, args = _demo_doing(
+        tmp_path,
+        "import signal, threading",
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)",
+        "threading.Thread(target=time.sleep, args=(120,)).start()",
+    )
+    job = worker.DemoJob(demo, "wait", args)
+    ended: list = []
+    job.done.connect(lambda report: ended.append(("done", report)))
+    job.cancelled.connect(lambda: ended.append(("cancelled", None)))
+    stopping = threading.Event()
+    stop = worker._stop_processes
+
+    def watched(process) -> None:
+        stopping.set()
+        stop(process)
+
+    monkeypatch.setattr(worker, "_stop_processes", watched)
+    threading.Thread(target=lambda: stopping.wait(60) and job.cancel(), daemon=True).start()
+    job.run()
+    assert [kind for kind, _report in ended] == ["done"]
+    assert ended[0][1]["stopped"] == "not ending"
+
+
+def test_an_examples_script_run_by_the_editor_ends_with_the_done_line(
+    qapp, tmp_path: Path, monkeypatch
+) -> None:
+    """An example's script that is no demo runs through run_script, which prints the
+    line that every step has run once the script has ended well: a script whose process
+    then does not end is stopped DEMO_EXIT_S later, and the run is done."""
+    from acoustic_spaces.demos import DONE, RUN, script_demo
+    from acoustic_spaces.gui import worker
+
+    monkeypatch.setattr(worker, "DEMO_EXIT_S", 1.0)
+    monkeypatch.setattr(worker, "DEMO_DRAIN_S", 0.2)
+    folder = tmp_path / "scripted"
+    folder.mkdir()
+    script = folder / "lingers.py"
+    script.write_text(
+        '''"""A script that is no demo, and whose process lingers after it has written."""
+
+import argparse
+import threading
+import time
+from pathlib import Path
+
+TITLE = "A lingering script"
+
+
+def parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, default=Path("written.txt"), help="what it writes")
+    return parser
+
+
+def main(argv=None) -> int:
+    args = parser().parse_args(argv)
+    args.out.write_text("written", "utf-8")
+    print(f"wrote {args.out}", flush=True)
+    threading.Thread(target=time.sleep, args=(120,)).start()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+''',
+        "utf-8",
+    )
+    demo = script_demo(script)
+    assert demo.stepless
+    job = worker.DemoJob(demo, RUN, demo.resolved(demo.defaults()))
+    assert job.argv[1:4] == ["-m", "acoustic_spaces.demos.run_script", str(script)]
+    report = job.compute()
+    assert job.lines[-1] == f"{DONE}: lingers.py"
+    assert report["stopped"] == "not ending"
+    assert (folder / "written.txt").read_text("utf-8") == "written"
+    assert _ended(report["pid"])
+
+
+def test_a_finished_demo_that_does_not_end_in_the_editor(
+    window, qapp, monkeypatch, tmp_path: Path
+) -> None:
+    """In the window: a demo that ran every step but whose process does not end is done,
+    with a warning that the editor stopped it; Cancel while the editor waits for it ends
+    the run as done too, saying that what the demo wrote is complete."""
+    from acoustic_spaces.gui import app as app_module
+    from acoustic_spaces.gui import worker
+
+    monkeypatch.setattr(worker, "DEMO_EXIT_S", 1.0)
+    monkeypatch.setattr(worker, "DEMO_DRAIN_S", 0.2)
+    demo, args = _demo_doing(
+        tmp_path,
+        "import threading",
+        "threading.Thread(target=time.sleep, args=(120,)).start()",
+    )
+
+    class Dialog:
+        def __init__(self, parent=None, *, scene=None, unsaved=False) -> None:
+            pass
+
+        def exec(self) -> int:
+            return int(QDialog.DialogCode.Accepted)
+
+        def chosen(self):
+            return demo, "wait", args
+
+        def deleteLater(self) -> None:
+            pass
+
+    monkeypatch.setattr(app_module, "DemoDialog", Dialog)
+    window.open_example(example_path("shoebox"))
+    window.demo_action.trigger()
+    _wait(qapp, lambda: window.job is None, timeout=60.0)
+    warned = [
+        text
+        for text, level, _links, _closing in window.message_panel.entries
+        if level == "warning" and "demo" in text
+    ]
+    assert len(warned) == 1 and "had not ended 1 s later: the editor stopped it" in warned[0]
+    assert _ends_a_run(window, "The wait demo is done in")
+
+    monkeypatch.setattr(worker, "DEMO_EXIT_S", 600.0)
+    window.demo_action.trigger()
+    _wait(qapp, lambda: "for the demo's process to end" in window.activity.text(), timeout=60.0)
+    window.cancel_simulation()
+    _wait(qapp, lambda: window.job is None, timeout=60.0)
+    messages = window.messages.toPlainText()
+    assert "The demo's process was stopped after every step had run" in messages
+    assert "Demo cancelled." not in messages
+    assert messages.rstrip().splitlines()[-1].startswith("The wait demo is done in")
+
+
 def _hrtf_set(tmp_path: Path, monkeypatch):
     """One set that comes from a file beside the tests, so nothing is downloaded."""
     from acoustic_spaces.spatial import hrtf_sets

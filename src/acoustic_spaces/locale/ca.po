@@ -1517,6 +1517,59 @@ msgstr ""
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
+"The demo had run every step, but its process (PID {pid}) had not ended "
+"{seconds:.0f} s later: the editor stopped it. What it wrote is complete."
+msgstr ""
+"La demostració havia completat tots els passos, però el seu procés (PID "
+"{pid}) no havia acabat {seconds:.0f} s després: l'editor l'ha aturat. El que "
+"va escriure és complet."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process had ended, but a process it started still holds its "
+"output open: the editor no longer waits for it."
+msgstr ""
+"El procés de la demostració havia acabat, però un procés que va iniciar "
+"encara manté oberta la seva sortida: l'editor ja no l'espera."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process had ended, but a process it started still held its output "
+"open: the editor stopped the processes the demo left."
+msgstr ""
+"El procés de la demostració havia acabat, però un procés que va iniciar "
+"encara mantenia oberta la seva sortida: l'editor ha aturat els processos que "
+"va deixar la demostració."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process was stopped after every step had run: what it wrote is "
+"complete."
+msgstr ""
+"El procés de la demostració es va aturar després de completar tots els "
+"passos: el que va escriure és complet."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The demo had run every step, but its process then ended by signal {signal}. "
+"What it wrote is complete."
+msgstr ""
+"La demostració havia completat tots els passos, però el seu procés va acabar "
+"després pel senyal {signal}. El que va escriure és complet."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The demo had run every step, but its process then ended with exit code "
+"{code}. What it wrote is complete."
+msgstr ""
+"La demostració havia completat tots els passos, però el seu procés va acabar "
+"després amb el codi de sortida {code}. El que va escriure és complet."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
 "The {demo} demo is done in {time:.1f} s ({step}); it wrote into {folder}."
 msgstr ""
 "La demostració {demo} ha acabat en {time:.1f} s ({step}); ha escrit a "
@@ -8047,6 +8100,11 @@ msgstr "La vista 3D necessita una pantalla amb OpenGL."
 #: acoustic_spaces/gui/worker.py
 msgid "Drawing the spread from the absorption uncertainty…"
 msgstr "Calculant la dispersió per la incertesa d'absorció…"
+
+#: acoustic_spaces/gui/worker.py
+#, python-brace-format
+msgid "waiting up to {seconds:.0f} s for the demo's process to end"
+msgstr "s'espera fins a {seconds:.0f} s que acabi el procés de la demostració"
 
 #: acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format

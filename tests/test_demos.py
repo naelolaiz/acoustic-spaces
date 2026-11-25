@@ -18,6 +18,7 @@ import yaml
 from acoustic_spaces import fetch
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.demos import (
+    DONE,
     SIMULATE,
     Demo,
     Option,
@@ -880,6 +881,48 @@ def test_an_examples_script_runs_as_a_demo_of_one_step(tmp_path: Path) -> None:
     assert [d.name for d in scripts_of("town_hall_pa")] == ["delays"]
     assert [d.name for d in scripts_of("listening_room")] == ["bass"]
     assert scripts_of("shoebox") == [] and scripts_of("measurement") == []
+
+
+def test_run_script_runs_a_script_as_python_would_then_says_it_is_done(tmp_path: Path) -> None:
+    """run_script runs an example's script as ``python SCRIPT ARGS`` would: as
+    ``__main__``, with its own name and arguments, its folder first on the module path
+    (so it imports what lies beside it) and the working folder where it was started;
+    then, if it ended well, the line that every step has run. A script that fails ends
+    with its own exit code, and without that line."""
+    import subprocess
+    import sys
+
+    folder = tmp_path / "example"
+    folder.mkdir()
+    (folder / "beside.py").write_text("WORD = 'beside'\n", "utf-8")
+    script = folder / "speaks.py"
+    script.write_text(
+        "import sys\n"
+        "from pathlib import Path\n"
+        "import beside\n"
+        "print(__name__, Path(sys.argv[0]).name, sys.argv[1:], beside.WORD, Path.cwd().name)\n"
+        "if '--fail' in sys.argv:\n"
+        "    raise SystemExit(3)\n",
+        "utf-8",
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+
+    def run(*args: str) -> subprocess.CompletedProcess:
+        command = [sys.executable, "-m", "acoustic_spaces.demos.run_script", str(script)]
+        return subprocess.run(
+            [*command, *args], cwd=elsewhere, capture_output=True, text=True, check=False
+        )
+
+    ran = run("--rays", "30")
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout.splitlines() == [
+        "__main__ speaks.py ['--rays', '30'] beside elsewhere",
+        f"{DONE}: speaks.py",
+    ]
+    failed = run("--fail")
+    assert failed.returncode == 3
+    assert DONE not in failed.stdout
 
 
 def test_a_caption_leaves_out_a_path_at_its_default_where_the_demo_runs(

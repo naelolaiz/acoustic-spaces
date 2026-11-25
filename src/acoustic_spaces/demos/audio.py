@@ -264,7 +264,7 @@ def decoded(path: Path) -> tuple[np.ndarray, int]:
     with tempfile.TemporaryDirectory() as folder:
         wav = Path(folder) / "decoded.wav"
         command = ["ffmpeg", "-v", "error", "-y", "-i", str(path), "-c:a", "pcm_f32le", str(wav)]
-        subprocess.run(command, check=True)
+        subprocess.run(command, stdin=subprocess.DEVNULL, check=True)
         return read(wav)
 
 

@@ -960,6 +960,13 @@ simulation:
   (`simulate` and `edit`) skips the trial: `auto` then takes the choice kept for the
   nearest length, or the CPU when there is none.
 
+On Linux, NVIDIA's driver can keep a process that traced on its GPU for hours busy after
+the run has finished: one thread spins at 100 % of a core in the driver's own clean-up
+as the process exits (seen with driver 620.73.04 after a three-hour demo, and
+[reported to NVIDIA](https://forums.developer.nvidia.com/t/610-43-03-rtx-4090-process-hangs-on-exit-in-libnvidia-glcore-libglx-nvidia-after-long-vulkan-openxr-session/378441)
+with 610.43.03). What the run wrote is complete: stop the process. The editor's
+**Run demo…** stops it by itself (see the [graphical editor](editor.md)).
+
 ### Tuning the devices for a computer
 
 `acoustic-spaces tune` times every option and keeps the fastest for `auto`, once per

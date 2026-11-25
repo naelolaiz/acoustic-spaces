@@ -917,7 +917,9 @@ def _ffmpeg(
         "-c:v", "libx264", "-preset", "slow", "-crf", "18",
         "-c:a", "aac", "-b:a", "384k", "-movflags", "+faststart", str(out),
     ]  # fmt: skip
-    piped = subprocess.PIPE if feed is not None else None
+    # The pictures through its input, or nothing: ffmpeg reads keys from a terminal
+    # otherwise ("q" ends the video short).
+    piped = subprocess.PIPE if feed is not None else subprocess.DEVNULL
     with subprocess.Popen(command, stdin=piped, stdout=subprocess.PIPE) as process:
         said = threading.Thread(target=_encode, args=(process.stdout, length_s, shown), daemon=True)
         said.start()

@@ -75,6 +75,11 @@ KINDS = (
 PATH_KINDS = ("file", "path", "folder")
 #: The kinds whose value is a dict of names and files.
 MAP_KINDS = ("inputs", "files")
+#: How the line begins that a demo prints once every step it was asked for has run
+#: (:meth:`Demo.run`; for an example's script that is no demo,
+#: :mod:`acoustic_spaces.demos.run_script` once it has ended well): from it the editor's
+#: Run demo knows that what the demo writes is complete, whatever its process does next.
+DONE = "every step has run"
 
 
 #: What a ``movers`` option takes for nothing moving.
@@ -770,7 +775,8 @@ class Demo:
 
     def run(self, names: Sequence[str], args: argparse.Namespace, skip_done: bool = False) -> None:
         """Run the steps ``names`` in order with ``args`` (paths counted from the demo's
-        folder); ``skip_done`` leaves out the steps whose result is there."""
+        folder); ``skip_done`` leaves out the steps whose result is there. Ends with a
+        line that begins with :data:`DONE`."""
         problem = self.check(args)
         if problem:
             raise SystemExit(f"error: {problem}")
@@ -784,6 +790,7 @@ class Demo:
                 self.simulate(args, only_missing=skip_done)
             else:
                 step.run(args)
+        print(f"{DONE}: {', '.join(names)}", flush=True)
 
     def main(self, argv: Sequence[str] | None = None) -> int:
         """Run the steps a command line asks for. A demo of the examples counts relative
@@ -942,6 +949,7 @@ def scripts_of(example: str) -> list[Demo]:
 
 __all__ = [
     "ADVANCED",
+    "DONE",
     "KINDS",
     "LABELS",
     "MAP_KINDS",
