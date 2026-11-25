@@ -15,6 +15,12 @@
   buildings take up to 12 % longer, runs from or over a roof 14 to 41 % and steep
   listeners behind barriers and buildings up to 55 %.
 
+**Tests and CI**
+
+- Changed: CI runs the tests under the sanitizers in four parts side by side, a job
+  each (`pytest --shard K/N` runs the K-th of N): in one job they ran out of the step's
+  150 minutes on slower runners, with none failed.
+
 ## 4.3.0
 
 Error estimates for more results: the uncertainty of a coverage map's values (its
