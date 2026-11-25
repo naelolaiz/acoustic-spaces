@@ -120,6 +120,21 @@ def canvas(size: tuple[int, int] = SIZE) -> Image.Image:
     return Image.new("RGBA", size, BG)
 
 
+def title_card(size: tuple[int, int], title: str, name: str, lines) -> Image.Image:
+    """A title card of ``size``: ``title`` in large, ``name`` under it and ``lines`` under
+    that, each cut to the width (the ``join`` step's card before each run)."""
+    img = canvas(size)
+    draw = ImageDraw.Draw(img)
+    text(draw, (MARGIN, 300), title, font("Bold", 64, display=True))
+    text(draw, (MARGIN, 390), name, font("Regular", 34), LISTENER)
+    y = 480
+    for line in lines:
+        shown, face = fitted(draw, line, 30, size[0] - 2 * MARGIN)
+        text(draw, (MARGIN, y), shown, face, MUTED)
+        y += 52
+    return img
+
+
 def save(img: Image.Image, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     img.convert("RGB").save(path, optimize=True)
@@ -547,6 +562,7 @@ __all__ = [
     "settings_lines",
     "text",
     "thumbnail_badge",
+    "title_card",
     "tool_line",
     "tour_column",
 ]

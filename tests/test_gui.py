@@ -5852,10 +5852,13 @@ def test_a_demo_run_away_from_its_script_reads_and_writes_where_the_editor_says(
         # The scene a run writes for itself goes to its folder, named as the window
         # names the run: the copy's own files are the defaults there.
         assert theirs.run_folder == demo.run_folder(args)
-        assert theirs.run_folder.name == {
-            "stadium": "stadium_spicy_funk_cake_binaural",
-            "crossing": "crossing_binaural",
-        }[demo.name]
+        assert (
+            theirs.run_folder.name
+            == {
+                "stadium": "stadium_spicy_funk_cake_binaural",
+                "crossing": "crossing_binaural",
+            }[demo.name]
+        )
         own = demo.option("scene").in_run is not None
         assert theirs.scene.parent == (theirs.run_folder if own else there)
         assert theirs.work == demo.work_folder(args) == there / "demo"

@@ -155,18 +155,7 @@ def draw_card(title: str, name: str, lines: Sequence[str]):
     """A title card (:data:`SIZE`): the demo's title, the run's name, and ``lines``."""
     from acoustic_spaces.demos import pictures as pics
 
-    img = pics.canvas(SIZE)
-    from PIL import ImageDraw
-
-    draw = ImageDraw.Draw(img)
-    pics.text(draw, (pics.MARGIN, 300), title, pics.font("Bold", 64, display=True))
-    pics.text(draw, (pics.MARGIN, 390), name, pics.font("Regular", 34), pics.LISTENER)
-    y = 480
-    for line in lines:
-        shown, face = pics.fitted(draw, line, 30, SIZE[0] - 2 * pics.MARGIN)
-        pics.text(draw, (pics.MARGIN, y), shown, face, pics.MUTED)
-        y += 52
-    return img
+    return pics.title_card(SIZE, title, name, lines)
 
 
 def _picked(runs: list[dict], wanted: list[str] | None, demo: Demo, work: Path) -> list[dict]:
