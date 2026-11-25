@@ -9,8 +9,9 @@
   name or group (all but the airport's flight, the helicopter flyover and the roadside
   demo, which play one vehicle, `--vehicle` picking which where there are several),
   and `--sources-play in-turn` plays them one after another; `--series listeners`
-  gives each listener a part. In Run demo these are lists to tick and drag, the
-  Movement box's ticks pick what moves, and a box sets the order of the parts.
+  gives each listener a part. In Run demo, **Several…** turns a choice into a list to
+  tick and drag, the sources' tree says what each plays and takes your WAV, and the
+  Video box lists the parts the run makes and sets their order.
 - Changed: `--listeners` sets the order of every demo's tour (a tour's timing kept),
   and the gallery walk's parts; `--tour` keeps its own order. The orchestra's
   `--movements` plays and downloads the movements it names, in that order.
@@ -20,7 +21,8 @@
 - Fixed: a police car's or a fire engine's walk was simulated again on every run, and
   the tram's credit named a pantograph it does not have.
 - Changed: every demo run is named after its settings (what it plays, the listeners,
-  the options changed, the output), and its mixes, stills and the scenes made for it go
+  the options changed, the output; a pick of sources by what it adds or leaves out,
+  `with-train_horn`), and its mixes, stills and the scenes made for it go
   to a folder of that name, its video beside it, so that a run with other settings (the
   airport's arrival after its departure) writes over nothing of another's; each output's
   simulation goes to a folder of its own in the results (`results_choir/binaural`), so

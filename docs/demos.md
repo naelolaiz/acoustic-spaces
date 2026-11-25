@@ -104,8 +104,10 @@ as one) in a part of its own, one after another in one video as above, or withou
 `--sources` each top group of the demo's pick (the stadium's sound system, its
 monitors, then its band); a single turn (one name, or a pick of one top group) is an
 ordinary run, and in a series of vehicles each takes its own turns (`--vehicle
-car,police_car`: the car, the police car, then its siren). A pick that is not the demo's own names the run
-(`church_Choir_binaural`, `church_each-source_binaural`); the stills, credits and
+car,police_car`: the car, the police car, then its siren). A pick that is not the
+demo's own names the run (`church_Choir_binaural`, `church_each-source_binaural`), by
+what it adds and leaves out where that is shorter (`passby_regional_with-train_horn`,
+`stadium_spicy_funk_cake_without-guitar_amp`); the stills, credits and
 captions describe only what plays. Where the simulation keeps every source (the
 concerts, the church, the demo of any scene, the works), another pick needs no new
 simulation; the pass-by demos walk the vehicle again with the parts picked.
@@ -152,14 +154,19 @@ as it is.
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
 and its scripts that are no demos. The window shows the options that change what the
-demo plays, at the command line's defaults, the file each source plays, the listeners
-to play and the walkers that move. A choice that takes several values is a list to
-tick, dragged into the order its parts play, and a number takes several comma
-separated; the sources are a tree of the scene's groups to tick, the Movement box's
-ticks pick what moves (the airport's departure and arrival), and **Order of the
-parts** sets `--series`, with a tick for each listener in a part of its own; **Advanced** holds the step, the paths and the
-command line, to repeat the run in a terminal. A line above **Run** says what the run
-downloads and how much. The demo reads the scene's file, so the editor asks to save a
+demo plays, at the command line's defaults, each in one place. A choice, and
+**Format**, is a list to pick from, which **Several…** turns into a list to tick,
+dragged into the order its parts play; a number takes several comma separated. The
+sources are a tree of the scene's groups to tick (a table where the demo takes no
+`--sources`), which says what each plays and takes a WAV of yours for it (**Choose
+WAV…**, or a double click). The **Movement** box shows what the run moves along its
+walk (*This scene*: ticks to change it), and **Edit movement…** changes a walk. The
+**Video** box says what the run makes, the video's name and, a line each, what sets its
+parts apart, in order; it holds how the sources play, whether a tour visits the
+listeners in each part or each is a part of its own, and, for parts of two kinds or
+more, **Order of the parts**, whose rows are dragged to set `--series`. **Advanced**
+holds the step, the paths and the command line, to repeat the run in a terminal. A line
+above **Run** says what the run downloads and how much. The demo reads the scene's file, so the editor asks to save a
 scene with no file or with changes first. However it closes, the window keeps the
 options changed in it for the next time, each demo its own: a pick from a list, a
 number, a tick and a file of yours (the HRTFs, a song with its credit) for any scene,

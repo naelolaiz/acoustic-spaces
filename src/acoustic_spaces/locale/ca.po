@@ -71,7 +71,7 @@ msgstr "Escena de l'exemple"
 msgid "Results folder"
 msgstr "Carpeta de resultats"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/tree.py
 msgid "Listeners"
 msgstr "Receptors"
 
@@ -203,7 +203,7 @@ msgstr "Botzina"
 msgid "Heard indoors"
 msgstr "Escoltat a dins"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/tree.py
 msgid "Sources"
 msgstr "Fonts"
 
@@ -211,7 +211,7 @@ msgstr "Fonts"
 msgid "Sources play"
 msgstr "Com sonen les fonts"
 
-#: acoustic_spaces/demos/__init__.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py
 msgid "Order of the parts"
 msgstr "Ordre de les parts"
 
@@ -1918,8 +1918,8 @@ msgid "What the source plays in the demo, unless a file is given"
 msgstr "El que reprodueix la font a la demostració, si no se li dona un fitxer"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Instead"
-msgstr "En lloc seu"
+msgid "Your WAV"
+msgstr "El teu WAV"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -1986,6 +1986,26 @@ msgid "Untick every listener, to tick the few to hear"
 msgstr "Desmarca tots els receptors, per marcar els pocs que es volen sentir"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "Several…"
+msgstr "Diversos…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Play several of them, one after another in one video: a tick for each, "
+"dragged into the order they play"
+msgstr ""
+"Fes-ne sonar diversos, un darrere l'altre en un sol vídeo: una marca per a "
+"cadascun, arrossegats en l'ordre en què sonen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "One only"
+msgstr "Només un"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Back to one of them, the first ticked"
+msgstr "Torna a un de sol, el primer marcat"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every one: the run plays them one after another"
 msgstr "Marca'ls tots: l'execució els reprodueix un darrere l'altre"
 
@@ -2010,12 +2030,38 @@ msgid "Tick the sources the demo plays by default"
 msgstr "Marca les fonts que la demo reprodueix per defecte"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick the sources that play; a group ticks all of its own"
+msgstr "Marqueu les fonts que sonen; un grup marca totes les seves"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
 msgid ""
-"Ticked: each listener in a part of its own, at this place in the order; "
-"unticked: the video of each part tours them"
+"The WAV file the source plays instead ({option} SOURCE=WAV), typed after a "
+"double click or chosen with Choose WAV…; empty: what Plays says"
 msgstr ""
-"Marcat: cada receptor en una part pròpia, en aquest lloc de l'ordre; "
-"desmarcat: el vídeo de cada part els recorre"
+"El fitxer WAV que la font reprodueix en lloc d'això ({option} SOURCE=WAV), "
+"escrit després d'un doble clic o triat amb Tria un WAV…; buit: el que diu "
+"Reprodueix"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo plays it whatever is ticked"
+msgstr "La demo el reprodueix, sigui el que sigui el que estigui marcat"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A tour in each part visits them"
+msgstr "Un recorregut en cada part els visita"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Each in a part of its own"
+msgstr "Per separat, en una part pròpia"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"How the listeners are heard: one after another in the video of each part, or "
+"each in a part of its own, at its place in the order of the parts"
+msgstr ""
+"Com se senten els receptors: un darrere l'altre en el vídeo de cada part, o "
+"cadascun en una part pròpia, al seu lloc en l'ordre de les parts"
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2104,6 +2150,27 @@ msgid "Tick what Moves ticks in the scene again"
 msgstr "Torna a marcar el que marca Es mou a l'escena"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "All together, in each part"
+msgstr "Totes juntes, en cada part"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "every one"
+msgstr "tots"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "the demo's pick"
+msgstr "la tria de la demo"
+
+#. Translators: no draws at all, so no spread of the results.
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "none"
+msgstr "cap"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "as by default"
+msgstr "com per defecte"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
 msgstr "Executa una demostració"
 
@@ -2138,6 +2205,18 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Demostració"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Video"
+msgstr "Vídeo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The video the run makes: one part, or several one after another, each after "
+"a title card that says what sets it apart"
+msgstr ""
+"El vídeo que fa l'execució: una part, o diverses una darrere l'altra, "
+"cadascuna després d'un rètol que diu què la distingeix"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Advanced"
@@ -2211,38 +2290,12 @@ msgstr ""
 "Es mou a l'escena i només canvien aquesta execució ({option})."
 
 #: acoustic_spaces/gui/demo_dialog.py
-#, python-brace-format
 msgid ""
-"Tick what plays in this run ({option}); the ticked sources play together, or "
-"one after another as {play} says."
+"What this run moves along its walk, as the options below pick what plays; "
+"Edit movement… changes a walk."
 msgstr ""
-"Marca què sona en aquesta execució ({option}); les fonts marcades sonen "
-"juntes, o una darrere l'altra segons indiqui {play}."
-
-#: acoustic_spaces/gui/demo_dialog.py
-#, python-brace-format
-msgid ""
-"Tick what plays in this run ({option}); the ticked sources play together."
-msgstr ""
-"Marca què sona en aquesta execució ({option}); les fonts marcades sonen "
-"juntes."
-
-#: acoustic_spaces/gui/demo_dialog.py
-#, python-brace-format
-msgid ""
-"Tick what plays in this run ({option}); ticking several plays them one after "
-"another in one video."
-msgstr ""
-"Marca què sona en aquesta execució ({option}); si en marques diversos, sonen "
-"un darrere l'altre en un sol vídeo."
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid ""
-"This demo moves what is ticked; Moves in the scene turns a walk on or off, "
-"and Edit movement… changes it."
-msgstr ""
-"Aquesta demo mou el que està marcat; Es mou a l'escena activa o desactiva un "
-"recorregut, i Edita el moviment… el canvia."
+"El que aquesta execució mou pel seu recorregut, segons el que trien les "
+"opcions de sota; Edita el moviment… canvia un recorregut."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -2292,12 +2345,31 @@ msgstr ""
 "{options}. Per defecte les restableix."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Listeners, each in a part of its own"
-msgstr "Receptors, cadascun en una part pròpia"
+#, python-brace-format
+msgid "This run makes one video, {name}.mp4."
+msgstr "Aquesta execució fa un vídeo, {name}.mp4."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Sources, one at a time"
-msgstr "Fonts, una cada vegada"
+#, python-brace-format
+msgid ""
+"This run makes one video, {name}.mp4, of {count} part, each after a title "
+"card of 4 s:"
+msgid_plural ""
+"This run makes one video, {name}.mp4, of {count} parts, one after another, "
+"each after a title card of 4 s:"
+msgstr[0] ""
+"Aquesta execució fa un vídeo, {name}.mp4, de {count} part, després d'un "
+"rètol de 4 s:"
+msgstr[1] ""
+"Aquesta execució fa un vídeo, {name}.mp4, de {count} parts, una darrere "
+"l'altra, cadascuna després d'un rètol de 4 s:"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "… and {count} more"
+msgid_plural "… and {count} more"
+msgstr[0] "… i {count} més"
+msgstr[1] "… i {count} més"
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
@@ -2675,11 +2747,6 @@ msgstr "traçat de raigs"
 #: acoustic_spaces/gui/inspector.py
 msgid "image_sources"
 msgstr "fonts imatge"
-
-#. Translators: no draws at all, so no spread of the results.
-#: acoustic_spaces/gui/inspector.py
-msgid "none"
-msgstr "cap"
 
 #. Translators: the direct sound's paths, in a plot's legend.
 #: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py

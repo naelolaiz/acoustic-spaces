@@ -7,11 +7,13 @@ video. A scene of an example that comes with a demo (:mod:`acoustic_spaces.demos
 a copy of one, also has that demo, with its own recordings, reading the open scene. The
 form is built from the demo's own options, so the editor and the command line run
 exactly the same thing. It shows the options that change what the demo plays, each
-labelled in words with its flag in the tip; Advanced shows the step to run, what
-fine-tunes the run, the files and folders the demo reads and writes, and that command,
-to run again or to put in a script. A demo whose sources can play files of the user's
-(``--input``) lists them in a table, each with what it plays and the WAV file it plays
-instead. A number
+in one place, labelled in words with its flag in the tip: a choice is a list to pick
+one from, which Several… turns into a list to tick; Advanced shows the step to run,
+what fine-tunes the run, the files and folders the demo reads and writes, and that
+command, to run again or to put in a script. The sources are a tree to tick, each with
+what it plays and, where the demo takes files of the user's (``--input``), the WAV file
+it plays instead. The Video box says what the run makes, a line for each part, and
+holds how its sources play and the order of its parts (``--series``). A number
 shows its unit, and one whose default the scene gives (the pass-by demos' ``--speed``)
 says so while its field is empty, which stands for that default; the line under the
 form says what the options make of the run, where the demo says (how far, how fast and
@@ -20,10 +22,11 @@ Above Run, a line says what the run downloads and how much: the recordings of a 
 whose steps fetch them (:attr:`~acoustic_spaces.demos.Step.downloads`), until they are
 there.
 
-The Movement box lists the sources and listeners of the scene that have a walk, ticked
-when they move in the run. This scene's ticks start as Moves sets them in the scene and
-can be changed for one run (``--moving``); an example's demo shows what it moves. Edit
-movement… closes the window and opens the Movement panel on the walker.
+The Movement box lists the sources and listeners of the scene that have a walk. This
+scene's ticks, for what moves, start as Moves sets them in the scene and can be changed
+for one run (``--moving``); an example's demo shows only what the run moves, as its
+options pick what plays. Edit movement… closes the window and opens the Movement panel
+on the walker.
 
 However the window closes, it keeps the options changed from where a first run starts
 them, in the user's settings (:func:`~acoustic_spaces.i18n.setting`), and opens with
@@ -39,11 +42,13 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QObject, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -72,12 +77,14 @@ from PySide6.QtWidgets import (
 
 from acoustic_spaces import i18n
 from acoustic_spaces.demos import (
+    IN_TURN,
     LISTENERS_DIM,
     MAP_KINDS,
     NO_MOVERS,
     PATH_KINDS,
     RESOLVED_ONLY,
     SOURCES_DIM,
+    TOGETHER,
     Demo,
     Option,
     Source,
@@ -88,7 +95,7 @@ from acoustic_spaces.demos import (
 )
 from acoustic_spaces.gui.inspector import int_spin, spin
 from acoustic_spaces.gui.sizing import body_size, fit, reading_width, scroll_bar_width, scrolled
-from acoustic_spaces.i18n import _, ngettext
+from acoustic_spaces.i18n import N_, _, ngettext
 
 #: The folder under the user's home the editor runs a demo in when the scene's own folder
 #: is not to be written: the examples of an installed copy, or a folder that cannot be.
@@ -484,7 +491,7 @@ class InputsField(QWidget):
                 (_("Source"), _("The source, as the scene names it")),
                 (_("Plays"), _("What the source plays in the demo, unless a file is given")),
                 (
-                    _("Instead"),
+                    _("Your WAV"),
                     _(
                         "The WAV file the source plays instead (--input SOURCE=WAV); empty: "
                         "what Plays says. The table's tip says how loud it plays"
@@ -655,6 +662,8 @@ class ListenersField(QWidget):
         row.addWidget(self.none)
         row.addStretch(1)
         layout.addLayout(row)
+        #: The row of All and None.
+        self.buttons_row = row
 
     def _tips(self) -> None:
         self.all.setToolTip(_("Tick every listener: the demo plays them all, its default"))
@@ -747,34 +756,121 @@ class ListenersField(QWidget):
 
 class ChoicesField(ListenersField):
     """The field of a choice that takes several values (:attr:`Option.varies`), such as
-    ``--vehicle``: a tick for each of its choices, its default ticked; a run plays the
-    ticked ones one after another, in the list's order, which the rows are dragged to
-    change."""
+    ``--vehicle`` or ``--format``: a list to pick one from, its default picked; or, with
+    Several… pressed, a tick for each choice, the run playing the ticked ones one after
+    another in the list's order, which the rows are dragged to change. ``choices`` gives
+    the choices of an option that lists none (the formats); a value given that is none
+    of them joins them where it ``takes_others`` (a scene's own output, ``binaural-me``)."""
 
-    def __init__(self, option: Option, tip: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        option: Option,
+        tip: str,
+        parent: QWidget | None = None,
+        choices: Sequence[str] | None = None,
+        takes_others: bool = False,
+    ) -> None:
         super().__init__(option, tip, parent)
-        self.set_listeners(list(option.choices))
+        self.takes_others = takes_others
+        self.combo = QComboBox()
+        self.combo.setToolTip(tip)
+        self.combo.currentIndexChanged.connect(self._picked)
+        self.several = QToolButton()
+        self.several.setText(_("Several…"))
+        self.several.setCheckable(True)
+        self.several.setToolTip(
+            _(
+                "Play several of them, one after another in one video: a tick for each, "
+                "dragged into the order they play"
+            )
+        )
+        self.several.toggled.connect(self._toggled)
+        self.one = QPushButton(_("One only"))
+        self.one.setToolTip(_("Back to one of them, the first ticked"))
+        self.one.clicked.connect(lambda: self.several.setChecked(False))
+        self.buttons_row.insertWidget(2, self.one)
+        top = QHBoxLayout()
+        top.addWidget(self.combo, 1)
+        top.addWidget(self.several)
+        layout = self.layout()
+        assert isinstance(layout, QVBoxLayout)
+        layout.insertLayout(0, top)
+        self.set_listeners(list(option.choices if choices is None else choices))
         self.set_value(option.default)
 
     def _tips(self) -> None:
         self.all.setToolTip(_("Tick every one: the run plays them one after another"))
         self.none.setToolTip(_("Untick every one, to tick those to play"))
 
+    def _fill(self) -> None:
+        super()._fill()
+        current = self.combo.currentText()
+        self.combo.blockSignals(True)
+        self.combo.clear()
+        self.combo.addItems(self.names)
+        ticked = self.ticked_rows()
+        self.combo.setCurrentText(ticked[0] if ticked else current)
+        self.combo.blockSignals(False)
+        self._show_mode()
+
+    def _show_mode(self) -> None:
+        """The list to pick one from, or the ticks with Several… pressed."""
+        many = self.several.isChecked()
+        for widget in (self.combo, self.several):
+            widget.setVisible(not many)
+        for widget in (self.list, self.all, self.none, self.one):
+            widget.setVisible(many)
+
+    def ticked_rows(self) -> list[str]:
+        """The ticked rows of the list, in its order."""
+        return super().ticked()
+
+    def ticked(self) -> list[str]:
+        """The choices the run plays: the one picked, or the ticked ones in order."""
+        if self.several.isChecked():
+            return self.ticked_rows()
+        text = self.combo.currentText()
+        return [text] if text else []
+
     def value(self) -> Any:
-        """The ticked choice, or the ticked ones in the list's order (several, a tuple);
-        an empty tuple for none."""
+        """The choice picked, or the ticked ones in the list's order (several, a tuple;
+        one alone as itself); an empty tuple for none ticked."""
         ticked = tuple(self.ticked())
         return ticked[0] if len(ticked) == 1 else ticked
 
     def set_value(self, value) -> None:
-        names = [v for v in values_of(value) if v in self.names]
+        """Pick ``value``, or tick its values in their order, Several… pressed for more
+        than one."""
+        given = [str(v) for v in values_of(value)]
+        if self.takes_others:
+            added = [v for v in given if v not in self.names]
+            if added:
+                self.set_listeners(self.names + added)
+        names = [v for v in given if v in self.names]
         if not names:
             return  # a value it does not offer: the pick stays
+        self.several.blockSignals(True)
+        self.several.setChecked(len(names) > 1)
+        self.several.blockSignals(False)
         super().set_value(tuple(names))
 
     def pick(self, value) -> None:
-        """Tick ``value`` (one choice, or several in their order) alone, as a click would."""
+        """Pick ``value`` (one choice, or several in their order) alone, as a click would."""
         self.set_value(value)
+        self.changed.emit()
+
+    def _picked(self) -> None:
+        """Another choice picked in the list: the run's alone."""
+        self.unticked = set(self.names) - {self.combo.currentText()}
+        super()._fill()
+        self.changed.emit()
+
+    def _toggled(self, many: bool) -> None:
+        """Several… pressed: the ticks, the choice picked ticked alone; released: the
+        first ticked picked alone."""
+        first = (self.ticked_rows() or [self.combo.currentText()])[0]
+        self.unticked = set(self.names) - {first}
+        self._fill()
         self.changed.emit()
 
     def _tick_all(self, ticked: bool) -> None:
@@ -789,10 +885,18 @@ class SourcesField(QWidget):
     (:attr:`Demo.sources`, which :meth:`set_sources` gives), in their scene's groups, a
     tick for each and for each group; the demo's own pick ticked by default. A run plays
     the ticked ones (a group wholly ticked by its name). All, None and The demo's pick
-    tick them."""
+    tick them. For a demo whose sources can play files of the user's (``--input``,
+    :meth:`take_inputs`), each row also says what the source plays (:meth:`set_plays`)
+    and the WAV file it plays instead, typed in its row or chosen with Choose WAV…,
+    Default emptying it again; a source the demo plays beyond its pick (the crossing's
+    helicopter) has a row of its own, with no tick."""
 
     #: A tick changed.
     changed = Signal()
+    #: A file was typed, chosen or taken back.
+    inputs_changed = Signal()
+
+    SOURCE, PLAYS, FILE = range(3)
 
     def __init__(self, option: Option, tip: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -800,12 +904,21 @@ class SourcesField(QWidget):
         self.sources: list[Source] = []
         #: The ticks as names (None: the demo's own pick), kept while the tree changes.
         self.picked: list[str] | None = None
+        #: ``--input``'s option where the rows take files, what each source plays, and
+        #: the files given.
+        self.inputs_option: Option | None = None
+        self.plays: dict[str, str] = {}
+        self.inputs: dict[str, Path] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.tree = QTreeWidget()
+        self.tree.setColumnCount(1)
         self.tree.setHeaderHidden(True)
         self.tree.setToolTip(tip)
-        self.tree.itemChanged.connect(self._ticked)
+        self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.tree.itemChanged.connect(self._item_changed)
+        self.tree.itemDoubleClicked.connect(self._double_clicked)
+        self.tree.itemSelectionChanged.connect(self._selected)
         layout.addWidget(self.tree)
         row = QHBoxLayout()
         self.all = QPushButton(_("All"))
@@ -817,14 +930,55 @@ class SourcesField(QWidget):
         self.own = QPushButton(_("The demo's pick"))
         self.own.setToolTip(_("Tick the sources the demo plays by default"))
         self.own.clicked.connect(lambda: self._set_ticks(None))
-        for button in (self.all, self.none, self.own):
+        self.choose = QPushButton(_("Choose WAV…"))
+        self.choose.setToolTip(_("Choose the WAV file the selected source plays instead"))
+        self.choose.clicked.connect(self._choose)
+        self.default = QPushButton(_("Default"))
+        self.default.setToolTip(_("The selected source plays what Plays says again"))
+        self.default.clicked.connect(self._default)
+        for button in (self.all, self.none, self.own, self.choose, self.default):
             row.addWidget(button)
         row.addStretch(1)
         layout.addLayout(row)
+        self._selected()
 
     @property
     def own_pick(self) -> list[str]:
         return [source.name for source in self.sources if source.on]
+
+    def take_inputs(self, option: Option, tip: str) -> None:
+        """The rows also take the files ``option`` (``--input``) gives the sources: the
+        columns Plays and Your WAV, ``tip`` the table's."""
+        self.inputs_option = option
+        self.tree.setColumnCount(3)
+        self.tree.setHeaderHidden(False)
+        heads = (
+            (_("Source"), _("Tick the sources that play; a group ticks all of its own")),
+            (_("Plays"), _("What the source plays in the demo, unless a file is given")),
+            (
+                _("Your WAV"),
+                _(
+                    "The WAV file the source plays instead ({option} SOURCE=WAV), typed "
+                    "after a double click or chosen with Choose WAV…; empty: what Plays "
+                    "says"
+                ).format(option=option.option),
+            ),
+        )
+        head = QTreeWidgetItem([text for text, _tip in heads])
+        for column, (_text, head_tip) in enumerate(heads):
+            head.setToolTip(column, head_tip)
+        self.tree.setHeaderItem(head)
+        self.tree.setToolTip(f"{self.tree.toolTip()}\n\n{tip}")
+        # The names in full, what they play cut short where the window is narrow (in
+        # full in its tip), and room for a file's name.
+        header = self.tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(self.SOURCE, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.PLAYS, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(self.FILE, QHeaderView.ResizeMode.Interactive)
+        header.resizeSection(self.FILE, header.fontMetrics().horizontalAdvance("x" * 24))
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._selected()
 
     def set_sources(self, sources: list[Source]) -> None:
         """The rows: ``sources``, in their groups, ticked as picked before; the demo's own
@@ -836,6 +990,9 @@ class SourcesField(QWidget):
         self.sources = sources
         if self.names_none_of(sources):
             self.picked = None
+        self._build_tree()
+
+    def _build_tree(self) -> None:
         self.tree.blockSignals(True)
         self.tree.clear()
         groups: dict[str, QTreeWidgetItem] = {}
@@ -856,7 +1013,7 @@ class SourcesField(QWidget):
             groups[path] = item
             return item
 
-        for source in sources:
+        for source in self.sources:
             item = QTreeWidgetItem([source.name])
             item.setData(0, Qt.ItemDataRole.UserRole, ("source", source.name))
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -865,11 +1022,22 @@ class SourcesField(QWidget):
                 group_item(source.group).addChild(item)
             else:
                 self.tree.addTopLevelItem(item)
+        listed = {source.name for source in self.sources}
+        for name in self.plays:  # played beyond the demo's pick: always
+            if name in listed:
+                continue
+            item = QTreeWidgetItem([name])
+            item.setData(0, Qt.ItemDataRole.UserRole, ("always", name))
+            item.setToolTip(0, _("The demo plays it whatever is ticked"))
+            self.tree.addTopLevelItem(item)
         self.tree.expandAll()
         self.tree.blockSignals(False)
         self._show_ticks()
-        rows = min(len(sources) + len(groups), 8)
-        self.tree.setFixedHeight(rows * max(self.tree.sizeHintForRow(0), 1) + 6)
+        self._show_plays()
+        rows = min(len(self.sources) + len(groups) + len(set(self.plays) - listed), 8)
+        head = 0 if self.tree.isHeaderHidden() else self.tree.header().sizeHint().height()
+        row = max(self.tree.sizeHintForRow(0), self.tree.fontMetrics().height() + 4)
+        self.tree.setFixedHeight(head + rows * row + 2 * self.tree.frameWidth() + 2)
 
     def names_none_of(self, sources: list[Source]) -> bool:
         """Whether what was picked (not the demo's own pick) names none of ``sources``
@@ -880,12 +1048,12 @@ class SourcesField(QWidget):
             return False
         return not any(source_matches(s, name) for s in sources for name in self.picked)
 
-    def _leaves(self) -> list[QTreeWidgetItem]:
+    def _items(self, kinds: tuple[str, ...] = ("source",)) -> list[QTreeWidgetItem]:
         out = []
         stack = [self.tree.topLevelItem(k) for k in range(self.tree.topLevelItemCount())]
         while stack:
             item = stack.pop(0)
-            if item.data(0, Qt.ItemDataRole.UserRole)[0] == "source":
+            if item.data(0, Qt.ItemDataRole.UserRole)[0] in kinds:
                 out.append(item)
             stack[:0] = [item.child(k) for k in range(item.childCount())]
         return out
@@ -897,11 +1065,45 @@ class SourcesField(QWidget):
         names = self.own_pick if self.picked is None else self.picked
         by_name = {source.name: source for source in self.sources}
         self.tree.blockSignals(True)
-        for item in self._leaves():
+        for item in self._items():
             source = by_name[item.data(0, Qt.ItemDataRole.UserRole)[1]]
             on = any(source_matches(source, name) for name in names)
             item.setCheckState(0, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
         self.tree.blockSignals(False)
+
+    def set_plays(self, plays: dict[str, str]) -> None:
+        """What each source plays (:attr:`Demo.plays`); a file given to a source that no
+        longer plays is dropped."""
+        plays = dict(plays)
+        if plays == self.plays:
+            return
+        listed = {source.name for source in self.sources}
+        rows = set(self.plays) - listed != set(plays) - listed
+        self.plays = plays
+        self.inputs = {name: file for name, file in self.inputs.items() if name in plays}
+        if rows:  # another source played beyond the pick: rows anew
+            self._build_tree()
+        else:  # the rows as they are (a tick in them may be what changed it)
+            self._show_plays()
+
+    def _show_plays(self) -> None:
+        """Each row's Plays and Your WAV, where the rows take files."""
+        if self.inputs_option is None:
+            return
+        self.tree.blockSignals(True)
+        for item in self._items(("source", "always")):
+            name = item.data(0, Qt.ItemDataRole.UserRole)[1]
+            file = self.inputs.get(name)
+            item.setText(self.PLAYS, self.plays.get(name, ""))
+            item.setToolTip(self.PLAYS, self.plays.get(name, ""))
+            item.setText(self.FILE, "" if file is None else str(file))
+            flags = item.flags()
+            if name in self.plays:
+                item.setFlags(flags | Qt.ItemFlag.ItemIsEditable)
+            else:
+                item.setFlags(flags & ~Qt.ItemFlag.ItemIsEditable)
+        self.tree.blockSignals(False)
+        self._selected()
 
     def _names(self) -> list[str]:
         """The ticks as names: a group wholly ticked by its path, else its ticked ones."""
@@ -910,6 +1112,8 @@ class SourcesField(QWidget):
         def walk(item: QTreeWidgetItem) -> None:
             kind, name = item.data(0, Qt.ItemDataRole.UserRole)
             state = item.checkState(0)
+            if kind == "always":
+                return
             if state == Qt.CheckState.Checked:
                 out.append(name)
             elif kind == "group" and state == Qt.CheckState.PartiallyChecked:
@@ -924,7 +1128,7 @@ class SourcesField(QWidget):
         """The ticked sources by name, in the demo's order."""
         on = {
             item.data(0, Qt.ItemDataRole.UserRole)[1]
-            for item in self._leaves()
+            for item in self._items()
             if item.checkState(0) == Qt.CheckState.Checked
         }
         return [source.name for source in self.sources if source.name in on]
@@ -944,13 +1148,106 @@ class SourcesField(QWidget):
         if self.sources:
             self._show_ticks()
 
+    def inputs_value(self) -> dict[str, Path] | None:
+        """``--input``: the files given, by source; None for none."""
+        return dict(self.inputs) or None
+
+    def set_inputs(self, value) -> None:
+        self.inputs = {str(name): Path(file) for name, file in (value or {}).items()}
+        self._show_plays()
+
     def _set_ticks(self, names: list[str] | None) -> None:
         self.set_value(None if names is None else ",".join(names))
         self.changed.emit()
 
-    def _ticked(self, _item: QTreeWidgetItem, _column: int) -> None:
+    def _item_changed(self, item: QTreeWidgetItem, column: int) -> None:
+        if column == self.FILE and self.inputs_option is not None:
+            text = item.text(self.FILE).strip()
+            self._set_file(item.data(0, Qt.ItemDataRole.UserRole)[1], Path(text) if text else None)
+            return
+        if column != self.SOURCE:
+            return
         self.picked = None if self.ticked() == self.own_pick else self._names()
         self.changed.emit()
+
+    def _double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        """A double click in Your WAV types the file a playing source plays instead."""
+        if column == self.FILE and item.flags() & Qt.ItemFlag.ItemIsEditable:
+            self.tree.editItem(item, self.FILE)
+
+    def _source(self) -> str | None:
+        """The selected source that plays, or None."""
+        items = self.tree.selectedItems()
+        if not items:
+            return None
+        kind, name = items[0].data(0, Qt.ItemDataRole.UserRole)
+        return name if kind != "group" and name in self.plays else None
+
+    def _selected(self) -> None:
+        files = self.inputs_option is not None
+        name = self._source() if files else None
+        for button in (self.choose, self.default):
+            button.setVisible(files)
+        self.choose.setEnabled(name is not None)
+        self.default.setEnabled(name is not None and name in self.inputs)
+
+    def _set_file(self, name: str, file: Path | None) -> None:
+        if file is None:
+            self.inputs.pop(name, None)
+        else:
+            self.inputs[name] = file
+        self._show_plays()
+        self.inputs_changed.emit()
+
+    def _choose(self) -> None:
+        name = self._source()
+        if name is None:
+            return
+        start = str(self.inputs.get(name) or Path.home())
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self,
+            _("WAV file for {source}").format(source=name),
+            start,
+            (self.inputs_option.filter if self.inputs_option else "") or _("All files (*)"),
+        )
+        if chosen:
+            self._set_file(name, Path(chosen))
+
+    def _default(self) -> None:
+        name = self._source()
+        if name is not None:
+            self._set_file(name, None)
+
+
+class SourceInputs(QObject):
+    """``--input`` where the sources' tree takes the files (:class:`SourcesField`): its
+    value, the tree's files; one asked for before the tree is there is given it when it
+    is (:meth:`bind`)."""
+
+    #: A file was typed, chosen or taken back.
+    changed = Signal()
+
+    def __init__(self, option: Option) -> None:
+        super().__init__()
+        self.option = option
+        self.field: SourcesField | None = None
+        self._wanted: Any = None
+
+    def bind(self, field: SourcesField) -> None:
+        self.field = field
+        field.take_inputs(self.option, self.option.description)
+        field.inputs_changed.connect(self.changed)
+        field.set_inputs(self._wanted)
+        self._wanted = None
+
+    def value(self) -> dict[str, Path] | None:
+        return self._wanted if self.field is None else self.field.inputs_value()
+
+    def set_value(self, value) -> None:
+        if self.field is None:
+            self._wanted = value
+        else:
+            self.field.set_inputs(value)
 
 
 class NumbersField(QWidget):
@@ -998,12 +1295,12 @@ class NumbersField(QWidget):
 
 
 class SeriesField(QWidget):
-    """The field of ``--series``: what the run plays several of, one row each, in the
-    order of its parts, outermost first, which the rows are dragged to change; and a
-    tick for the listeners, each in a part of its own rather than toured in each part
-    (:meth:`~acoustic_spaces.demos.Demo.series_order`)."""
+    """The field of ``--series``: whether the listeners are toured in each part or each
+    heard in a part of its own, and when the run has parts of two kinds or more, what
+    it plays several of, a row each, in the order of its parts, outermost first, which
+    the rows are dragged to change (:meth:`~acoustic_spaces.demos.Demo.series_order`)."""
 
-    #: The order or the tick changed.
+    #: The order or the listeners' choice changed.
     changed = Signal()
 
     def __init__(self, option: Option, tip: str, parent: QWidget | None = None) -> None:
@@ -1014,77 +1311,99 @@ class SeriesField(QWidget):
         self.labels: dict[str, tuple[str, str]] = {}
         self.order: list[str] = []
         self.split = False
+        #: How many listeners the run plays.
+        self.listeners = 0
         #: What :meth:`set_value` asked for before the rows were there.
         self._wanted: Any = None
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        form = self._form = QFormLayout(self)
+        form.setContentsMargins(0, 0, 0, 0)
+        self.split_box = QComboBox()
+        self.split_box.addItems(
+            [_("A tour in each part visits them"), _("Each in a part of its own")]
+        )
+        self.split_box.setToolTip(
+            _(
+                "How the listeners are heard: one after another in the video of each part, "
+                "or each in a part of its own, at its place in the order of the parts"
+            )
+        )
+        self.split_box.currentIndexChanged.connect(self._split)
         self.list = QListWidget()
         self.list.setToolTip(tip)
         self.list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.list.itemChanged.connect(self._ticked)
         self.list.model().rowsMoved.connect(self._moved)
-        layout.addWidget(self.list)
+        for text, widget in (
+            (_("Listeners"), self.split_box),
+            (_("Order of the parts"), self.list),
+        ):
+            label = QLabel(text)
+            label.setBuddy(widget)
+            label.setToolTip(widget.toolTip())
+            form.addRow(label, widget)
 
-    def set_dims(self, dims: list[str], labels: dict[str, tuple[str, str]]) -> None:
-        """The rows: ``dims`` (what varies, in the default order) and the listeners'
-        row, each with its label and its name in ``--series`` as ``labels`` gives them,
-        in the order picked before."""
-        from acoustic_spaces.demos import LISTENERS_DIM
-
+    def set_dims(
+        self, dims: list[str], labels: dict[str, tuple[str, str]], listeners: int = 0
+    ) -> None:
+        """The rows: ``dims`` (what varies, in the default order) and the listeners' row,
+        each with its label and its name in ``--series`` as ``labels`` gives them, in the
+        order picked before; ``listeners``, how many the run plays."""
         dims = [d for d in dims if d != LISTENERS_DIM]
-        if dims == self.dims and labels == self.labels:
+        if dims == self.dims and labels == self.labels and listeners == self.listeners:
             return
-        self.dims, self.labels = dims, labels
-        everything = [*dims, LISTENERS_DIM]
-        kept = [d for d in self.order if d in everything]
-        new = [d for d in everything if d not in kept]
-        if LISTENERS_DIM in kept and not self.split:
-            # The listeners toured: what varies anew goes before them, as by default.
-            at = kept.index(LISTENERS_DIM)
-            kept[at:at] = [d for d in new if d != LISTENERS_DIM]
-            new = []
-        self.order = kept + new
+        self.listeners = listeners
+        if dims != self.dims or labels != self.labels:
+            self.dims, self.labels = dims, labels
+            everything = [*dims, LISTENERS_DIM]
+            kept = [d for d in self.order if d in everything]
+            new = [d for d in everything if d not in kept]
+            if LISTENERS_DIM in kept and not self.split:
+                # The listeners toured: what varies anew goes before them, as by default.
+                at = kept.index(LISTENERS_DIM)
+                kept[at:at] = [d for d in new if d != LISTENERS_DIM]
+                new = []
+            self.order = kept + new
         wanted, self._wanted = self._wanted, None
         if wanted is not None:
             self.set_value(wanted)
         else:
             self._fill()
 
-    def _fill(self) -> None:
-        from acoustic_spaces.demos import LISTENERS_DIM
+    def rows(self) -> list[str]:
+        """What the run plays several of, in the order of its parts."""
+        return [d for d in self.order if d != LISTENERS_DIM or self.split]
 
+    def shown(self) -> bool:
+        """Whether there is anything to choose: listeners to split, or an order."""
+        return self.listeners > 1 or len(self.rows()) > 1
+
+    def _fill(self) -> None:
+        self.split_box.blockSignals(True)
+        self.split_box.setCurrentIndex(1 if self.split else 0)
+        self.split_box.blockSignals(False)
         self.list.blockSignals(True)
         self.list.clear()
-        for dim in self.order:
+        for dim in self.rows():
             item = QListWidgetItem(self.labels.get(dim, (dim, dim))[0])
             item.setData(Qt.ItemDataRole.UserRole, dim)
-            flags = (item.flags() | Qt.ItemFlag.ItemIsDragEnabled) & ~(
-                Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDropEnabled
+            item.setFlags(
+                (item.flags() | Qt.ItemFlag.ItemIsDragEnabled)
+                & ~(Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDropEnabled)
             )
-            if dim == LISTENERS_DIM:
-                item.setFlags(flags | Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(Qt.CheckState.Checked if self.split else Qt.CheckState.Unchecked)
-                item.setToolTip(
-                    _(
-                        "Ticked: each listener in a part of its own, at this place in the "
-                        "order; unticked: the video of each part tours them"
-                    )
-                )
-            else:
-                item.setFlags(flags)
             self.list.addItem(item)
         self.list.blockSignals(False)
-        rows = sum(self.list.sizeHintForRow(r) for r in range(min(len(self.order), 6)))
+        count = self.list.count()
+        rows = sum(self.list.sizeHintForRow(r) for r in range(min(count, 6)))
         self.list.setFixedHeight(rows + 2 * self.list.frameWidth())
+        self._form.setRowVisible(self.split_box, self.listeners > 1 or self.split)
+        self._form.setRowVisible(self.list, count > 1)
 
     def value(self) -> str | None:
         """``--series``: None for the default order (what varies in the options' order,
-        the listeners toured), else the rows in order, the listeners' when ticked."""
-        from acoustic_spaces.demos import LISTENERS_DIM
-
+        the listeners toured), else the rows in order, the listeners' among them when
+        each is in a part of its own."""
         if not self.labels:  # the rows not there yet
             return self._wanted
-        order = [d for d in self.order if d != LISTENERS_DIM or self.split]
+        order = self.rows()
         if order == self.dims:
             return None
         return ",".join(self._flag(d) for d in order)
@@ -1093,8 +1412,6 @@ class SeriesField(QWidget):
         return self.labels.get(dim, (dim, dim))[1]
 
     def set_value(self, value) -> None:
-        from acoustic_spaces.demos import LISTENERS_DIM
-
         if not self.labels:  # before set_dims, which puts it in order
             self._wanted = value
             return
@@ -1106,14 +1423,16 @@ class SeriesField(QWidget):
         self.order = kept + [d for d in self.order if d not in kept]
         self._fill()
 
-    def _ticked(self, item: QListWidgetItem) -> None:
-        self.split = item.checkState() == Qt.CheckState.Checked
+    def _split(self, index: int) -> None:
+        self.split = index == 1
+        self._fill()
         self.changed.emit()
 
     def _moved(self, *_args) -> None:
-        self.order = [
+        rows = [
             self.list.item(row).data(Qt.ItemDataRole.UserRole) for row in range(self.list.count())
         ]
+        self.order = rows + [d for d in self.order if d not in rows]
         self.changed.emit()
 
 
@@ -1189,8 +1508,6 @@ class MovementBox(QGroupBox):
         #: Whether each walker is in the scene's simulations.
         self.used = [item.in_use for _kind, item in walkers]
         self.editable = False
-        #: The ticks before the last click: as last set, or as the click before left them.
-        self.before: list[str] = []
         layout = QVBoxLayout(self)
         # As tall as its contents, however tall the window is.
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
@@ -1271,24 +1588,21 @@ class MovementBox(QGroupBox):
             if self.table.item(row, self.MOVES).checkState() == Qt.CheckState.Checked
         ]
 
-    def set_mode(
-        self, editable: bool, ticked: list[str], note: str, shown: list[str] | None = None
-    ) -> None:
+    def set_mode(self, editable: bool, ticked: list[str], note: str, alone: bool = False) -> None:
         """Whether the ticks are the run's to change, what is ticked, and the line above;
-        ``shown``, the walkers ticks pick what plays by (a demo's ``--vehicle``), which
-        show whether in the scene's simulations or not."""
+        with ``alone``, only what is ticked shows, and no ticks: what the run moves, as
+        its picks of what plays make it (a pass-by demo's vehicle)."""
         self.editable = editable
         self.note.setText(note)
-        self.reset.setVisible(editable and self.any_used and shown is None)
+        self.reset.setVisible(editable and self.any_used)
         self._tick(ticked)
         rows_shown = []
         for row, (_kind, name, _on) in enumerate(self.walkers):
-            hidden = not self.used[row] and name not in ticked
-            if shown is not None:
-                hidden = name not in shown and name not in ticked
+            hidden = name not in ticked and (alone or not self.used[row])
             self.table.setRowHidden(row, hidden)
             if not self.table.isRowHidden(row):
                 rows_shown.append(row)
+        self.table.setColumnHidden(self.MOVES, alone)
         rows = sum(self.table.rowHeight(r) for r in rows_shown[:6])
         self.table.setFixedHeight(
             self.table.horizontalHeader().height() + rows + 2 * self.table.frameWidth()
@@ -1321,12 +1635,10 @@ class MovementBox(QGroupBox):
             item.setFlags(flags)
             item.setCheckState(Qt.CheckState.Checked if name in names else Qt.CheckState.Unchecked)
         self.table.blockSignals(False)
-        self.before = self.ticked()
 
     def _ticked(self, item: QTableWidgetItem) -> None:
         if item.column() == self.MOVES and self.editable:
             self.changed.emit()
-            self.before = self.ticked()
 
     def _edit(self) -> None:
         shown = [r for r in range(len(self.walkers)) if not self.table.isRowHidden(r)]
@@ -1342,6 +1654,51 @@ def binaural(args: argparse.Namespace) -> bool:
     """Whether a run with ``args`` makes a binaural mix, which takes HRTFs: its format,
     or one of its formats, binaural (the default)."""
     return "binaural" in values_of(getattr(args, "format", "binaural"))
+
+
+#: The options the Video box asks for: how the sources and the listeners split into
+#: parts, and their order.
+VIDEO_OPTIONS = ("sources_play", "series")
+#: How many parts the Video box lists; it counts the others.
+PARTS_LISTED = 12
+#: Where a sentence of a demo's summary ends: at a full stop and a space.
+SENTENCE_END = re.compile(r"(?<=\.)\s+")
+#: The words a list shows for the choices of an option, by its name, where its choices
+#: are no words of their own (``--sources-play in-turn``).
+CHOICE_WORDS = {
+    "sources_play": {
+        TOGETHER: N_("All together, in each part"),
+        IN_TURN: N_("Each in a part of its own"),
+    }
+}
+
+
+def part_value(option: Option, value: Any) -> str:
+    """``value`` of ``option`` in a part, in a few words, as the Video box lists a part
+    by it: its label and the value (several comma separated; the listeners or the
+    sources not given, the demo's own)."""
+    if option.kind in ("listeners", "sources") and value is None:
+        shown = _("every one") if option.kind == "listeners" else _("the demo's pick")
+    elif option.kind in MAP_KINDS:
+        shown = ", ".join(f"{k}={Path(v).name}" for k, v in (value or {}).items()) or _("none")
+    elif isinstance(value, float):
+        shown = f"{value:g}" + (f" {option.unit}" if option.unit else "")
+    elif value is None:
+        shown = option.unset or _("as by default")
+    else:
+        shown = ", ".join(str(v) for v in values_of(value))
+    return f"{_(option.label)}: {shown}"
+
+
+def format_choices() -> list[str]:
+    """The formats a run's mixes can take (``--format``), as the field lists them:
+    binaural and mono, stereo, Ambisonics of each order, then the other loudspeaker
+    layouts (:func:`~acoustic_spaces.demos.pipeline.output_named` reads them all)."""
+    from acoustic_spaces.spatial import LAYOUTS, MAX_ORDER
+
+    ambisonics = [f"ambix{order}" for order in range(1, MAX_ORDER + 1)]
+    layouts = [name for name in LAYOUTS if name != "stereo"]
+    return ["binaural", "mono", "stereo", *ambisonics, *layouts]
 
 
 def field_for(option: Option, tip: str) -> QWidget:
@@ -1364,6 +1721,8 @@ def field_for(option: Option, tip: str) -> QWidget:
         return SourcesField(option, tip)
     if option.name == "series":
         return SeriesField(option, tip)
+    if option.name == "format":
+        return ChoicesField(option, tip, choices=format_choices(), takes_others=True)
     if option.varies and option.choices:
         return ChoicesField(option, tip)
     if option.varies and option.kind in ("int", "float"):
@@ -1377,9 +1736,11 @@ def field_for(option: Option, tip: str) -> QWidget:
         return box
     if option.choices:
         combo = QComboBox()
-        combo.addItems(list(option.choices))
+        words = CHOICE_WORDS.get(option.name, {})
+        for choice in option.choices:
+            combo.addItem(_(words[choice]) if choice in words else choice, choice)
         if option.default in option.choices:
-            combo.setCurrentText(str(option.default))
+            combo.setCurrentIndex(combo.findData(option.default))
         combo.setToolTip(tip)
         return combo
     if option.kind in ("int", "float") and (option.default is not None or option.unset):
@@ -1409,7 +1770,8 @@ def value_of(option: Option, widget: QWidget):
     if isinstance(widget, QCheckBox):
         return widget.isChecked()
     if isinstance(widget, QComboBox):
-        return widget.currentText()
+        data = widget.currentData()
+        return widget.currentText() if data is None else data
     if isinstance(widget, QLineEdit):
         text = widget.text().strip()
         if text and option.varies:  # several, comma separated
@@ -1438,7 +1800,7 @@ def show_value(option: Option, widget: QWidget, value: Any) -> None:
         widget.setChecked(bool(value))
     elif isinstance(widget, QComboBox):
         if value in option.choices:
-            widget.setCurrentText(str(value))
+            widget.setCurrentIndex(widget.findData(value))
     elif isinstance(widget, QLineEdit):
         widget.setText("" if value is None else ",".join(str(v) for v in values_of(value)))
     else:  # a number; none is its unset text, at the lowest
@@ -1449,6 +1811,7 @@ def show_value(option: Option, widget: QWidget, value: Any) -> None:
 FIELDS = (
     PathField,
     InputsField,
+    SourceInputs,
     MovementBox,
     ListenersField,
     SourcesField,
@@ -1498,9 +1861,6 @@ class DemoDialog(QDialog):
         self.kept_values: dict[str, Any] = {}
         #: What Edit movement… asked for: the walker's kind and name (empty for none).
         self.edit_request: tuple[str, str] | None = None
-        #: The option whose pick the Movement box's ticks make, and what each value moves
-        #: (:meth:`_movers`); None when its ticks are not a pick.
-        self._picks: tuple[str, dict[Any, list[str]]] | None = None
         # The form scrolls where the screen is too small for it, rather than squeezing
         # its tables and buttons; the buttons stay below it.
         body = QWidget()
@@ -1553,7 +1913,7 @@ class DemoDialog(QDialog):
         #: Whether the Movement box shows: for a scene's demos, not for a script.
         self._moves = demos is None and scene is not None
         self.movement.setVisible(self._moves)
-        self.movement.changed.connect(self._moved)
+        self.movement.changed.connect(self._refresh)
         self.movement.edit.connect(self._edit_movement)
         layout.addWidget(self.movement)
         # What the options make of the run, where the demo says: beside what moves.
@@ -1563,6 +1923,24 @@ class DemoDialog(QDialog):
 
         self.options = QWidget()
         layout.addWidget(self.options)
+        # What the run makes: its parts, how the sources and listeners split into them,
+        # and their order.
+        self.video = QGroupBox(_("Video"))
+        self.video.setToolTip(
+            _(
+                "The video the run makes: one part, or several one after another, each "
+                "after a title card that says what sets it apart"
+            )
+        )
+        self.video.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        video = self._video_layout = QVBoxLayout(self.video)
+        self.video_options = QWidget()
+        video.addWidget(self.video_options)
+        self.parts = QLabel()
+        self.parts.setWordWrap(True)
+        self.parts.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        video.addWidget(self.parts)
+        layout.addWidget(self.video)
 
         # What fine-tunes a run, the files and folders it reads and writes and the
         # command line: shown on asking.
@@ -1741,17 +2119,24 @@ class DemoDialog(QDialog):
         self.about_step.setVisible(not demo.stepless)
         self.movement.setVisible(self._moves and not demo.stepless)
 
-        form, more = QWidget(), QWidget()
-        rows, more_rows = QFormLayout(form), QFormLayout(more)
-        for layout in (rows, more_rows):
+        form, more, video = QWidget(), QWidget(), QWidget()
+        rows, more_rows, video_rows = QFormLayout(form), QFormLayout(more), QFormLayout(video)
+        for layout in (rows, more_rows, video_rows):
             layout.setContentsMargins(0, 0, 0, 0)
         self.fields = {}
         self._rows: dict[str, QFormLayout] = {}
         self._show_movement(demo, args)
         reads = reads_scene(demo)
+        tree = any(option.kind == "sources" for option in demo.options)
         for option in demo.options:
             if option.kind == "movers":  # the Movement box's ticks
                 self.fields[option.name] = self.movement
+                continue
+            if option.kind == "inputs" and tree:  # in the sources' tree, bound below
+                inputs = SourceInputs(option)
+                inputs.set_value(getattr(args, option.name, option.default))
+                inputs.changed.connect(self._refresh)
+                self.fields[option.name] = inputs
                 continue
             tip = option.description
             widget = field_for(option, tip)
@@ -1769,20 +2154,32 @@ class DemoDialog(QDialog):
             label = QLabel(_(option.label))
             label.setBuddy(widget)
             label.setToolTip(f"{tip} ({option.option})")
-            form_rows = more_rows if option.advanced or option is reads else rows
-            form_rows.addRow(label, widget)
+            if option.name in VIDEO_OPTIONS:
+                form_rows = video_rows
+            else:
+                form_rows = more_rows if option.advanced or option is reads else rows
+            if isinstance(widget, SeriesField):  # its own labels
+                form_rows.addRow(widget)
+            else:
+                form_rows.addRow(label, widget)
             self.fields[option.name] = widget
             self._rows[option.name] = form_rows
+        sources = next((w for w in self.fields.values() if isinstance(w, SourcesField)), None)
+        for widget in self.fields.values():
+            if isinstance(widget, SourceInputs) and sources is not None:
+                widget.bind(sources)
         self._layout.replaceWidget(self.options, form)
         self._advanced_layout.replaceWidget(self.advanced_options, more)
-        for old in (self.options, self.advanced_options):
+        self._video_layout.replaceWidget(self.video_options, video)
+        for old in (self.options, self.advanced_options, self.video_options):
             old.setParent(None)  # off the window at once, not when Qt deletes it
             old.deleteLater()
-        self.options, self.advanced_options = form, more
+        self.options, self.advanced_options, self.video_options = form, more, video
+        self.video.setVisible(not demo.stepless)
         if self.isVisible():
             # Shown now, not when Qt next gets round to it, so that _fit measures them.
-            form.show()
-            more.show()
+            for widget in (form, more, video):
+                widget.show()
         self._refresh()
         if self.isVisible():  # another demo: as tall as its form, as wide as the window
             self._fit(self.width())
@@ -1796,18 +2193,15 @@ class DemoDialog(QDialog):
 
     def _show_movement(self, demo: Demo, args: argparse.Namespace) -> None:
         """The Movement box for ``demo``: ticks to change for a demo with a ``movers``
-        option; for one whose pick of what plays moves its own walkers (``--vehicle``,
-        ``--sources``: :meth:`_movers`), ticks that pick it, the walkers of every choice
-        shown; what it moves, for one that moves its own walkers otherwise; none for
-        one that moves nothing."""
+        option; what a run moves, for one that moves its own walkers (by what it plays,
+        a pass-by demo's vehicle, picked in the options below); none for one that moves
+        nothing."""
         box = self.movement
         option = next((o for o in demo.options if o.kind == "movers"), None)
         names = None
-        self._picks = None
         if option is None and demo.moving is not None:
             names = self._moving(demo, args)
-            self._picks = self._movers(demo, args)
-        if not box.any_used and not names and self._picks is None:
+        if not box.any_used and not names:
             note = _(
                 "Nothing in this scene moves. Edit movement… gives a source or a listener a "
                 "walk along keyframes."
@@ -1821,34 +2215,12 @@ class DemoDialog(QDialog):
                 "the scene, and change this run only ({option})."
             ).format(option=option.option)
             box.set_mode(True, box.own if names is None else names, note)
-        elif self._picks is not None:
-            picker, table = self._picks
-            option = demo.option(picker)
-            if option.kind == "sources":
-                play = next((o for o in demo.options if o.name == "sources_play"), None)
-                note = (
-                    _(
-                        "Tick what plays in this run ({option}); the ticked sources play "
-                        "together, or one after another as {play} says."
-                    ).format(option=option.option, play=_(play.label))
-                    if play is not None
-                    else _(
-                        "Tick what plays in this run ({option}); the ticked sources play together."
-                    ).format(option=option.option)
-                )
-            else:
-                note = _(
-                    "Tick what plays in this run ({option}); ticking several plays them one "
-                    "after another in one video."
-                ).format(option=option.option)
-            shown = sorted({name for walkers in table.values() for name in walkers})
-            box.set_mode(True, names or [], note, shown=shown)
-        elif names is not None:
+        elif names:
             note = _(
-                "This demo moves what is ticked; Moves in the scene turns a walk on or off, "
-                "and Edit movement… changes it."
+                "What this run moves along its walk, as the options below pick what plays; "
+                "Edit movement… changes a walk."
             )
-            box.set_mode(False, names, note)
+            box.set_mode(False, names, note, alone=True)
         else:
             note = _(
                 "This demo moves nothing: every source and listener stands where it starts. "
@@ -1867,73 +2239,6 @@ class DemoDialog(QDialog):
         except Exception:
             return []
         return out
-
-    def _movers(
-        self, demo: Demo, args: argparse.Namespace
-    ) -> tuple[str, dict[Any, list[str]]] | None:
-        """The option whose pick decides what moves (a choice that takes several values,
-        or ``--sources``), and the walkers each of its values moves, each value of a
-        choice with the sources it plays by default (``--sources`` picks among each
-        vehicle's own); None when no option does (every value moves the same)."""
-        from acoustic_spaces.demos import TOGETHER
-
-        base = {k: v for k, v in vars(args).items() if k not in ("series",)}
-        own_pick = {
-            o.name: o.default for o in demo.options if o.name in ("sources", "sources_play")
-        }
-        for option in demo.options:
-            if option.kind == "sources":
-                values: list[Any] = [s.name for s in self._sources(demo, args)]
-                change = lambda v: {"sources": v, "sources_play": TOGETHER}  # noqa: E731
-            elif option.varies and option.choices:
-                values = list(option.choices)
-                change = lambda v, n=option.name: own_pick | {n: v}  # noqa: E731
-            else:
-                continue
-            table: dict[Any, list[str]] = {}
-            for value in values:
-                one = argparse.Namespace(**(base | change(value)))
-                for other in demo.options:  # one of everything else
-                    if other.varies and other.name != option.name:
-                        setattr(one, other.name, values_of(getattr(one, other.name, None))[0])
-                try:
-                    table[value] = list(demo.moving(demo.resolved(one)))
-                except Exception:
-                    table[value] = []
-            if len({tuple(sorted(w)) for w in table.values()}) > 1:
-                return option.name, table
-        return None
-
-    def _moved(self) -> None:
-        """A tick in the Movement box: the run's own (``--moving``), or for a demo whose
-        pick of what plays moves its walkers (:meth:`_movers`), that pick: a walker
-        ticked adds every value that moves it (the police car's siren, the police car),
-        a walker unticked drops every value that moves it, the others stay as they
-        were."""
-        demo = self.shown or self.demo
-        if self._picks is None:
-            self._refresh()
-            return
-        picker, table = self._picks
-        field = self.fields.get(picker)
-        ticked, was = set(self.movement.ticked()), set(self.movement.before)
-        added, dropped = ticked - was, was - ticked
-        if isinstance(field, SourcesField):
-            before = field.ticked()
-        else:
-            before = list(values_of(value_of(demo.option(picker), field)))
-        picks = [
-            value
-            for value in (field.order if isinstance(field, ChoicesField) else list(table))
-            if set(table.get(value) or ()) & added
-            or (value in before and not set(table.get(value) or ()) & dropped)
-        ]
-        if picks:  # none at all: the ticks stay as they were
-            if isinstance(field, SourcesField):
-                field.set_value(",".join(picks))
-            else:
-                show_value(demo.option(picker), field, tuple(picks))
-        self._refresh()
 
     def _edit_movement(self, kind: str, name: str) -> None:
         self.edit_request = (kind, name)
@@ -1963,9 +2268,15 @@ class DemoDialog(QDialog):
             elif isinstance(widget, ListenersField) and not isinstance(widget, ChoicesField):
                 widget.set_listeners(self._listeners(demo, args))
                 args = self.arguments()
+        for widget in self.fields.values():
+            if isinstance(widget, SourceInputs) and widget.field is not None:
+                widget.field.set_plays(self._plays(demo, args))
+                args = self.arguments()
         series = self.fields.get("series")
         if isinstance(series, SeriesField):
-            series.set_dims(*self._dims(demo, args))
+            listeners = next((w for w in self.fields.values() if type(w) is ListenersField), None)
+            count = len(listeners.ticked()) if listeners is not None else 0
+            series.set_dims(*self._dims(demo, args), listeners=count)
             args = self.arguments()
         self.command.setText(demo.command(step, args))
         # An option that matters only with another's values (the police car's --siren
@@ -1980,12 +2291,8 @@ class DemoDialog(QDialog):
             elif name == "sources_play":  # where the sources could play in turn
                 field = self.fields.get("sources")
                 shown = isinstance(field, SourcesField) and len(self._turns(field)) > 1
-            elif isinstance(widget, SeriesField):  # when the run has parts to order
-                listeners = next(
-                    (w for w in self.fields.values() if type(w) is ListenersField), None
-                )
-                many = listeners is not None and len(listeners.ticked()) > 1
-                shown = bool(widget.dims) or many
+            elif isinstance(widget, SeriesField):  # listeners to split, or parts to order
+                shown = widget.shown()
             if form_rows.isRowVisible(widget) != shown:
                 form_rows.setRowVisible(widget, shown)
                 moved = True
@@ -1994,6 +2301,7 @@ class DemoDialog(QDialog):
         if demo.moving is not None and all(o.kind != "movers" for o in demo.options):
             self._show_movement(demo, args)  # what it moves may follow an option (--vehicle)
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
+        self.parts.setText(self._parts_text(demo, args))
         self.summary.setText(self._summary(demo, args) or "")
         self.summary.setVisible(bool(self.summary.text()))
         what = self._downloads(demo, step, args)
@@ -2113,21 +2421,66 @@ class DemoDialog(QDialog):
         super().done(result)
 
     @staticmethod
+    def _parts_text(demo: Demo, args: argparse.Namespace) -> str:
+        """What the run makes, in words: one video, named as the run, of one part or of
+        several, each listed by what sets it apart from the others (the options whose
+        values differ among them); nothing where the options cannot tell (the line below
+        says what is wrong)."""
+        try:
+            parts = demo.parts(args)
+            name = demo.run_name(demo.resolved(args))
+        except (Exception, SystemExit):
+            return ""
+        if len(parts) < 2:
+            return _("This run makes one video, {name}.mp4.").format(name=name)
+        differ = [
+            option
+            for option in demo.options
+            if option.name != "series"
+            and option.kind not in PATH_KINDS
+            and len({repr(getattr(part, option.name, None)) for part in parts}) > 1
+        ]
+        lines = [
+            ngettext(
+                "This run makes one video, {name}.mp4, of {count} part, each after a title "
+                "card of 4 s:",
+                "This run makes one video, {name}.mp4, of {count} parts, one after another, "
+                "each after a title card of 4 s:",
+                len(parts),
+            ).format(name=name, count=len(parts))
+        ]
+        for k, part in enumerate(parts[:PARTS_LISTED]):
+            said = [part_value(option, getattr(part, option.name, None)) for option in differ]
+            lines.append(f"{k + 1}. " + "; ".join(said))
+        if len(parts) > PARTS_LISTED:
+            more = len(parts) - PARTS_LISTED
+            lines.append(
+                ngettext("… and {count} more", "… and {count} more", more).format(count=more)
+            )
+        return "\n".join(lines)
+
+    @staticmethod
     def _summary(demo: Demo, args: argparse.Namespace) -> str | None:
-        """What the run does, as the demo says it (:attr:`Demo.summary`), of each of its
-        parts (:meth:`~acoustic_spaces.demos.Demo.parts`) that says something else; none
-        when it says nothing or cannot tell (the line below says what is wrong)."""
+        """What the run does, as the demo says it (:attr:`Demo.summary`), each sentence
+        once: those of the parts (:meth:`~acoustic_spaces.demos.Demo.parts`) that differ,
+        a line each, then those every part says; none when it says nothing or cannot
+        tell (the line below says what is wrong)."""
         if demo.summary is None:
             return None
         try:
-            said: list[str] = []
-            for part in demo.each(args):
-                text = demo.summary(part)
-                if text and text not in said:
-                    said.append(text)
+            texts = [demo.summary(part) for part in demo.each(args)]
         except Exception:
             return None
-        return " ".join(said) or None
+        said = [SENTENCE_END.split(text) for text in texts if text]
+        if not said:
+            return None
+        common = [s for s in said[0] if all(s in other for other in said)]
+        own: list[str] = []
+        for sentences in said:
+            line = " ".join(s for s in sentences if s not in common)
+            if line and line not in own:
+                own.append(line)
+        return "\n".join([*own, " ".join(common)] if common else own)
 
     @staticmethod
     def _downloads(demo: Demo, step: str, args: argparse.Namespace) -> str | None:
@@ -2203,8 +2556,8 @@ class DemoDialog(QDialog):
             dims = []
         labels = {o.name: (_(o.label), o.option.lstrip("-")) for o in demo.options}
         # Not the options' own labels: the listeners' row and the sources in turn.
-        labels[LISTENERS_DIM] = (_("Listeners, each in a part of its own"), LISTENERS_DIM)
-        labels[SOURCES_DIM] = (_("Sources, one at a time"), SOURCES_DIM)
+        labels[LISTENERS_DIM] = (_("Listeners"), LISTENERS_DIM)
+        labels[SOURCES_DIM] = (_("Sources"), SOURCES_DIM)
         return dims, labels
 
     @staticmethod

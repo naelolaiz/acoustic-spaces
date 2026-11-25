@@ -71,7 +71,7 @@ msgstr "Szene des Beispiels"
 msgid "Results folder"
 msgstr "Ergebnisordner"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/tree.py
 msgid "Listeners"
 msgstr "Empfänger"
 
@@ -203,7 +203,7 @@ msgstr "Horn"
 msgid "Heard indoors"
 msgstr "Drinnen gehört"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/tree.py
 msgid "Sources"
 msgstr "Quellen"
 
@@ -211,7 +211,7 @@ msgstr "Quellen"
 msgid "Sources play"
 msgstr "Wie die Quellen spielen"
 
-#: acoustic_spaces/demos/__init__.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py
 msgid "Order of the parts"
 msgstr "Reihenfolge der Teile"
 
@@ -1942,8 +1942,8 @@ msgid "What the source plays in the demo, unless a file is given"
 msgstr "Was die Quelle in der Demo spielt, wenn ihr keine Datei gegeben wird"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Instead"
-msgstr "Stattdessen"
+msgid "Your WAV"
+msgstr "Eigene WAV"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -2009,6 +2009,26 @@ msgid "Untick every listener, to tick the few to hear"
 msgstr "Alle Empfänger abhaken, um die wenigen anzuhaken, die man hören will"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "Several…"
+msgstr "Mehrere…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Play several of them, one after another in one video: a tick for each, "
+"dragged into the order they play"
+msgstr ""
+"Mehrere davon spielen, nacheinander in einem Video: ein Häkchen für jedes, "
+"in die Reihenfolge gezogen, in der sie spielen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "One only"
+msgstr "Nur eins"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Back to one of them, the first ticked"
+msgstr "Zurück zu einem davon, dem ersten angehakten"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every one: the run plays them one after another"
 msgstr "Alle anhaken: der Lauf spielt sie nacheinander"
 
@@ -2033,13 +2053,38 @@ msgid "Tick the sources the demo plays by default"
 msgstr "Die Quellen anhaken, die die Demo standardmäßig spielt"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick the sources that play; a group ticks all of its own"
+msgstr "Die Quellen anhaken, die spielen; eine Gruppe hakt alle ihre an"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
 msgid ""
-"Ticked: each listener in a part of its own, at this place in the order; "
-"unticked: the video of each part tours them"
+"The WAV file the source plays instead ({option} SOURCE=WAV), typed after a "
+"double click or chosen with Choose WAV…; empty: what Plays says"
 msgstr ""
-"Angehakt: jeder Empfänger in einem eigenen Teil, an dieser Stelle der "
-"Reihenfolge; nicht angehakt: das Video jedes Teils geht sie der Reihe nach "
-"durch"
+"Die WAV-Datei, die die Quelle stattdessen spielt ({option} SOURCE=WAV), nach "
+"einem Doppelklick eingegeben oder mit WAV wählen… gewählt; leer: was Spielt "
+"sagt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo plays it whatever is ticked"
+msgstr "Die Demo spielt es, was auch immer angehakt ist"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A tour in each part visits them"
+msgstr "Ein Rundgang in jedem Teil besucht sie"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Each in a part of its own"
+msgstr "Jeweils in einem eigenen Teil"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"How the listeners are heard: one after another in the video of each part, or "
+"each in a part of its own, at its place in the order of the parts"
+msgstr ""
+"Wie die Empfänger gehört werden: nacheinander im Video jedes Teils, oder "
+"jeder in einem eigenen Teil, an seinem Platz in der Reihenfolge der Teile"
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2128,6 +2173,27 @@ msgid "Tick what Moves ticks in the scene again"
 msgstr "Wieder anhaken, was Bewegt sich in der Szene anhakt"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "All together, in each part"
+msgstr "Alle zusammen, in jedem Teil"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "every one"
+msgstr "alle"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "the demo's pick"
+msgstr "die Auswahl der Demo"
+
+#. Translators: no draws at all, so no spread of the results.
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "none"
+msgstr "keine"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "as by default"
+msgstr "wie standardmäßig"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
 msgstr "Demo ausführen"
 
@@ -2162,6 +2228,18 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Demo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Video"
+msgstr "Video"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The video the run makes: one part, or several one after another, each after "
+"a title card that says what sets it apart"
+msgstr ""
+"Das Video, das der Lauf erstellt: ein Teil oder mehrere nacheinander, jeder "
+"nach einer Titeltafel, die sagt, was ihn unterscheidet"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Advanced"
@@ -2236,38 +2314,12 @@ msgstr ""
 "Bewegt sich sie in der Szene setzt, und ändern nur diesen Lauf ({option})."
 
 #: acoustic_spaces/gui/demo_dialog.py
-#, python-brace-format
 msgid ""
-"Tick what plays in this run ({option}); the ticked sources play together, or "
-"one after another as {play} says."
+"What this run moves along its walk, as the options below pick what plays; "
+"Edit movement… changes a walk."
 msgstr ""
-"Anhaken, was in diesem Lauf spielt ({option}); die angehakten Quellen "
-"spielen zusammen oder nacheinander, wie {play} sagt."
-
-#: acoustic_spaces/gui/demo_dialog.py
-#, python-brace-format
-msgid ""
-"Tick what plays in this run ({option}); the ticked sources play together."
-msgstr ""
-"Anhaken, was in diesem Lauf spielt ({option}); die angehakten Quellen "
-"spielen zusammen."
-
-#: acoustic_spaces/gui/demo_dialog.py
-#, python-brace-format
-msgid ""
-"Tick what plays in this run ({option}); ticking several plays them one after "
-"another in one video."
-msgstr ""
-"Anhaken, was in diesem Lauf spielt ({option}); mehrere angehakt spielen "
-"nacheinander in einem Video."
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid ""
-"This demo moves what is ticked; Moves in the scene turns a walk on or off, "
-"and Edit movement… changes it."
-msgstr ""
-"Diese Demo bewegt, was angehakt ist; Bewegt sich in der Szene schaltet einen "
-"Weg ein oder aus, und Bewegung bearbeiten… ändert ihn."
+"Was dieser Lauf seinem Weg entlang bewegt, wie die Optionen unten wählen, "
+"was spielt; Bewegung bearbeiten… ändert einen Weg."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -2317,12 +2369,31 @@ msgstr ""
 "Standardwerte setzt sie zurück."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Listeners, each in a part of its own"
-msgstr "Empfänger, jeder in einem eigenen Teil"
+#, python-brace-format
+msgid "This run makes one video, {name}.mp4."
+msgstr "Dieser Lauf erstellt ein Video, {name}.mp4."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Sources, one at a time"
-msgstr "Quellen, eine nach der anderen"
+#, python-brace-format
+msgid ""
+"This run makes one video, {name}.mp4, of {count} part, each after a title "
+"card of 4 s:"
+msgid_plural ""
+"This run makes one video, {name}.mp4, of {count} parts, one after another, "
+"each after a title card of 4 s:"
+msgstr[0] ""
+"Dieser Lauf erstellt ein Video, {name}.mp4, aus {count} Teil, nach einer "
+"Titeltafel von 4 s:"
+msgstr[1] ""
+"Dieser Lauf erstellt ein Video, {name}.mp4, aus {count} Teilen, "
+"nacheinander, jeder nach einer Titeltafel von 4 s:"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "… and {count} more"
+msgid_plural "… and {count} more"
+msgstr[0] "… und {count} weitere"
+msgstr[1] "… und {count} weitere"
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
@@ -2700,11 +2771,6 @@ msgstr "Strahlenverfolgung"
 #: acoustic_spaces/gui/inspector.py
 msgid "image_sources"
 msgstr "Spiegelquellen"
-
-#. Translators: no draws at all, so no spread of the results.
-#: acoustic_spaces/gui/inspector.py
-msgid "none"
-msgstr "keine"
 
 #. Translators: the direct sound's paths, in a plot's legend.
 #: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
