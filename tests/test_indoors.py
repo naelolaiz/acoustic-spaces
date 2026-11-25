@@ -17,6 +17,11 @@ from acoustic_spaces.parameters import a_weighted
 RATE = 16_000
 
 
+
+def run_of(demo, *argv: str) -> Path:
+    """The folder of the demo's run with the options ``argv``: named after its settings."""
+    return demo.run_folder(demo.parser().parse_args(["all", *argv]))
+
 def test_the_window_is_agcs_double_glazing() -> None:
     """The window's sound reduction index is AGC's 4-16-4 from 125 Hz to 4 kHz, 6 dB
     less an octave lower and held an octave higher; ISO 717-1 rates those octave values
@@ -466,13 +471,14 @@ def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path, monke
     run = ["all", *common, "--indoors", "train_and_rumble"]
     assert demo.main(["sound", *common]) == 0 and demo.main(["scene", *common]) == 0
     assert demo.main(outdoors) == 0
-    out = pipeline.read_json(folder / "demo" / "walk" / "walk.json")["listeners"]["tsi_7m5"]
+    out = pipeline.read_json(run_of(demo, *common) / "walk" / "walk.json")["listeners"]["tsi_7m5"]
     curve = vibration.CURVES[rail.TRAINS["s_bahn"].curve]
     # Outdoors: the ground under the listener, 7.5 m from the track.
     assert out["shaking"] == "ground" and "inside" not in out
     assert out["vibration_vdb"] == pytest.approx(curve.level(7.5, 80.0), abs=0.05)
     assert demo.main(run) == 0
-    facts = pipeline.read_json(folder / "demo" / "walk" / "walk.json")
+    work = run_of(demo, *run[1:])
+    facts = pipeline.read_json(work / "walk" / "walk.json")
     assert facts["indoors"] == "train_and_rumble" and facts["plays"].endswith(
         "; indoors train_and_rumble"
     )
@@ -483,7 +489,7 @@ def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path, monke
         "and the rumble of the floors and walls (FTA)"
     )
     assert facts["shaker"]["hz"] == 25.0
-    assert (folder / "demo" / "walk" / "tsi_7m5.shaker.wav").exists()
+    assert (work / "walk" / "s_bahn__tsi_7m5.shaker.wav").exists()
     parts = heard["parts"]
     assert list(parts) == ["train", "train_roof", "train_pantograph", "rumble"]
     energy = sum(10.0 ** (p["sel_a_db"] / 10.0) for p in parts.values())
@@ -505,7 +511,7 @@ def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path, monke
     # this meadow): so the last within 1 dB.
     from acoustic_spaces import Scene
 
-    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    scene = Scene.from_yaml(work / "scene_demo.yaml")
     loudest = max(each.sound_power_db for each in scene.sources if each.in_use)
     played = added[-1]
     assert len(played) == 4
@@ -523,15 +529,17 @@ def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path, monke
     told = parts["train"]["sel_a_db"] - parts["rumble"]["sel_a_db"]
     assert under == pytest.approx(told, abs=1.0)
     # The rumble alone: nothing simulated, the rumble alone in the mix.
-    again = demo.resolved(demo.parser().parse_args(["all", *common, "--indoors", "rumble"]))
+    rumble = [*common, "--indoors", "rumble"]
+    again = demo.resolved(demo.parser().parse_args(["all", *rumble]))
     assert not demo.is_done(demo.step("walk"), again)
+    assert demo.main(["sound", *rumble]) == 0 and demo.main(["scene", *rumble]) == 0
 
     def nothing(*args, **kwargs):
         raise AssertionError("the rumble alone simulates nothing")
 
     monkeypatch.setattr("acoustic_spaces.walkthrough.simulate_walk", nothing)
-    assert demo.main(["walk", *common, "--indoors", "rumble"]) == 0
-    alone = pipeline.read_json(folder / "demo" / "walk" / "walk.json")["listeners"]["tsi_7m5"]
+    assert demo.main(["walk", *rumble]) == 0
+    alone = pipeline.read_json(run_of(demo, *rumble) / "walk" / "walk.json")["listeners"]["tsi_7m5"]
     assert "parts" not in alone and "pitch_semitones" not in alone
     assert alone["sel_a_db"] == pytest.approx(parts["rumble"]["sel_a_db"], abs=0.01)
     assert len(added[-1]) == 1
@@ -580,8 +588,9 @@ def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, mo
     monkeypatch.setattr(indoors.House, "heard", heard_in)
     demo = load(folder / "passby_demo.py").at(folder)
     common = ["--vehicle", "tram", "--step", "4", "--format", "mono", "--listeners", "balcony"]
+    common += ["--indoors", "tram"]
     assert demo.main(["sound", *common]) == 0 and demo.main(["scene", *common]) == 0
-    assert demo.main(["walk", *common, "--indoors", "tram"]) == 0
+    assert demo.main(["walk", *common]) == 0
     assert [(part, at) for part, at, _ in simulated] == [
         ("tram", "balcony"),
         ("tram", "balcony_2m"),
@@ -591,7 +600,7 @@ def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, mo
     for _, at, position in simulated:
         wanted = (5.0, -4.0, 10.0) if at == "balcony_2m" else (5.0, -5.0, 10.0)
         assert position == pytest.approx(wanted, abs=1e-12)
-    heard = pipeline.read_json(folder / "demo" / "walk" / "walk.json")["listeners"]["balcony"]
+    heard = pipeline.read_json(run_of(demo, *common) / "walk" / "walk.json")["listeners"]["balcony"]
     assert heard["inside"] == "offices"
     for part, passing in zip(("tram", "tram_roof"), outside, strict=True):
         assert passing.listener == "balcony_2m"

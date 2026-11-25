@@ -57,6 +57,7 @@ import numpy as np
 import yaml
 
 from acoustic_spaces.demos import (
+    JOIN,
     Option,
     Step,
     listener_names,
@@ -439,14 +440,15 @@ DEMO.listeners = lambda args: listeners_in(args.stadium)
 _FLIGHT = Option(
     "source",
     "the stadium with the helicopter's flight over it, which flight writes",
-    Path("scene_flight.yaml"),
+    None,
     "path",
     steps=("flight", HELICOPTER, "scene"),
     flag="--flight",
+    in_run="scene_flight.yaml",
 )
 _REPLACED = {
     "source": _FLIGHT,
-    "scene": dataclasses.replace(DEMO.option("scene"), default=Path("scene_overhead.yaml")),
+    "scene": dataclasses.replace(DEMO.option("scene"), in_run="scene_overhead.yaml"),
     "listeners": dataclasses.replace(
         DEMO.option("listeners"),
         steps=("walk", "mix", "video"),
@@ -510,10 +512,11 @@ DEMO.steps = [
     *(
         dataclasses.replace(step, help=_OVERHEAD) if step.name == "scene" else step
         for step in DEMO.steps
-        if step.name != "video"
+        if step.name not in ("video", JOIN.name)
     ),
     Step("mix", mix, "the concert's mixes with the helicopter's pass in each", mix_done),
-    Step("video", video, "tour.wav, the stills and tour.mp4 in the work folder's crossing"),
+    Step("video", video, "the run's video, its audio and the stills, named after the run"),
+    JOIN,
 ]
 
 __all__ = ["DEMO"]

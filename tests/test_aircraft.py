@@ -131,7 +131,7 @@ def test_the_flight_demo_lands_the_jet_as_loud_as_its_levels_say(tmp_path) -> No
     assert demo.moving(args) == ["arrival"]
     assert demo.summary(args).startswith("The landing jet flies 1000 m along its walk's ground")
     assert demo.main(run) == 0
-    work = folder / "demo"
+    work = demo.run_folder(demo.parser().parse_args(run))
     info = pipeline.read_json(work / "arrival" / "aircraft.json")
     assert info["procedure"] == "Descend" and info["thrust_lb"] == 10000.0
     x, rate = audio.read(work / "arrival" / "engines.wav")
@@ -143,11 +143,11 @@ def test_the_flight_demo_lands_the_jet_as_loud_as_its_levels_say(tmp_path) -> No
     measured = blocks_loudness(x, RATE, at, SOUND_RMS)
     assert 10.0 * np.log10(measured / told) == pytest.approx(np.zeros(len(at)), abs=0.5)
     assert np.ptp(10.0 * np.log10(told)) > 2.0
-    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    scene = Scene.from_yaml(work / "scene_demo.yaml")
     (source,) = [s for s in scene.sources if s.in_use]
     assert source.name == "arrival" and source.level_db == info["level_db"]
     assert source.walk.keyframes and source.walk.doppler
-    assert source.directivity.file == folder / "scene_demo_arrival.csv"
+    assert source.directivity.file == work / "scene_demo_arrival.csv"
     facts = pipeline.read_json(work / "walk" / "walk.json")
     fastest, slowest = (round(info[k], 1) for k in ("fastest_kmh", "slowest_kmh"))
     assert facts["speed_text"] == f"From {fastest:g} to {slowest:g} km/h"
@@ -161,7 +161,7 @@ def test_the_flight_demo_lands_the_jet_as_loud_as_its_levels_say(tmp_path) -> No
     assert heard["max_as_db"] < heard["max_a_db"] - 0.1
     assert heard["sel_10db_down_a_db"] < heard["sel_a_db"]
     # The mix against the levels, second by second (A-weighted, as heard).
-    mix, _ = audio.read(work / "walk" / "beside.mono.wav")
+    mix, _ = audio.read(work / "walk" / "arrival__beside.mono.wav")
     times = np.asarray(heard["heard_s"], dtype=float)
     levels = np.asarray(heard["levels_a_db"], dtype=float)
     weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)

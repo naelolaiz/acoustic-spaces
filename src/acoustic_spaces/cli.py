@@ -2403,7 +2403,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     if problem:
         print(f"error: {problem}", file=sys.stderr)
         return 2
-    names = [s.name for s in demo.steps] if args.step == "all" else [args.step]
+    names = demo.all_steps() if args.step == "all" else [args.step]
     try:
         demo.run(names, values, skip_done=args.step == "all")
     except SystemExit as exc:  # a step that stops says why
@@ -3399,7 +3399,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         choices=[s.name for s in SCENE_DEMO.steps] + ["all"],
         help="; ".join(f"{s.name}: {s.help}" for s in SCENE_DEMO.steps)
-        + "; all (default): every step, leaving out what is done already",
+        + "; all (default): every step but join, leaving out what is done already",
     )
     for option in SCENE_DEMO.options:
         if option.name != "scene":

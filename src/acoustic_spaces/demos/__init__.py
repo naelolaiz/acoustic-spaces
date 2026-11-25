@@ -33,7 +33,10 @@ from __future__ import annotations
 
 import argparse
 import functools
+import hashlib
 import importlib.util
+import json
+import re
 import shlex
 import subprocess
 import sys
@@ -56,8 +59,9 @@ if TYPE_CHECKING:
 #: WAV file for each of some names the option lists as its choices (``--stem
 #: NAME=WAV``), such as the stems of a song, ``movers``: the sources and listeners
 #: that move in a run, by name and comma-separated, or ``none`` (:func:`moving_names`),
-#: and ``listeners``: the listeners a run plays, by name and comma-separated
-#: (:func:`listener_names`), which the editor ticks in a list.
+#: ``listeners``: the listeners a run plays, by name and comma-separated
+#: (:func:`listener_names`), which the editor ticks in a list, and ``runs``: finished
+#: runs of the demo by their names (:attr:`Demo.runs`), comma-separated, ticked alike.
 KINDS = (
     "text",
     "choice",
@@ -71,6 +75,7 @@ KINDS = (
     "files",
     "movers",
     "listeners",
+    "runs",
 )
 PATH_KINDS = ("file", "path", "folder")
 #: The kinds whose value is a dict of names and files.
@@ -84,6 +89,41 @@ DONE = "every step has run"
 
 #: What a ``movers`` option takes for nothing moving.
 NO_MOVERS = "none"
+
+#: How an option counts in the name of a run (:attr:`Option.named`): ``plays``, it picks
+#: what plays (``--vehicle``, ``--song``; named always, at its default too, or for a file,
+#: when one is given); ``changed``, it changes the sound or the pictures (named when it
+#: differs from its default, as ``speed-80``); ``never``, it does neither (``--credit``,
+#: ``--again``, a folder the demo writes into).
+NAMINGS = ("plays", "changed", "never")
+#: The longest a run's name gets, in characters: a longer one keeps its first part (the
+#: demo) and its last (the output) and gives the rest cut short, with a digest of it.
+RUN_NAME_MOST = 96
+#: The longest the listeners of a run (``--listeners``) get in its name; more are named by
+#: their number and a digest of their names (``12-listeners-3f9a1c``).
+LISTENERS_MOST = 48
+#: The longest a text (``--tour``, ``--movements``) gets in a run's name; a longer one is
+#: named by a digest of it (``tour-3f9a1c``).
+TEXT_MOST = 24
+#: The file each run's folder keeps of it (:func:`record_run`): the demo, the run's
+#: name and its parts, the command, and once the video is there, its file, length and
+#: chapters.
+RUN_RECORD = "run.json"
+
+
+def digest(text: str) -> str:
+    """Six hexadecimal digits that stand for ``text`` in a name (of SHA-1)."""
+    return hashlib.sha1(str(text).encode("utf-8")).hexdigest()[:6]
+
+
+def name_part(text: str) -> str:
+    """``text`` as part of a file's name: letters (of any script), digits, ``_``, ``-`` and
+    ``+`` as they are, a point between digits as ``p`` (``80.5`` as ``80p5``, so that a
+    folder named so has no extension), anything else as ``-``; a digest of it when
+    nothing is left."""
+    out = re.sub(r"(?<=\d)\.(?=\d)", "p", str(text))
+    out = re.sub(r"[^\w+-]+", "-", out).strip("-")
+    return out or digest(text)
 
 #: The editor's label of each option, in words, by its flag (the Run demo window gives
 #: the flag in the label's tip); an option not named here shows its flag.
@@ -127,6 +167,7 @@ LABELS = {
     "--stem": N_("Stems"),
     "--rays": N_("Rays per band"),
     "--out": N_("Written to"),
+    "--runs": N_("Runs"),
 }
 #: The options the editor keeps under Advanced besides the files and folders a demo
 #: writes, the example's scenes it reads and the flags, by flag: what fine-tunes a run
@@ -271,16 +312,44 @@ class Option:
     #: Other flags it is given by, as before it took this one (``--tour``, for the demo
     #: of any scene's ``--listeners``).
     aliases: tuple[str, ...] = ()
+    #: How it counts in the name of a run (:meth:`Demo.run_name`), one of
+    #: :data:`NAMINGS`; None: as its kind has it (:attr:`naming`).
+    named: str | None = None
+    #: For a file the demo writes (``path``) that depends on the run's settings (a scene
+    #: with the vehicle at ``--speed``): its name in the run's folder
+    #: (:func:`run_folder`), where it is written when the option is not given.
+    in_run: str | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
             raise ValueError(f"{self.name}: no option kind {self.kind!r}")
+        if self.named is not None and self.named not in NAMINGS:
+            raise ValueError(f"{self.name}: no naming {self.named!r}")
+        if self.in_run is not None and (self.kind != "path" or self.default is not None):
+            raise ValueError(f"{self.name}: only a path with no default is written in the run")
         if self.kind == "files" and not self.choices:
             raise ValueError(f"{self.name}: a files option lists the names it takes as choices")
 
     @property
     def option(self) -> str:
         return self.flag or "--" + self.name.replace("_", "-")
+
+    @property
+    def naming(self) -> str:
+        """How it counts in the name of a run (:data:`NAMINGS`): as :attr:`named` says,
+        else ``plays`` for the files some sources play (``--input``, ``--stem``),
+        ``never`` for a file or folder the demo writes, the listeners and the runs (named
+        their own way), the format and the HRTFs (in the run's label) and ``--credit`` (a
+        line of words on the stills), and ``changed`` for the rest."""
+        if self.named is not None:
+            return self.named
+        if self.kind in MAP_KINDS:
+            return "plays"
+        if self.kind in ("path", "folder", "listeners", "runs") or self.positional:
+            return "never"
+        if self.name in ("format", "hrtf", "credit"):
+            return "never"
+        return "changed"
 
     def applies(self, values: dict[str, Any]) -> bool:
         """Whether it matters with the options at ``values`` (by name): always, unless
@@ -316,6 +385,8 @@ class Option:
         text = f"{', '.join(self.steps)}: {self.help}" if self.steps else self.help
         if self.default is not None and self.kind != "flag":
             text += f" (default {self.default})"
+        elif self.in_run is not None:
+            text += f" (default {self.in_run} in the run's folder)"
         return text
 
     def add_to(self, parser: argparse.ArgumentParser) -> None:
@@ -388,6 +459,78 @@ def input_option(steps: tuple[str, ...] = ("render",)) -> Option:
 #: demo names (:meth:`Demo.simulations`), unless its results are there.
 SIMULATE = Step("simulate", None, "simulate each scene of the demo (acoustic-spaces simulate)")
 
+#: One video of several finished runs of the demo, run by the framework
+#: (:mod:`acoustic_spaces.demos.join`): every demo has it, after its own steps, and
+#: ``all`` leaves it out.
+JOIN = Step(
+    "join",
+    None,
+    "one video of finished runs of the demo in turn, each after a title card that says "
+    "what it plays, and their chapters (--runs)",
+)
+
+
+def runs_option() -> Option:
+    """``--runs a,b``: the finished runs of the demo the ``join`` step joins
+    (:data:`JOIN`), by name; the editor ticks them in a list of those in the work folder
+    (:meth:`Demo.runs`)."""
+    return Option(
+        "runs",
+        "the finished runs to join, by name, comma separated, in the video's order "
+        "(default: every run of the demo in the work folder with a video, by name)",
+        None,
+        "runs",
+        steps=(JOIN.name,),
+    )
+
+
+def run_folder(args: argparse.Namespace) -> Path:
+    """The folder of a run with ``args`` (resolved, :meth:`Demo.resolved`): in the work
+    folder, named as the run is (:meth:`Demo.run_name`). What depends on the run's
+    settings goes there (the mixes, the walks, the stills), so that a run with others
+    writes over none of it."""
+    folder = getattr(args, "run_folder", None)
+    if folder is None:
+        raise ValueError("the arguments are not resolved by a demo (Demo.resolved)")
+    return Path(folder)
+
+
+def product(args: argparse.Namespace, suffix: str) -> Path:
+    """A file of a run to keep or share, in the work folder beside the run's folder and
+    named as the run is, then ``suffix``: ``product(args, ".mp4")`` is the video
+    (``demo/flight_departure_binaural.mp4``), ``"_thumbnail.png"`` its thumbnail."""
+    folder = run_folder(args)
+    return folder.parent / f"{folder.name}{suffix}"
+
+
+def run_plays(args: argparse.Namespace) -> str | None:
+    """What a run with ``args`` (resolved) plays, as its name gives it (``arrival``,
+    ``violin-my_song``), or None when the demo gives no choice of it: the front of
+    each mix's name (``arrival__lateral_450m.binaural.wav``)."""
+    return getattr(args, "run_plays", None)
+
+
+def mix_stem(args: argparse.Namespace, key: str) -> str:
+    """The name of a mix file of a run (before ``.<output>.wav``): what plays
+    (:func:`run_plays`), then the listener or seat ``key``, as ``arrival__lateral_450m``;
+    the key alone where the demo gives no choice of what plays."""
+    plays = run_plays(args)
+    return f"{plays}__{name_part(key)}" if plays else name_part(key)
+
+
+def record_run(folder: Path, **fields: Any) -> None:
+    """Keep ``fields`` in the run folder's :data:`RUN_RECORD`, beside what it holds."""
+    path = Path(folder) / RUN_RECORD
+    record = {}
+    if path.exists():
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            record = {}
+    record.update(fields)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
 
 def common_options(work: str = "demo") -> list[Option]:
     """The options every demo takes: the work folder, the mixes' format and HRTF, ``--again``
@@ -408,8 +551,20 @@ def common_options(work: str = "demo") -> list[Option]:
             "file",
             filter="SOFA files (*.sofa)",
         ),
-        Option("again", "render: mix the stops again, even the mixes that exist", False, "flag"),
-        Option("no_mp4", "video: write the audio and the stills only", False, "flag"),
+        Option(
+            "again",
+            "render: mix the stops again, even the mixes that exist",
+            False,
+            "flag",
+            named="never",
+        ),
+        Option(
+            "no_mp4",
+            "video: write the audio and the stills only (and remove the run's older video)",
+            False,
+            "flag",
+            named="never",
+        ),
     ]
 
 
@@ -479,6 +634,10 @@ class Demo:
     #: Whether it is a script of one step, run without naming it (an example's script
     #: that is no demo, :func:`script_demo`).
     stepless: bool = False
+    #: The first part of a run's name (:meth:`run_name`), from the arguments (paths
+    #: resolved): the scene file's name for the demo of any scene; None: the demo's
+    #: :attr:`name`.
+    stem_of: Callable[[argparse.Namespace], str] | None = None
     _folder: Path | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -487,6 +646,10 @@ class Demo:
         names = [s.name for s in self.steps]
         if len(set(names)) != len(names):
             raise ValueError(f"{self.name}: a step is listed twice")
+        if not self.stepless and JOIN.name not in names:
+            self.steps = [*self.steps, JOIN]
+        if not self.stepless and all(o.name != "runs" for o in self.options):
+            self.options = [*self.options, runs_option()]
 
     # -- description ----------------------------------------------------------------
 
@@ -535,11 +698,128 @@ class Demo:
 
     def work_folder(self, args: argparse.Namespace) -> Path:
         """Where a run with ``args`` writes (:attr:`work_of`)."""
-        resolved = self.resolved(args)
+        return self._work(self.resolved(args))
+
+    def run_folder(self, args: argparse.Namespace) -> Path:
+        """The folder of a run with ``args`` (:func:`run_folder`): in the work folder,
+        named after the run's settings (:meth:`run_name`)."""
+        return run_folder(self.resolved(args))
+
+    def sibling(self, args: argparse.Namespace, **changes: Any) -> argparse.Namespace:
+        """The arguments (resolved) of the run with ``args`` (resolved) but for
+        ``changes``, by option name: ``sibling(args, listeners=None)`` is the run of every
+        listener with the same settings, whose work a run of some listeners may play
+        (a walk's passes). The files a run writes in its folder (:attr:`Option.in_run`)
+        are that run's."""
+        values = vars(args) | changes
+        own = getattr(args, "run_folder", None)
+        for option in self.options:
+            if option.in_run is not None and option.name not in changes and own is not None:
+                if values.get(option.name) == Path(own) / option.in_run:
+                    values[option.name] = None
+        values.pop("run_folder", None)
+        values.pop("run_plays", None)
+        return self.resolved(argparse.Namespace(**values))
+
+    def _work(self, resolved: argparse.Namespace) -> Path:
         if self.work_of is not None:
             return Path(self.work_of(resolved))
         work = getattr(resolved, "work", None)
         return Path(work) if work else self.folder
+
+    # -- the names of runs --------------------------------------------------------------
+
+    def run_parts(self, args: argparse.Namespace) -> list[tuple[str, str]]:
+        """The parts of the name of a run with ``args`` (paths resolved), each as its kind
+        and its text: ``demo``, the demo (:attr:`stem_of`); ``plays``, what plays where
+        the demo gives a choice of it (:data:`NAMINGS`); ``listeners``, those
+        ``--listeners`` names; ``changed``, each option that changes the sound or the
+        pictures and differs from its default, as ``speed-80``; ``label``, the output the
+        mixes take (``binaural``, ``binaural-kemar``, ``ambix3``)."""
+        stem = self.stem_of(args) if self.stem_of is not None else self.name
+        parts = [("demo", name_part(stem))]
+        values = vars(args)
+        changed: list[tuple[str, str]] = []
+        for option in self.options:
+            naming = option.naming
+            if naming == "never" or not option.applies(values):
+                continue
+            value = values.get(option.name)
+            if naming == "plays":
+                if value is None or value == {} or value is False:
+                    continue
+                parts.append(("plays", self._value_part(option, value)))
+            elif not self._at_default(option, value):
+                if option.kind == "flag":
+                    changed.append(("changed", name_part(option.option.lstrip("-"))))
+                else:
+                    text = self._value_part(option, value)
+                    changed.append(("changed", f"{name_part(option.option.lstrip('-'))}-{text}"))
+        listeners = next((o for o in self.options if o.kind == "listeners"), None)
+        names = None if listeners is None else listener_names(values.get(listeners.name))
+        if names:
+            text = "+".join(name_part(name) for name in names)
+            if len(text) > LISTENERS_MOST:
+                text = f"{len(names)}-listeners-{digest(','.join(names))}"
+            parts.append(("listeners", text))
+        parts += changed
+        if any(o.name in ("format", "hrtf") for o in self.options):
+            from acoustic_spaces.demos.pipeline import hrtf_label
+
+            fmt = values.get("format") or "binaural"
+            parts.append(("label", name_part(hrtf_label(str(fmt), values.get("hrtf")))))
+        return parts
+
+    def run_name(self, args: argparse.Namespace) -> str:
+        """The name of a run with ``args`` (paths resolved): its parts
+        (:meth:`run_parts`) joined by ``_``, as ``flight_arrival_lateral_450m_binaural``
+        or ``passby_truck_speed-80_binaural-kemar``; no longer than
+        :data:`RUN_NAME_MOST`. Its folder (:func:`run_folder`) and the files it keeps
+        (:func:`product`) are named so, so that runs with other settings write over none
+        of each other's files, and a run with the same settings finds what it made."""
+        return joined_name([text for _kind, text in self.run_parts(args)])
+
+    def _at_default(self, option: Option, value: Any) -> bool:
+        """Whether ``value`` (resolved) is the option's default."""
+        if value is None:
+            return True
+        if option.kind == "flag":
+            return not value
+        if option.kind in MAP_KINDS:
+            return not value
+        if option.kind in PATH_KINDS and option.default is not None:
+            try:
+                return Path(value).resolve() == self.default_path(option).resolve()
+            except (OSError, ValueError):
+                return False
+        return value == option.default
+
+    @staticmethod
+    def _value_part(option: Option, value: Any) -> str:
+        """``value`` of ``option`` as part of a run's name."""
+        if option.kind in MAP_KINDS:
+            return "+".join(
+                f"{name_part(name)}-{name_part(Path(file).stem)}" for name, file in value.items()
+            )
+        if option.kind in PATH_KINDS:
+            return name_part(Path(value).stem)
+        if option.kind in ("int", "float") and isinstance(value, (int, float)):
+            return name_part(f"{value:g}")
+        if option.kind == "movers":
+            names = moving_names(value)
+            text = "+".join(name_part(n) for n in names) if names else NO_MOVERS
+            return text if len(text) <= TEXT_MOST else digest(value)
+        if option.kind == "text":
+            text = "+".join(name_part(p) for p in str(value).split(",") if p.strip())
+            return text if 0 < len(text) <= TEXT_MOST else digest(value)
+        return name_part(value)
+
+    def runs(self, args: argparse.Namespace) -> list[str]:
+        """The finished runs of the demo in the work folder of ``args``, by name: those
+        with a video, which the ``join`` step joins (:data:`JOIN`)."""
+        from acoustic_spaces.demos.join import finished_runs
+
+        return [run["run"] for run in finished_runs(self, self.resolved(args))]
 
     def arguments(
         self,
@@ -561,8 +841,12 @@ class Demo:
         moved = not names_only and not self.in_place
         argv: list[str] = []
         lead: list[str] = []
+        own = None if args is None else getattr(args, "run_folder", None)
         for option in self.options:
             value = getattr(args, option.name, option.default) if args is not None else None
+            if option.in_run is not None and own is not None and value is not None:
+                if Path(value) == Path(own) / option.in_run:  # where the run writes it
+                    continue
             given = moved and option.kind in PATH_KINDS and option.default is not None
             if given:  # in full, counted from the folder the demo runs in
                 value = self.default_path(option) if value is None else self.folder / value
@@ -648,7 +932,7 @@ class Demo:
             "step",
             choices=choices,
             help="; ".join(f"{s.name}: {s.help}" for s in self.steps)
-            + "; all: every step, leaving out what is done already",
+            + f"; all: every step but {JOIN.name}, leaving out what is done already",
         )
         for option in self.options:
             option.add_to(parser)
@@ -673,7 +957,20 @@ class Demo:
                     for name, f in value.items()
                 }
         resolved = argparse.Namespace(**values)
-        return self.completes(resolved) if self.completes is not None else resolved
+        if self.completes is not None:
+            resolved = self.completes(resolved)
+        if not self.stepless:
+            try:
+                work = self._work(resolved)
+            except (TypeError, ValueError, OSError):  # no work folder yet (no scene given)
+                return resolved
+            resolved.run_folder = work / self.run_name(resolved)
+            plays = [text for kind, text in self.run_parts(resolved) if kind == "plays"]
+            resolved.run_plays = "+".join(plays) or None
+            for option in self.options:
+                if option.in_run is not None and getattr(resolved, option.name, None) is None:
+                    setattr(resolved, option.name, resolved.run_folder / option.in_run)
+        return resolved
 
     def check(self, args: argparse.Namespace) -> str | None:
         """What is wrong with the arguments, or None."""
@@ -756,6 +1053,10 @@ class Demo:
             if code:
                 raise SystemExit(code)
 
+    def all_steps(self) -> list[str]:
+        """The steps ``all`` runs: every one but :data:`JOIN`."""
+        return [s.name for s in self.steps if s is not JOIN]
+
     def scene_step(self) -> Step | None:
         """The step that writes the demo's scenes (:attr:`scene_from`), or None."""
         return self.step(self.scene_from) if self.scene_from else None
@@ -769,6 +1070,8 @@ class Demo:
         """Whether ``all`` may leave ``step`` out: its result is there already."""
         from acoustic_spaces.demos.pipeline import simulated
 
+        if step is JOIN:
+            return False
         if step is SIMULATE:
             return all(simulated(s, args) for s in self.simulations(args))
         return step.done is not None and step.done(args)
@@ -788,8 +1091,21 @@ class Demo:
                 continue
             if step is SIMULATE:
                 self.simulate(args, only_missing=skip_done)
+            elif step is JOIN:
+                from acoustic_spaces.demos.join import join
+
+                join(self, args)
             else:
                 step.run(args)
+        if not self.stepless and run_folder(args).is_dir() and JOIN.name not in names:
+            record_run(
+                run_folder(args),
+                demo=self.name,
+                title=self.title,
+                run=run_folder(args).name,
+                parts=[list(part) for part in self.run_parts(args)],
+                command=self.command("all", args, names_only=True),
+            )
         print(f"{DONE}: {', '.join(names)}", flush=True)
 
     def main(self, argv: Sequence[str] | None = None) -> int:
@@ -802,9 +1118,25 @@ class Demo:
         problem = demo.check(args)
         if problem:
             parser.error(problem)
-        names = [s.name for s in demo.steps] if args.step == "all" else [args.step]
+        names = demo.all_steps() if args.step == "all" else [args.step]
         demo.run(names, args, skip_done=args.step == "all")
         return 0
+
+
+def joined_name(parts: Sequence[str]) -> str:
+    """``parts`` (each made for a file's name, :func:`name_part`) joined by ``_``: the
+    name of a run (:meth:`Demo.run_name`). A name longer than :data:`RUN_NAME_MOST`
+    keeps its first part and its last and gives those between cut short, with a digest
+    of them, so that two long names stay apart."""
+    parts = [part for part in parts if part]
+    name = "_".join(parts)
+    if len(name) <= RUN_NAME_MOST:
+        return name
+    if len(parts) < 3:
+        return f"{name[: RUN_NAME_MOST - 7].rstrip('_-')}-{digest(name)}"
+    first, last, middle = parts[0], parts[-1], "_".join(parts[1:-1])
+    room = max(RUN_NAME_MOST - len(first) - len(last) - 9, 0)
+    return f"{first}_{middle[:room].rstrip('_-')}-{digest(middle)}_{last}"
 
 
 def _relative(path: Path, folder: Path) -> str:
@@ -819,7 +1151,8 @@ def sibling(script: str | Path, name: str) -> ModuleType:
     """The module ``name``.py next to ``script`` (a demo's pictures), imported by its
     path, so that a script runs from any folder and the editor can load it."""
     script = Path(script).resolve()
-    key = f"acoustic_spaces_demos.{script.parent.name}.{name}"
+    # One module per folder: two copies of an example are two demos, each in its own.
+    key = f"acoustic_spaces_demos.{script.parent.name}_{digest(str(script.parent))}.{name}"
     if key in sys.modules:
         return sys.modules[key]
     spec = importlib.util.spec_from_file_location(key, script.parent / f"{name}.py")
@@ -950,19 +1283,34 @@ def scripts_of(example: str) -> list[Demo]:
 __all__ = [
     "ADVANCED",
     "DONE",
+    "JOIN",
     "KINDS",
     "LABELS",
+    "LISTENERS_MOST",
     "MAP_KINDS",
+    "NAMINGS",
     "NO_MOVERS",
     "PATH_KINDS",
     "RUN",
+    "RUN_NAME_MOST",
+    "RUN_RECORD",
     "SIMULATE",
+    "TEXT_MOST",
     "Demo",
     "Option",
     "Step",
     "chosen_order",
     "common_options",
+    "digest",
     "input_option",
+    "joined_name",
+    "mix_stem",
+    "name_part",
+    "product",
+    "record_run",
+    "run_folder",
+    "run_plays",
+    "runs_option",
     "demo_for",
     "demos_of",
     "list_demos",

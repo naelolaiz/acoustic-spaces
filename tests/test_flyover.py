@@ -94,19 +94,20 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
     )
     path.write_text(level, encoding="utf-8")
     assert demo.main(["all", "--step", "8", "--no-mp4"]) == 0
-    work = folder / "demo"
+    work = demo.run_folder(demo.parser().parse_args(["all", "--step", "8"]))
+    assert work == folder / "demo" / "flyover_step-8_binaural"
     info = pipeline.read_json(work / "helicopter" / "helicopter.json")
     assert info["helicopter"] == "AS350 B3" and info["speed_kmh"] == pytest.approx(226.8)
     assert info["duration_s"] == pytest.approx(40.0 / 63.0, abs=1e-6)
     x, rate = audio.read(work / "helicopter" / "below.wav")
     assert rate == 16_000 and len(x) == round(info["duration_s"] * rate)
     assert np.abs(x).max() == pytest.approx(0.5, rel=1e-3)
-    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    scene = Scene.from_yaml(work / "scene_demo.yaml")
     (helicopter,) = scene.sources
     assert helicopter.level_db == pytest.approx(info["level_db"])
     assert helicopter.walk.face_forward and helicopter.walk.doppler
     # The example's at 48 kHz: at 16 kHz the 8 kHz band is half above the sound's top.
-    table = read_directivity_csv(folder / "scene_demo_helicopter.csv").table[..., :7]
+    table = read_directivity_csv(work / "scene_demo_helicopter.csv").table[..., :7]
     full = read_directivity_csv(folder / "helicopter.csv").table[..., :7]
     np.testing.assert_allclose(table, full, rtol=2e-3)
     facts = pipeline.read_json(work / "walk" / "walk.json")
@@ -117,7 +118,8 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
     towards = 63.0 * 20.0 / math.hypot(20.0, 148.8)
     falls = 12.0 * math.log2((c + towards) / (c - towards))
     assert under["pitch_semitones"] == pytest.approx(falls, abs=1e-3)
-    assert (work / "tour.wav").exists() and (work / "stills" / "00_under_track.png").exists()
+    assert work.with_name(work.name + ".wav").exists()
+    assert (work / "stills" / "00_under_track.png").exists()
 
 
 def test_the_stadiums_helicopter_is_its_rotors_model() -> None:
