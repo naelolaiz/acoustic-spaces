@@ -179,6 +179,10 @@ msgstr "Raigs per banda"
 msgid "Written to"
 msgstr "S'escriu a"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Runs"
+msgstr "Execucions"
+
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
 msgstr "Aquesta escena"
@@ -1937,6 +1941,12 @@ msgid "All"
 msgstr "Tots"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every finished run: the video joins them all, its default"
+msgstr ""
+"Marca totes les execucions acabades: el vídeo les uneix totes, el valor per "
+"defecte"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every listener: the demo plays them all, its default"
 msgstr ""
 "Marca tots els receptors: la demo els reprodueix tots, el predeterminat"
@@ -1944,6 +1954,10 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "None"
 msgstr "Cap"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every run, to tick the ones to join"
+msgstr "Desmarca totes les execucions, per marcar les que es volen unir"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every listener, to tick the few to hear"
@@ -2159,8 +2173,10 @@ msgstr ""
 "Aquesta escena reprodueix els recorreguts."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "all: every step in order, leaving out what is done already."
-msgstr "all: tots els passos en ordre, deixant de banda el que ja està fet."
+msgid "all: every step in order but join, leaving out what is done already."
+msgstr ""
+"all: tots els passos en ordre excepte join, deixant de banda el que ja està "
+"fet."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format

@@ -68,6 +68,7 @@ from PySide6.QtWidgets import (
 
 from acoustic_spaces import i18n
 from acoustic_spaces.demos import (
+    JOIN,
     MAP_KINDS,
     NO_MOVERS,
     PATH_KINDS,
@@ -153,7 +154,7 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
     demo = DEMO.at(base)
     args = demo.defaults()
     args.scene = path
-    args = demo.resolved(args)  # with the scene's own HRTFs, when it names some
+    args = run_free(demo, demo.resolved(args))  # with the scene's own HRTFs, if it names some
     if path is None or base != path.parent:  # not beside the scene, its default
         args.work = base / "demo"
     found.append((demo, args))
@@ -173,12 +174,26 @@ def starting_arguments(demo: Demo) -> argparse.Namespace:
     the paths filled in: what the demo writes goes under that folder, what it reads
     comes from the example when the folder has no copy of it
     (:meth:`~acoustic_spaces.demos.Demo.default_path`)."""
-    args = demo.resolved(demo.defaults())
+    args = run_free(demo, demo.resolved(demo.defaults()))
     for option in demo.options:
         if option.kind != "file" or option.default is None:
             continue
         if not Path(getattr(args, option.name)).exists():
             setattr(args, option.name, demo.default_path(option))
+    return args
+
+
+def run_free(demo: Demo, args: argparse.Namespace) -> argparse.Namespace:
+    """``args`` (resolved) without what a run's settings decide: its folder, what it
+    plays, and the files it writes in its folder when not given
+    (:attr:`~acoustic_spaces.demos.Option.in_run`), so that a run with the settings
+    chosen in the window names them afresh."""
+    for name in ("run_folder", "run_plays"):
+        if hasattr(args, name):
+            delattr(args, name)
+    for option in demo.options:
+        if option.in_run is not None:
+            setattr(args, option.name, None)
     return args
 
 
@@ -196,8 +211,9 @@ def scene_key(scene: str | Path | None) -> str | None:
 def keeps(demo: Demo, option: Option) -> bool:
     """Whether the window keeps ``option`` of ``demo`` for the next time it opens: every
     option but the folders and files the demo writes, the example's files it reads and
-    the scene it plays, which follow where the scene is."""
-    if option.kind in ("path", "folder"):
+    the scene it plays, which follow where the scene is, and the runs to join, which
+    follow what the work folder holds."""
+    if option.kind in ("path", "folder", "runs"):
         return False
     if option.kind == "file":
         return option.default is None and option is not reads_scene(demo)
@@ -590,7 +606,9 @@ class InputsField(QWidget):
 class ListenersField(QWidget):
     """The field of ``--listeners``: a tick for each listener the demo can play
     (:attr:`Demo.listeners`, which :meth:`set_listeners` gives), all ticked by default;
-    a run plays the ticked ones. All and None tick or untick them all."""
+    a run plays the ticked ones. All and None tick or untick them all. Of ``--runs``
+    (the ``join`` step's), a tick for each finished run of the demo in the work folder
+    (:meth:`Demo.runs`): the video joins the ticked ones."""
 
     #: A tick changed.
     changed = Signal()
@@ -610,11 +628,20 @@ class ListenersField(QWidget):
         self.list.itemChanged.connect(self._ticked)
         layout.addWidget(self.list)
         row = QHBoxLayout()
+        runs = option.kind == "runs"
         self.all = QPushButton(_("All"))
-        self.all.setToolTip(_("Tick every listener: the demo plays them all, its default"))
+        self.all.setToolTip(
+            _("Tick every finished run: the video joins them all, its default")
+            if runs
+            else _("Tick every listener: the demo plays them all, its default")
+        )
         self.all.clicked.connect(lambda: self._tick_all(True))
         self.none = QPushButton(_("None"))
-        self.none.setToolTip(_("Untick every listener, to tick the few to hear"))
+        self.none.setToolTip(
+            _("Untick every run, to tick the ones to join")
+            if runs
+            else _("Untick every listener, to tick the few to hear")
+        )
         self.none.clicked.connect(lambda: self._tick_all(False))
         row.addWidget(self.all)
         row.addWidget(self.none)
@@ -896,11 +923,12 @@ def field_for(option: Option, tip: str) -> QWidget:
     """The widget that asks for ``option``: a tick for a flag, a list for a choice, a
     spin box for a number (with its unit; at zero, its ``unset`` text, for one the scene
     gives by default), a path with a Browse… button for a file or a folder, a table of
-    the sources for ``--input``, a tick for each listener for ``--listeners``, and a
-    text field for the rest (empty where the demo takes none)."""
+    the sources for ``--input``, a tick for each listener for ``--listeners`` and for
+    each finished run for ``--runs``, and a text field for the rest (empty where the
+    demo takes none)."""
     if option.kind in MAP_KINDS:
         return InputsField(option, tip)
-    if option.kind == "listeners":
+    if option.kind in ("listeners", "runs"):
         return ListenersField(option, tip)
     if option.kind in PATH_KINDS:
         return PathField(option, tip, sets=option.name == "hrtf")
@@ -1348,7 +1376,7 @@ class DemoDialog(QDialog):
         demo, step = self.demo, self.chosen_step()
         if step == ALL:
             self.about_step.setText(
-                _("all: every step in order, leaving out what is done already.")
+                _("all: every step in order but join, leaving out what is done already.")
             )
         else:
             self.about_step.setText(f"{step}: {demo.step(step).help}.")
@@ -1358,7 +1386,10 @@ class DemoDialog(QDialog):
                 widget.set_sources(self._plays(demo, args))
                 args = self.arguments()
             elif isinstance(widget, ListenersField):
-                widget.set_listeners(self._listeners(demo, args))
+                if widget.option.kind == "runs":
+                    widget.set_listeners(self._runs(demo, args))
+                else:
+                    widget.set_listeners(self._listeners(demo, args))
                 args = self.arguments()
         self.command.setText(demo.command(step, args))
         # An option that matters only with another's values (the police car's --siren
@@ -1368,6 +1399,8 @@ class DemoDialog(QDialog):
             widget, shown = self.fields[name], demo.option(name).applies(values)
             if isinstance(widget, ListenersField):  # none to tick where the scene cannot tell
                 shown = shown and bool(widget.names)
+                if widget.option.kind == "runs":  # the join step's alone
+                    shown = shown and step == JOIN.name
             if form_rows.isRowVisible(widget) != shown:
                 form_rows.setRowVisible(widget, shown)
                 moved = True
@@ -1499,6 +1532,15 @@ class DemoDialog(QDialog):
             return []
         try:
             return list(demo.listeners(demo.resolved(args)))
+        except (Exception, SystemExit):
+            return []
+
+    @staticmethod
+    def _runs(demo: Demo, args: argparse.Namespace) -> list[str]:
+        """The finished runs of ``demo`` in the work folder of ``args``, which its join
+        step joins (:meth:`Demo.runs`); none when it cannot tell."""
+        try:
+            return demo.runs(args)
         except (Exception, SystemExit):
             return []
 

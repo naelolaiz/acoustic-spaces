@@ -801,7 +801,11 @@ class Demo:
         return joined_name([text for _kind, text in self.run_parts(args)])
 
     def _at_default(self, option: Option, value: Any) -> bool:
-        """Whether ``value`` (resolved) is the option's default."""
+        """Whether ``value`` (resolved) is the option's default. A path is at its default
+        where :meth:`default_path` puts it, or as the default names it in the working
+        folder: the editor starts a demo moved to a copy of its example (:meth:`at`) in
+        that copy, with every path in full, and the script, counting from its own
+        folder, then names its run as the editor does."""
         if value is None:
             return True
         if option.kind == "flag":
@@ -810,7 +814,11 @@ class Demo:
             return not value
         if option.kind in PATH_KINDS and option.default is not None:
             try:
-                return Path(value).resolve() == self.default_path(option).resolve()
+                given = Path(value).resolve()
+                return given in (
+                    self.default_path(option).resolve(),
+                    (Path.cwd() / option.default).resolve(),
+                )
             except (OSError, ValueError):
                 return False
         return value == option.default

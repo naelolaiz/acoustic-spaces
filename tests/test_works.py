@@ -166,7 +166,7 @@ def test_the_works_demo_plays_each_machine_at_its_sound_power(tmp_path, monkeypa
     engine's firing), not on average over each octave."""
     pytest.importorskip("PIL")
     from acoustic_spaces import Scene, render
-    from acoustic_spaces.demos import audio, load, pipeline
+    from acoustic_spaces.demos import audio, load, pipeline, scene_demo
     from acoustic_spaces.synthesis import split_bands
 
     heard = []
@@ -191,15 +191,20 @@ def test_the_works_demo_plays_each_machine_at_its_sound_power(tmp_path, monkeypa
     assert all(s.in_use for s in scene.sources)
     for source in scene.sources:
         assert list(source.level_db) == works.level_of(source.name, RATE)
-    work = folder / "demo_works"
-    table = pipeline.read_json(work / "feeds" / "feeds.json")
+    # The feeds of the scene, its simulation for the output and the run's stills, each
+    # in its folder.
+    feeds = scene_demo.feeds_folder(args)
+    assert feeds == folder / "demo_works" / "feeds" / "scene_works"
+    results = demo.simulations(args)[0].results
+    assert results == folder / "demo_works" / "results" / "scene_works" / "binaural"
+    table = pipeline.read_json(feeds / "feeds.json")
     assert table["length_s"] == pytest.approx(12.0)
     for name in works.SOURCES:
-        x, rate = audio.read(work / "feeds" / f"{name}.wav")
+        x, rate = audio.read(feeds / f"{name}.wav")
         assert rate == RATE and len(x) == 12 * RATE
         assert float(np.sqrt(np.mean(x**2))) == pytest.approx(plant.SOUND_RMS, rel=0.01)
-    assert (work / "stills" / "00_pavement.png").exists()
-    report = pipeline.read_json(work / "results" / pipeline.PARAMETERS)
+    assert (args.run_folder / "stills" / "00_pavement.png").exists()
+    report = pipeline.read_json(results / pipeline.PARAMETERS)
     levels = {(r["source"], r["listener"]): r["spl_a_db"] for r in report["responses"]}
     weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
 
@@ -214,8 +219,8 @@ def test_the_works_demo_plays_each_machine_at_its_sound_power(tmp_path, monkeypa
         bands' levels say, A-weighted: a tone (the alarm's beeps, an engine's firing) is
         heard as the response is at its frequencies, where the street's reflections add
         up or cancel, not as each octave is on average."""
-        ir, _ = audio.read(work / "results" / f"{name}__{listener}.binaural.wav")
-        x, _ = audio.read(work / "feeds" / f"{name}.wav")
+        ir, _ = audio.read(results / f"{name}__{listener}.binaural.wav")
+        x, _ = audio.read(feeds / f"{name}.wav")
         n = 1 << math.ceil(math.log2(len(x) + len(ir)))
         sound = np.abs(np.fft.rfft(x[:, 0], n)) ** 2
         through = np.sum(np.abs(np.fft.rfft(ir, n, axis=0)) ** 2, axis=1)
@@ -281,8 +286,7 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     distances from the building, their energies added, no adjustment for the building,
     50 dB under in dB(A); the two together are the sum of their energies. The garden, in
     front of no wall, hears them outdoors. What is felt at each is the ground's
-    vibration, a shaker track. Another --indoors mixes again, and the video refuses
-    mixes made for another."""
+    vibration, a shaker track. Another --indoors mixes again, in its run's folder."""
     pytest.importorskip("PIL")
     from acoustic_spaces import Scene, vibration
     from acoustic_spaces.demos import audio, indoors, load, pipeline, scene_pictures
@@ -294,10 +298,14 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     common = ["--seconds", "4", "--no-mp4", "--format", "mono"]
     work = folder / "demo_works"
 
-    def mixes() -> tuple[dict, dict[str, np.ndarray]]:
-        seats = pipeline.read_json(work / "seats" / pipeline.SEATS)
+    def held(*more: str) -> Path:
+        """The folder of the mixes of the run with ``common`` and ``more``."""
+        return demo.run_folder(demo.parser().parse_args(["render", *common, *more])) / "seats"
+
+    def mixes(*more: str) -> tuple[dict, dict[str, np.ndarray]]:
+        seats = pipeline.read_json(held(*more) / pipeline.SEATS)
         return seats, {
-            key: audio.read(work / "seats" / f"{key}.mono.wav")[0][:, 0] / seats["gain"]
+            key: audio.read(held(*more) / f"{key}.mono.wav")[0][:, 0] / seats["gain"]
             for key in seats["seats"]
         }
 
@@ -313,12 +321,12 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     heard = {}
     for choice in ("works", "rumble", "works_and_rumble"):
         assert demo.main(["render", *common, "--indoors", choice]) == 0
-        heard[choice] = mixes()
+        heard[choice] = mixes("--indoors", choice)
     scene = Scene.from_yaml(folder / "scene_works.yaml")
     loudest = max(s.sound_power_db for s in scene.sources if s.in_use)
     sources = {s.name: s for s in scene.sources}
-    report = pipeline.read_json(work / "results" / pipeline.PARAMETERS)
-    out = pipeline.read_json(work / "results_2m" / pipeline.PARAMETERS)
+    report = pipeline.read_json(work / "results" / "scene_works" / "mono" / pipeline.PARAMETERS)
+    out = pipeline.read_json(work / "results" / "scene_works_2m" / "mono" / pipeline.PARAMETERS)
     (front,) = Scene.from_yaml(folder / "scene_works_2m.yaml").listeners
     assert front.name == "balcony_2m"
     assert front.position == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
@@ -398,8 +406,8 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
         return drawn[-1]
 
     monkeypatch.setattr(scene_pictures, "Pictures", pictures)
-    with pytest.raises(SystemExit, match="another --indoors"):
-        demo.main(["video", *common, "--indoors", "works"])
+    # Each --indoors mixes in its run's folder: none over another's.
+    assert len({held(), *(held("--indoors", choice) for choice in heard)}) == 4
     assert demo.main(["video", *common, "--indoors", "works_and_rumble"]) == 0
     lines = [line if isinstance(line, str) else line[0] for line in drawn[-1].lines(0)]
     first = drawn[-1].stops[0].key
@@ -429,8 +437,9 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     # What is felt: a shaker track at each listener, and along the tour.
     seats = heard["works_and_rumble"][0]
     assert seats["shaker"]["hz"] == 25.0
-    assert all((work / "seats" / f"{key}.shaker.wav").exists() for key in seats["seats"])
-    assert (work / "tour.shaker.wav").exists()
+    shaken = held("--indoors", "works_and_rumble")
+    assert all((shaken / f"{key}.shaker.wav").exists() for key in seats["seats"])
+    assert (shaken.parent.with_name(shaken.parent.name + "_shaker.wav")).exists()
     # Outdoors again: the mixes made again, without the house.
     assert demo.main(["render", *common]) == 0
     seats, again = mixes()

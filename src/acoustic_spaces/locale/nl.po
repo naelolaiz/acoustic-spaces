@@ -179,6 +179,10 @@ msgstr "Stralen per band"
 msgid "Written to"
 msgstr "Geschreven naar"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Runs"
+msgstr "Runs"
+
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
 msgstr "Deze scène"
@@ -1940,12 +1944,21 @@ msgid "All"
 msgstr "Alle"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every finished run: the video joins them all, its default"
+msgstr ""
+"Vink alle voltooide runs aan: de video voegt ze allemaal samen, de standaard"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every listener: the demo plays them all, its default"
 msgstr "Vink alle ontvangers aan: de demo speelt ze allemaal, de standaard"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "None"
 msgstr "Geen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every run, to tick the ones to join"
+msgstr "Vink alle runs uit, om de runs aan te vinken die je wilt samenvoegen"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every listener, to tick the few to hear"
@@ -2160,8 +2173,8 @@ msgstr ""
 "begint. Deze scène speelt de routes."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "all: every step in order, leaving out what is done already."
-msgstr "all: elke stap op volgorde, zonder wat al gedaan is."
+msgid "all: every step in order but join, leaving out what is done already."
+msgstr "all: elke stap op volgorde behalve join, zonder wat al gedaan is."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
