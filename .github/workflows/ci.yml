@@ -112,8 +112,9 @@ jobs:
   sanitizers:
     # The native module built with AddressSanitizer and UndefinedBehaviorSanitizer: an
     # out-of-bounds or freed read or write, or undefined behaviour, stops the tests. The
-    # tests run in parts side by side, one job each (pytest's --shard, tests/conftest.py):
-    # every test is in one part, and each part has a share of every file.
+    # tests run in parts side by side, one job each (the option --shard of
+    # tests/conftest.py): every test is in one part, and each part has a share of every
+    # file.
     name: Native code under ASan and UBSan (part ${{ matrix.part }} of ${{ strategy.job-total }})
     runs-on: ubuntu-24.04
     strategy:
@@ -131,15 +132,15 @@ jobs:
           -C cmake.define.ACOUSTIC_SPACES_SANITIZE=ON
       - name: Test
         # Python itself is not built with them, so their runtimes are loaded first. Leaks
-        # are not checked: Python keeps some memory to the end on purpose. The checks make
-        # the tests three to five times as slow as on the plain Linux jobs. In one job
-        # they took 129 minutes on main on 21 November 2026, where another runner was cut
-        # at the 150 minutes the step had, 87 % of the way through with none failed, and
-        # on the 24th one was cut 86 % of the way through.
+        # are not checked: Python keeps some memory to the end on purpose. In one job the
+        # tests took 129 minutes on main on 21 November 2026, and slower runners were cut
+        # at the 150 minutes the step had then, 86 to 87 % of the way through with none
+        # failed. The four parts took 29 to 38 minutes each on the 25th: the limit, the
+        # test job's, leaves room for runners twice as slow and for more tests.
         env:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1
-        timeout-minutes: 90
+        timeout-minutes: 120
         run: >-
           LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libubsan.so)"
           python -m pytest -q -W error --shard ${{ matrix.part }}/${{ strategy.job-total }}
