@@ -180,8 +180,40 @@ msgid "Written to"
 msgstr "Geschrieben nach"
 
 #: acoustic_spaces/demos/__init__.py
-msgid "Runs"
-msgstr "Durchläufe"
+msgid "Vehicle"
+msgstr "Fahrzeug"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Train"
+msgstr "Zug"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Track"
+msgstr "Gleis"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Siren"
+msgstr "Sirene"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Horn"
+msgstr "Horn"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Heard indoors"
+msgstr "Drinnen gehört"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+msgid "Sources"
+msgstr "Quellen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Sources play"
+msgstr "Wie die Quellen spielen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Order of the parts"
+msgstr "Reihenfolge der Teile"
 
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
@@ -1965,26 +1997,49 @@ msgid "All"
 msgstr "Alle"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick every finished run: the video joins them all, its default"
-msgstr ""
-"Alle fertigen Durchläufe anhaken: das Video verbindet sie alle, die "
-"Voreinstellung"
+msgid "None"
+msgstr "Keine"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every listener: the demo plays them all, its default"
 msgstr "Alle Empfänger anhaken: die Demo spielt sie alle, ihre Voreinstellung"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "None"
-msgstr "Keine"
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid "Untick every run, to tick the ones to join"
-msgstr "Alle Durchläufe abhaken, um die anzuhaken, die verbunden werden sollen"
-
-#: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every listener, to tick the few to hear"
 msgstr "Alle Empfänger abhaken, um die wenigen anzuhaken, die man hören will"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every one: the run plays them one after another"
+msgstr "Alle anhaken: der Lauf spielt sie nacheinander"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every one, to tick those to play"
+msgstr "Alle abhaken, um die anzuhaken, die spielen sollen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every source"
+msgstr "Alle Quellen anhaken"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every source, to tick those to hear"
+msgstr "Alle Quellen abhaken, um die anzuhaken, die man hören will"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo's pick"
+msgstr "Die Auswahl der Demo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick the sources the demo plays by default"
+msgstr "Die Quellen anhaken, die die Demo standardmäßig spielt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Ticked: each listener in a part of its own, at this place in the order; "
+"unticked: the video of each part tours them"
+msgstr ""
+"Angehakt: jeder Empfänger in einem eigenen Teil, an dieser Stelle der "
+"Reihenfolge; nicht angehakt: das Video jedes Teils geht sie der Reihe nach "
+"durch"
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2181,6 +2236,15 @@ msgstr ""
 "Bewegt sich sie in der Szene setzt, und ändern nur diesen Lauf ({option})."
 
 #: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Tick what plays in this run ({option}); ticking several plays them one after "
+"another in one video."
+msgstr ""
+"Anhaken, was in diesem Lauf spielt ({option}); mehrere angehakt spielen "
+"nacheinander in einem Video."
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "This demo moves what is ticked; Moves in the scene turns a walk on or off, "
 "and Edit movement… changes it."
@@ -2197,9 +2261,8 @@ msgstr ""
 "er beginnt. Diese Szene spielt die Wege."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "all: every step in order but join, leaving out what is done already."
-msgstr ""
-"all: jeder Schritt der Reihe nach außer join, ohne das, was schon getan ist."
+msgid "all: every step in order, leaving out what is done already."
+msgstr "all: jeder Schritt der Reihe nach, ohne das, was schon getan ist."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2210,6 +2273,11 @@ msgstr "Läuft in {folder}"
 #, python-brace-format
 msgid "This run downloads {what}."
 msgstr "Diese Ausführung lädt {what} herunter."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "{option} names none: tick one at least"
+msgstr "{option} nennt keinen: mindestens einen anhaken"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "save the scene first (File > Save): the demo reads it from its file"
@@ -2230,6 +2298,14 @@ msgid ""
 msgstr ""
 "Von den Standardwerten geändert und für das nächste Mal behalten: {options}. "
 "Standardwerte setzt sie zurück."
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Listeners, each in a part of its own"
+msgstr "Empfänger, jeder in einem eigenen Teil"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Sources, one at a time"
+msgstr "Quellen, eine nach der anderen"
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
@@ -8027,10 +8103,6 @@ msgid "Materials"
 msgstr "Materialien"
 
 #: acoustic_spaces/gui/tree.py
-msgid "Sources"
-msgstr "Quellen"
-
-#: acoustic_spaces/gui/tree.py
 msgid "Simulation"
 msgstr "Simulation"
 
@@ -9159,7 +9231,8 @@ msgid ""
 "height one behind the other (its bogies, its cars' roofs, its pantograph), "
 "so the train goes by as long as it is. They are left out of simulations "
 "until ticked, as is the train's horn at its front, and passby_demo.py runs "
-"one of four trains past, its horn sounding with --horn blasts."
+"one of four trains past, its horn sounding with --sources "
+"train,train_roof,train_pantograph,train_horn."
 msgstr ""
 "Im Freien: eine Bahnstrecke auf Schotter quer über eine Wiese, gehört dort, "
 "wo die EU-Vorschrift für den Lärm von Zügen eine Vorbeifahrt misst (7.5 m "
@@ -9178,8 +9251,8 @@ msgstr ""
 "Drehgestelle, die Dächer seiner Wagen, seinen Stromabnehmer), so dass der "
 "Zug so lange vorbeifährt, wie er lang ist. Sie bleiben aus den Simulationen, "
 "bis sie angehakt werden, wie auch das Signalhorn an der Spitze des Zuges, "
-"und passby_demo.py lässt einen von vier Zügen vorbeifahren, mit --horn "
-"blasts ertönt sein Signalhorn."
+"und passby_demo.py lässt einen von vier Zügen vorbeifahren, mit --sources "
+"train,train_roof,train_pantograph,train_horn ertönt sein Signalhorn."
 
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"

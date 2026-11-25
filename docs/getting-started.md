@@ -235,7 +235,8 @@ listener. Sources and listeners left out of simulations (`enabled: false`) get n
   `LISTENER.binaural.wav`, and the stills, beside the run's video (`scene_binaural.mp4`),
   its sound and its thumbnail. The video visits every listener in use in the scene's
   order (`--listeners` picks them). A run with other settings goes to a folder and a
-  video of its own, and the `join` step plays several in one video. An example's own
+  video of its own; several values of an option (`--format binaural,mono`), or
+  `--sources-play in-turn`, play one after another in one video. An example's own
   demo writes its scene and simulation beside its script (the stadium's
   `scene_band.yaml` and `results_band/`) and the rest into `demo/` there
   ([Demos](demos.md#running-a-demo)).

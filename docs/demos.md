@@ -74,30 +74,48 @@ the feeds of each song, the simulation of each output, in a folder of its own
 (`results_choir/binaural`, `results_choir/binaural-kemar`), and the walks of a run
 that differs only in what later steps do with them (a pass at another `--at`).
 
-**One video of several runs.** `join`, the last step of every demo and the one `all`
-leaves out, plays finished runs one after another in one video: `python flight_demo.py
-join --runs flight_departure_binaural,flight_arrival_binaural`, in that order, or every
-run of the demo in the work folder that has its video when `--runs` is not given. Each
-run plays after a title card of 4 s that says what it plays and how it was made. Each
-keeps its own level (every run brings its loudest peak to -1 dBFS), so the parts are
-not comparable in level with each other, which the cards say. The video is named after
-what the runs share and what sets them apart (`flight_departure+arrival_binaural.mp4`),
-in the work folder, with the chapters of every part. In the editor the step lists the
-finished runs, to tick those to join.
+**Several of something in one video.** A choice or a number that changes what a run
+plays or how it sounds, and `--format`, take several values, comma separated: `python
+flight_demo.py all --vehicle departure,arrival` plays the take-off and then the landing,
+`--speed 50,80` a car at each speed, `--format binaural,mono` each mix. The run is then
+made of parts, one for each value (every pair of values when two options take several),
+each an ordinary run with its own name and folder, made or found as such; its video
+plays them one after another, each after a title card of 4 s that says what sets it
+apart and how it was made, with the chapters of every part, and is named after them all
+(`demo/flight_departure+arrival_binaural.mp4`). Each part keeps its own level (each
+brings its loudest peak to -1 dBFS), so the parts are not comparable in level with each
+other, which the cards say. `--series` sets the order of the parts, outermost first, by
+the options' names (`--series format,vehicle` plays both flights binaural, then both
+mono), and with `listeners` in it makes each listener a part of its own (otherwise the
+tour of each part visits them); the run's name then says the order (`series-format-vehicle`).
 
-`--listeners a,b` has a demo play those listeners alone: it mixes them and its video
-tours them, leaving the others out. Every demo with several listeners takes it, with the
-names the scene gives them (a name the demo cannot play is refused with the list of
-those it can). The simulation still takes every listener in use, so another choice later
-needs no new simulation, except in the pass-by demos, which simulate the vehicle along
-its walk at each listener they play (a pass made already is kept). The demo of any scene
-and the pass-by demos visit them in the order given; the others keep their own tour's
-order: the church's tour keeps its times, a place left out giving its time to the one
-before; the stadium's and the lake's stops there keep their phrases, the last running to
-the end; the orchestra plays each movement at the seats of its tour among them, or at
-all of them when its tour has none. A tour's crossfade is never longer than the shorter
-of the two stops it joins. The gallery walk hears its visitor alone and takes
-no `--listeners`.
+**The sources a run plays.** Every demo lists the sources it can play, in the groups
+its scene gives them, and plays its own pick of them by default. `--sources` names
+others, by name or by group, comma separated: `--sources PA` plays every source of the
+groups under `PA` (`PA/Mains`, `PA/Fills`...), `--sources PA,Band` those of both.
+`--sources-play together` (the default) plays them in one mix; `--sources-play in-turn`
+plays each name given (a group as one) in a part of its own, one after another in one
+video as above, or without `--sources` each top group of the demo's pick (the stadium's
+sound system, its monitors, then its band). A pick that is not the demo's own names the
+run (`church_Choir_binaural`, `church_each-source_binaural`); the stills, credits and
+captions describe only what plays. Where the simulation keeps every source (the
+concerts, the church, the demo of any scene, the works), another pick needs no new
+simulation; the pass-by demos walk the vehicle again with the parts picked.
+
+`--listeners a,b` has a demo play those listeners alone, in that order: it mixes them
+and its video tours them in it, leaving the others out. Every demo with several
+listeners takes it, with the names the scene gives them (a name the demo cannot play is
+refused with the list of those it can). The simulation still takes every listener in
+use, so another choice later needs no new simulation, except in the pass-by demos, which
+simulate the vehicle along its walk at each listener they play (a pass made already is
+kept). A tour keeps its timing: the church's keeps its times, filled in the order given,
+a place left out giving its time to the one before; the stadium's stops keep their
+phrases, the last running to the end; the lake's keep the stops of its default tour and
+end back at the first; the orchestra plays each movement at the seats of its tour among
+them, or at all of them when its tour has none. A `--tour` given keeps its own order,
+`--listeners` leaving out the stops at the others. A tour's crossfade is never longer
+than the shorter of the two stops it joins. The gallery walk takes the listener each of
+its two parts follows (`--listeners standing,visitor` plays the head turn first).
 
 `--input SOURCE=WAV`, once for each source, has a source play a recording of yours
 instead of what the demo gives it: `python lakeside_demo.py render --input
@@ -127,7 +145,11 @@ In the editor, **Simulation > Run demo…** does the same for the open scene: *T
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
 and its scripts that are no demos. The window shows the options that change what the
 demo plays, at the command line's defaults, the file each source plays, the listeners
-to play and the walkers that move; **Advanced** holds the step, the paths and the
+to play and the walkers that move. A choice that takes several values is a list to
+tick, dragged into the order its parts play, and a number takes several comma
+separated; the sources are a tree of the scene's groups to tick, the Movement box's
+ticks pick what moves (the airport's departure and arrival), and **Order of the
+parts** sets `--series`, with a tick for each listener in a part of its own; **Advanced** holds the step, the paths and the
 command line, to repeat the run in a terminal. A line above **Run** says what the run
 downloads and how much. The demo reads the scene's file, so the editor asks to save a
 scene with no file or with changes first. However it closes, the window keeps the
@@ -226,8 +248,8 @@ acoustic-spaces demo scene.yaml --moving none   # every walker standing where it
   HRTFs the scene's binaural output names, `--hrtf` instead, or the spherical head
   model when neither names any. A scene changed since its results is simulated again.
 - **render**: every listener in use (or those `--listeners` names, in its order;
-  `--tour`, its earlier name, still works) hearing every source that plays, with one
-  gain for all, so that the listeners' differences in level are heard as they are.
+  `--tour`, its earlier name, still works) hearing every source that plays (or those
+  `--sources` picks, by name or by the scene's group), with one gain for all, so that the listeners' differences in level are heard as they are.
 - **video**: its sound hears each listener for `--seconds` (20 by default) while the
   recordings run on, crossfading between them; a recording too short for every listener
   shares its length out. Each stop is turned up to the loudness of the loudest, by 40 dB
@@ -298,8 +320,12 @@ python orchestra_demo.py video    # demo/orchestra_binaural.mp4, its sound, stil
 
 Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement
 take equal shares of it), `--listeners conductor,stalls-rear` (each movement at the
-seats of its tour among them, or at all of them when it has none of them), `--zips
-FOLDER` for a folder with zips downloaded before, `--movements 1,2` for `tracks`,
+seats of its tour among them, in that order, or at all of them when it has none of
+them), `--sources Winds` (the players that play, by name, `fl1`, or by section:
+`Strings/Violins I` or `Strings` for all five string sections, `Winds`, `Brass`,
+`Percussion`; the trumpets and the timpani rest through movement II, which a pick of
+only them leaves out), `--zips FOLDER` for a folder with zips downloaded before,
+`--movements 4,1` (the movements played and downloaded, in that order),
 `--format` for another output the simulation wrote (the tour [decodes it to two
 ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `demo/orchestra_binaural_chapters.txt`
 lists the stops' times for a video description. `all` runs tracks, the simulation,
@@ -364,7 +390,9 @@ python church_demo.py video     # demo/church_binaural.mp4, its sound, stills an
 ```
 
 Options: `--tour nave-back:0,conductor:25,...` (listener:start in seconds), `--listeners
-nave-back,conductor` (those places alone, in `render` and `video`), `--format` for
+nave-back,conductor` (those places alone, in that order, in `render` and `video`),
+`--sources Choir` (the singers or the organ's pipes by name, or the groups `Choir` and
+`Organ pipes`; a verse whose part is left out is silent, as its caption says), `--format` for
 another output the simulation wrote (`ambix3`, `5.0`, ...; the tour [decodes it to two
 ears](#running-a-demo)), `--no-mp4` for the audio and stills only. The scene and its
 simulation go beside the script (`scene_choir.yaml`, `results_choir/binaural`, a
@@ -471,7 +499,10 @@ python stadium_demo.py video     # demo/stadium_spicy_funk_cake_binaural.mp4, it
 Options: `--song francium` or `rubidium` for `music` and `feeds` (each song's feeds and
 runs have folders of their own), `--tour mix_position:1,singer:0.5,east_stand:1`
 (listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners
-mix_position,east_stand` (those listeners alone, in `render` and `video`), `--format`
+mix_position,east_stand` (those listeners alone, in that order, in `render` and
+`video`), `--sources PA` (by the scene's groups, `PA/Mains`, `PA/Subwoofers`,
+`PA/Fills`, `PA/Delays`, `Monitors` and `Band`, or by name; the helicopter is the
+crossing's), `--format`
 for another output the simulation wrote (the tour [decodes it to two
 ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `all` runs every
 step in turn, leaving out what is there already (the music, the scene, the simulation).
@@ -604,7 +635,9 @@ song.wav --bpm 120` for a song of your own in their place (a stereo file, WAV or
 anything ffmpeg decodes, and its tempo, which the tour's phrases of 8 bars go by;
 nothing is downloaded, and the video credits the file by its name unless `--credit` says
 what to show), `--tour bedroom_window:still:1,audience::2` (listener:weather:phrases of
-8 bars), `--listeners audience,bedroom_window` (those places alone, in both weathers),
+8 bars), `--listeners audience,bedroom_window` (those places alone, in that order, in both
+weathers), `--sources subs` (the loudspeakers `main_left`, `main_right` and `subs`, or
+`PA` for the three),
 `--last-phrases` (how long the last stop lasts, 0 to the end of the song; 2 by default),
 `--format` for another output the simulation wrote (the tour [decodes it to two
 ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `all` runs every
@@ -714,8 +747,9 @@ python walk_demo.py all   # or speech, scene, walk, turn, video one at a time
 Options: `--talker M4` picks one of the corpus's 14 talkers, `--voice` how loud the
 guide speaks (relaxed, normal, raised, loud), `--stand 16,4` where the visitor stands
 for the turn (by default where the scene's `standing` listener does, left out of the
-gallery's own simulations), `--turn` the angles it holds, `--hrtf me.sofa` a measured
-head.
+gallery's own simulations), `--turn` the angles it holds, `--listeners standing,visitor` the parts played, by
+the listener each follows, in that order (the walk, then the turn, by default),
+`--hrtf me.sofa` a measured head.
 
 - **The walk** is the example's visitor's: responses every 25 cm along it
   (`acoustic-spaces walkthrough`), the talk played along them so that the voice changes
@@ -754,7 +788,7 @@ drives past and each listener hears one pass in turn, its pitch falling as it go
 The video follows the vehicle on the plan, with the level heard over the pass drawn
 under it. `--vehicle` picks what goes past: in the roadside a passenger car (`car`) or
 an articulated truck (`truck`), in the street the car (with `car_horn`, its horn, when
-`--car` says), a city bus (`bus`), a motorcycle (`motorcycle`), a police car with its
+`--sources` picks it), a city bus (`bus`), a motorcycle (`motorcycle`), a police car with its
 siren on (`police_car`, the car itself, and `police_car_siren`), a fire engine with its
 siren on and its air horn in blasts (`fire_engine`, the vehicle itself,
 `fire_engine_siren` and `fire_engine_horn`) or a tram (`tram`, see [trains passing
@@ -770,11 +804,12 @@ drives (km/h; without it, the speed of its walk in the example's scene: 70 km/h 
 truck, 50 km/h for the others), `--rpm 2000` how fast its engine turns, for its made
 sound (by default its own: the car's four cylinders at 2000 rpm, the truck's six at
 1200, the bus's and the fire engine's six at 1500 and the motorcycle's two at 4000),
-`--siren wail` the police car's siren (`wail`, `yelp` or `two_tone`), `--police-car
-car_and_siren` what the police car plays (the car itself and its siren, or `siren`
-alone), `--fire-engine truck_siren_and_horn` what the fire engine plays (all three,
-`truck_and_siren`, `siren_and_horn` or `siren` alone), `--car car` what the street's car
-plays (the car alone, `car_and_horn` with its horn, or `horn` alone), `--step 1` how far
+`--siren wail` the police car's siren (`wail`, `yelp` or `two_tone`), `--sources` which
+of the vehicle's sources play, by name (in the street `police_car_siren` alone, the
+police car's siren without the car; `fire_engine,fire_engine_siren` the fire engine
+without its horn; `car,car_horn` the car with its horn, `car_horn` the horn alone; by
+default every source of the vehicle but the car's horn; `--sources-play in-turn` plays
+them one after another, see [running a demo](#running-a-demo)), `--step 1` how far
 apart the vehicle is simulated along its walk (m), `--hrtf me.sofa` a measured head,
 `--input NAME=WAV` a dry recording of yours for the vehicle NAME (`police_car_siren=WAV`
 for the police car's siren, `fire_engine_horn=WAV` for the fire engine's horn,
@@ -836,9 +871,10 @@ three, the car's with its horn) in its Movement box.
   facing the way it drives (its walk's `face_forward`). Each is simulated along the walk
   alone, and the two are heard together: their sounds added, each at its own sound
   power, and the energies of their levels band by band. The demo refuses a siren whose
-  walk goes elsewhere in plan or at other times than the car's. `--police-car siren` plays the siren alone. The siren
-  has the level and the directivity of a commercial 100 W electronic siren the National Bureau of Standards
-  measured in an anechoic room (NBS Special Publication 480-28, 1978): 3 m away, its
+  walk goes elsewhere in plan or at other times than the car's. `--sources
+  police_car_siren` plays the siren alone. The siren has the level and the directivity
+  of a commercial 100 W electronic siren the National Bureau of Standards measured in
+  an anechoic room (NBS Special Publication 480-28, 1978): 3 m away, its
   yelp averaged over 20 s, 118 dB(A) on its axis, 112 dB(A) 50 degrees off it and 107
   dB(A) at 90 degrees. The scene's `siren.csv` goes through those three, in dB linearly
   with the angle off the axis, alike round the axis and behind as at 90 degrees: NBS
@@ -872,7 +908,7 @@ three, the car's with its horn) in its Movement box.
   at 1500 rpm, `--rpm`); its siren (`fire_engine_siren`) on its cab's roof, 3.0 m up;
   and its air horn (`fire_engine_horn`), 1.2 m up. The siren and the horn face the way
   it drives, with the directivity of the siren NBS measured (`siren.csv`), and the three
-  are heard together, each at its own sound power (`--fire-engine` leaves out the horn,
+  are heard together, each at its own sound power (`--sources` leaves out the horn,
   the vehicle itself, or both). The siren plays the police car's two tones (440 and
   586.7 Hz, 1.5 s each), 6.0 dB louder: as loud as the Swiss rule lets two tones be on a
   vehicle, 114.9 dB(A) 7 m in front of the siren (taken at the vehicle's front) at the
@@ -899,7 +935,7 @@ three, the car's with its horn) in its Movement box.
   dB(A) 7 m in front of the vehicle, 0.5 to 1.5 m up (the rule: 93 at least), and, on
   its bench, 110.2 dB(A) between 1800 and 3550 Hz (the rule: 105 at least), its loudest
   component there 6.0 dB over any above 3550 Hz (the rule: over).
-- **The car's horn** (in the street, `--car car_and_horn`, or `horn` alone) is a pair of
+- **The car's horn** (in the street, `--sources car,car_horn`, or `car_horn` alone) is a pair of
   disc horns behind the car's front bumper (`car_horn`), 0.5 m up along the car's walk,
   facing the way it drives, with the siren's directivity, in two blasts of 0.25 s, 0.15
   s apart, every 3 s from the start of the pass, each at its level 0.02 s after it
@@ -916,8 +952,8 @@ three, the car's with its horn) in its Movement box.
   107.6 dB(A) between 1800 and 3550 Hz (105 at least), its loudest component there 1.9
   dB over any above 3550 Hz, and 100.4 to 101.3 dB(A) 7 m in front of the car, 0.5 to
   1.5 m up (93 at least). Made as the air horn is, a sawtooth at each fundamental, it
-  would give only 102.8 dB(A) between 1800 and 3550 Hz, under the rule. `--car car`, the
-  default, plays the car alone, as it plays without a horn.
+  would give only 102.8 dB(A) between 1800 and 3550 Hz, under the rule. By
+  default the car plays alone, as it plays without a horn.
 - **The pass**: the vehicle every metre along its walk (`--step`), simulated at each
   listener in turn (`acoustic-spaces walkthrough`), its sound played through those
   places with each early path through its own delay as it changes ([moving sources and
@@ -971,7 +1007,7 @@ three, the car's with its horn) in its Movement box.
   and adds 0.7 dB to it (113.0 dB(A), the siren alone 112.3). The balcony hears the fire
   engine nearly as loud as the pavement does, as its siren, 3.0 m up in the lane on the
   offices' side, passes 7.6 m from the balcony and 6.2 m from the pavement. With its
-  horn (`--car car_and_horn`) the car peaks at 97.0 dB(A) on the pavement, 93.9 on the
+  horn (`--sources car,car_horn`) the car peaks at 97.0 dB(A) on the pavement, 93.9 on the
   balcony and 80.5 in the garden, its horn's loudest blast 17.5 to 19.7 dB over the
   car's own loudest.
 
@@ -1019,8 +1055,9 @@ at 100 km/h), `--speed` how fast it runs (km/h; by default the train's own above
 whatever the speed of the example's walk: the Run demo window's **Speed** reads *the
 train's own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in
 ballast; `slab`, slab track; `slab_absorber`, slab track with absorbers;
-`level_crossing`), `--horn off` the train's warning horn (`blasts` or `chord` sounds it,
-see below), `--indoors off` where it is heard (see below), `--step 1` how far apart the
+`level_crossing`), `--sources` the train's sources that play (`train`, `train_roof` and
+`train_pantograph` by default; `train_horn` adds its warning horn, see below), `--horn
+blasts` how the horn sounds (`blasts` or `chord`), `--indoors off` where it is heard (see below), `--step 1` how far apart the
 train is simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input
 train=WAV` a dry recording of yours (`train_roof=WAV` and `train_pantograph=WAV` for the
 sources up on the train, `train_horn=WAV` for its horn). The tram has no options of its
@@ -1070,7 +1107,8 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
   that much later. The units' lengths and the points' places are assumptions; Schall 03
   gives only each unit's sound power per metre of track. Its sound's time structure
   (steady noise) is made up too; its spectrum per octave band is Schall 03's.
-- **The horn** (`--horn blasts`, the example's `train_horn`, at the train's front 2.0 m
+- **The horn** (`train_horn`, the example's, played when `--sources` names it, as
+  `--sources train,train_roof,train_pantograph,train_horn`, at the train's front 2.0 m
   above the rail top, along its walk): its high note (660 Hz) and its low note (370 Hz)
   in turn, the notes of the EU's rule for locomotives and passenger trains (TSI
   LOC&PAS, point 4.2.7.2.1), a second each, 0.2 s apart, every 4 s, each as loud as EN
@@ -1324,8 +1362,9 @@ python works_demo.py all   # or scene, feeds, simulate, render, video one at a t
 Options: `--blows 480` how many blows a minute the breaker strikes (Epiroc's MB 1650, a
 1650 kg breaker, strikes 320 to 640), `--seconds 20` how long each listener is heard,
 `--listeners pavement,garden` which listeners and in which order (every one in use by
-default; `--tour`, its earlier name, still works), `--indoors off` where they are heard
-(see below), `--hrtf me.sofa` a measured head, `--input NAME=WAV` a dry recording of
+default; `--tour`, its earlier name, still works), `--sources breaker,dumper` which of
+the works play (`breaker`, `generator`, `dumper`, `dumper_alarm`; all of them by
+default), `--indoors off` where they are heard (see below), `--hrtf me.sofa` a measured head, `--input NAME=WAV` a dry recording of
 yours instead of a made sound (`breaker`, `generator`, `dumper` or `dumper_alarm`). The
 scene with the works alone goes to `scene_works.yaml`, the same heard 2 m in front of
 the offices to `scene_works_2m.yaml` (see Indoors below), everything else to

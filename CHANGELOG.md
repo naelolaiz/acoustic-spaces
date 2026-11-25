@@ -2,9 +2,21 @@
 
 ## Unreleased
 
-- Added: a `join` step in every demo plays finished runs one after another in one
-  video, each after a title card, with the chapters of every part (`--runs`, or the
-  list of finished runs to tick in Run demo).
+- Added: every demo plays several of something in one video: an option that changes
+  what plays or how it sounds, and `--format`, take several values (`--vehicle
+  departure,arrival`, `--speed 50,80`), each value a run of its own played after a title
+  card, in the order `--series` sets; `--sources` picks the sources a demo plays, by
+  name or group, and `--sources-play in-turn` plays them one after another; `--series
+  listeners` gives each listener a part. In Run demo these are lists to tick and drag,
+  the Movement box's ticks pick what moves, and a box sets the order of the parts.
+- Changed: `--listeners` sets the order of every demo's tour (a tour's timing kept),
+  and the gallery walk's parts; `--tour` keeps its own order. The orchestra's
+  `--movements` plays and downloads the movements it names, in that order.
+- Removed: the pass-by demos' `--car`, `--police-car` and `--fire-engine`, and `--horn
+  off`: `--sources` picks what a vehicle plays (`--sources police_car_siren`,
+  `--sources car,car_horn`, the train's horn with `train_horn`).
+- Fixed: a police car's or a fire engine's walk was simulated again on every run, and
+  the tram's credit named a pantograph it does not have.
 - Changed: every demo run is named after its settings (what it plays, the listeners,
   the options changed, the output), and its mixes, stills and the scenes made for it go
   to a folder of that name, its video beside it, so that a run with other settings (the

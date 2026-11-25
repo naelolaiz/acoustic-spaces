@@ -4914,7 +4914,7 @@ the rule asks 93 at least (point 2.1.4). The horn's pitch, its spectrum, its bla
 height and its directivity are assumptions, as no measured air horn of a fire engine was
 found; the rule bounds them only as above.
 
-**The car's horn.** The street car's pair of disc horns (`--car car_and_horn`), at 360
+**The car's horn.** The street car's pair of disc horns (`--sources car,car_horn`), at 360
 and 430 Hz, 0.5 m up, against the same rule. On its bench, 2 m in front of it on its
 axis in a free field, a blast gives 109.9 dB(A) (the rule: 105 to 118; Hella gives its
 S77 110 +/- 3, the air over the 2 m taking the last 0.1 dB of the treble); between 1800
@@ -4929,7 +4929,7 @@ fundamental, it would give only 102.8 dB(A) between 1800 and 3550 Hz, under the 
 which a horn sold as approved meets. Its blasts, its height and its directivity are
 assumed.
 
-**The train's horn.** The railway train's warning horn (`--horn blasts`) sounds the
+**The train's horn.** The railway train's warning horn (`train_horn` in `--sources`) sounds the
 two notes of the EU's rule for locomotives and passenger trains (TSI LOC&PAS,
 Regulation (EU) No 1302/2014, point 4.2.7.2.1), 660 and 370 Hz (the rule: 660 +/- 30
 and 370 +/- 20), one after the other. EN 15153-2:2020, which the rule names for the

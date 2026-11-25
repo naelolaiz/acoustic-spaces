@@ -180,8 +180,40 @@ msgid "Written to"
 msgstr "S'escriu a"
 
 #: acoustic_spaces/demos/__init__.py
-msgid "Runs"
-msgstr "Execucions"
+msgid "Vehicle"
+msgstr "Vehicle"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Train"
+msgstr "Tren"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Track"
+msgstr "Via"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Siren"
+msgstr "Sirena"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Horn"
+msgstr "Botzina"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Heard indoors"
+msgstr "Escoltat a dins"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+msgid "Sources"
+msgstr "Fonts"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Sources play"
+msgstr "Com sonen les fonts"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Order of the parts"
+msgstr "Ordre de les parts"
 
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
@@ -1941,10 +1973,8 @@ msgid "All"
 msgstr "Tots"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick every finished run: the video joins them all, its default"
-msgstr ""
-"Marca totes les execucions acabades: el vídeo les uneix totes, el valor per "
-"defecte"
+msgid "None"
+msgstr "Cap"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every listener: the demo plays them all, its default"
@@ -1952,16 +1982,40 @@ msgstr ""
 "Marca tots els receptors: la demo els reprodueix tots, el predeterminat"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "None"
-msgstr "Cap"
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid "Untick every run, to tick the ones to join"
-msgstr "Desmarca totes les execucions, per marcar les que es volen unir"
-
-#: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every listener, to tick the few to hear"
 msgstr "Desmarca tots els receptors, per marcar els pocs que es volen sentir"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every one: the run plays them one after another"
+msgstr "Marca'ls tots: l'execució els reprodueix un darrere l'altre"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every one, to tick those to play"
+msgstr "Desmarca'ls tots, per marcar els que han de sonar"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every source"
+msgstr "Marca totes les fonts"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every source, to tick those to hear"
+msgstr "Desmarca totes les fonts, per marcar les que es volen sentir"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo's pick"
+msgstr "La tria de la demo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick the sources the demo plays by default"
+msgstr "Marca les fonts que la demo reprodueix per defecte"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Ticked: each listener in a part of its own, at this place in the order; "
+"unticked: the video of each part tours them"
+msgstr ""
+"Marcat: cada receptor en una part pròpia, en aquest lloc de l'ordre; "
+"desmarcat: el vídeo de cada part els recorre"
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2157,6 +2211,15 @@ msgstr ""
 "Es mou a l'escena i només canvien aquesta execució ({option})."
 
 #: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Tick what plays in this run ({option}); ticking several plays them one after "
+"another in one video."
+msgstr ""
+"Marca què sona en aquesta execució ({option}); si en marques diversos, sonen "
+"un darrere l'altre en un sol vídeo."
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "This demo moves what is ticked; Moves in the scene turns a walk on or off, "
 "and Edit movement… changes it."
@@ -2173,10 +2236,8 @@ msgstr ""
 "Aquesta escena reprodueix els recorreguts."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "all: every step in order but join, leaving out what is done already."
-msgstr ""
-"all: tots els passos en ordre excepte join, deixant de banda el que ja està "
-"fet."
+msgid "all: every step in order, leaving out what is done already."
+msgstr "all: tots els passos en ordre, deixant de banda el que ja està fet."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2187,6 +2248,11 @@ msgstr "S'executa a {folder}"
 #, python-brace-format
 msgid "This run downloads {what}."
 msgstr "Aquesta execució baixa {what}."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "{option} names none: tick one at least"
+msgstr "{option} no n'indica cap: marca'n un com a mínim"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "save the scene first (File > Save): the demo reads it from its file"
@@ -2207,6 +2273,14 @@ msgid ""
 msgstr ""
 "Canviades respecte als valors per defecte i desades per a la propera vegada: "
 "{options}. Per defecte les restableix."
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Listeners, each in a part of its own"
+msgstr "Receptors, cadascun en una part pròpia"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Sources, one at a time"
+msgstr "Fonts, una cada vegada"
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
@@ -7980,10 +8054,6 @@ msgid "Materials"
 msgstr "Materials"
 
 #: acoustic_spaces/gui/tree.py
-msgid "Sources"
-msgstr "Fonts"
-
-#: acoustic_spaces/gui/tree.py
 msgid "Simulation"
 msgstr "Simulació"
 
@@ -9103,7 +9173,8 @@ msgid ""
 "height one behind the other (its bogies, its cars' roofs, its pantograph), "
 "so the train goes by as long as it is. They are left out of simulations "
 "until ticked, as is the train's horn at its front, and passby_demo.py runs "
-"one of four trains past, its horn sounding with --horn blasts."
+"one of four trains past, its horn sounding with --sources "
+"train,train_roof,train_pantograph,train_horn."
 msgstr ""
 "A l'aire lliure: una via de tren sobre balast a través d'un prat, escoltada "
 "on la norma de la UE per al soroll dels trens en mesura un en passar (a 7,5 "
@@ -9122,7 +9193,8 @@ msgstr ""
 "dels seus cotxes, el seu pantògraf), de manera que el tren triga a passar "
 "tant com és de llarg. Queden fora de les simulacions fins que es marquen, "
 "com la botzina del tren al seu davant, i passby_demo.py fa passar un de "
-"quatre trens, amb la botzina sonant amb --horn blasts."
+"quatre trens, amb la botzina sonant amb --sources "
+"train,train_roof,train_pantograph,train_horn."
 
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"

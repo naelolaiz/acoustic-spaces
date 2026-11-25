@@ -627,12 +627,12 @@ Movement:
   excavator, a generator and a dumper reversing with its alarm on) from Defra's noise
   database for construction sites, and a demo that plays them; checked against Defra's
   rows, the EU's limits for outdoor machines and SAE J994.
-- [x] Car horns: the street's car with a pair of disc horns (`passby_demo.py --car
-  car_and_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
+- [x] Car horns: the street's car with a pair of disc horns (`passby_demo.py --sources
+  car,car_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
   rule for vehicles' horns; a horn's levels in the captions follow its blasts.
-- [x] A train's warning horn (`passby_demo.py --horn blasts` on the railway): the TSI's
-  two notes in turn (or together, `--horn chord`), as loud as EN 15153-2 allows 25 m
-  ahead, the measuring site's ground taken out harmonic by harmonic.
+- [x] A train's warning horn (`train_horn` in the railway's `passby_demo.py --sources`):
+  the TSI's two notes in turn (or together, `--horn chord`), as loud as EN 15153-2
+  allows 25 m ahead, the measuring site's ground taken out harmonic by harmonic.
 - [ ] A train horn's directivity measured, mounted on a train's front (Toward et al.
   found one 1 dB down 30 degrees off its axis, where the siren the horns take is 3.6 dB
   down).
@@ -685,8 +685,9 @@ Editor:
   and, for what names something in a scene, per scene file, with **Defaults** to put
   them back.
 - [x] Every demo run named after its settings, in a folder and a video of its own, so
-  that runs with other settings write over none of each other's files, and a `join`
-  step that plays finished runs one after another in one video, ticked in Run demo.
+  that runs with other settings write over none of each other's files; several values
+  of an option, sources picked by name or group and listeners played one after another
+  in one video, in an order of choice, the same way in every demo and in Run demo.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.
