@@ -53,6 +53,38 @@ exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the
 and the stills without calling ffmpeg. Where a step needs an earlier one, it says which
 command to run.
 
+**Runs and their names.** Each run of a demo is named after its settings, and what
+depends on them goes into a folder of that name in the work folder: the mixes, the
+walks, the stills, the scenes written for that run and its record, `run.json`. Its
+video and the files that go with it lie beside that folder under the same name (the
+sound, `_thumbnail.png`, `_chapters.txt`), as `demo/flight_departure_binaural.mp4` and
+`demo/flight_arrival_binaural.mp4`, so that a run with other settings writes over
+nothing of another's and a run with the same settings finds what it made. The name
+gives, in order: the demo (for the demo of any scene, the scene file's name); what
+plays, where the demo gives a choice of it (`arrival`, a song, the files `--input`
+gives, as `guide-talk`); the listeners `--listeners` names, joined by `+` (by their
+number and a digest when that takes more than 48 characters); each other option that
+changes the sound or the pictures and is not at its default (`speed-80`, `seconds-0p8`,
+a decimal point as `p`, a text longer than 24 characters as a digest); and the output
+the mixes take (`binaural`, `binaural-kemar` through `--hrtf kemar.sofa`, `ambix3`). A
+name longer than 96 characters keeps the demo and the output and shortens the rest
+with a digest. Folders, `--credit` and `--again` change neither and are never in it.
+What the settings of a run do not change is shared in the work folder: the recordings,
+the feeds of each song, the simulation of each output, in a folder of its own
+(`results_choir/binaural`, `results_choir/binaural-kemar`), and the walks of a run
+that differs only in what later steps do with them (a pass at another `--at`).
+
+**One video of several runs.** `join`, the last step of every demo and the one `all`
+leaves out, plays finished runs one after another in one video: `python flight_demo.py
+join --runs flight_departure_binaural,flight_arrival_binaural`, in that order, or every
+run of the demo in the work folder that has its video when `--runs` is not given. Each
+run plays after a title card of 4 s that says what it plays and how it was made. Each
+keeps its own level (every run brings its loudest peak to -1 dBFS), so the parts are
+not comparable in level with each other, which the cards say. The video is named after
+what the runs share and what sets them apart (`flight_departure+arrival_binaural.mp4`),
+in the work folder, with the chapters of every part. In the editor the step lists the
+finished runs, to tick those to join.
+
 `--listeners a,b` has a demo play those listeners alone: it mixes them and its video
 tours them, leaving the others out. Every demo with several listeners takes it, with the
 names the scene gives them (a name the demo cannot play is refused with the list of
@@ -196,7 +228,7 @@ acoustic-spaces demo scene.yaml --moving none   # every walker standing where it
 - **render**: every listener in use (or those `--listeners` names, in its order;
   `--tour`, its earlier name, still works) hearing every source that plays, with one
   gain for all, so that the listeners' differences in level are heard as they are.
-- **video**: `tour.wav` hears each listener for `--seconds` (20 by default) while the
+- **video**: its sound hears each listener for `--seconds` (20 by default) while the
   recordings run on, crossfading between them; a recording too short for every listener
   shares its length out. Each stop is turned up to the loudness of the loudest, by 40 dB
   at most and by as much as the still says, the only step that is not the simulation's:
@@ -231,9 +263,11 @@ crossfaded from place to place
 the one simulation of the moving run, as the editor's **Render movement…** plays it.
 With other walks on as well, the demo says to leave them standing.
 
-Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds, the
-results, the mixes in `seats/` (in `moving/` when something moves), `tour.wav`, the
-stills, `thumbnail.png` and `tour.mp4`.
+Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds in
+`feeds/`, the results in `results/<scene>/<output>`, and the run's folder (named as in
+[runs and their names](#running-a-demo), as `scene_binaural`) with the mixes in
+`seats/` (in `moving/` when something moves) and the stills, beside its video
+(`scene_binaural.mp4`), sound and thumbnail.
 In Python the demo is `acoustic_spaces.demos.scene_demo`
 (`python -m acoustic_spaces.demos.scene_demo all --scene scene.yaml`).
 
@@ -257,9 +291,9 @@ conductor's podium to the back of the hall.
 ```sh
 acoustic-spaces examples --copy . orchestra && cd orchestra
 python orchestra_demo.py tracks   # demo/tracks: the 61 tracks of each movement (2.0 GB)
-acoustic-spaces simulate scene.yaml --out results
-python orchestra_demo.py render   # demo/seats: each stop of the tour, binaural (~1 min each)
-python orchestra_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
+acoustic-spaces simulate scene.yaml --out results/binaural
+python orchestra_demo.py render   # demo/orchestra_binaural/seats: each stop of the tour (~1 min each)
+python orchestra_demo.py video    # demo/orchestra_binaural.mp4, its sound, stills and thumbnail
 ```
 
 Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement
@@ -267,7 +301,7 @@ take equal shares of it), `--listeners conductor,stalls-rear` (each movement at 
 seats of its tour among them, or at all of them when it has none of them), `--zips
 FOLDER` for a folder with zips downloaded before, `--movements 1,2` for `tracks`,
 `--format` for another output the simulation wrote (the tour [decodes it to two
-ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `demo/chapters.txt`
+ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `demo/orchestra_binaural_chapters.txt`
 lists the stops' times for a video description. `all` runs tracks, the simulation,
 render and video, leaving out what is there already.
 
@@ -323,18 +357,18 @@ church's own simulations until ticked in the editor, and its listeners `nave-bac
 acoustic-spaces examples --copy . church && cd church
 python church_demo.py music     # 19 takes, their annotations, 27 organ samples (127 MB)
 python church_demo.py scene     # scene_choir.yaml: the church with the choir and the organ
-acoustic-spaces simulate scene_choir.yaml --out results_choir --output binaural   # 10-20 min on 4 cores
+acoustic-spaces simulate scene_choir.yaml --out results_choir/binaural --output binaural   # 10-20 min on 4 cores
 python church_demo.py feeds     # demo/feeds: one WAV per singer and per side of the organ
-python church_demo.py render    # demo/seats: the whole piece at each listener
-python church_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
+python church_demo.py render    # demo/church_binaural/seats: the whole piece at each listener
+python church_demo.py video     # demo/church_binaural.mp4, its sound, stills and thumbnail
 ```
 
 Options: `--tour nave-back:0,conductor:25,...` (listener:start in seconds), `--listeners
 nave-back,conductor` (those places alone, in `render` and `video`), `--format` for
 another output the simulation wrote (`ambix3`, `5.0`, ...; the tour [decodes it to two
 ears](#running-a-demo)), `--no-mp4` for the audio and stills only. The scene and its
-simulation go beside the script (`scene_choir.yaml`, `results_choir`), the rest to
-`./demo` (`--work`). `all` runs every step in turn, leaving out what is done already.
+simulation go beside the script (`scene_choir.yaml`, `results_choir/binaural`, a
+folder for each output), the rest to `./demo` (`--work`). `all` runs every step in turn, leaving out what is done already.
 
 - **The choir.** Each singer sang the tune alone in a recording booth, at their own tempo
   and a little off pitch here and there. `feeds` moves each take towards the tune (each
@@ -428,14 +462,14 @@ Software-Entwicklungskit released with their stems.
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
 python stadium_demo.py music     # the reference mix and 7 stems (WAV, 313 MB to download)
 python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
-acoustic-spaces simulate scene_band.yaml --out results_band --output binaural   # ~2.5 min on 4 cores
-python stadium_demo.py feeds     # demo/feeds: one WAV per loudspeaker and player
-python stadium_demo.py render    # demo/seats: one binaural WAV per listener (~30 s each)
-python stadium_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
+acoustic-spaces simulate scene_band.yaml --out results_band/binaural --output binaural   # ~2.5 min on 4 cores
+python stadium_demo.py feeds     # demo/feeds/<song>: one WAV per loudspeaker and player
+python stadium_demo.py render    # demo/stadium_spicy_funk_cake_binaural/seats: one mix per listener (~30 s each)
+python stadium_demo.py video     # demo/stadium_spicy_funk_cake_binaural.mp4, its sound, stills and thumbnail
 ```
 
-Options: `--song francium` or `rubidium` for `music` and `feeds` (with `--work
-demo_francium` for a folder of its own), `--tour mix_position:1,singer:0.5,east_stand:1`
+Options: `--song francium` or `rubidium` for `music` and `feeds` (each song's feeds and
+runs have folders of their own), `--tour mix_position:1,singer:0.5,east_stand:1`
 (listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners
 mix_position,east_stand` (those listeners alone, in `render` and `video`), `--format`
 for another output the simulation wrote (the tour [decodes it to two
@@ -476,7 +510,7 @@ music goes to `demo/music/<file name>`, a folder of its own beside the presets',
   with `--equal-power`, so that the levels are applied once.
 - **One gain for all listeners, then each stop turned up.** `render` scales the 12 mixes
   by one gain (the loudest peak at -1 dBFS), so the level differences between places in
-  `demo/seats` are the simulation's: on stage, between the monitors and beside the drum
+  the run's `seats` are the simulation's: on stage, between the monitors and beside the drum
   kit, it is 6 to 18 dB(A) louder than in the audience, and the mix position is
   16 dB(A) below the singer's place. That is too much to hear both in one video, so the
   tour turns each stop up to the loudness of the loudest one and its caption gives the
@@ -559,10 +593,10 @@ makes is heard.
 acoustic-spaces examples --copy . lakeside_concert && cd lakeside_concert
 python lakeside_demo.py music    # the song (WAV, 56 MB), a signal for each loudspeaker
 python lakeside_demo.py scenes   # scene_demo.yaml, and scene_still.yaml in still air
-acoustic-spaces simulate scene_demo.yaml --out results_demo --output binaural    # ~20 s
-acoustic-spaces simulate scene_still.yaml --out results_still --output binaural  # ~13 s
-python lakeside_demo.py render   # demo/seats: every listener in both weathers
-python lakeside_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
+acoustic-spaces simulate scene_demo.yaml --out results_demo/binaural --output binaural    # ~20 s
+acoustic-spaces simulate scene_still.yaml --out results_still/binaural --output binaural  # ~13 s
+python lakeside_demo.py render   # demo/lakeside_spicy_funk_cake_binaural/seats: every listener in both weathers
+python lakeside_demo.py video    # demo/lakeside_spicy_funk_cake_binaural.mp4, its sound, stills and thumbnail
 ```
 
 Options: `--song great_british_summer` or `potassium` for `music` (below), `--music
@@ -640,7 +674,7 @@ with the gusts as it does across a real lake. The song is a finished studio mix,
 as it is. Binaural is through the spherical head model unless `--hrtf` names a SOFA
 file.
 
-**Recordings and licences.** `music` writes the credit to `demo/music/song.json`, and
+**Recordings and licences.** `music` writes the credit to `demo/music/<song>/song.json`, and
 the video shows it.
 
 - `spicy_funk_cake` (the default): "Spicy Funk Cake" by the Rhythmussportgruppe, the
@@ -758,7 +792,7 @@ three, the car's with its horn) in its Movement box.
   keyframes timed for one steady speed, since CNOSSOS-EU gives a vehicle's sound at a
   steady speed: keyframes that speed up or slow down by more than 1 % are refused,
   unless `--speed` drives the vehicle through their places at one speed. The demo's
-  scene (`scene_demo.yaml`) has the vehicle alone along its walk at that speed, with
+  scene (`scene_demo.yaml` in the run's folder) has the vehicle alone along its walk at that speed, with
   CNOSSOS-EU's sound power of its category at that speed on the method's reference road
   surface, level (the method's corrections for road gradients, other surfaces and
   studded tyres are left out), in the scene's air temperature: rolling noise A_R + B_R
@@ -1086,7 +1120,8 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
   curves, which are the ground's), and whether that is felt, from about 65 VdB (the
   manual's threshold of perception). Outdoors nothing rumbles: the manual counts
   ground-borne noise only inside buildings. Each listener's vibration is also a track
-  for a bass shaker, `walk/<listener>.shaker.wav`, and the tour's `tour.shaker.wav`:
+  for a bass shaker, `.shaker.wav` beside its mix in the run's `walk/` folder, and the
+  tour's beside the video (`passby_regional_binaural_shaker.wav`):
   noise in the third octave at 25 Hz whose RMS is the vibration's velocity, every
   listener at one gain, its full scale in `walk.json` (`shaker`).
 - **Against Schall 03's own sum** (`validation/rail_sources.py`): in a free field, the
@@ -1160,7 +1195,7 @@ take 14.3 s at 63 m/s.
   150 m up (3 m/s at 10 m), so it flies through the air at 67.5 m/s. It faces along
   its walk, so it does not turn into a wind from the side, as a helicopter flying
   crabwise would: a wind along its track, or none, suits it best. The demo's scene
-  (`scene_demo.yaml`) has the helicopter alone with the sound power per octave band and
+  (`scene_demo.yaml` in the run's folder) has the helicopter alone with the sound power per octave band and
   the directivity of its rotors' sound at that airspeed, the directivity in a table
   beside it (`scene_demo_helicopter.csv`): 137.7 dB, 132.9 dB(A) in the example, which
   its own scene has too.
@@ -1170,7 +1205,7 @@ take 14.3 s at 63 m/s.
   ([the sound sent each way](spatial-audio.md#moving-sources-and-doppler)); a late
   sound, which the meadow alone does not give, plays it averaged over the directions. It
   fades in and out over its first and
-  last second. `demo/helicopter/below.wav` is what they send straight down, dry, to
+  last second. `helicopter/below.wav` in the run's folder is what they send straight down, dry, to
   listen to. `--input helicopter=WAV` plays a dry recording instead, mixed down to mono,
   at least as long as the pass, sent every way with the rotors' directivity; the
   captions still give the rotors' model.
@@ -1210,8 +1245,9 @@ listener's mix of the concert, both at their simulated levels. The helicopter is
 stadium's scene, left out of the concert's own simulations: the editor shows its walk,
 the Run demo window lists it as what the demo moves, and what Edit movement… changes
 there the demo flies. It builds on the stadium
-demo: run that one first, in the same work folder, up to its `render` step, with the
-`--format` and the `--hrtf` this one gets.
+demo: run that one first, in the same work folder, up to its `render` step, with its
+default song and the `--format`, the `--hrtf` and the `--listeners` this one gets (or
+no `--listeners`, every listener's mixes serving any choice of them).
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
@@ -1232,7 +1268,7 @@ listeners.
   simulations, flying 1200 m along the stadium's long axis at 63 m/s, from behind the
   stage over the centre spot to past the east stand, with its rotors' sound power and
   directivity (`helicopter.csv`) at that speed through still air. `flight` writes
-  `scene_flight.yaml`: the stadium's scene with the helicopter at `--height` when that
+  `scene_flight.yaml` in the run's folder: the stadium's scene with the helicopter at `--height` when that
   is given. As the scene has it, it flies 150 m up, as a police or a television helicopter
   given leave may. Without leave the EU's rules of the air keep a flight by sight (VFR)
   over an open-air assembly of persons 300 m above the highest obstacle within 600 m
@@ -1242,7 +1278,8 @@ listeners.
   concert's 2.7 s), so each keeps the stadium's decay after the helicopter's sound
   arrives.
 - **The helicopter and its pass** are the flyover demo's steps on that scene:
-  `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`)
+  `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`,
+  in the run's folder)
   with the sound power and the directivity of its rotors at 63 m/s through still air
   (137.1 dB, 132.8 dB(A)), and `walk` the helicopter every 4 m along its flight at
   each of the 12 listeners, with Doppler. At the mix position it peaks between 81 and
@@ -1252,14 +1289,14 @@ listeners.
   lower (four runs): the sound there is almost all late sound, which a few rays can lift
   by several decibels at one place.
 - **The mix.** `mix` adds the helicopter's pass at each listener to the concert's mix
-  there (`demo/seats`), the helicopter over the centre spot at `--at`. The feeds stand
+  there (the stadium run's `seats`), the helicopter over the centre spot at `--at`. The feeds stand
   for the loudspeakers' sound power, a gated RMS of 0.1 for the loudest one's (the main
   arrays', 134 dB), and the helicopter's sound is in pascals 1 m from its hub, so the
   mix scales it by 0.1 over the pressure 1 m from a source of the main arrays' sound
   power, in the scene's air. The mixes get one gain for all (the loudest peak at
-  -1 dBFS), into `demo/crossing/seats`, and the feeds' table goes to
-  `demo/crossing/feeds` with the song lasting until the helicopter has gone.
-- **The video** is the stadium demo's, made from those mixes into `demo/crossing`: the
+  -1 dBFS), into the run's `seats` (`demo/crossing_binaural/seats`), and the feeds'
+  table goes to its `feeds` with the song lasting until the helicopter has gone.
+- **The video** is the stadium demo's, made from those mixes (`demo/crossing_binaural.mp4`): the
   same tour, each stop turned up to the loudness of the loudest, the helicopter named
   in the title and in the credit. The tour goes on as the stadium demo's does: halfway
   through each of the three songs it is in the north stand, at its far seats and then
@@ -1271,8 +1308,7 @@ helicopter's sound. The rotors' downwash does not reach the crowd: flying past a
 speed, their wake trails behind them and sinks a few metres a second (1.6 m/s through
 the main rotor's disc in its trim). The rotors' model is 3.4 dB louder than the
 helicopter's noise certificate, as in the flyover. The stills draw the stadium as the
-stadium demo's do, without the helicopter, and the concert's mixes are taken as they
-are: one rendered with other HRTFs than `--hrtf` names is not caught.
+stadium demo's do, without the helicopter.
 
 ## Road works in the street
 
@@ -1293,7 +1329,7 @@ default; `--tour`, its earlier name, still works), `--indoors off` where they ar
 yours instead of a made sound (`breaker`, `generator`, `dumper` or `dumper_alarm`). The
 scene with the works alone goes to `scene_works.yaml`, the same heard 2 m in front of
 the offices to `scene_works_2m.yaml` (see Indoors below), everything else to
-`demo_works/`. In the editor, **Simulation > Run demo…** on the street's scene has it
+`demo_works/`, each run's mixes and video in their own names there. In the editor, **Simulation > Run demo…** on the street's scene has it
 beside the pass-by demo.
 
 - **The machines** are rows of Defra's noise database for construction sites (*Update
@@ -1354,7 +1390,7 @@ beside the pass-by demo.
   offices (75.5), and steady, as the breaker's blows come faster than noise at 25 Hz can
   swell and fade. The garden's ground shakes at 66.1 VdB, just felt. The captions give
   what is felt at each listener, and each one's vibration is a bass shaker's track
-  (`<listener>.shaker.wav` beside the mixes, `tour.shaker.wav`), as the trains' are.
+  (`.shaker.wav` beside each mix, and the run's `<run>_shaker.wav`), as the trains' are.
 
 What it leaves out: the dumper stands still while its alarm sounds, as if it reversed on
 the spot; the machines' bodies are not in the scene, so nothing of the dumper shields
@@ -1407,7 +1443,8 @@ listeners it is simulated and heard at.
   departure's climb thrust 8.0 dB under its start of roll, the arrival's approach 2.3 dB
   under its reverse thrust and the end of its roll-out 3.5 dB under. Its directivity is
   its engines' installation correction (under the wings), in a table beside the demo's
-  scene (`scene_demo_departure.csv`). `demo/departure/engines.wav` is the made sound,
+  scene in the run's folder (`scene_demo_departure.csv`). `departure/engines.wav` there
+  is the made sound,
   dry, as long as the flight. `--input departure=WAV` plays a dry recording instead, at
   least as long as the flight, its level following the recording's.
 - **The pass**: the jet every 4 m along its flight at each listener in turn, through

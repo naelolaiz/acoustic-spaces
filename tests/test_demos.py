@@ -19,6 +19,7 @@ from acoustic_spaces import fetch
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.demos import (
     DONE,
+    JOIN,
     SIMULATE,
     Demo,
     Option,
@@ -35,6 +36,9 @@ from acoustic_spaces.demos import (
     music,
     picked,
     pipeline,
+    product,
+    record_run,
+    run_folder,
     scripts_of,
     shell_line,
     sibling,
@@ -695,11 +699,11 @@ def test_a_demo_leaves_out_what_is_done_already(tmp_path: Path, capsys) -> None:
     args = demo.defaults()
     simulated = []
     demo.simulate = lambda args, only_missing=False: simulated.append(only_missing)
-    demo.run([s.name for s in demo.steps], args, skip_done=True)
+    demo.run(demo.all_steps(), args, skip_done=True)
     assert ran == ["scene", "render"] and simulated == [True]
     (tmp_path / "scene.yaml").write_text("name: a scene\n", encoding="utf-8")
     ran.clear()
-    demo.run([s.name for s in demo.steps], args, skip_done=True)
+    demo.run(demo.all_steps(), args, skip_done=True)
     assert ran == ["render"] and "done already" in capsys.readouterr().out
     ran.clear()
     demo.run(["scene"], args)
@@ -826,6 +830,9 @@ def test_the_examples_demos_are_listed() -> None:
     assert {demo.name for demo in demos} >= {"church", "stadium", "walk", "crossing"}
     for demo in demos:
         assert demo.title and demo.description and demo.steps
+        # Every demo joins its finished runs into one video, which all leaves out.
+        assert demo.steps[-1] is JOIN and JOIN.name not in demo.all_steps()
+        assert demo.option("runs").kind == "runs"
         assert demo.script.exists() and demo.script.parent.name == demo.example
         own = demos_of(demo.example)
         assert demo.name in [d.name for d in own] and own[0].builds_on is None
@@ -855,7 +862,7 @@ def test_an_examples_script_runs_as_a_demo_of_one_step(tmp_path: Path) -> None:
     assert scene.positional and scene.kind == "file" and scene.default == Path("scene.yaml")
     assert scene.advanced and out.advanced and not rays.advanced
     assert (rays.kind, rays.default, rays.option) == ("int", None, "--rays")
-    assert (out.kind, out.default) == ("path", Path("feedback.wav"))
+    assert (out.kind, out.default) == ("path", None)
     assert feedback.command("run", feedback.defaults()) == "python feedback.py"
     args = feedback.defaults()
     args.scene, args.rays, args.out = tmp_path / "copy.yaml", 30, Path("loop.wav")
@@ -998,11 +1005,13 @@ def test_arrival_weighs_the_sources_by_how_loud_they_play(tmp_path: Path) -> Non
     assert pipeline.response_rate(pipeline.Simulation(Path("s"), results), entries) == RATE
 
 
-def _mixes(tmp_path: Path, monkeypatch, **more) -> tuple[list[pipeline.Mix], Path, list[str]]:
-    """Two mixes of one simulation, auralized by a fake that writes a tone, the far one
-    16 dB quieter."""
+def _mixes(
+    tmp_path: Path, monkeypatch, fmt: str = "binaural", **more
+) -> tuple[list[pipeline.Mix], Path, list[str]]:
+    """Two mixes of one simulation (of the output ``fmt``), auralized by a fake that
+    writes a tone, the far one 16 dB quieter."""
     results = tmp_path / "results"
-    _results(results)
+    _results(results, fmt=fmt)
     feeds = {"a": tmp_path / "feeds" / "a.wav", "b": tmp_path / "feeds" / "b.wav"}
     for path in feeds.values():
         audio.write(path, _tone(1.0), RATE)
@@ -1082,7 +1091,7 @@ def test_the_mixes_are_measured_by_how_their_format_weighs_its_channels(
     """``render_mixes`` hands the meters the weights of the mixes' format
     (``weights_of``, ITU-R BS.1770-4 eq. 2): AmbiX on W, loudspeakers by where they
     stand."""
-    mixes, folder, _made = _mixes(tmp_path, monkeypatch)
+    mixes, folder, _made = _mixes(tmp_path, monkeypatch, fmt)
     pans = {"near": np.array(near), "far": np.array(far)}
 
     def auralize(results, feeds, listener, label, out, equal_power=False) -> None:
@@ -1092,7 +1101,7 @@ def test_the_mixes_are_measured_by_how_their_format_weighs_its_channels(
     seats = pipeline.render_mixes(mixes, folder, argparse.Namespace(format=fmt, hrtf=None))
     levels = {key: seat["rms_db"] for key, seat in seats["seats"].items()}
     assert levels["far"] - levels["near"] == pytest.approx(far_db, abs=0.01)
-    x = audio.read(folder / f"near.{fmt}.wav")[0]  # as kept, in 32-bit floats
+    x = audio.read(folder / seats["seats"]["near"]["file"])[0]  # as kept, in 32-bit floats
     assert levels["near"] == pytest.approx(audio.level_db(x[:, :1], RATE), abs=1e-5)
 
 
@@ -1499,6 +1508,7 @@ def test_the_video_is_made_in_a_folder_named_with_an_apostrophe(tmp_path: Path) 
         [("near", 0.5), ("far", 0.5)],
         lambda k: Image.new("RGB", (64, 36), (10, 10 * k, 10)),
         folder / "tour.wav",
+        out=folder / "tour.mp4",
         spectrum_box=(0, 20, 64, 16),
     )
     listed = (folder / "stills" / "stills.txt").read_text(encoding="utf-8").splitlines()[0]
@@ -1518,13 +1528,17 @@ def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
         drawn.append(k)
         return Image.new("RGB", (64, 36), (10, 10, 10))
 
-    folder = tmp_path / "demo"
+    folder = tmp_path / "demo" / "church_binaural"
+    out = tmp_path / "demo" / "church_binaural.mp4"
     audio.write(folder / "tour.wav", audio.stereo(_tone(1.0)), RATE)
+    out.write_bytes(b"an older video of the run")
+    record_run(folder, video=out.name, length_s=9.0)
     pipeline.video(
         folder,
         [("near", 2.0), ("far", 3.0)],
         draw,
         folder / "tour.wav",
+        out=out,
         no_mp4=True,
         chapters=["0:00 Near", "0:02 Far"],
     )
@@ -1534,7 +1548,17 @@ def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     lines = (folder / "stills" / "stills.txt").read_text(encoding="utf-8").splitlines()
     assert lines[1] == "duration 2.000" and lines[3] == "duration 3.000"
     assert lines[-1] == lines[-3]  # the last picture again, as the demuxer wants
-    assert (folder / "chapters.txt").read_text(encoding="utf-8").startswith("0:00 Near")
+    chapters = tmp_path / "demo" / "church_binaural_chapters.txt"
+    assert pipeline.chapters_file(out) == chapters
+    assert chapters.read_text(encoding="utf-8").startswith("0:00 Near")
+    # --no-mp4 leaves no older video of the run to play other stills and sound, and the
+    # run's record names none.
+    assert not out.exists()
+    assert pipeline.read_json(folder / "run.json")["video"] is None
+    # A tour of fewer stops leaves none of the earlier stills behind.
+    pipeline.video(folder, [("far", 1.0)], draw, folder / "tour.wav", out=out, no_mp4=True)
+    assert [p.name for p in (folder / "stills").glob("*.png")] == ["00_far.png"]
+    assert not chapters.exists()
     # An animation draws by time instead, and writes the stills it is asked for.
     times: list[float] = []
 
@@ -1547,6 +1571,7 @@ def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
         3.0,
         frame,
         folder / "tour.wav",
+        out=tmp_path / "walk.mp4",
         stills=[("setting-off", 0.5)],
         no_mp4=True,
     )
@@ -1581,6 +1606,7 @@ def test_the_video_says_what_each_moment_shows(tmp_path: Path, capsys) -> None:
         2.0,
         frame,
         folder / "tour.wav",
+        out=folder / "tour.mp4",
         fps=10,
         spectrum_box=box,
         shown=lambda t: f"stage, {moment_name('car', 3.0 + t)} -> seat",
@@ -1603,6 +1629,7 @@ def test_the_video_says_what_each_moment_shows(tmp_path: Path, capsys) -> None:
         [("near", 1.0), ("far", 1.0)],
         lambda k: Image.new("RGB", (64, 32), (10, 10, 10)),
         folder / "tour.wav",
+        out=folder / "tour.mp4",
         spectrum_box=box,
     )
     heads = [line.split(":")[0] for line in capsys.readouterr().out.splitlines()]
@@ -1771,19 +1798,32 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     scene = _any_scene(tmp_path)
     monkeypatch.chdir(scene.parent)
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
-    work = scene.parent / "demo"
-    table = pipeline.read_json(work / "feeds" / "feeds.json")
+    args = DEMO.at(scene.parent).defaults()
+    args.scene, args.seconds, args.no_mp4 = Path("scene.yaml"), 0.8, True
+    args = DEMO.at(scene.parent).resolved(args)
+    # The run's files are named after the scene and what the run changes; its
+    # simulation is kept by the scene and the output.
+    work = run_folder(args)
+    assert work == scene.parent / "demo" / "scene_seconds-0p8_binaural"
+    results = scene.parent / "demo" / "results" / "scene" / "binaural"
+    feeds = scene.parent / "demo" / "feeds" / "scene"
+    table = pipeline.read_json(feeds / "feeds.json")
     assert table["rate"] == 16_000 and list(table["sources"]) == ["talker", "radio"]
     assert table["silent"] == ["fan"]
     for name in ("talker", "radio"):
-        x, rate = audio.read(work / "feeds" / f"{name}.wav")
+        x, rate = audio.read(feeds / f"{name}.wav")
         assert rate == 16_000 and x.reshape(len(x), -1).shape[1] == 1
         assert audio.gated_rms(x, rate) == pytest.approx(FEED_RMS, rel=0.02)
     seats = pipeline.read_json(work / "seats" / "seats.json")
     assert set(seats["seats"]) == {"seat-a", "seat-b"}
+    assert seats["seats"]["seat-a"]["file"] == "seat-a.binaural.wav"
     stills = sorted(p.name for p in (work / "stills").glob("*.png"))
     assert stills == ["00_seat-a.png", "01_seat-b.png"]
-    assert (work / "thumbnail.png").exists() and (work / "tour.wav").exists()
+    assert product(args, "_thumbnail.png").exists() and product(args, ".wav").exists()
+    record = pipeline.read_json(work / "run.json")
+    assert record["demo"] == "scene" and record["run"] == work.name
+    assert record["parts"] == [["demo", "scene"], ["changed", "seconds-0p8"], ["label", "binaural"]]
+    assert record["video"] is None  # --no-mp4
     # Again: what is there is left out, and a step on its own runs.
     capsys.readouterr()
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
@@ -1791,10 +1831,7 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     assert "feeds: done already" in out and "simulate: done already" in out
     assert "there already" in out  # the mixes, newer than their feeds and responses
     # The stills say how the sound was made and how to make it again.
-    args = DEMO.at(scene.parent).defaults()
-    args.scene, args.seconds, args.no_mp4 = Path("scene.yaml"), 0.8, True
-    args = DEMO.at(scene.parent).resolved(args)
-    report = pipeline.read_json(work / "results" / pipeline.PARAMETERS)
+    report = pipeline.read_json(results / pipeline.PARAMETERS)
     from acoustic_spaces.demos import scene_pictures
     from acoustic_spaces.scene import Scene
 
@@ -1857,13 +1894,13 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     )
     # A scene changed since is fed and simulated again (later than both, however long
     # the simulation took).
-    written = [work / "feeds" / "feeds.json", work / "results" / pipeline.PARAMETERS]
+    written = [feeds / "feeds.json", results / pipeline.PARAMETERS]
     later = max(path.stat().st_mtime for path in written) + 10
     os.utime(scene, (later, later))
     from acoustic_spaces.demos.scene_demo import feeds_done
 
     assert not feeds_done(args)
-    assert not pipeline.simulated(pipeline.Simulation(scene, work / "results", "binaural"), args)
+    assert not pipeline.simulated(pipeline.Simulation(scene, results, "binaural"), args)
     # A missing scene is the command line's error.
     assert cli(["demo", "nothing.yaml"]) == 2
     assert "no " in capsys.readouterr().err
@@ -1881,17 +1918,23 @@ def test_a_demo_of_any_scene_plays_the_listeners_named(tmp_path: Path, monkeypat
     monkeypatch.chdir(scene.parent)
     run = ["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]
     assert cli([*run, "--listeners", "seat-b"]) == 0
-    work = scene.parent / "demo"
-    report = pipeline.read_json(work / "results" / pipeline.PARAMETERS)
+    demo = scene.parent / "demo"
+    report = pipeline.read_json(demo / "results" / "scene" / "binaural" / pipeline.PARAMETERS)
     assert {e["listener"] for e in report["responses"]} == {"seat-a", "seat-b"}
+    # The run is named after the listeners it plays.
+    work = demo / "scene_seat-b_seconds-0p8_binaural"
     assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-b"}
     assert sorted(p.name for p in (work / "stills").glob("*.png")) == ["00_seat-b.png"]
     capsys.readouterr()
     assert cli([*run, "--tour", "seat-b,seat-a"]) == 0
     assert "simulate: done already" in capsys.readouterr().out
-    assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-a", "seat-b"}
-    stills = sorted(p.name for p in (work / "stills").glob("*.png"))
+    both = demo / "scene_seat-b+seat-a_seconds-0p8_binaural"
+    assert set(pipeline.read_json(both / "seats" / "seats.json")["seats"]) == {"seat-a", "seat-b"}
+    stills = sorted(p.name for p in (both / "stills").glob("*.png"))
     assert stills == ["00_seat-b.png", "01_seat-a.png"]
+    # The first run's files are as it left them.
+    assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-b"}
+    assert sorted(p.name for p in (work / "stills").glob("*.png")) == ["00_seat-b.png"]
     assert cli(["demo", "scene.yaml", "--listeners", "nobody"]) == 2
     assert "--listeners nobody: no such listener here; it has seat-a, seat-b" in (
         capsys.readouterr().err
@@ -1942,7 +1985,7 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     assert demo.command("render", args) == "acoustic-spaces demo scene.yaml render --moving none"
 
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
-    work = scene.parent / "demo"
+    work = scene.parent / "demo" / "scene_seconds-0p8_binaural"
     seats = pipeline.read_json(work / "moving" / "seats.json")
     assert seats["moving"] == ["seat-b"] and set(seats["seats"]) == {"seat-a", "seat-b"}
     seat_a, seat_b = seats["seats"]["seat-a"], seats["seats"]["seat-b"]
@@ -1955,7 +1998,7 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     assert set(levels) == {"talker", "radio"}
     assert all(len(v) == len(moments) for v in levels.values())
     peaks = [
-        np.abs(audio.read(work / "moving" / f"{k}.binaural.wav")[0]).max() for k in seats["seats"]
+        np.abs(audio.read(work / "moving" / s["file"])[0]).max() for s in seats["seats"].values()
     ]
     assert max(peaks) == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
     assert not (work / "seats").exists()
@@ -1968,7 +2011,9 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     drawing = scene_pictures.Pictures(
         moving.to_data(),
         np.zeros((0, 2, 2)),
-        pipeline.read_json(work / "results" / pipeline.PARAMETERS),
+        pipeline.read_json(
+            scene.parent / "demo" / "results" / "scene" / "binaural" / pipeline.PARAMETERS
+        ),
         seats["seats"],
         stops,
         playing=["talker", "radio"],
@@ -1994,10 +2039,11 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     assert drawing.shown(1) == "talker, radio -> seat-b"  # a still: no moment
     # Again: there already; with every walker standing, the still mixes instead.
     capsys.readouterr()
-    assert cli(["demo", "scene.yaml", "render"]) == 0
+    assert cli(["demo", "scene.yaml", "render", "--seconds", "0.8"]) == 0
     assert "there already" in capsys.readouterr().out
-    assert cli(["demo", "scene.yaml", "render", "--moving", "none"]) == 0
-    assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-a", "seat-b"}
+    assert cli(["demo", "scene.yaml", "render", "--seconds", "0.8", "--moving", "none"]) == 0
+    still = work.with_name("scene_seconds-0p8_moving-none_binaural")
+    assert set(pipeline.read_json(still / "seats" / "seats.json")["seats"]) == {"seat-a", "seat-b"}
 
 
 def test_a_demo_of_any_scene_plays_a_walk_with_doppler(tmp_path: Path, monkeypatch) -> None:
@@ -2015,7 +2061,7 @@ def test_a_demo_of_any_scene_plays_a_walk_with_doppler(tmp_path: Path, monkeypat
     scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     monkeypatch.chdir(scene.parent)
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
-    work = scene.parent / "demo"
+    work = scene.parent / "demo" / "scene_seconds-0p8_binaural"
     seats = pipeline.read_json(work / "moving" / "seats.json")
     assert seats["moving"] == ["radio"] and len(seats["seats"]) == 2
     moments = seats["movement"]["times"]
@@ -2025,7 +2071,7 @@ def test_a_demo_of_any_scene_plays_a_walk_with_doppler(tmp_path: Path, monkeypat
         assert len(levels["radio"]) == len(moments) and len(set(levels["radio"])) > 1
         assert len(set(levels["talker"])) == 1  # it stands
     peaks = [
-        np.abs(audio.read(work / "moving" / f"{k}.binaural.wav")[0]).max() for k in seats["seats"]
+        np.abs(audio.read(work / "moving" / s["file"])[0]).max() for s in seats["seats"].values()
     ]
     assert max(peaks) == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
 
@@ -2083,12 +2129,13 @@ def test_a_demo_of_any_scene_plays_the_files_given_to_its_sources(
     audio.write(scene.parent / "hum.wav", _tone(1.0, 100.0, RATE, 0.3), RATE)
     argv = ["demo", "scene.yaml", "feeds", "--input", "fan=hum.wav", "--input", "radio=hum.wav"]
     assert cli(argv) == 0
-    work = scene.parent / "demo"
-    table = pipeline.read_json(work / "feeds" / "feeds.json")
+    # Feeds kept by the files the sources play: the runs that play them share them.
+    work = scene.parent / "demo" / "feeds" / "scene_fan-hum+radio-hum"
+    table = pipeline.read_json(work / "feeds.json")
     hum = str(scene.parent / "hum.wav")
     assert table["sources"]["fan"]["signal"] == hum and table["sources"]["radio"]["signal"] == hum
     assert table["sources"]["talker"]["signal"].endswith("talk.wav") and table["silent"] == []
-    x, rate = audio.read(work / "feeds" / "fan.wav")
+    x, rate = audio.read(work / "fan.wav")
     assert audio.gated_rms(x, rate) == pytest.approx(FEED_RMS, rel=0.02)
     demo = DEMO.at(scene.parent)
     args = demo.defaults()
@@ -2149,7 +2196,7 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
     }
     assert recording_download(args) is None  # a file of its own: nothing to download
     assert cli(["demo", "scene.yaml", "feeds"]) == 0
-    table = pipeline.read_json(scene.parent / "demo" / "feeds" / "feeds.json")
+    table = pipeline.read_json(scene.parent / "demo" / "feeds" / "scene" / "feeds.json")
     assert {k: v["channel"] for k, v in table["sources"].items()} == {
         "talker": "right",
         "radio": "left",
@@ -2159,12 +2206,12 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
     # Feeds levelled the old way (before 4.1.0, with no "levels") are made again.
     old = dict(table)
     old.pop("levels")
-    pipeline.write_json(scene.parent / "demo" / "feeds" / "feeds.json", old)
+    pipeline.write_json(scene.parent / "demo" / "feeds" / "scene" / "feeds.json", old)
     assert not feeds_done(args)
     assert cli(["demo", "scene.yaml", "feeds"]) == 0
     assert feeds_done(args)
     feed = {
-        k: audio.read(scene.parent / "demo" / "feeds" / f"{k}.wav")[0].ravel()
+        k: audio.read(scene.parent / "demo" / "feeds" / "scene" / f"{k}.wav")[0].ravel()
         for k in table["sources"]
     }
 
@@ -2203,7 +2250,7 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
     audio.write(kept, band, rate)
     assert recording_download(args) is None
     assert cli(["demo", "scene.yaml", "feeds"]) == 0
-    table = pipeline.read_json(scene.parent / "demo" / "feeds" / "feeds.json")
+    table = pipeline.read_json(scene.parent / "demo" / "feeds" / "scene" / "feeds.json")
     assert table["sources"]["fan"]["signal"] == str(kept)
     credit = plays_line(table, recordings.named("potassium"))
     assert credit.startswith(recordings.named("potassium").credit)

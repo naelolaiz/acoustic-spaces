@@ -46,7 +46,7 @@ from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces.demos import Option, pipeline
+from acoustic_spaces.demos import Option, pipeline, run_folder
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import (
     CYLINDER_WORDS,
@@ -508,7 +508,7 @@ class EmergencyVehicle(Vehicle):
 
     def sound_path(self, args: argparse.Namespace, part: str) -> Path:
         files = {d.part: d.file for d in self.devices}
-        return args.work / self.name / files.get(part, self.body.sound_file)
+        return run_folder(args) / self.name / files.get(part, self.body.sound_file)
 
     def make(self, args: argparse.Namespace, info: dict, folder: Path) -> str:
         said = [] if info["vehicle"] is None else [self.body.make(args, info["vehicle"], folder)]
@@ -643,7 +643,7 @@ class EmergencyVehicle(Vehicle):
             "horn's blasts to the made horn's), and the captions' levels stay the made "
             "sounds', so a recording with another spectrum is heard louder or quieter in "
             "dB(A) than they say",
-            "sound": f"demo/{self.name}/{self.body.sound_file} and {files}: the "
+            "sound": f"demo/RUN/{self.name}/{self.body.sound_file} and {files}: the "
             f"{self.itself}'s sound, made to CNOSSOS-EU, and {nouns}, dry",
             "header": self.header,
         }

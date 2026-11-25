@@ -1,7 +1,7 @@
 """Feedback of the singer's microphone: how much gain it allows before the loudspeakers
 that play it make it ring, at which frequencies it rings first, and how that sounds.
 
-    python feedback.py [scene.yaml] [--rays N] [--out feedback.wav]
+    python feedback.py [scene.yaml] [--rays N] [--out FILE]
 
 The singer's voice and microphone are the scene's, in its Band and Stage groups and left
 out of its simulations: the voice (singer_voice) a talker's, subcardioid, just in front
@@ -233,9 +233,27 @@ def parser() -> argparse.ArgumentParser:
     )
     found.add_argument("--rays", type=int, help="rays per band (fewer is quicker)")
     found.add_argument(
-        "--out", type=Path, default=Path("feedback.wav"), help="the rendered loop (WAV)"
+        "--out",
+        type=Path,
+        default=None,
+        help="the rendered loop (WAV; default: feedback.wav, with the scene's name when "
+        "it is not the example's and --rays when given, as feedback_copy_rays-30.wav)",
     )
     return found
+
+
+def out_of(args: argparse.Namespace) -> Path:
+    """Where the loop goes: ``--out``, or ``feedback.wav`` named after what changes it,
+    the scene when it is not the example's and ``--rays``, so that runs with others
+    write over none of each other's."""
+    if args.out is not None:
+        return args.out
+    parts = ["feedback"]
+    if Path(args.scene).resolve() != Path(__file__).with_name("scene.yaml").resolve():
+        parts.append(Path(args.scene).stem)
+    if args.rays is not None:
+        parts.append(f"rays-{args.rays}")
+    return Path("_".join(parts) + ".wav")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -252,9 +270,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nIt rings first at {ring}.")
     parts = [render(found["response"], gain) for gain in RENDERED_DB]
     signal = np.concatenate(parts)
-    write_wav(args.out, 0.5 * signal / np.abs(signal).max(), RATE)
+    out = out_of(args)
+    write_wav(out, 0.5 * signal / np.abs(signal).max(), RATE)
     steps = ", ".join(f"{g:+.0f} dB" for g in RENDERED_DB)
-    print(f"Wrote {args.out}: the loop at {steps} from unity gain, {RENDER_S:g} s each.")
+    print(f"Wrote {out}: the loop at {steps} from unity gain, {RENDER_S:g} s each.")
     return 0
 
 

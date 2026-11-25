@@ -684,6 +684,9 @@ Editor:
 - [x] The Run demo window keeps the options changed in it for the next time, per demo
   and, for what names something in a scene, per scene file, with **Defaults** to put
   them back.
+- [x] Every demo run named after its settings, in a folder and a video of its own, so
+  that runs with other settings write over none of each other's files, and a `join`
+  step that plays finished runs one after another in one video, ticked in Run demo.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.

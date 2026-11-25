@@ -185,6 +185,7 @@ def own_song_options(
             "file",
             steps=steps,
             filter=AUDIO_FILTER,
+            named="plays",
         ),
         Option(
             "bpm",

@@ -429,7 +429,9 @@ def test_a_demo_plays_only_what_its_example_holds(demo, tmp_path: Path) -> None:
     demo.run(SCENE_STEPS.get(demo.name, [demo.scene_from] if demo.scene_from else []), args)
     own = Scene.from_yaml(folder / "scene.yaml")
     items = {item.name: item for item in [*own.sources, *own.listeners]}
-    written = sorted(folder.glob("scene_*.yaml"))
+    # Beside the script, or in the run's folder for a scene that hangs on the run's
+    # settings (a vehicle at --speed).
+    written = sorted(folder.glob("scene_*.yaml")) + sorted(args.run_folder.glob("scene_*.yaml"))
     assert bool(written) == bool(demo.scene_from), written
     for path in written:
         scene = Scene.from_yaml(path)
@@ -624,10 +626,12 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert pipeline.arrival_s(results, responses, "east_stand") == pytest.approx(0.38, abs=0.002)
     # The tour moves on phrase boundaries and leaves out listeners without a mix.
     work = tmp_path / "demo"
-    (work / "feeds").mkdir(parents=True)
+    feeds = demo.feeds_folder(_demo_args(demo.DEMO, work=work))  # the song's own
+    assert feeds == work / "feeds" / "spicy_funk_cake"
+    feeds.mkdir(parents=True)
     funk = demo.SONGS["spicy_funk_cake"]
     phrase = demo.phrase_s(funk)
-    (work / "feeds" / "feeds.json").write_text(
+    (feeds / "feeds.json").write_text(
         json.dumps({"length_s": 195.0, "song": funk | {"name": "spicy_funk_cake"}}), "utf-8"
     )
     tour = demo.tour_of(_demo_args(demo.DEMO, work=work), {"mix_position", "singer"})
@@ -658,9 +662,7 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     # crossfade before a downbeat, and the last stop longer than a phrase.
     for name, length in (("spicy_funk_cake", 195.0), ("francium", 294.5), ("rubidium", 232.0)):
         song = demo.SONGS[name] | {"name": name}
-        (work / "feeds" / "feeds.json").write_text(
-            json.dumps({"length_s": length, "song": song}), "utf-8"
-        )
+        (feeds / "feeds.json").write_text(json.dumps({"length_s": length, "song": song}), "utf-8")
         tour = demo.tour_of(_demo_args(demo.DEMO, work=work), set(demo.TITLES))
         left_out = {name for name, n in song.get("tour", {}).items() if n == 0}
         assert len(tour) == len(demo.TOUR) - len(left_out)
@@ -745,8 +747,10 @@ def test_stadium_demo_plays_a_song_of_your_own(tmp_path: Path) -> None:
     assert kept == {k: v for k, v in song.items() if k in demo.SONG_KEPT}
     assert str(tmp_path / "vox.wav") in (demo.music_folder(args) / "SOURCES.txt").read_text()
     # feeds: one per source at the responses' rate, silence where no stem plays.
-    args.results.mkdir()
-    write_wav(args.results / "main_left__mix_position.wav", np.zeros((rate, 2)), rate)
+    results = demo.simulations(args)[0].results  # the output's own folder
+    assert results == args.results / "binaural"
+    results.mkdir(parents=True)
+    write_wav(results / "main_left__mix_position.wav", np.zeros((rate, 2)), rate)
     responses = [
         {
             "source": "main_left",
@@ -754,16 +758,20 @@ def test_stadium_demo_plays_a_song_of_your_own(tmp_path: Path) -> None:
             "outputs": [{"format": "binaural", "wav": "main_left__mix_position.wav"}],
         }
     ]
-    (args.results / "parameters.json").write_text(json.dumps({"responses": responses}), "utf-8")
+    (results / "parameters.json").write_text(json.dumps({"responses": responses}), "utf-8")
     demo.feeds(args)
-    table = pipeline.read_json(work / "feeds" / "feeds.json")
+    assert demo.feeds_folder(args) == work / "feeds" / "my-song"
+    table = pipeline.read_json(demo.feeds_folder(args) / "feeds.json")
     assert table["song"] == kept and table["length_s"] == 3.0 and table["rate"] == rate
     assert table["sources"]["drum_kit"]["silent"] and table["sources"]["guitar_amp"]["silent"]
     assert "silent" not in table["sources"]["singer_voice"]
     assert "silent" not in table["sources"]["main_left"]
-    assert not read_wav(work / "feeds" / "drum_kit.wav")[0].any()
-    assert read_wav(work / "feeds" / "singer_voice.wav")[0].any()
-    assert read_wav(work / "feeds" / "subs.wav")[0].any()
+    assert not read_wav(demo.feeds_folder(args) / "drum_kit.wav")[0].any()
+    assert read_wav(demo.feeds_folder(args) / "singer_voice.wav")[0].any()
+    assert read_wav(demo.feeds_folder(args) / "subs.wav")[0].any()
+    # Done for the song as it is; another credit makes them again.
+    assert demo.feeds_done(args)
+    assert not demo.feeds_done(argparse.Namespace(**vars(args) | {"credit": "Music: mine"}))
 
 
 def test_orchestra_demo_tour(tmp_path: Path) -> None:
@@ -792,7 +800,7 @@ def test_orchestra_demo_tour(tmp_path: Path) -> None:
     for movement, seat in demo.stops_of(args):
         length = (30 if movement == 1 else 10) * rate
         key = demo.key_of(movement, seat)
-        demo.write(work / "seats" / f"{key}.binaural.wav", stereo[:length], rate)
+        demo.write(args.run_folder / "seats" / f"{key}.binaural.wav", stereo[:length], rate)
         lag = {"conductor": 0.01, "stalls-middle": 0.05, "stalls-rear": 0.08}[seat]
         seats["seats"][key] = {
             "movement": movement,
@@ -815,7 +823,7 @@ def test_orchestra_demo_tour(tmp_path: Path) -> None:
     assert demo.last_of_movement(tour, 1) and not demo.last_of_movement(tour, 0)
     audio = pipeline.tour_audio(
         tour,
-        work / "seats",
+        args.run_folder / "seats",
         seats,
         crossfade_s=demo.CROSSFADE_S,
         fade_out_s=demo.FADE_OUT_S,
@@ -1013,10 +1021,12 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     }
     # The tour: 8 bars a stop, the last one --last-phrases long.
     work = tmp_path / "demo"
-    (work / "music").mkdir(parents=True)
+    signals = demo.feeds_folder(_demo_args(demo.DEMO, work=work))  # the song's own
+    assert signals == work / "music" / "spicy_funk_cake"
+    signals.mkdir(parents=True)
     song = {k: v for k, v in demo.SONGS["spicy_funk_cake"].items() if k in demo.SONG_KEPT}
     song |= {"name": "spicy_funk_cake"}
-    (work / "music" / "song.json").write_text(json.dumps(song), encoding="utf-8")
+    (signals / "song.json").write_text(json.dumps(song), encoding="utf-8")
     write_wav(work / "music" / "spicy_funk_cake.wav", np.zeros((19_500, 2)), 100)  # 195 s
     tour = demo.tour_of(_demo_args(demo.DEMO, work=work))
     phrase = demo.phrase_s(song)
@@ -1095,8 +1105,10 @@ def test_lakeside_demo_plays_a_song_of_your_own(tmp_path: Path, monkeypatch) -> 
     x, got = read_wav(demo.song_path(args))
     assert demo.song_path(args) == work / "music" / "mine.wav"
     assert got == demo.RATE and x.shape == (40 * demo.RATE, 2)
-    assert all((work / "music" / f"{name}.wav").exists() for name in demo.CHANNELS)
+    assert all((work / "music" / "mine" / f"{name}.wav").exists() for name in demo.CHANNELS)
     assert demo.played(args) == {"name": "mine", "bpm": 100.0, "credit": "Music: mine.wav"}
+    # Another tempo is another song's signals: made again.
+    assert not demo.music_done(argparse.Namespace(**vars(args) | {"bpm": 120.0}))
     # A phrase is 8 bars of the tempo given: 19.2 s; the 40 s song holds two stops.
     tour = demo.tour_of(args)
     assert [stop[:2] for stop in tour] == [("audience", "evening"), ("behind_stage", "evening")]
@@ -1128,7 +1140,7 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     )
     args = _demo_args(
         demo.DEMO,
-        source=example_path("gallery"),
+        source=EXAMPLES / "gallery" / "scene.yaml",  # the script's own: the default
         scene=tmp_path / "scene_demo.yaml",
         work=tmp_path / "demo",
     )
@@ -1221,11 +1233,21 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     assert demo.credit_of(given) == "Playing guide: mine.wav"
     assert demo.credit_of(args).startswith("Speech: ACE challenge corpus, talker M4")
     assert demo.said(given, room)[2] == 2  # said again, as the corpus's short takes are
-    (args.work / "walk").mkdir()
-    pipeline.write_json(args.work / "walk" / demo.WALK, {"talker": args.talker})
+    walked = args.run_folder / "walk"  # the run's own
+    assert walked == args.work / "walk_M4_binaural" / "walk"
+    # A scene of another file is named in the run (the walk is that scene's).
+    other = demo.DEMO.resolved(argparse.Namespace(**vars(args) | {"source": off}))
+    assert other.run_folder.name == "walk_M4_from-off_binaural"
+    walked.mkdir(parents=True)
+    pipeline.write_json(walked / demo.WALK, {"talker": args.talker})
     assert not demo.part_done(args, "walk", demo.WALK)  # no sound for these ears yet
-    write_wav(args.work / "walk" / f"walk.{demo.label_of(args)}.wav", np.zeros((8, 2)), rate)
+    write_wav(walked / f"walk.{demo.label_of(args)}.wav", np.zeros((8, 2)), rate)
     assert demo.part_done(args, "walk", demo.WALK)
+    # A run with another --turn walks the same: it plays this run's walk.
+    turned = demo.DEMO.resolved(argparse.Namespace(**vars(args) | {"turn": "0:0,2:90"}))
+    assert turned.run_folder != args.run_folder
+    assert demo.part_folder(turned, "walk", demo.WALK) == walked
+    assert not demo.part_done(turned, "turn", demo.TURNING)
     # Through another head (--hrtf) the walk is made again, not taken as done.
     kemar = argparse.Namespace(**vars(args) | {"hrtf": tmp_path / "kemar.sofa"})
     assert demo.label_of(kemar) != demo.label_of(args)

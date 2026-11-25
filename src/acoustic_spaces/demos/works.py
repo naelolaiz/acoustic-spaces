@@ -16,8 +16,8 @@ or either alone (:class:`acoustic_spaces.demos.indoors.StillHouses`); a room who
 listener does not stand 2 m in front of its wall takes its level outdoors at the point
 there, which ``scene`` writes to a scene of its own (:func:`front_scene`) and
 ``simulate`` simulates too. What is felt at each listener, the ground's or the house's
-floor's vibration, is a track for a bass shaker too (``<listener>.shaker.wav`` beside
-the mixes, ``tour.shaker.wav``).
+floor's vibration, is a track for a bass shaker too (``.shaker.wav`` beside each mix,
+and the run's ``<run>_shaker.wav``).
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ import numpy as np
 import yaml
 
 from acoustic_spaces.demos import (
+    JOIN,
     SIMULATE,
     Demo,
     Option,
@@ -110,7 +111,7 @@ def simulations(args: argparse.Namespace) -> list[pipeline.Simulation]:
     """The scene's simulation and, when :func:`front_scene` is there, that one's."""
     out = scene_demo.simulations(args)
     front = pipeline.Simulation(
-        front_scene(args), scene_demo.work_of(args) / "results_2m", args.format
+        front_scene(args), scene_demo.results_at(args, front_scene(args)), args.format
     )
     return [*out, front] if front.scene.exists() else out
 
@@ -224,6 +225,7 @@ def scene(args: argparse.Namespace) -> None:
         data,
         "# The street example with its road works alone, written by works_demo.py.\n",
         Path(args.source).parent,
+        made_from=args.source,
     )
     print(f"wrote {args.scene}: {', '.join(SOURCES)}")
     room = Room.from_yaml(args.scene)
@@ -248,6 +250,7 @@ def scene(args: argparse.Namespace) -> None:
         "# The street example with its road works alone, heard 2 m in front of the walls\n"
         "# that its listeners stand less than 2 m in front of, written by works_demo.py.\n",
         Path(args.source).parent,
+        made_from=args.source,
     )
     print(f"wrote {path}: {', '.join(item['name'] for item in data['listeners'])}")
 
@@ -256,12 +259,11 @@ def scene_done(args: argparse.Namespace) -> bool:
     from acoustic_spaces import Scene
 
     scene_file, source = Path(args.scene), Path(args.source)
-    if not (scene_file.exists() and scene_file.stat().st_mtime >= source.stat().st_mtime):
+    if not pipeline.scene_made(scene_file, source):
         return False
-    front = front_scene(args)
     if not front_points(Scene.from_yaml(scene_file)):
         return True
-    return front.exists() and front.stat().st_mtime >= source.stat().st_mtime
+    return pipeline.scene_made(front_scene(args), source)
 
 
 # --------------------------------------------------------------------------- the feeds
@@ -309,7 +311,7 @@ def input_gain(name: str, x: np.ndarray, rate: int) -> float:
 
 
 def feeds(args: argparse.Namespace) -> None:
-    """One WAV per source of the works in the work folder's ``feeds``, ``--seconds`` for
+    """One WAV per source of the works in the run's ``feeds``, ``--seconds`` for
     each listener long: its made sound (:func:`~acoustic_spaces.demos.plant.machine_sound`,
     :func:`~acoustic_spaces.demos.plant.alarm_sound`) or the file ``--input`` gives it,
     mixed down to mono and cut or looped to that length; each at the made sounds' RMS,
@@ -317,7 +319,7 @@ def feeds(args: argparse.Namespace) -> None:
     facts = made(args)
     rate, seconds = facts["rate"], facts["length_s"]
     n = int(round(seconds * rate))
-    out = Path(args.work) / "feeds"
+    out = scene_demo.feeds_folder(args)
     table: dict[str, dict] = {}
     for k, name in enumerate(SOURCES):
         given = facts["inputs"].get(name)
@@ -346,7 +348,7 @@ def feeds(args: argparse.Namespace) -> None:
 
 
 def feeds_done(args: argparse.Namespace) -> bool:
-    out = Path(args.work) / "feeds"
+    out = scene_demo.feeds_folder(args)
     kept = out / WORKS
     if not kept.exists() or not Path(args.scene).exists():
         return False
@@ -362,7 +364,7 @@ def feeds_done(args: argparse.Namespace) -> bool:
 
 def credit(args: argparse.Namespace) -> str:
     """The stills' line on what plays: each source's made sound or file."""
-    facts = pipeline.read_json(Path(args.work) / "feeds" / WORKS)
+    facts = pipeline.read_json(scene_demo.feeds_folder(args) / WORKS)
     said = []
     for name in SOURCES:
         given = facts["inputs"].get(name)
@@ -468,8 +470,9 @@ def demo(script: Path, example: str = "street") -> Demo:
         Step(
             "video",
             lambda args: video(made, args),
-            "tour.wav, the stills and tour.mp4 in the work folder",
+            "the run's video, its audio and the stills, named after the run",
         ),
+        JOIN,
     ]
     return made
 

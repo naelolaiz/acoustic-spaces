@@ -62,7 +62,7 @@ from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces.demos import Option, indoors, pipeline
+from acoustic_spaces.demos import Option, indoors, pipeline, run_folder
 from acoustic_spaces.demos.audio import read, resampled
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import (
@@ -877,6 +877,7 @@ class TrainVehicle(Vehicle):
                     "choice",
                     self.trains,
                     steps=(self.sound_step, "scene", "walk"),
+                    named="plays",
                 )
             )
         if len(self.tracks) > 1:
@@ -937,7 +938,7 @@ class TrainVehicle(Vehicle):
         FREIGHT_WAGONS_DB under the curve, its locomotive on it."""
         from acoustic_spaces import vibration
 
-        info = pipeline.read_json(args.work / self.name / self.info_file)
+        info = pipeline.read_json(run_folder(args) / self.name / self.info_file)
         train = TRAINS[info["train"]]
         points = info["parts"][self.name]
         wagons = vibration.FREIGHT_WAGONS_DB if info["train"] == "freight" else 0.0
@@ -1085,7 +1086,7 @@ class TrainVehicle(Vehicle):
         return tuple(f"{part}.wav" for part in self.parts(args))
 
     def sound_path(self, args: argparse.Namespace, part: str) -> Path:
-        return args.work / self.name / f"{part}.wav"
+        return run_folder(args) / self.name / f"{part}.wav"
 
     def made(self, args: argparse.Namespace, rate: int, duration_s: float, part: str = ""):
         """The front point's made sound at the height of ``part``."""
@@ -1141,7 +1142,7 @@ class TrainVehicle(Vehicle):
         horn, at its front, nothing."""
         if self.horn is not None and part == self.horn.part:
             return Trail()
-        info = pipeline.read_json(args.work / self.name / self.info_file)
+        info = pipeline.read_json(run_folder(args) / self.name / self.info_file)
         points = info["parts"][part]
         speed = info["speed_kmh"] / 3.6
         first = np.asarray(points[0]["level_db"], dtype=float)
@@ -1288,7 +1289,7 @@ class TrainVehicle(Vehicle):
                 if self.horn is not None
                 else ""
             ),
-            "sound": f"demo/{name}/{name}.wav and the files of its roof and pantograph: "
+            "sound": f"demo/RUN/{name}/{name}.wav and the files of its roof and pantograph: "
             f"the {noun}'s sound at each of its points, made to Schall 03",
             "header": f"# The example with its {noun} running past alone, at the speed and with "
             "the sound\n# power of the pass-by demo (Schall 03), written by passby_demo.py.\n",

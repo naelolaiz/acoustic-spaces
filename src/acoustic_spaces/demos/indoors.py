@@ -605,13 +605,14 @@ class StillHouses:
         return out
 
 
-#: The name of what is felt among a listener's files: ``<listener>.shaker.wav``.
+#: The name of what is felt among a listener's files: ``<its mix's name>.shaker.wav``.
 SHAKER = "shaker"
 
 
 def write_shakers(folder, shakers: dict[str, np.ndarray], rate: int) -> dict:
-    """``<listener>.shaker.wav`` in ``folder`` for each of ``shakers`` (what is felt
-    there, m/s; :func:`shaker_sound`), one gain for all, the loudest peak at -1 dBFS;
+    """``<name>.shaker.wav`` in ``folder`` for each of ``shakers`` (what is felt there,
+    m/s; :func:`shaker_sound`), by the name of the listener's mix before its output
+    (:func:`~acoustic_spaces.demos.mix_stem`), one gain for all, the loudest peak at -1 dBFS;
     what their full scale is (a velocity) and the third octave they are in, for the
     demo's JSON; nothing without shakers, or with nothing felt. As with dBFS, a sample
     of 1 is ``full_scale_mm_s``, and a track's RMS level in dBFS plus
@@ -632,10 +633,10 @@ def write_shakers(folder, shakers: dict[str, np.ndarray], rate: int) -> dict:
 
 
 def tour_shaker(
-    work, stops, folder, seats: dict, shaker: dict, crossfade_s: float, fade_out_s: float
+    out, stops, folder, seats: dict, shaker: dict, crossfade_s: float, fade_out_s: float
 ) -> None:
-    """``tour.shaker.wav`` in ``work``: what is felt along the tour, each stop's
-    ``<listener>.shaker.wav`` (in ``folder``) as the tour plays its mix
+    """``out`` (the run's ``<run>_shaker.wav``): what is felt along the tour, each stop's
+    ``.shaker.wav`` beside its mix (in ``folder``) as the tour plays its mix
     (:func:`~acoustic_spaces.demos.pipeline.tour_audio`), at their full scale
     (``shaker``, :func:`write_shakers`'s)."""
     from acoustic_spaces.demos import pipeline
@@ -644,9 +645,9 @@ def tour_shaker(
     x = pipeline.tour_audio(
         stops, folder, seats, crossfade_s=crossfade_s, fade_out_s=fade_out_s, kind=SHAKER
     )
-    write(work / f"tour.{SHAKER}.wav", x[:, 0], seats["rate"])
+    write(out, x[:, 0], seats["rate"])
     print(
-        f"wrote {work / f'tour.{SHAKER}.wav'}: what is felt, for a bass shaker, "
+        f"wrote {out}: what is felt, for a bass shaker, "
         f"{shaker['full_scale_mm_s']:.3g} mm/s at full scale"
     )
 

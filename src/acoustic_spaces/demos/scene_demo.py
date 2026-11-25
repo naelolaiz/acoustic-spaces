@@ -69,8 +69,13 @@ from acoustic_spaces.demos import (
     listener_names,
     listeners_in,
     listeners_option,
+    mix_stem,
     moving_names,
+    name_part,
     pipeline,
+    product,
+    run_folder,
+    run_plays,
 )
 from acoustic_spaces.demos.audio import (
     channel_weights,
@@ -114,6 +119,29 @@ MOVING = "moving"
 def work_of(args: argparse.Namespace) -> Path:
     """Where the demo writes: ``--work``, or ``demo`` beside the scene."""
     return Path(args.work) if args.work else Path(args.scene).parent / "demo"
+
+
+def results_at(args: argparse.Namespace, scene: str | Path) -> Path:
+    """Where the simulation of ``scene`` for the output a run asks for is kept, in the
+    work folder: ``results/<the scene's name>/<the output>``
+    (:func:`~acoustic_spaces.demos.pipeline.results_for`), so that scenes sharing a work
+    folder, and runs of other outputs, simulate over none of each other's."""
+    return pipeline.results_for(work_of(args) / "results" / name_part(Path(scene).stem), args)
+
+
+def feeds_folder(args: argparse.Namespace) -> Path:
+    """Where a run's feeds go: ``feeds/<scene>`` in the work folder, or with the files
+    ``--input`` gives the sources, ``feeds/<scene>_<what plays>``
+    (:func:`~acoustic_spaces.demos.run_plays`): what a run feeds hangs on nothing else,
+    so that the runs that play the same share them."""
+    plays = run_plays(args)
+    name = name_part(stem_of(args)) + (f"_{plays}" if plays else "")
+    return work_of(args) / "feeds" / name
+
+
+def stem_of(args: argparse.Namespace) -> str:
+    """The first part of a run's name: the scene file's name."""
+    return Path(args.scene).stem if getattr(args, "scene", None) else "scene"
 
 
 @functools.lru_cache(maxsize=8)
@@ -265,7 +293,8 @@ def moving_of(args: argparse.Namespace) -> list[str]:
 
 
 def results_of(args: argparse.Namespace) -> Path:
-    return work_of(args) / "results"
+    """Where the scene's simulation is kept for the run's output (:func:`results_at`)."""
+    return results_at(args, args.scene)
 
 
 def scene_of(args: argparse.Namespace) -> Scene:
@@ -335,7 +364,7 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
 
 
 def feeds_table(args: argparse.Namespace, demo: Demo | None = None) -> dict:
-    path = work_of(args) / "feeds" / FEEDS
+    path = feeds_folder(args) / FEEDS
     if not path.exists():
         raise SystemExit(f"error: no feeds yet; run first: {(demo or DEMO).command('feeds', args)}")
     return pipeline.read_json(path)
@@ -344,7 +373,7 @@ def feeds_table(args: argparse.Namespace, demo: Demo | None = None) -> dict:
 def feeds_done(args: argparse.Namespace) -> bool:
     """Whether the feeds are there, play what the scene and ``--input`` ask for, and are
     newer than the scene and the files they play."""
-    path = work_of(args) / "feeds" / FEEDS
+    path = feeds_folder(args) / FEEDS
     if not path.exists():
         return False
     made = path.stat().st_mtime
@@ -381,7 +410,7 @@ def feeds(args: argparse.Namespace) -> None:
     silent."""
     scene = scene_of(args)
     rate = scene.simulation.sample_rate
-    out = work_of(args) / "feeds"
+    out = feeds_folder(args)
     table: dict[str, dict] = {}
     silent: list[str] = []
     length = 0
@@ -473,7 +502,7 @@ def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> 
     table = feeds_table(args, demo)
     entries = responses_of(args, demo)
     simulation = simulations(args)[0]
-    feeds = {name: work_of(args) / "feeds" / f"{name}.wav" for name in table["sources"]}
+    feeds = {name: feeds_folder(args) / f"{name}.wav" for name in table["sources"]}
     powers = {s.name: s.sound_power_db for s in scene_of(args).sources if s.name in feeds}
     mixes = [
         pipeline.Mix(
@@ -489,7 +518,7 @@ def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> 
     if not mixes:
         raise SystemExit("error: no listener to render; the scene's listeners are all left out")
     post = None if indoors is None else indoors.post
-    folder = work_of(args) / "seats"
+    folder = run_folder(args) / "seats"
     seats = pipeline.render_mixes(mixes, folder, args, post=post)
     if indoors is not None and indoors.plant:
         from acoustic_spaces.demos.indoors import write_shakers
@@ -499,7 +528,9 @@ def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> 
             seat["listener"]: indoors.shaker(seat["listener"], rate, round(seat["length_s"] * rate))
             for seat in seats["seats"].values()
         }
-        seats["shaker"] = write_shakers(folder, felt, rate)
+        seats["shaker"] = write_shakers(
+            folder, {mix_stem(args, name): x for name, x in felt.items()}, rate
+        )
         pipeline.write_json(folder / pipeline.SEATS, seats)
 
 
@@ -530,7 +561,7 @@ def moving_done(
         and seats.get("label") == pipeline.output_label(args)
         and sorted(seats.get("seats", {})) == sorted(names)
     )
-    made = [Path(args.scene), work_of(args) / "feeds" / FEEDS]
+    made = [Path(args.scene), feeds_folder(args) / FEEDS]
     return same and all(path.stat().st_mtime >= p.stat().st_mtime for p in made if p.exists())
 
 
@@ -568,15 +599,14 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     names = listeners_of(args, responses_of(args, demo))
     if not names:
         raise SystemExit("error: no listener to render; the scene's listeners are all left out")
-    work = work_of(args)
-    folder = work / MOVING
+    folder = run_folder(args) / MOVING
     if moving_done(args, folder, moving, names):
         print(f"{folder}: there already (--again mixes them again)")
         return
     scene = moving_scene(args)
     room = Room.from_scene(scene)
     rate = int(scene.simulation.sample_rate)
-    feeds = {name: read(work / "feeds" / f"{name}.wav") for name in table["sources"]}
+    feeds = {name: read(feeds_folder(args) / f"{name}.wav") for name in table["sources"]}
     playing = [s for s in scene.sources if s.name in feeds]
     fmt = format_of(args, scene)
     print(f"simulating the movement of {', '.join(moving)}, on one clock")
@@ -594,13 +624,15 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     info = {}
     for name in names:
         x = mixes[name] * gain
-        write(folder / f"{name}.{args.format}.wav", x, rate)
+        file = pipeline.mix_file(args, name)
+        write(folder / file, x, rate)
         moves = sources_move or name in moving
         # Where nothing moves, the sound arrives as in the still simulation. The tour
         # shifts none of the mixes, as they keep the walks' one clock.
         arrival = None if moves else pipeline.arrival_s(results_of(args), entries, name, weights)
         info[name] = {
             "listener": name,
+            "file": file,
             "lag_s": 0.0,
             "arrival_s": arrival,
             "rms_db": level_db(x, rate, channel_weights(fmt)),
@@ -649,8 +681,9 @@ def tour_of(
 
 
 def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> None:
-    """tour.wav, one still per stop, the thumbnail, and tour.mp4: the stills with a
-    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``). When
+    """The run's audio (``<run>.wav``), one still per stop, the thumbnail, and the video
+    (``<run>.mp4``): the stills with a scrolling spectrogram in the panel at their foot
+    (ffmpeg, unless ``--no-mp4``). When
     something moves, the video is a moving picture instead: the walkers go along their
     walks as the piece plays, with a still of each stop. ``demo``, this one by default,
     is the demo that runs it: its commands and its settings go in the messages and on
@@ -661,10 +694,9 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
     from acoustic_spaces.room import Room, outline_edges
     from acoustic_spaces.walkthrough import knots, movers
 
-    work = work_of(args)
     table = feeds_table(args, demo)
     moving = moving_of(args)
-    folder = work / (MOVING if moving else "seats")
+    folder = run_folder(args) / (MOVING if moving else "seats")
     seats = pipeline.seats_of(folder, demo.command("render", args), args)
     if seats.get("moving", []) != moving:
         raise SystemExit(
@@ -689,13 +721,14 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         fade_out_s=min(FADE_OUT_S, stops[-1].length / 2),
         scene=args.scene,
     )
-    write(work / "tour.wav", audio, seats["rate"])
-    print(f"wrote {work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    sound = product(args, ".wav")
+    write(sound, audio, seats["rate"])
+    print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
     if seats.get("shaker"):
         from acoustic_spaces.demos.indoors import tour_shaker
 
         tour_shaker(
-            work,
+            product(args, "_shaker.wav"),
             stops,
             folder,
             seats,
@@ -721,23 +754,25 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         movement=seats.get("movement"),
         indoors=None if indoors is None else indoors.pictures(),
     )
-    pictures.save(drawing.thumbnail(), work / "thumbnail.png")
+    pictures.save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     if moving:
         pipeline.animation(
-            work,
+            run_folder(args),
             len(audio) / seats["rate"],
             drawing.frame,
-            work / "tour.wav",
+            sound,
+            out=product(args, ".mp4"),
             stills=[(stop.key, stop.at + min(0.5, stop.length / 2)) for stop in stops],
             no_mp4=args.no_mp4,
             shown=drawing.shown_at,
         )
         return
     pipeline.video(
-        work,
+        run_folder(args),
         [(stop.key, stop.length) for stop in stops],
         drawing.still,
-        work / "tour.wav",
+        sound,
+        out=product(args, ".mp4"),
         no_mp4=args.no_mp4,
         shown=drawing.shown,
     )
@@ -785,7 +820,7 @@ DEMO = Demo(
         ),
         SIMULATE,
         Step("render", render, "every listener, with one gain for all"),
-        Step("video", video, "tour.wav, the stills and tour.mp4 in the work folder"),
+        Step("video", video, "the run's video, its audio and the stills, named after the run"),
     ],
     options=[
         Option(
@@ -794,6 +829,7 @@ DEMO = Demo(
             None,
             "file",
             filter="Scene files (*.yaml *.yml)",
+            named="never",  # its name begins the run's (stem_of)
         ),
         Option(
             "seconds",
@@ -816,6 +852,7 @@ DEMO = Demo(
             "a line on the stills about the recordings: who made them, under which licence",
             None,
             steps=("video",),
+            named="never",
         ),
         Option(
             "moving",
@@ -851,6 +888,7 @@ DEMO = Demo(
     module="acoustic_spaces.demos.scene_demo",
     work_of=work_of,
     completes=completed,
+    stem_of=stem_of,
     plays=plays,
     moving=moving_of,
     walks=moving_scene,

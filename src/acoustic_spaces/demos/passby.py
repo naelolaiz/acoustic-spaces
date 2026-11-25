@@ -12,12 +12,13 @@ vehicle's sound, with a walk along the road with Doppler, left out of the exampl
 simulations (``enabled: false``), which keep the traffic as a still line source. Its walk
 goes through points at a speed (``to``, ``speed_m_s``) or through keyframes at one
 steady speed, as CNOSSOS-EU gives a vehicle's sound at a steady speed. The demo writes
-``scene_demo.yaml`` beside its script: the vehicle in use, along its walk at the walk's
+``scene_demo.yaml`` in the run's folder (named after the run's settings,
+:meth:`~acoustic_spaces.demos.Demo.run_name`): the vehicle in use, along its walk at the walk's
 own speed or at ``--speed`` (through the keyframes' places, for keyframes), with
 CNOSSOS-EU's sound power of its category at that speed and the scene's air temperature
 (:mod:`acoustic_spaces.demos.road`), and every other source left out, so that the
-vehicle is heard alone. It plays a sound made to that power (``demo/car/car.wav`` for
-the car: tyre noise and an engine at ``--rpm``), or the dry recording ``--input
+vehicle is heard alone. It plays a sound made to that power (``car/car.wav`` in the run's
+folder for the car: tyre noise and an engine at ``--rpm``), or the dry recording ``--input
 car=WAV`` gives. The police car is two sources along one walk, the car's sound and its
 siren on its roof, with the level and the directivity of a measured one
 (:mod:`acoustic_spaces.demos.siren`); the fire engine three, the vehicle, its siren and
@@ -47,6 +48,7 @@ import numpy as np
 import yaml
 
 from acoustic_spaces.demos import (
+    JOIN,
     Demo,
     Option,
     Step,
@@ -56,7 +58,10 @@ from acoustic_spaces.demos import (
     listener_names,
     listeners_in,
     listeners_option,
+    mix_stem,
     pipeline,
+    product,
+    run_folder,
 )
 from acoustic_spaces.demos.audio import (
     channel_weights,
@@ -247,7 +252,7 @@ class Vehicle:
 
     def sound_path(self, args: argparse.Namespace, part: str) -> Path:
         """The file of the made sound the source ``part`` plays."""
-        return args.work / self.name / self.sound_file
+        return run_folder(args) / self.name / self.sound_file
 
     def made(self, args: argparse.Namespace, rate: int, duration_s: float, part: str = ""):
         """What the source ``part`` (by default its own) plays along its pass at
@@ -467,7 +472,7 @@ class RoadVehicle(Vehicle):
         )
 
     def texts(self) -> dict[str, str]:
-        return road_texts(self.noun, self.name, f"demo/{self.name}/{self.sound_file}")
+        return road_texts(self.noun, self.name, f"demo/RUN/{self.name}/{self.sound_file}")
 
 
 def rpm_help(fleet: Sequence[RoadVehicle]) -> str:
@@ -701,7 +706,7 @@ def car(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> Non
     :func:`acoustic_spaces.demos.road.vehicle_sound`), and what it is made of."""
     vehicle.check(args)
     info = car_info(args, vehicle)
-    folder = args.work / vehicle.name
+    folder = run_folder(args) / vehicle.name
     said = vehicle.make(args, info, folder)
     pipeline.write_json(folder / vehicle.info_file, info)
     files = ", ".join(str(folder / f) for f in vehicle.sound_files(args))
@@ -713,7 +718,7 @@ def car_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
     it is now, or not needed (``--input NAME=...``)."""
     if all(car_input(args, vehicle, part) is not None for part in vehicle.parts(args)):
         return True
-    folder = args.work / vehicle.name
+    folder = run_folder(args) / vehicle.name
     path = folder / vehicle.info_file
     if not path.exists() or not all((folder / f).exists() for f in vehicle.sound_files(args)):
         return False
@@ -821,6 +826,7 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     leaves out (:meth:`Vehicle.every_part`) still walk at that speed, so that its
     sources go along one walk."""
     info = car_info(args, vehicle)
+    args.scene.parent.mkdir(parents=True, exist_ok=True)  # the run's folder
     data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
     data["name"] = f"{data.get('name', 'scene')}: a {vehicle.noun} passing"
     own = {s.name: s for s in source_scene(args).sources}
@@ -1030,10 +1036,10 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     """Each listener in use (those ``--listeners`` names, in its order): the vehicle
     simulated every ``--step`` along its walk, its
     sound played through those places with Doppler, and the level along the way; one
-    gain for every listener (the loudest peak at -1 dBFS), into ``walk/``: a WAV per
-    listener, seats.json and walk.json. A vehicle of several sources (the police car and
-    its siren, :meth:`Vehicle.parts`) has each simulated and played alone, and heard
-    together: their sounds added, each at its own sound power, and their levels'
+    gain for every listener (the loudest peak at -1 dBFS), into ``walk/`` in the run's
+    folder: a WAV per listener, seats.json and walk.json. A vehicle of several sources
+    (the police car and its siren, :meth:`Vehicle.parts`) has each simulated and played
+    alone, and heard together: their sounds added, each at its own sound power, and their levels'
     energies added. In the house a listener stands in front of (``--indoors``,
     :mod:`acoustic_spaces.demos.indoors`), each part comes in through its window, its
     level outdoors taken 2 m in front of the wall (simulated there too where the
@@ -1216,20 +1222,24 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         )
     peak = max(float(np.abs(m).max(initial=0.0)) for m in mixes.values())
     gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
-    out = args.work / "walk"
+    out = walk_folder(args)
     seats = {}
     for name, mix in mixes.items():
         mix = mix * gain
-        write_wav(out / f"{name}.{args.format}.wav", mix, rate)
+        file = pipeline.mix_file(args, name)
+        write_wav(out / file, mix, rate)
         seats[name] = {
             "listener": name,
+            "file": file,
             "lag_s": 0.0,
             "rms_db": level_db(mix, rate, channel_weights(fmt)),
             "loudness_db": loudness_db(mix, rate, channel_weights(fmt)),
             "length_s": len(mix) / rate,
         }
     label = pipeline.output_label(args)
-    shaker = indoors.write_shakers(out, shakers, rate)
+    shaker = indoors.write_shakers(
+        out, {mix_stem(args, name): x for name, x in shakers.items()}, rate
+    )
     pipeline.write_json(
         out / pipeline.SEATS,
         {"rate": rate, "format": args.format, "label": label, "gain": gain, "seats": seats},
@@ -1266,11 +1276,57 @@ def facts_of(args: argparse.Namespace, vehicle: Vehicle, made: dict) -> dict:
     return facts
 
 
-def walk_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
-    """Whether the passes are there, made from the scene, the vehicle's sound, the step
-    and the format of this run, newer than what they are made from, and at every
-    listener the run plays (:func:`heard_by`)."""
-    path = args.work / "walk" / WALK
+def walk_folder(args: argparse.Namespace) -> Path:
+    """Where the walk step writes a run's passes: ``walk/`` in the run's folder."""
+    return run_folder(args) / "walk"
+
+
+def walk_done(
+    args: argparse.Namespace, vehicle: Vehicle = THE_CAR, demo: Demo | None = None
+) -> bool:
+    """Whether the passes the run plays are there (:func:`passes_of`): its own, or with
+    ``demo``, those of the run at every listener with the same settings, when it plays
+    some (``--listeners``)."""
+    return passes_of(args, vehicle, demo) is not None
+
+
+def passes_of(
+    args: argparse.Namespace, vehicle: Vehicle = THE_CAR, demo: Demo | None = None
+) -> Path | None:
+    """The folder of the passes a run plays, or None when they are not there: its own
+    (:func:`walk_folder`) when they are made for it (:func:`walked`); else, with
+    ``demo``, those of the run with the same settings up to the walk
+    (:meth:`Demo.upstream`: another ``--tour`` or ``--at`` walks the same), and with
+    ``--listeners``, those of that run at every listener (:meth:`Demo.sibling`), when
+    they are made for that run and have a pass at each listener this one plays: the
+    passes of a listener do not hang on which others are simulated with it, and the
+    tour brings each to one loudness."""
+    runs = [args]
+    if demo is not None:
+        up = demo.upstream(args, "walk")
+        runs.append(up)
+        if listener_names(getattr(args, "listeners", None)) is not None:
+            runs.append(demo.sibling(up, listeners=None))
+    wanted = None
+    for run in runs:  # the listeners this run plays, from the first scene there
+        try:
+            wanted = heard_by(argparse.Namespace(**vars(run) | {"listeners": args.listeners}))
+            break
+        except OSError:  # no scene yet
+            continue
+    if wanted is None:
+        return None
+    for run in runs:
+        if walked(run, vehicle, wanted):
+            return walk_folder(run)
+    return None
+
+
+def walked(args: argparse.Namespace, vehicle: Vehicle, wanted: Sequence[str]) -> bool:
+    """Whether the run's passes are there, made from its scene, the vehicle's sound, the
+    step and the format, newer than what they are made from, and at every listener of
+    ``wanted``."""
+    path = walk_folder(args) / WALK
     if not path.exists() or not args.scene.exists():
         return False
     made = path.stat().st_mtime
@@ -1292,7 +1348,7 @@ def walk_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
         facts.get("plays") == plays
         and facts.get("label") == pipeline.output_label(args)
         and facts.get("step_m") == float(args.step_m)
-        and set(heard_by(args)) <= set(facts.get("listeners", {}))
+        and set(wanted) <= set(facts.get("listeners", {}))
     )
 
 
@@ -1345,15 +1401,16 @@ def credit_of(args: argparse.Namespace, facts: dict, vehicle: Vehicle = THE_CAR)
 
 
 def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> None:
-    """tour.wav (each listener's pass in turn, turned up to one loudness, the loudest peak
-    at -1 dBFS) and tour.mp4: the scene from above with the vehicle going past, the level
-    heard over time under it, and what is heard, with a scrolling spectrogram (ffmpeg,
-    unless ``--no-mp4``); a still of each listener at its loudest, and the thumbnail."""
+    """The run's audio (``<run>.wav``: each listener's pass in turn, turned up to one
+    loudness, the loudest peak at -1 dBFS) and video (``<run>.mp4``): the scene from
+    above with the vehicle going past, the level heard over time under it, and what is
+    heard, with a scrolling spectrogram (ffmpeg, unless ``--no-mp4``); a still of each
+    listener at its loudest, and the thumbnail."""
     from acoustic_spaces.demos import passby_pictures, pictures
     from acoustic_spaces.room import outline_edges
     from acoustic_spaces.walkthrough import knots
 
-    folder = args.work / "walk"
+    folder = passes_of(args, vehicle, demo) or walk_folder(args)
     path = folder / WALK
     if not path.exists():
         raise SystemExit(f"error: no {path}; run first: {demo.command('walk', args)}")
@@ -1364,12 +1421,14 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     audio = pipeline.tour_audio(
         stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0, scene=args.scene
     )
-    write_wav(args.work / "tour.wav", audio, seats["rate"])
-    print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    sound = product(args, ".wav")
+    write_wav(sound, audio, seats["rate"])
+    print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
     if facts.get("shaker"):
         from acoustic_spaces.demos.indoors import tour_shaker
 
-        tour_shaker(args.work, stops, folder, seats, facts["shaker"], 0.0, 0.0)
+        shaken = product(args, "_shaker.wav")
+        tour_shaker(shaken, stops, folder, seats, facts["shaker"], 0.0, 0.0)
     room = room_of(demo, args)
     data = room.scene.to_data()
     tool = pictures.settings_lines(demo, args, data)
@@ -1385,13 +1444,14 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         tool=tool,
         fmt=args.format,
     )
-    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    pictures.save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     moments = [(stop.key, stop.at + facts["listeners"][stop.key]["max_s"]) for stop in stops]
     pipeline.animation(
-        args.work,
+        run_folder(args),
         len(audio) / seats["rate"],
         drawing.frame,
-        args.work / "tour.wav",
+        sound,
+        out=product(args, ".mp4"),
         stills=moments,
         no_mp4=args.no_mp4,
         chapters=[f"{pictures.mmss(stop.at)} {stop.key.replace('_', ' ')}" for stop in stops],
@@ -1512,7 +1572,7 @@ def demo(
     texts = first.texts()
     if several:
         texts = first.fleet_texts() or road_texts(
-            "vehicle", "NAME", f"demo/NAME/NAME.wav (the {first.name}'s, …)"
+            "vehicle", "NAME", f"demo/RUN/NAME/NAME.wav (the {first.name}'s, …)"
         )
         texts["input"] = texts["input"].replace(
             "as NAME=WAV", f"as NAME=WAV for the vehicle of --vehicle ({first.name}=WAV, …)"
@@ -1550,6 +1610,7 @@ def demo(
             "choice",
             tuple(by_name),
             steps=(first.sound_step, "scene", "walk"),
+            named="plays",
         )
     ]
     # A vehicle whose own numbers time its walk (an aircraft) goes at no --speed.
@@ -1604,8 +1665,9 @@ def demo(
             Option(
                 "scene",
                 f"the scene with the {noun} {first.going} alone",
-                Path("scene_demo.yaml"),
+                None,
                 "path",
+                in_run="scene_demo.yaml",
             ),
             *[o for o in common_options() if o.name != "again"],
             dataclasses.replace(input_option(("walk", "video")), help=texts["input"]),
@@ -1644,13 +1706,14 @@ def demo(
             "walk",
             lambda args: walk(made, args, pick(args)),
             f"simulate the {noun} along its walk at every listener and play it with Doppler",
-            lambda args: walk_done(args, pick(args)),
+            lambda args: walk_done(args, pick(args), made),
         ),
         Step(
             "video",
             lambda args: video(made, args, pick(args)),
-            "tour.wav, tour.mp4 and the stills in the work folder",
+            "the run's video, its audio and the stills, named after the run",
         ),
+        JOIN,
     ]
     return made
 

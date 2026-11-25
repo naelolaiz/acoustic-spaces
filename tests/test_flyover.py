@@ -94,19 +94,20 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
     )
     path.write_text(level, encoding="utf-8")
     assert demo.main(["all", "--step", "8", "--no-mp4"]) == 0
-    work = folder / "demo"
+    work = demo.run_folder(demo.parser().parse_args(["all", "--step", "8"]))
+    assert work == folder / "demo" / "flyover_step-8_binaural"
     info = pipeline.read_json(work / "helicopter" / "helicopter.json")
     assert info["helicopter"] == "AS350 B3" and info["speed_kmh"] == pytest.approx(226.8)
     assert info["duration_s"] == pytest.approx(40.0 / 63.0, abs=1e-6)
     x, rate = audio.read(work / "helicopter" / "below.wav")
     assert rate == 16_000 and len(x) == round(info["duration_s"] * rate)
     assert np.abs(x).max() == pytest.approx(0.5, rel=1e-3)
-    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    scene = Scene.from_yaml(work / "scene_demo.yaml")
     (helicopter,) = scene.sources
     assert helicopter.level_db == pytest.approx(info["level_db"])
     assert helicopter.walk.face_forward and helicopter.walk.doppler
     # The example's at 48 kHz: at 16 kHz the 8 kHz band is half above the sound's top.
-    table = read_directivity_csv(folder / "scene_demo_helicopter.csv").table[..., :7]
+    table = read_directivity_csv(work / "scene_demo_helicopter.csv").table[..., :7]
     full = read_directivity_csv(folder / "helicopter.csv").table[..., :7]
     np.testing.assert_allclose(table, full, rtol=2e-3)
     facts = pipeline.read_json(work / "walk" / "walk.json")
@@ -117,7 +118,8 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
     towards = 63.0 * 20.0 / math.hypot(20.0, 148.8)
     falls = 12.0 * math.log2((c + towards) / (c - towards))
     assert under["pitch_semitones"] == pytest.approx(falls, abs=1e-3)
-    assert (work / "tour.wav").exists() and (work / "stills" / "00_under_track.png").exists()
+    assert work.with_name(work.name + ".wav").exists()
+    assert (work / "stills" / "00_under_track.png").exists()
 
 
 def test_the_stadiums_helicopter_is_its_rotors_model() -> None:
@@ -198,13 +200,19 @@ def _stadium(tmp_path: Path) -> Path:
     return folder
 
 
+def _concert_seats(folder: Path, stadium) -> Path:
+    """Where the stadium demo's run at its defaults keeps its mixes."""
+    return stadium.DEMO.at(folder).run_folder(stadium.DEMO.defaults()) / "seats"
+
+
 def _concert(folder: Path, stadium, length_s: float, rate: int = 16_000) -> dict:
     """What the stadium demo's render leaves in the work folder, made up: the band's
     scene, a simulation's parameters, the feeds' table (the main arrays the loudest, at
-    134 dB) and a mix of noise at each listener, with one gain."""
+    134 dB) and a mix of noise at each listener, with one gain, in the folder of its run
+    at its defaults."""
     stadium.DEMO.at(folder).main(["band"])
-    results = folder / "results_band"
-    results.mkdir()
+    results = folder / "results_band" / "binaural"
+    results.mkdir(parents=True)
     responses = [
         {"source": source, "listener": listener, "spl_a_db": level, "outputs": []}
         for listener in ("mix_position", "singer")
@@ -219,14 +227,16 @@ def _concert(folder: Path, stadium, length_s: float, rate: int = 16_000) -> dict
     played = {k: v for k, v in song.items() if k in stadium.SONG_KEPT} | {"name": "spicy_funk_cake"}
     work = folder / "demo"
     pipeline.write_json(
-        work / "feeds" / "feeds.json",
+        work / "feeds" / "spicy_funk_cake" / "feeds.json",
         {"rate": rate, "length_s": length_s, "song": played, "sources": sources},
     )
+    held = _concert_seats(folder, stadium)
+    assert held == work / "stadium_spicy_funk_cake_binaural" / "seats"
     noise = np.random.default_rng(1).normal(0.0, 0.05, (round((length_s + 0.5) * rate), 2))
     seats = {}
     for k, listener in enumerate(("mix_position", "singer")):
         x = noise * (1.0 - 0.5 * k)
-        audio.write(work / "seats" / f"{listener}.binaural.wav", x, rate)
+        audio.write(held / f"{listener}.binaural.wav", x, rate)
         seats[listener] = {
             "listener": listener,
             "lag_s": 0.1 * (1 - k),
@@ -237,7 +247,7 @@ def _concert(folder: Path, stadium, length_s: float, rate: int = 16_000) -> dict
         }
     concert = {"rate": rate, "format": "binaural", "label": "binaural", "gain": 0.25}
     concert["seats"] = seats
-    pipeline.write_json(work / "seats" / pipeline.SEATS, concert)
+    pipeline.write_json(held / pipeline.SEATS, concert)
     return concert
 
 
@@ -277,12 +287,19 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     own["position"][2] = 150.0
     (folder / "scene.yaml").write_text(yaml.safe_dump(stadium_scene, sort_keys=False), "utf-8")
 
-    assert demo.main(["flight"]) == 0
-    flown = yaml.safe_load((folder / "scene_flight.yaml").read_text(encoding="utf-8"))
+    # Every step of the run with a step of 8 m: its scenes and its passes in its folder.
+    args = argparse.Namespace(**vars(args) | {"step_m": 8.0})
+    run = demo.run_folder(args)
+    assert run == folder / "demo" / "crossing_step-8_binaural"
+    assert demo.main(["flight", "--step", "8"]) == 0
+    flown = yaml.safe_load((run / "scene_flight.yaml").read_text(encoding="utf-8"))
     ground = flown["geometry"]["ground"]
     assert ground["extent"] == [[-650.0, -82], [650.0, 82]] and ground["sky"] == 190.0
     (helicopter,) = [s for s in flown["sources"] if s["name"] == "helicopter"]
-    assert helicopter == own  # the scene's, left out of the concert's simulations
+    # The scene's, left out of the concert's simulations, its files found from the run's
+    # folder.
+    assert helicopter == pipeline.files_from(own, run / "scene_flight.yaml", folder)
+    assert helicopter["directivity"]["file"] == str(folder / "helicopter.csv")
     assert helicopter["enabled"] is False and helicopter["position"] == [-600, 0, 150]
     assert helicopter["walk"] == {"to": [[600, 0, 150]], "speed_m_s": 63, "doppler": True}
     lower = sibling(folder / "helicopter_demo.py", "helicopter_demo").flight_of(own, 40.0)
@@ -296,24 +313,25 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     helicopter["position"] = [-20.0, 0.0, 150.0]
     helicopter["walk"]["to"] = [[20.0, 0.0, 150.0]]
     flown["simulation"]["ir_length_s"] = 1.5
-    (folder / "scene_flight.yaml").write_text(yaml.safe_dump(flown, sort_keys=False), "utf-8")
+    (run / "scene_flight.yaml").write_text(yaml.safe_dump(flown, sort_keys=False), "utf-8")
     for step in ("helicopter", "scene", "walk"):
         assert demo.main([step, "--step", "8"]) == 0
-    scene = Scene.from_yaml(folder / "scene_overhead.yaml")
+    scene = Scene.from_yaml(run / "scene_overhead.yaml")
     assert [s.name for s in scene.sources if s.in_use] == ["helicopter"]
-    assert (folder / "scene_overhead_helicopter.csv").exists()
+    assert (run / "scene_overhead_helicopter.csv").exists()
 
     work = folder / "demo"
+    held = _concert_seats(folder, stadium)
     with pytest.raises(SystemExit, match="stadium_demo.py render"):
         demo.main(["mix", "--step", "8"])
     concert = _concert(folder, stadium, 6.0)
     assert demo.main(["mix", "--step", "8"]) == 0
-    facts = pipeline.read_json(work / "walk" / "walk.json")
+    facts = pipeline.read_json(run / "walk" / "walk.json")
     middle = 20.0 / 63.0  # over the centre spot between its places 4 m either side
     assert [round(p[0]) for p in facts["positions"]] == [-20, -12, -4, 4, 12, 20]
-    passes = pipeline.read_json(work / "walk" / pipeline.SEATS)
-    crossed = pipeline.read_json(work / "crossing" / "seats" / pipeline.SEATS)
-    table = pipeline.read_json(work / "crossing" / "feeds" / "feeds.json")
+    passes = pipeline.read_json(run / "walk" / pipeline.SEATS)
+    crossed = pipeline.read_json(run / "seats" / pipeline.SEATS)
+    table = pipeline.read_json(run / "feeds" / "feeds.json")
     crossing = table["helicopter"]
     assert crossing["at_s"] == 3.0 and crossing["height_m"] == 150.0  # halfway through
     assert crossing["start_s"] == pytest.approx(3.0 - middle, abs=1e-4)
@@ -329,12 +347,13 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     level = one_pa.sound_power_db(density(20.0, 101.325), speed_of_sound(20.0))
     pressure = 10.0 ** ((134.0 - 10.0 * math.log10(np.sum(10.0 ** (level / 10.0)))) / 20.0)
     for listener in ("mix_position", "singer"):
-        x = audio.read(work / "seats" / f"{listener}.binaural.wav")[0] / concert["gain"]
-        y = audio.read(work / "walk" / f"{listener}.binaural.wav")[0] / passes["gain"]
+        x = audio.read(held / f"{listener}.binaural.wav")[0] / concert["gain"]
+        y = audio.read(run / "walk" / f"{listener}.binaural.wav")[0] / passes["gain"]
         expected = np.zeros((max(len(x), start + len(y)), 2))
         expected[: len(x)] += x
         expected[start : start + len(y)] += y * 0.1 / pressure
-        mixed = audio.read(work / "crossing" / "seats" / f"{listener}.binaural.wav")[0]
+        assert crossed["seats"][listener]["file"] == f"{listener}.binaural.wav"
+        mixed = audio.read(run / "seats" / f"{listener}.binaural.wav")[0]
         np.testing.assert_allclose(mixed, expected * crossed["gain"], atol=2e-6)
         assert crossed["seats"][listener]["lag_s"] == concert["seats"][listener]["lag_s"]
     assert demo.step("mix").done(demo.resolved(args))
@@ -342,24 +361,29 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     # Through other HRTFs than these mixes (and the concert's): made again, not done.
     kemar = argparse.Namespace(**vars(args) | {"hrtf": "kemar.sofa"})
     assert crossed["label"] == "binaural" and not demo.step("mix").done(demo.resolved(kemar))
+    # Another --at plays the same passes: the walk of the run up to the walk, not
+    # walked again.
+    later = demo.resolved(argparse.Namespace(**vars(args) | {"at": 5.0}))
+    assert later.run_folder != run and demo.upstream(later, "walk").run_folder == run
+    assert demo.step("walk").done(later)
     with pytest.raises(SystemExit, match="give --at 1 or later"):
         demo.main(["mix", "--step", "8", "--at", "0.2"])
 
     assert demo.main(["video", "--step", "8", "--no-mp4"]) == 0
-    tour, rate = audio.read(work / "crossing" / "tour.wav")
+    tour, rate = audio.read(work / "crossing_step-8_binaural.wav")
     assert rate == 16_000 and len(tour) / rate == pytest.approx(table["length_s"], abs=0.01)
-    assert sorted(p.name for p in (work / "crossing" / "stills").glob("*.png")) == [
-        "00_mix_position.png"
-    ]
+    assert sorted(p.name for p in (run / "stills").glob("*.png")) == ["00_mix_position.png"]
     # --listeners: the mixes with the helicopter there are made already, and the video
     # tours that listener alone; a listener the concert has no mix at is refused with
     # the stadium demo's command for it.
     singer = argparse.Namespace(**vars(args) | {"listeners": "singer"})
+    assert not demo.step("mix").done(demo.resolved(singer))  # a run of its own
+    assert demo.main(["mix", "--step", "8", "--listeners", "singer"]) == 0
     assert demo.step("mix").done(demo.resolved(singer))
     assert demo.main(["video", "--step", "8", "--no-mp4", "--listeners", "singer"]) == 0
-    assert (work / "crossing" / "stills" / "00_singer.png").exists()
+    assert (demo.run_folder(singer) / "stills" / "00_singer.png").exists()
     concert["seats"].pop("singer")
-    pipeline.write_json(work / "seats" / pipeline.SEATS, concert)
+    pipeline.write_json(held / pipeline.SEATS, concert)
     assert not demo.step("mix").done(demo.resolved(singer))
     with pytest.raises(SystemExit, match="the concert has no mix at singer; run: python stad"):
         demo.main(["mix", "--step", "8", "--listeners", "singer"])

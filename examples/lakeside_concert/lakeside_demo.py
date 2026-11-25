@@ -17,12 +17,16 @@ acoustic-spaces is installed in, with ffmpeg on the PATH:
     python lakeside_demo.py scenes    # scene_demo.yaml, and scene_still.yaml in still air
     python lakeside_demo.py simulate  # both scenes: results_demo and results_still
     python lakeside_demo.py render    # every listener in both, binaural
-    python lakeside_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
+    python lakeside_demo.py video     # demo/lakeside_spicy_funk_cake_binaural.mp4
 
 or `python lakeside_demo.py all`, which runs them in turn and leaves out what is there
 already (the song, the scenes, the simulations). The scenes and their simulations go
 beside the script (scene_demo.yaml and scene_still.yaml, results_demo and
-results_still); the song, the feeds, the mixes and the video go to ./demo (--work). Use
+results_still, a folder in each for each output, as results_demo/binaural); the song
+and its signals go to ./demo/music (--work), and each run's mixes and stills to a
+folder in ./demo named after its settings (what it plays, the places, the output:
+demo/lakeside_spicy_funk_cake_binaural/), with the video, its audio and its thumbnail
+beside it, so that a run with other settings writes over none of them. Use
 headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
 spherical head (the simulations take it too). `--input subs=bass.wav` has a
 loudspeaker (main_left, main_right or subs) play a file of yours instead of its part of
@@ -60,8 +64,11 @@ from acoustic_spaces.demos import (
     input_option,
     listeners_option,
     music,
+    name_part,
     picked,
     pipeline,
+    product,
+    run_folder,
     sibling,
 )
 from acoustic_spaces.demos.audio import channels_rms, gated_rms, mono, read, stereo, write
@@ -148,19 +155,34 @@ def music_folder(args) -> Path:
     return args.work / "music"
 
 
+def feeds_folder(args) -> Path:
+    """Where the signals of the song a run plays go, with ``song.json``: a folder of the
+    song's own in the music folder, so that runs of other songs keep theirs."""
+    return music_folder(args) / name_part(song_of(args)["name"])
+
+
 def song_path(args) -> Path:
     return music_folder(args) / f"{song_of(args)['name']}.wav"
 
 
 def music_done(args) -> bool:
-    """Whether the song and each loudspeaker's signal are there."""
-    folder = music_folder(args)
-    names = [song_of(args)["name"], *CHANNELS]
-    if not all((folder / f"{name}.wav").exists() for name in names):
+    """Whether the song and each loudspeaker's signal are there, made from the song the
+    run plays (its name, tempo and credit) and newer than a song of your own."""
+    folder = feeds_folder(args)
+    if not song_path(args).exists():
         return False
+    if not all((folder / f"{name}.wav").exists() for name in CHANNELS):
+        return False
+    path = folder / "song.json"
+    if not path.exists():
+        return False
+    if args.music is not None and Path(args.music).exists():
+        if path.stat().st_mtime < Path(args.music).stat().st_mtime:
+            return False
+    song = pipeline.read_json(path)
+    kept = {k: v for k, v in song_of(args).items() if k in SONG_KEPT}
     # Signals levelled otherwise (the song's raw channels, before 4.1.0) are made again.
-    song = folder / "song.json"
-    return song.exists() and pipeline.read_json(song).get("levels") == FEED_LEVELS
+    return song.get("levels") == FEED_LEVELS and all(song.get(k) == v for k, v in kept.items())
 
 
 def music_download(args) -> str | None:
@@ -178,8 +200,8 @@ def music_step(args) -> None:
     subwoofers' mixdown, which two unlike channels lower, is brought to it too. A song
     downloaded before is kept."""
     song = song_of(args)
-    folder = music_folder(args)
-    music.write_tracks({song["name"]: song["files"]}, folder, rate=RATE, channels=2)
+    music.write_tracks({song["name"]: song["files"]}, music_folder(args), rate=RATE, channels=2)
+    folder = feeds_folder(args)
     x, rate = read(song_path(args))
     x = stereo(x)
     pair = channels_rms(x, rate)
@@ -203,8 +225,9 @@ def plays(args) -> dict[str, str]:
 
 
 def played(args) -> dict:
-    """The song ``music`` last wrote the loudspeakers' signals from."""
-    path = music_folder(args) / "song.json"
+    """The song ``music`` wrote the loudspeakers' signals from, for the song the run
+    plays."""
+    path = feeds_folder(args) / "song.json"
     if not path.exists():
         raise SystemExit(f"error: no song yet; run first: {DEMO.command('music', args)}")
     return {k: v for k, v in pipeline.read_json(path).items() if k in SONG_KEPT}
@@ -247,6 +270,7 @@ def scenes(args) -> None:
             data,
             f"# The lakeside concert example {what}, written by lakeside_demo.py.\n",
             args.source.parent,
+            made_from=args.source,
         )
     print(f"wrote {args.scene} and {args.still}; now:")
     for simulation in simulations(args):
@@ -254,10 +278,15 @@ def scenes(args) -> None:
 
 
 def weathers(args) -> dict[str, pipeline.Simulation]:
-    """Each weather's scene and the folder its simulation writes."""
+    """Each weather's scene and the folder its simulation writes for the run's output
+    (:func:`~acoustic_spaces.demos.pipeline.results_for`)."""
     return {
-        "evening": pipeline.Simulation(args.scene, args.results, args.format),
-        "still": pipeline.Simulation(args.still, args.still_results, args.format),
+        "evening": pipeline.Simulation(
+            args.scene, pipeline.results_for(args.results, args), args.format
+        ),
+        "still": pipeline.Simulation(
+            args.still, pipeline.results_for(args.still_results, args), args.format
+        ),
     }
 
 
@@ -276,7 +305,7 @@ def responses_of(args, weather: str) -> list[dict]:
 def render(args) -> None:
     """Every listener's mix in both weathers (``--format``, binaural by default), with one
     gain for all: the loudest peak at -1 dBFS; and each one's level and delay."""
-    feeds = {name: music_folder(args) / f"{name}.wav" for name in CHANNELS}
+    feeds = {name: feeds_folder(args) / f"{name}.wav" for name in CHANNELS}
     mixes = []
     for weather, simulation in weathers(args).items():
         simulated = sorted({e["listener"] for e in responses_of(args, weather)})
@@ -291,7 +320,11 @@ def render(args) -> None:
                 )
             )
     pipeline.render_mixes(
-        mixes, args.work / "seats", args, first=DEMO.command("scenes", args), inputs=args.inputs
+        mixes,
+        run_folder(args) / "seats",
+        args,
+        first=DEMO.command("scenes", args),
+        inputs=args.inputs,
     )
 
 
@@ -347,12 +380,14 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
 
 
 def video(args) -> None:
-    """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
-    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    """The run's audio (``<run>.wav``), one still per stop of the tour, and its video
+    (``<run>.mp4``): the stills with a scrolling spectrogram in the panel at their foot
+    (ffmpeg, unless ``--no-mp4``)."""
     from acoustic_spaces.demos.pictures import save, settings_lines
 
     pictures = sibling(__file__, "lakeside_pictures")
-    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args), args)
+    folder = run_folder(args) / "seats"
+    seats = pipeline.seats_of(folder, DEMO.command("render", args), args)
     tour = tour_of(args)
     keys = [f"{listener}.{weather}" for listener, weather, _, _ in tour]
     pipeline.missing_mixes(seats, keys, DEMO.command("render", args))
@@ -363,14 +398,15 @@ def video(args) -> None:
     ]
     audio = pipeline.tour_audio(
         stops,
-        args.work / "seats",
+        folder,
         seats,
         crossfade_s=CROSSFADE_S,
         fade_out_s=FADE_OUT_S,
         scene=args.scene,
     )
-    write(args.work / "tour.wav", audio, seats["rate"])
-    print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    sound = product(args, ".wav")
+    write(sound, audio, seats["rate"])
+    print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
     scenes = {
         w: yaml.safe_load(s.scene.read_text(encoding="utf-8")) for w, s in weathers(args).items()
     }
@@ -390,12 +426,13 @@ def video(args) -> None:
             for w, s in weathers(args).items()
         },
     )
-    save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     pipeline.video(
-        args.work,
+        run_folder(args),
         [(f"{listener}_{weather}", stop - start) for listener, weather, start, stop in tour],
         drawing.still,
-        args.work / "tour.wav",
+        sound,
+        out=product(args, ".mp4"),
         no_mp4=args.no_mp4,
         shown=lambda k: tour[k][0],
     )
@@ -419,11 +456,16 @@ DEMO = Demo(
             "scenes",
             scenes,
             "scene_demo.yaml, and scene_still.yaml in still air",
-            lambda args: args.scene.exists() and args.still.exists(),
+            lambda args: (
+                pipeline.scene_made(args.scene, args.source)
+                and pipeline.scene_made(args.still, args.source)
+            ),
         ),
         SIMULATE,
-        Step("render", render, "every listener in both weathers, binaural"),
-        Step("video", video, "tour.wav, the stills and tour.mp4 in the work folder"),
+        Step(
+            "render", render, "every listener in both weathers, in --format (binaural by default)"
+        ),
+        Step("video", video, "the run's video, its audio and the stills, named after the run"),
     ],
     options=[
         Option(
@@ -433,6 +475,8 @@ DEMO = Demo(
             "choice",
             tuple(sorted(SONGS)),
             ("music",),
+            named="plays",
+            replaced_by="music",
         ),
         *music.own_song_options(),
         Option(
@@ -446,10 +490,15 @@ DEMO = Demo(
         ),
         Option("scene", "the scene the demo plays", Path("scene_demo.yaml"), "path"),
         Option("still", "the same in still air", Path("scene_still.yaml"), "path"),
-        Option("results", "simulate's folder for it", Path("results_demo"), "folder"),
+        Option(
+            "results",
+            "simulate's folder for it, a folder in it for each output",
+            Path("results_demo"),
+            "folder",
+        ),
         Option(
             "still_results",
-            "simulate's folder for the scene in still air",
+            "simulate's folder for the scene in still air, a folder in it for each output",
             Path("results_still"),
             "folder",
         ),

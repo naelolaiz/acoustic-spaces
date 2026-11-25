@@ -12,7 +12,13 @@ their thumbnails themselves).
 
 With ``--hrtf``, the mixes ask for the responses simulated through that file
 (``binaural-<its name>``) and refuse ones made through the spherical head, so that a mix
-through a spherical head cannot pass for one through the listener's own ears.
+through a spherical head cannot pass for one through the listener's own ears. Each
+output's simulation is kept in a folder of its own (:func:`results_for`), so that a run
+with another format or other HRTFs simulates over none of another's.
+
+A run's files are named after its settings (:meth:`~acoustic_spaces.demos.Demo.run_name`):
+the mixes, the stills and ``run.json`` in its folder, the video, its audio, its chapters
+and its thumbnail beside it in the work folder (:func:`~acoustic_spaces.demos.product`).
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from acoustic_spaces.demos import audio, shell_line
+from acoustic_spaces.demos import audio, mix_stem, name_part, record_run, shell_line
 from acoustic_spaces.render import crossfaded
 
 PARAMETERS = "parameters.json"
@@ -90,14 +96,35 @@ def named_from(path: Path, folder: Path) -> str:
 FILE_KEYS = ("file", "hrtf", "signal", "recording")
 
 
-def write_scene(path: Path, data: dict, header: str, source_dir: Path) -> None:
+def write_scene(
+    path: Path, data: dict, header: str, source_dir: Path, made_from: Path | None = None
+) -> None:
     """``data`` as a scene file at ``path`` under the comment ``header``, the files it
     names relative to ``source_dir`` (the folder of the scene it was made from) named so
-    that they are found from ``path``'s folder too: relative when they lie under it,
-    else in full. A demo run elsewhere than its example (the editor's copy under the
-    home folder) writes scenes that still find the example's model and data."""
+    that they are found from ``path``'s folder too (:func:`files_from`). A demo run
+    elsewhere than its example (the editor's copy under the home folder), or writing in
+    a run's folder, writes scenes that still find the example's model and data.
+    ``made_from``, the scene file it was made from (``--from``), is named in a comment
+    under the header, which :func:`scene_made` reads."""
     path = Path(path)
-    dest = path.resolve().parent
+    if made_from is not None:
+        header += f"{MADE_FROM}{Path(made_from).resolve().as_posix()}\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        header
+        + yaml.safe_dump(
+            files_from(data, path, source_dir), sort_keys=False, default_flow_style=None, width=100
+        ),
+        encoding="utf-8",
+    )
+
+
+def files_from(data, path: Path, source_dir: Path):
+    """``data`` (a scene's, or a part of one) with the files it names relative to
+    ``source_dir`` named so that they are found from the folder of the scene file
+    ``path``: relative when they lie under it, else in full; as :func:`write_scene`
+    writes it, so that a demo can tell whether a scene it wrote has what it would write."""
+    dest = Path(path).resolve().parent
     source_dir = Path(source_dir).resolve()
 
     def moved(value: str) -> str:
@@ -126,11 +153,31 @@ def write_scene(path: Path, data: dict, header: str, source_dir: Path) -> None:
             return [fix(v) for v in node]
         return node
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        header + yaml.safe_dump(fix(data), sort_keys=False, default_flow_style=None, width=100),
-        encoding="utf-8",
-    )
+    return fix(data)
+
+
+#: The comment line of a written scene that names the scene it was made from.
+MADE_FROM = "# Made from: "
+
+
+def scene_made(path: Path, made_from: Path) -> bool:
+    """Whether the scene ``path`` a demo writes is there, made from ``made_from`` (its
+    ``--from``, as :func:`write_scene` names it) and newer than that file: a scene made
+    from another, or before that one changed, is written again, so that a run named
+    after its ``--from`` plays that scene."""
+    path, made_from = Path(path), Path(made_from)
+    if not path.exists():
+        return False
+    if made_from.exists() and path.stat().st_mtime < made_from.stat().st_mtime:
+        return False
+    line = f"{MADE_FROM}{made_from.resolve().as_posix()}"
+    with path.open(encoding="utf-8") as text:
+        for row in text:
+            if not row.startswith("#"):
+                return False
+            if row.rstrip("\n") == line:
+                return True
+    return False
 
 
 def hrtf_label(fmt: str, hrtf: str | Path | None) -> str:
@@ -271,30 +318,37 @@ def labels_of(entries: list[dict]) -> set[str]:
     return {o["format"] for e in entries for o in outputs_of(e)}
 
 
-def binaural_missing(args: argparse.Namespace, entries: list[dict]) -> bool:
-    """Whether binaural mixes cannot be made from these responses as the run asks:
-    through ``--hrtf``, or without it through the spherical head model, not responses
-    simulated through other HRTFs. Other formats are not checked."""
-    if getattr(args, "format", "binaural") != "binaural":
-        return False
+def output_missing(args: argparse.Namespace, entries: list[dict]) -> bool:
+    """Whether the mixes cannot be made from these responses as the run asks: they have
+    no output of its label (:func:`output_label`), binaural through ``--hrtf`` or
+    without it through the spherical head model (not responses simulated through other
+    HRTFs), or another ``--format``."""
     return output_label(args) not in labels_of(entries)
 
 
+def results_for(folder: str | Path, args: argparse.Namespace) -> Path:
+    """Where the simulation of the output a run asks for (:func:`output_label`) is kept:
+    ``folder/<label>`` (``results_choir/binaural-kemar``), so that a run with another
+    format or other HRTFs simulates into a folder of its own and a run back to the first
+    finds its simulation there."""
+    return Path(folder) / name_part(output_label(args))
+
+
 def simulated(simulation: Simulation, args: argparse.Namespace) -> bool:
-    """Whether the simulation's results are there, through ``--hrtf`` when given (or the
-    spherical head model when not, :func:`binaural_missing`), and newer than the scene
-    (a scene changed since is simulated again)."""
+    """Whether the simulation's results are there, of the output the run asks for
+    (:func:`output_missing`), and newer than the scene (a scene changed since is
+    simulated again)."""
     path = simulation.results / PARAMETERS
     if not path.exists():
         return False
     scene = Path(simulation.scene)
     if scene.exists() and scene.stat().st_mtime > path.stat().st_mtime:
         return False
-    return not binaural_missing(args, read_json(path)["responses"])
+    return not output_missing(args, read_json(path)["responses"])
 
 
 def responses_of(simulation: Simulation, args: argparse.Namespace, first: str = "") -> list[dict]:
-    """The responses of a simulation, checked for ``--hrtf`` (:func:`binaural_missing`);
+    """The responses of a simulation, checked for the run's output (:func:`output_missing`);
     without them, stop with the commands to run first: ``first`` (the step that writes
     the scene, when the scene is missing) and the simulate command."""
     hrtf = getattr(args, "hrtf", None)
@@ -306,7 +360,7 @@ def responses_of(simulation: Simulation, args: argparse.Namespace, first: str = 
             f"{before}  {simulate_command(simulation, hrtf)}"
         )
     entries = read_json(path)["responses"]
-    if binaural_missing(args, entries):
+    if output_missing(args, entries):
         raise SystemExit(
             f"error: {simulation.results} has no responses {label_text(output_label(args))}"
             f" ({', '.join(sorted(labels_of(entries)))}); run first:\n"
@@ -475,10 +529,11 @@ def render_mixes(
     inputs: dict[str, Path] | None = None,
     post: Callable[[Mix, np.ndarray, int], np.ndarray] | None = None,
 ) -> dict:
-    """Every mix as ``folder/<key>.<format>.wav``, with one gain for all (the loudest
-    peak at -1 dBFS), and ``folder/seats.json``: the rate, the format, the output
-    (``label``, :func:`output_label`), the gain and each mix's ``lag_s`` (when its sound
-    arrives), ``rms_db`` (gated, A-weighted), ``loudness_db`` (K-weighted), each the sum
+    """Every mix as ``folder/<what plays>__<key>.<label>.wav`` (:func:`mix_file`), with
+    one gain for all (the loudest peak at -1 dBFS), and ``folder/seats.json``: the rate,
+    the format, the output (``label``, :func:`output_label`), the gain and each mix's
+    ``file``, ``lag_s`` (when its sound arrives), ``rms_db`` (gated, A-weighted),
+    ``loudness_db`` (K-weighted), each the sum
     of the mix's channel powers as BS.1770 adds them (:func:`weights_of`),
     ``relative_db`` (against the loudest), length and the ``inputs`` it played.
     ``inputs`` (``--input``) replaces the feeds of the sources it names
@@ -496,7 +551,7 @@ def render_mixes(
     mixes = with_inputs(mixes, inputs, folder.parent / INPUTS)
 
     def path_of(mix: Mix) -> Path:
-        return folder / f"{mix.key}.{fmt}.wav"
+        return folder / mix_file(args, mix.key)
 
     def kept(mix: Mix) -> bool:
         """Whether the mix is there, made with the same inputs and output, and newer
@@ -507,6 +562,8 @@ def render_mixes(
         if previous.get("label") != label:  # through other HRTFs, or not known
             return False
         before = previous["seats"][mix.key]
+        if before.get("file") != out.name:
+            return False
         if before.get("inputs", {}) != mix.info.get("inputs", {}):
             return False
         if before.get("post") != mix.info.get("post"):
@@ -547,6 +604,7 @@ def render_mixes(
             )
         info[mix.key] = {
             "listener": mix.listener,
+            "file": out.name,
             "lag_s": lags[where],
             "rms_db": audio.level_db(x, rate, meters[mix.simulation.scene]),
             "loudness_db": audio.loudness_db(x, rate, meters[mix.simulation.scene]),
@@ -562,6 +620,22 @@ def render_mixes(
     seats = {"rate": rate, "format": fmt, "label": label, "gain": gain, "seats": info}
     write_json(seats_path, seats)
     return seats
+
+
+def mix_file(args: argparse.Namespace, key: str, kind: str | None = None) -> str:
+    """The file of the mix ``key`` (a listener, a seat) of a run with ``args``: what the
+    run plays where the demo gives a choice of it, the key, then the output
+    (:func:`output_label`) or ``kind`` (``shaker``, what is felt there), as
+    ``arrival__lateral_450m.binaural-kemar.wav`` or ``nave-back.binaural.wav``
+    (:func:`~acoustic_spaces.demos.mix_stem`)."""
+    return f"{mix_stem(args, key)}.{name_part(kind or output_label(args))}.wav"
+
+
+def mix_path(folder: Path, seats: dict, key: str) -> Path:
+    """The file of the mix ``key`` in ``folder``, as ``seats.json`` names it (``file``),
+    or as mixes were named before they said (``<key>.<format>.wav``)."""
+    seat = seats["seats"][key]
+    return folder / seat.get("file", f"{key}.{seats['format']}.wav")
 
 
 def seats_of(folder: Path, hint: str, args: argparse.Namespace | None = None) -> dict:
@@ -672,8 +746,9 @@ def tour_audio(
     quarter sine (:func:`~acoustic_spaces.render.crossfaded`: the power runs on, however
     alike the two mixes are; two seats of one piece, each brought forward by its arrival,
     are much alike), a fade at the end and the peak at ``peak_db``. With a ``kind``, each
-    stop's ``<listener>.<kind>.wav`` instead of its mix (what is felt there,
-    ``"shaker"``), neither turned up nor brought to a peak, as it is."""
+    stop's file of that kind beside its mix (what is felt there, ``"shaker"``: the
+    mix's name with ``.shaker.wav`` for its output's), neither turned up nor brought to
+    a peak, as it is."""
     rate, fmt = seats["rate"], seats["format"]
     bounds = [(round(stop.at * rate), round(stop.end * rate)) for stop in stops]
     length = bounds[-1][1]
@@ -691,7 +766,10 @@ def tour_audio(
     ears = ears_of(fmt, rate, scene)
     for k, stop in enumerate(stops):
         seat = seats["seats"][stop.key]
-        x = audio.read(folder / f"{stop.key}.{kind or fmt}.wav")[0]
+        path = mix_path(folder, seats, stop.key)
+        if kind:
+            path = path.with_name(f"{path.name.split('.')[0]}.{kind}.wav")
+        x = audio.read(path)[0]
         x = audio.stereo(x) if kind else ears(x)
         offset = round((stop.at - stop.start) * rate)  # the mix's start in the tour
         x = audio.shifted(x, round(seat.get("lag_s", 0.0) * rate) - offset, length)
@@ -777,25 +855,73 @@ def missing_mixes(seats: dict, keys: Sequence[str], hint: str) -> None:
 # --------------------------------------------------------------------------- the video
 
 
+def chapters_file(out: Path) -> Path:
+    """The chapters of the video ``out``, beside it: ``<its name>_chapters.txt``."""
+    return out.with_name(f"{out.stem}_chapters.txt")
+
+
+def _stills_folder(folder: Path) -> Path:
+    """``folder/stills``, emptied of the stills an earlier video of the run drew (a tour
+    of other stops leaves none behind)."""
+    stills = folder / "stills"
+    stills.mkdir(parents=True, exist_ok=True)
+    for old in stills.glob("*.png"):
+        old.unlink()
+    return stills
+
+
+def _finish(folder: Path, out: Path, chapters: Sequence[str] | None, no_mp4: bool) -> bool:
+    """The chapters beside the video ``out``, when given; with ``no_mp4``, an older
+    video of the run removed (so that none plays other stills and sound than these) and
+    the run's record (:func:`~acoustic_spaces.demos.record_run`, in ``folder``) left
+    with none. Whether to encode the video."""
+    chaptered = chapters_file(out)
+    if chapters:
+        chaptered.write_text("\n".join(chapters) + "\n", encoding="utf-8")
+        print(f"wrote {chaptered}")
+    elif chaptered.exists():
+        chaptered.unlink()
+    if no_mp4:
+        if out.exists():
+            out.unlink()
+            print(f"removed {out}, an older video of this run (--no-mp4)")
+        record_run(folder, video=None)
+        return False
+    record_run(folder, video=None)  # until the new one is encoded
+    return True
+
+
+def _recorded(folder: Path, out: Path, length_s: float, chapters: Sequence[str] | None) -> None:
+    """The video ``out`` encoded: kept in the run's record (``run.json`` in ``folder``)
+    with its length and chapters, which the ``join`` step reads."""
+    print(f"wrote {out}")
+    record_run(
+        folder, video=out.name, length_s=round(float(length_s), 3), chapters=list(chapters or [])
+    )
+
+
 def video(
     folder: Path,
     frames: Sequence[tuple[str, float]],
     draw: Callable[[int], object],
     audio_path: Path,
     *,
+    out: Path,
     no_mp4: bool = False,
     spectrum_box: tuple[int, int, int, int] = SPECTRUM_BOX,
     chapters: Sequence[str] | None = None,
     shown: Callable[[int], str] | None = None,
 ) -> None:
     """One still per frame (``name``, seconds) drawn by ``draw(k)``, into
-    ``folder/stills``, ``chapters.txt`` when given, and ``folder/tour.mp4`` from them and
-    ``audio_path``: the stills with a scrolling spectrogram in ``spectrum_box`` (ffmpeg,
-    unless ``no_mp4``). As it is encoded, its messages begin with what the still on
-    show shows, ``shown(k)``: the sources and listeners it is of (:func:`_encode`); the
-    still's name by default."""
-    stills = folder / "stills"
-    stills.mkdir(parents=True, exist_ok=True)
+    ``folder/stills`` (the run's folder, emptied of older stills first), the chapters
+    beside ``out`` when given (:func:`chapters_file`), and the video ``out`` (the run's
+    ``<run>.mp4``) from the stills and ``audio_path``: the stills with a scrolling
+    spectrogram in ``spectrum_box`` (ffmpeg, unless ``no_mp4``, which removes an older
+    ``out``). The run's ``run.json`` in ``folder`` keeps the video's file, length and
+    chapters. As it is encoded, its messages begin with what the still on show shows,
+    ``shown(k)``: the sources and listeners it is of (:func:`_encode`); the still's
+    name by default."""
+    stills = _stills_folder(folder)
     lines = []
     for k, (name, duration) in enumerate(frames):
         path = stills / f"{k:02d}_{name}.png"
@@ -807,13 +933,9 @@ def video(
     lines.append(lines[-2])  # the concat demuxer needs the last picture again
     (stills / "stills.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"wrote {len(frames)} stills to {stills}")
-    if chapters:
-        (folder / "chapters.txt").write_text("\n".join(chapters) + "\n", encoding="utf-8")
-        print(f"wrote {folder / 'chapters.txt'}")
-    if no_mp4:
-        return
-    out = folder / "tour.mp4"
     ends = np.cumsum([duration for _name, duration in frames])
+    if not _finish(folder, out, chapters, no_mp4):
+        return
 
     def still_at(t: float) -> str:
         k = min(int(np.searchsorted(ends, t, side="right")), len(frames) - 1)
@@ -827,7 +949,7 @@ def video(
         length_s=float(ends[-1]),
         shown=still_at,
     )
-    print(f"wrote {out}")
+    _recorded(folder, out, float(ends[-1]), chapters)
 
 
 def animation(
@@ -836,6 +958,7 @@ def animation(
     draw: Callable[[float], object],
     audio_path: Path,
     *,
+    out: Path,
     fps: int = 25,
     stills: Sequence[tuple[str, float]] = (),
     no_mp4: bool = False,
@@ -845,26 +968,24 @@ def animation(
 ) -> None:
     """A moving picture: ``draw(t)`` at every frame (``t`` in s, ``fps`` a second) for
     ``duration_s``, piped to ffmpeg with ``audio_path`` and a scrolling spectrogram in
-    ``spectrum_box``, into ``folder/tour.mp4``; and the frames at ``stills`` (name,
-    ``t``) as pictures in ``folder/stills``, which is all that ``no_mp4`` writes, with
-    ``chapters.txt`` when given. As it is encoded, its messages begin with what the
-    frame at ``t`` shows, ``shown(t)``: the sources and listeners it is of, a walker
-    with the moment of its walk (:func:`_encode`)."""
-    pictures = folder / "stills"
-    pictures.mkdir(parents=True, exist_ok=True)
+    ``spectrum_box``, into ``out`` (the run's ``<run>.mp4``); and the frames at ``stills``
+    (name, ``t``) as pictures in ``folder/stills`` (the run's folder, emptied of older
+    stills first), which is all that ``no_mp4`` writes (removing an older ``out``), with
+    the chapters beside ``out`` when given (:func:`chapters_file`). The run's
+    ``run.json`` in ``folder`` keeps the video's file, length and chapters. As it is
+    encoded, its messages begin with what the frame at ``t`` shows, ``shown(t)``: the
+    sources and listeners it is of, a walker with the moment of its walk
+    (:func:`_encode`)."""
+    pictures = _stills_folder(folder)
     for k, (name, t) in enumerate(stills):
         draw(t).convert("RGB").save(pictures / f"{k:02d}_{name}.png", optimize=True)
     if stills:
         print(f"wrote {len(stills)} stills to {pictures}")
-    if chapters:
-        (folder / "chapters.txt").write_text("\n".join(chapters) + "\n", encoding="utf-8")
-        print(f"wrote {folder / 'chapters.txt'}")
-    if no_mp4:
+    if not _finish(folder, out, chapters, no_mp4):
         return
     frames = int(math.ceil(duration_s * fps))
     first = draw(0.0).convert("RGB")
     width, height = first.size
-    out = folder / "tour.mp4"
     source = ["-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}"]
     source += ["-r", str(fps), "-i", "-"]
 
@@ -882,7 +1003,7 @@ def animation(
         length_s=duration_s,
         shown=shown,
     )
-    print(f"wrote {out}")
+    _recorded(folder, out, duration_s, chapters)
 
 
 def _spectrum(box: tuple[int, int, int, int], fps: int, pictures: str) -> str:
@@ -909,13 +1030,37 @@ def _ffmpeg(
     """ffmpeg: the pictures from ``source`` (or piped in by ``feed(stdin)``), the sound,
     the spectrogram over them, into an MP4 for the web, ``length_s`` long; saying how
     far it has come as it goes (:func:`_encode`)."""
+    command = [
+        *source, "-i", str(audio_path), "-filter_complex", spectrum, "-map", "[v]",
+        "-map", "1:a",
+    ]  # fmt: skip
+    encode(command, out, feed, length_s=length_s, shown=shown)
+
+
+#: How the videos are encoded, for the web: H.264 at a high quality, AAC sound.
+ENCODING = (
+    "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+    "-c:a", "aac", "-b:a", "384k", "-movflags", "+faststart",
+)  # fmt: skip
+
+
+def encode(
+    inputs: list[str],
+    out: Path,
+    feed=None,
+    *,
+    length_s: float,
+    shown: Callable[[float], str] | None = None,
+) -> None:
+    """ffmpeg on ``inputs`` (its inputs, filters and maps) into the MP4 ``out``
+    (:data:`ENCODING`), the pictures piped in by ``feed(stdin)`` when given; saying how
+    far it has come as it goes (:func:`_encode`), ``length_s`` being the video's
+    length."""
     if shutil.which("ffmpeg") is None:
         raise SystemExit("error: ffmpeg is needed for the video")
     command = [
-        "ffmpeg", "-v", "error", "-nostats", "-progress", "pipe:1", "-y", *source,
-        "-i", str(audio_path), "-filter_complex", spectrum, "-map", "[v]", "-map", "1:a",
-        "-c:v", "libx264", "-preset", "slow", "-crf", "18",
-        "-c:a", "aac", "-b:a", "384k", "-movflags", "+faststart", str(out),
+        "ffmpeg", "-v", "error", "-nostats", "-progress", "pipe:1", "-y", *inputs,
+        *ENCODING, str(out),
     ]  # fmt: skip
     # The pictures through its input, or nothing: ffmpeg reads keys from a terminal
     # otherwise ("q" ends the video short).
@@ -958,7 +1103,9 @@ def _encode(progress, length_s: float, shown: Callable[[float], str] | None) -> 
 
 
 __all__ = [
+    "ENCODING",
     "INPUTS",
+    "MADE_FROM",
     "MOST_GAIN_DB",
     "PARAMETERS",
     "SEATS",
@@ -966,11 +1113,13 @@ __all__ = [
     "Mix",
     "Simulation",
     "TourStop",
-    "binaural_missing",
     "animation",
     "arrival_s",
     "auralize",
+    "chapters_file",
+    "encode",
     "credited",
+    "files_from",
     "ears_of",
     "gains_of",
     "hrtf_label",
@@ -978,16 +1127,21 @@ __all__ = [
     "input_feed",
     "labels_of",
     "missing_mixes",
+    "mix_file",
+    "mix_path",
     "output_arg",
     "output_label",
     "output_named",
+    "output_missing",
     "outputs_of",
     "picked_tour",
     "read_json",
     "render_mixes",
     "response_rate",
     "responses_of",
+    "results_for",
     "scene_hrtf",
+    "scene_made",
     "seats_of",
     "simulate_argv",
     "simulate_command",

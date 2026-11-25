@@ -572,7 +572,7 @@ def test_a_horns_first_blast_is_not_faded_in(tmp_path) -> None:
     assert siren.FIRE_ENGINE_VEHICLE.fade_s(siren.FIRE_SIREN) == passby.FADE_S
     assert siren.HONKING_CAR.fade_s(siren.CAR_HORN_PART) == horn.CAR_HORN.rise_s
     duration = 6.0
-    args = argparse.Namespace(work=tmp_path, horn="blasts")
+    args = argparse.Namespace(work=tmp_path, horn="blasts", run_folder=tmp_path)
     (tmp_path / "train").mkdir()
     write(tmp_path / "train" / "train_horn.wav", vehicle.horn.sound("blasts", RATE, duration), RATE)
     made = vehicle.made(args, RATE, duration, "train_horn")
@@ -673,19 +673,19 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
         "an S-Bahn: a four-car electric multiple unit at 80 km/h, made to Schall 03's"
     )
     assert demo.main(run) == 0
-    work = folder / "demo"
+    work = demo.run_folder(demo.parser().parse_args(run))
     info = pipeline.read_json(work / "train" / "train.json")
     assert info["train"] == "s_bahn" and info["track"] == "ballast"
     assert [len(info["parts"][p]) for p in parts] == [5, 2, 1]
     x, rate = audio.read(work / "train" / "train.wav")
     assert rate == RATE and x.shape == (round(40.0 / (80.0 / 3.6) * RATE), 5)
-    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    scene = Scene.from_yaml(work / "scene_demo.yaml")
     assert [s.name for s in scene.sources if s.in_use] == parts
     for name in parts:
         source = next(s for s in scene.sources if s.name == name)
         assert source.level_db == info["parts"][name][0]["level_db"]
         assert source.walk.face_forward and source.walk.doppler
-        assert source.directivity.file == folder / "scene_demo_train.csv"
+        assert source.directivity.file == work / "scene_demo_train.csv"
     facts = pipeline.read_json(work / "walk" / "walk.json")
     assert facts["parts"] == parts and facts["train"] == "s_bahn"
     heard = facts["listeners"]["tsi_7m5"]
@@ -694,7 +694,7 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     # The pass lasts the walk and the train: the last bogie's sound ends that much later.
     lasts = 40.0 / (80.0 / 3.6) + (info["parts"]["train"][-1]["behind_m"]) / (80.0 / 3.6)
     assert heard["heard_s"][-1] > lasts - 0.5
-    mix, _ = audio.read(work / "walk" / "tsi_7m5.binaural.wav")
+    mix, _ = audio.read(work / "walk" / "s_bahn__tsi_7m5.binaural.wav")
     assert len(mix) / RATE > lasts
     # Each height plays at its own sound power: its sound in the mix is as far under the
     # rail top's as its SEL is (the roof's some 16 dB(A) under, the pantograph's 28), not as
@@ -755,16 +755,16 @@ def test_the_railway_demo_sounds_the_trains_horn(tmp_path, monkeypatch) -> None:
     blasts = "its horn at its front, 2 m above the rail top, in blasts"
     assert demo.plays(args)["train_horn"] == blasts
     assert demo.main(run) == 0
-    work = folder / "demo"
+    work = demo.run_folder(demo.parser().parse_args(run))
     info = pipeline.read_json(work / "train" / "train.json")
     assert info["horn"] == "blasts" and len(info["horn_level_db"]) == 8
     x, rate = audio.read(work / "train" / "train_horn.wav")
     assert rate == RATE and x.shape == (round(40.0 / (80.0 / 3.6) * RATE), 1)
-    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    scene = Scene.from_yaml(work / "scene_demo.yaml")
     assert [s.name for s in scene.sources if s.in_use] == [*parts, "train_horn"]
     blower = next(s for s in scene.sources if s.name == "train_horn")
     assert blower.level_db == info["horn_level_db"] and blower.position[2] == 2.2
-    assert blower.directivity.file == folder / "scene_demo_train_horn.csv"
+    assert blower.directivity.file == work / "scene_demo_train_horn.csv"
     lines = blower.directivity.file.read_text(encoding="utf-8").splitlines()
     assert lines[3:] == (folder / "siren.csv").read_text(encoding="utf-8").splitlines()[3:]
     assert blower.walk.face_forward and blower.walk.doppler
@@ -815,10 +815,11 @@ def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
     run = ["all", "--vehicle", "tram", "--step", "4", "--no-mp4"]
     assert demo.moving(demo.resolved(demo.parser().parse_args(run))) == ["tram", "tram_roof"]
     assert demo.main(run) == 0
-    info = pipeline.read_json(folder / "demo" / "tram" / "tram.json")
+    work = demo.run_folder(demo.parser().parse_args(run))
+    info = pipeline.read_json(work / "tram" / "tram.json")
     assert info["train"] == "tram" and info["track"] == "street"
     assert [len(info["parts"][p]) for p in ("tram", "tram_roof")] == [4, 2]
-    facts = pipeline.read_json(folder / "demo" / "walk" / "walk.json")
+    facts = pipeline.read_json(work / "walk" / "walk.json")
     assert facts["about"].startswith("A low-floor tram, 30 m long, at 50 km/h on track set")
 
 

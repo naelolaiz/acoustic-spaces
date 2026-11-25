@@ -35,14 +35,18 @@ the folder of the street example
 (`acoustic-spaces examples --copy . street && cd street`), in the Python environment
 acoustic-spaces is installed in, with ffmpeg on the PATH:
 
-    python passby_demo.py sound   # demo/NAME/NAME.wav (and NAME/siren.wav, horn.wav): dry
+    python passby_demo.py sound   # NAME/NAME.wav (and NAME/siren.wav, horn.wav): dry
     python passby_demo.py scene   # scene_demo.yaml: the vehicle alone, at --speed, with Doppler
     python passby_demo.py walk    # the vehicle every metre along the street, at every listener
-    python passby_demo.py video   # demo/tour.wav, demo/tour.mp4 (an animation), stills
+    python passby_demo.py video   # demo/passby_car_binaural.mp4 (an animation), stills
 
 or `python passby_demo.py all --vehicle bus`, every step, leaving out what is there
-already; the editor's Simulation > Run demo… runs it too. Use headphones; `--hrtf
-me.sofa` plays it through your own or measured HRTFs instead of a spherical head.
+already; the editor's Simulation > Run demo… runs it too. Each run goes to a folder in
+./demo named after its settings (demo/passby_bus_binaural/: the scene, the sound, the
+passes, the stills), with the video, its audio and its thumbnail beside it, so that a run
+with other settings writes over none of them; `python passby_demo.py join` plays finished
+runs one after another in one video. Use headphones; `--hrtf me.sofa` plays it through
+your own or measured HRTFs instead of a spherical head.
 
 Each listener hears the vehicle through every early path the scene traces (reflections
 off the road, the facades and the barrier up to the third order, and the direct sound

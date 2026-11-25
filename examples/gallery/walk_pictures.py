@@ -111,7 +111,7 @@ def rating(sti: float) -> str:
 
 
 class Pictures:
-    """The video's frames: :meth:`frame` at any time of tour.wav, :meth:`moments` for
+    """The video's frames: :meth:`frame` at any time of the video's sound, :meth:`moments` for
     its chapters and stills, and :meth:`thumbnail`."""
 
     def __init__(
@@ -150,7 +150,7 @@ class Pictures:
     # ------------------------------------------------------------------ the moment
 
     def state(self, t: float) -> dict:
-        """Where the visitor is at ``t`` (s of tour.wav), the way it faces, and what the
+        """Where the visitor is at ``t`` (s of the video's sound), the way it faces, and what the
         simulation says it hears there."""
         if t < self.walk_s:
             part, local = self.walked, t
@@ -172,7 +172,7 @@ class Pictures:
         }
 
     def shown(self, t: float, visitor: str, standing: str) -> str:
-        """What the picture at ``t`` (s of tour.wav) shows, for the video's messages: the
+        """What the picture at ``t`` (s of the video's sound) shows, for the video's messages: the
         guide, then the listener ``visitor`` at that moment of its walk, or ``standing``
         facing as the visitor's head turns there, as ``guide -> visitor @ 3.40 s`` or
         ``guide -> standing facing 90.0 deg``."""
@@ -184,7 +184,7 @@ class Pictures:
         return f"{self.guide['name']} -> {heard}"
 
     def moments(self) -> list[tuple[str, float, str]]:
-        """The tour's moments (a name, the time in tour.wav, a title): setting off, the
+        """The tour's moments (a name, the time in the video's sound, a title): setting off, the
         corner, out of sight, standing; then each hold and turn of the head."""
         walked, found = self.walked, [("setting-off", 0.0, "Setting off, the guide behind you")]
         yaws, times = walked["unwrapped"], walked["times"]
@@ -347,7 +347,7 @@ class Pictures:
         return img
 
     def frame(self, t: float) -> Image.Image:
-        """The picture at ``t`` (s of tour.wav)."""
+        """The picture at ``t`` (s of the video's sound)."""
         state = self.state(t)
         img = self.base.copy()
         self.voice_path(img, self.plan, state)

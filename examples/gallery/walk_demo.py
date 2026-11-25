@@ -13,12 +13,14 @@ ffmpeg on the PATH:
     python walk_demo.py scene   # scene_demo.yaml: the guide with a normal voice
     python walk_demo.py walk    # responses every 25 cm along the walk, the talk through them
     python walk_demo.py turn    # the visitor stands 4 m from the guide and turns round
-    python walk_demo.py video   # demo/tour.wav, demo/tour.mp4 (an animation), stills
+    python walk_demo.py video   # demo/walk_M4_binaural.mp4 (an animation), its audio, stills
 
 or `python walk_demo.py all`, every step, leaving out what is there already; the
-editor's Simulation > Run demo… runs it too. The scene goes beside the script
-(scene_demo.yaml); the speech, the walk, the head turn and the video go to ./demo
-(--work). Use headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
+editor's Simulation > Run demo… runs it too. The speech goes to ./demo (--work), and
+each run's scene, walk, head turn and stills to a folder there named after its settings
+(the talker, what changed, the HRTFs: demo/walk_M4_binaural/), with the video, its
+audio and its thumbnail beside it, so that a run with other settings writes over none
+of them. Use headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
 spherical head. `--input guide=talk.wav` has the guide say a recording of yours instead
 (mixed down to mono); the voice's level and
 STI in the captions are still the scene's (--voice), as the one gain of the video plays
@@ -72,6 +74,8 @@ from acoustic_spaces.demos import (
     common_options,
     input_option,
     pipeline,
+    product,
+    run_folder,
     sibling,
 )
 from acoustic_spaces.demos.audio import envelope, mono, quiet_moment, read, write
@@ -302,6 +306,7 @@ def scene(args) -> None:
         "# The gallery example with the guide's voice as a talker's, and where the visitor\n"
         "# stands to look round, written by walk_demo.py.\n",
         args.source.parent,
+        made_from=args.source,
     )
     print(f"wrote {args.scene}: the guide at {guide['level_db']} dB of sound power")
 
@@ -414,8 +419,9 @@ def facts_of(room, responses) -> dict:
 
 def walk(args) -> None:
     """The walk: responses every 25 cm along it, the late part traced every 2 m, the
-    talk up to the first cut played through them; ``walk/walk.<format>.wav`` and
-    walk.json (the places, the level and STI at each)."""
+    talk up to the first cut played through them; ``walk/walk.<label>.wav`` (binaural,
+    or binaural-<name> through ``--hrtf``) and walk.json (the places, the level and STI
+    at each), in the run's folder."""
     from acoustic_spaces.spatial import Binaural
     from acoustic_spaces.walkthrough import render_walk, simulate_walk
 
@@ -428,7 +434,7 @@ def walk(args) -> None:
     rate_out = walked.result.settings.sample_rate
     ears = Binaural(hrtf_of(args, rate_out))
     wet = render_walk(walked, {"guide": (x[: int(first * rate)], rate)}, ears)
-    out = args.work / "walk"
+    out = run_folder(args) / "walk"
     write(out / f"walk.{label_of(args)}.wav", wet, rate_out)
     pipeline.write_json(
         out / WALK,
@@ -512,7 +518,7 @@ def turn(args) -> None:
     print(f"turning the head through {len(keys)} keys")
     length_s = (len(dry) + tracker.taps - 1) / rate_out  # the talk and the room's tail
     wet = tracker.run(dry, head=turning(times, yaws, facing, length_s))
-    out = args.work / "turn"
+    out = run_folder(args) / "turn"
     write(out / f"turn.{label_of(args)}.wav", wet, rate_out)
     pipeline.write_json(
         out / TURNING,
@@ -544,19 +550,21 @@ def part_audio(path: Path, talk_s: float) -> tuple[np.ndarray, int]:
 
 
 def video(args) -> None:
-    """tour.wav (the walk, a breath of silence, the turn: one gain, the loudest peak at
-    -1 dBFS), and tour.mp4: the gallery from above, the visitor walking and turning, and
-    what they hear, with a scrolling spectrogram (ffmpeg); stills of its moments."""
+    """The run's audio (``<run>.wav``: the walk, a breath of silence, the turn: one gain,
+    the loudest peak at -1 dBFS), and its video (``<run>.mp4``): the gallery from above,
+    the visitor walking and turning, and what they hear, with a scrolling spectrogram
+    (ffmpeg); stills of its moments."""
     from acoustic_spaces.demos.pictures import save, settings_lines
 
     pictures = sibling(__file__, "walk_pictures")
     label = label_of(args)
     parts = {}
     for name, info in (("walk", WALK), ("turn", TURNING)):
-        path = args.work / name / f"{name}.{label}.wav"
+        folder = part_folder(args, name, info) or run_folder(args) / name
+        path = folder / f"{name}.{label}.wav"
         if not path.exists():
             raise SystemExit(f"error: no {path}; run first: {DEMO.command(name, args)}")
-        facts = pipeline.read_json(args.work / name / info)
+        facts = pipeline.read_json(folder / info)
         start, stop = facts["talk_s"]
         parts[name] = (*part_audio(path, stop - start), facts)
     (walk_x, rate, walked), (turn_x, _, turned) = parts["walk"], parts["turn"]
@@ -564,8 +572,9 @@ def video(args) -> None:
     gap = np.zeros((int(GAP_S * rate), walk_x.shape[1]))
     audio = np.concatenate([walk_x, gap, turn_x])
     audio *= 10.0 ** (-1.0 / 20.0) / float(np.abs(audio).max())
-    write(args.work / "tour.wav", audio, rate)
-    print(f"wrote {args.work / 'tour.wav'} ({len(audio) / rate:.1f} s)")
+    sound = product(args, ".wav")
+    write(sound, audio, rate)
+    print(f"wrote {sound} ({len(audio) / rate:.1f} s)")
     room = room_of(args)
     scene_data = yaml.safe_load(args.scene.read_text(encoding="utf-8"))
     drawing = pictures.Pictures(
@@ -580,13 +589,14 @@ def video(args) -> None:
         pace=pace_of(visitor_of(room.scene)),
         tool=settings_lines(DEMO, args, scene_data),
     )
-    save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     moments = drawing.moments()
     pipeline.animation(
-        args.work,
+        run_folder(args),
         len(audio) / rate,
         drawing.frame,
-        args.work / "tour.wav",
+        sound,
+        out=product(args, ".mp4"),
         stills=[(name, t + 0.5) for name, t, _ in moments],
         no_mp4=args.no_mp4,
         chapters=[f"{int(t // 60)}:{int(t % 60):02d} {title}" for _, t, title in moments],
@@ -611,24 +621,35 @@ def speech_done(args) -> bool:
 
 
 def part_done(args, name: str, info: str) -> bool:
-    """Whether the walk's or the turn's sound is there for the ears this run asks for
-    (``--hrtf``), made from what the guide says now (files written before they kept
-    "plays" said the talk of their "talker") and from the scene as it is now."""
-    path = args.work / name / info
-    if not path.exists() or not (args.work / name / f"{name}.{label_of(args)}.wav").exists():
-        return False  # not made yet, or only through another head
-    if args.scene.exists() and path.stat().st_mtime < args.scene.stat().st_mtime:
-        return False  # the scene changed since: the walk edited, say
-    facts = pipeline.read_json(path)
-    return facts.get("plays", f"ACE {facts.get('talker')}") == played_by(args)
+    """Whether the walk's or the turn's sound the run plays is there
+    (:func:`part_folder`)."""
+    return part_folder(args, name, info) is not None
+
+
+def part_folder(args, name: str, info: str) -> Path | None:
+    """The folder of the walk's or the turn's sound the run plays, or None when it is
+    not there: the run's own, or that of the run with the same settings up to that step
+    (:meth:`~acoustic_spaces.demos.Demo.upstream`: the walk of a run with another
+    ``--turn`` is the same), when it is made for the ears this run asks for
+    (``--hrtf``), from what the guide says now (files written before they kept "plays"
+    said the talk of their "talker") and from that run's scene as it is now."""
+    for run in (args, DEMO.upstream(args, name)):
+        folder = run_folder(run) / name
+        path = folder / info
+        if not path.exists() or not (folder / f"{name}.{label_of(run)}.wav").exists():
+            continue  # not made yet, or only through another head
+        if run.scene.exists() and path.stat().st_mtime < run.scene.stat().st_mtime:
+            continue  # the scene changed since: the walk edited, say
+        facts = pipeline.read_json(path)
+        if facts.get("plays", f"ACE {facts.get('talker')}") == played_by(run):
+            return folder
+    return None
 
 
 def scene_done(args) -> bool:
-    """Whether scene_demo.yaml is there and newer than the example's scene it is made from
-    (the visitor's walk edited in the editor makes it again)."""
-    if not args.scene.exists():
-        return False
-    return not args.source.exists() or args.scene.stat().st_mtime >= args.source.stat().st_mtime
+    """Whether scene_demo.yaml is there, made from the example's scene ``--from`` names
+    and newer than it (the visitor's walk edited in the editor makes it again)."""
+    return pipeline.scene_made(args.scene, args.source)
 
 
 def moving(args) -> list[str]:
@@ -701,7 +722,7 @@ DEMO = Demo(
             "simulate where the visitor stands and turn its head",
             lambda args: part_done(args, "turn", TURNING),
         ),
-        Step("video", video, "tour.wav, tour.mp4 and the stills in the work folder"),
+        Step("video", video, "the run's video, its audio and the stills, named after the run"),
     ],
     options=[
         Option(
@@ -711,6 +732,7 @@ DEMO = Demo(
             "choice",
             TALKERS,
             ("speech", "walk", "turn", "video"),
+            named="plays",
         ),
         Option(
             "voice",
@@ -729,7 +751,13 @@ DEMO = Demo(
             flag="--from",
             filter="Scene files (*.yaml *.yml)",
         ),
-        Option("scene", "the scene with the guide's voice", Path("scene_demo.yaml"), "path"),
+        Option(
+            "scene",
+            "the scene with the guide's voice (default: scene_demo.yaml in the run's folder)",
+            None,
+            "path",
+            in_run="scene_demo.yaml",
+        ),
         Option(
             "stand",
             "x,y where the visitor stands to look round (m); by default the scene's listener"

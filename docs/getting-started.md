@@ -230,12 +230,15 @@ listener. Sources and listeners left out of simulations (`enabled: false`) get n
   `walk_LISTENER.wav`.
 - `acoustic-spaces demo scene.yaml` (*This scene* in the editor's **Simulation > Run
   demo…**) writes into `demo/` beside the scene (`--work` elsewhere): the simulation in
-  `results/`, one mix per listener in `seats/` (`moving/` when something walks), named
-  `LISTENER.binaural.wav`, and `tour.wav`, the stills in `stills/`, `thumbnail.png` and
-  `tour.mp4`, which visits every listener in use in the scene's order (`--listeners`
-  picks them). An example's own demo writes its scene and simulation beside its script (the
-  stadium's `scene_band.yaml` and `results_band/`) and the rest into `demo/` there
-  ([Demos](demos.md)).
+  `results/`, and a folder for each run named after its settings (`scene_binaural/`)
+  with one mix per listener in `seats/` (`moving/` when something walks), named
+  `LISTENER.binaural.wav`, and the stills, beside the run's video (`scene_binaural.mp4`),
+  its sound and its thumbnail. The video visits every listener in use in the scene's
+  order (`--listeners` picks them). A run with other settings goes to a folder and a
+  video of its own, and the `join` step plays several in one video. An example's own
+  demo writes its scene and simulation beside its script (the stadium's
+  `scene_band.yaml` and `results_band/`) and the rest into `demo/` there
+  ([Demos](demos.md#running-a-demo)).
 - The editor runs a demo in the open scene's folder, where the command line runs it,
   but for the examples of an installed copy (opened from **File > Open example**) and a
   folder it cannot write: those run in a folder of the same name in

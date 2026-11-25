@@ -4359,7 +4359,10 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
         "HRTFs": "hrtf",
         "What the sources play": "inputs",
         "Listeners": "listeners",
+        "Runs": "runs",
     }
+    # shown for the join step alone
+    assert not dialog.options.layout().isRowVisible(dialog.fields["runs"])
     assert "(--song)" in dialog.options.layout().labelForField(dialog.fields["song"]).toolTip()
     for name in ("work", "results", "source", "scene", "tour", "bpm", "again"):
         assert dialog.advanced.isAncestorOf(dialog.fields[name]), name
@@ -4468,7 +4471,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     dialog.picker.setCurrentIndex(names.index("scene"))
     assert dialog.command.text() == "acoustic-spaces demo scene.yaml all"
     steps = [step.name for step in dialog.demo.steps]
-    assert steps == ["recording", "feeds", "simulate", "render", "video"]
+    assert steps == ["recording", "feeds", "simulate", "render", "video", "join"]
     assert "song" not in dialog.fields and "seconds" in dialog.fields
     assert dialog.problem.text() == "" and ok.isEnabled()
     assert '"Spicy Funk Cake"' in dialog.downloads.text() and "61 MB" in dialog.downloads.text()
@@ -4664,6 +4667,39 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
     unsaved = DemoDialog(scene=None)
     assert not unsaved._rows["listeners"].isRowVisible(unsaved.fields["listeners"])
     unsaved.deleteLater()
+
+
+def test_demo_dialog_picks_the_runs_to_join(qapp, monkeypatch, tmp_path: Path) -> None:
+    """For the join step, the Run demo window lists the demo's finished runs in its work
+    folder, every one ticked: the video joins the ticked ones (--runs). The list is for
+    the join step alone, and the window does not keep it for next time."""
+    from acoustic_spaces import examples
+    from acoustic_spaces.demos import JOIN, record_run
+    from acoustic_spaces.examples import copy_examples
+    from acoustic_spaces.gui.demo_dialog import DemoDialog, ListenersField, keeps
+
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
+    (scene,) = copy_examples(tmp_path, ["stadium_concert"])
+    work = scene.parent / "demo"
+    for name in ("stadium_francium_binaural", "stadium_spicy_funk_cake_binaural"):
+        record_run(work / name, demo="stadium", run=name, video=f"{name}.mp4")
+        (work / f"{name}.mp4").write_bytes(b"")
+    record_run(work / "stadium_rubidium_binaural", demo="stadium", video=None)  # no video
+    dialog = DemoDialog(scene=scene)
+    field = dialog.fields["runs"]
+    assert isinstance(field, ListenersField)
+    assert not dialog._rows["runs"].isRowVisible(field)  # not for "all"
+    dialog.step.setCurrentText(JOIN.name)
+    assert dialog._rows["runs"].isRowVisible(field)
+    assert field.names == ["stadium_francium_binaural", "stadium_spicy_funk_cake_binaural"]
+    assert " join " in dialog.command.text() and "--runs" not in dialog.command.text()
+    field.list.item(0).setCheckState(Qt.CheckState.Unchecked)
+    assert "--runs stadium_spicy_funk_cake_binaural" in dialog.command.text()
+    assert dialog.chosen()[1:] == (JOIN.name, dialog.chosen()[2])
+    assert dialog.chosen()[2].runs == "stadium_spicy_funk_cake_binaural"
+    assert "finished run" in field.all.toolTip()
+    assert not keeps(dialog.demo, dialog.demo.option("runs"))
+    dialog.deleteLater()
 
 
 def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path: Path) -> None:
@@ -5813,8 +5849,19 @@ def test_a_demo_run_away_from_its_script_reads_and_writes_where_the_editor_says(
         assert demo.folder == there and not demo.in_place
         theirs = as_run(demo, args)
         assert paths(demo, theirs) == paths(demo, demo.resolved(args))
-        assert theirs.scene.parent == there and theirs.work == demo.work_folder(args)
-        assert demo.work_folder(args) == there / "demo"
+        # The scene a run writes for itself goes to its folder, named as the window
+        # names the run: the copy's own files are the defaults there.
+        assert theirs.run_folder == demo.run_folder(args)
+        assert (
+            theirs.run_folder.name
+            == {
+                "stadium": "stadium_spicy_funk_cake_binaural",
+                "crossing": "crossing_binaural",
+            }[demo.name]
+        )
+        own = demo.option("scene").in_run is not None
+        assert theirs.scene.parent == (theirs.run_folder if own else there)
+        assert theirs.work == demo.work_folder(args) == there / "demo"
     # A path left empty is the demo's default, in that folder too; a file it reads that
     # the folder has no copy of, the example's, as the window starts it, not a missing one.
     demo, args = moved[0]

@@ -329,7 +329,7 @@ class Aircraft(Vehicle):
             f"as {self.name}=WAV: a dry recording, mixed down to mono and sent every way "
             "with the engines' directivity, at least as long as the flight, its level "
             "following the recording's",
-            "sound": f"demo/{self.name}/{SOUND_FILE}: its engines' sound along its flight, dry",
+            "sound": f"demo/RUN/{self.name}/{SOUND_FILE}: its engines' sound along its flight, dry",
             "header": f"# The example with its {self.noun} alone, flown as Doc 29 flies "
             f"{JET}'s\n# {self.procedure} procedure, with the sound power and directivity of "
             f"its NPD curves,\n# written by {self.script}.\n",
@@ -341,7 +341,7 @@ class Aircraft(Vehicle):
             "NAME=WAV: a dry recording, mixed down to mono and sent every way with the "
             "engines' directivity, at least as long as the flight, its level following "
             "the recording's",
-            "sound": f"demo/NAME/{SOUND_FILE}: the aircraft's engines' sound along its "
+            "sound": f"demo/RUN/NAME/{SOUND_FILE}: the aircraft's engines' sound along its "
             "flight, dry (the departure's, …)",
             "header": self.texts()["header"],
         }

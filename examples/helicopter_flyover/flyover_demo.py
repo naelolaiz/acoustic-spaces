@@ -18,14 +18,17 @@ directivity. Run it from the folder of the helicopter_flyover example (`acoustic
 examples --copy . helicopter_flyover && cd helicopter_flyover`), in the Python
 environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
-    python flyover_demo.py helicopter  # demo/helicopter/below.wav: its sound straight down
+    python flyover_demo.py helicopter  # helicopter/below.wav: its sound straight down
     python flyover_demo.py scene       # scene_demo.yaml: the helicopter alone, at --speed
     python flyover_demo.py walk        # it every 4 m along its flight, at every listener
-    python flyover_demo.py video       # demo/tour.wav, demo/tour.mp4 (an animation), stills
+    python flyover_demo.py video       # demo/flyover_binaural.mp4 (an animation), stills
 
 or `python flyover_demo.py all`, every step, leaving out what is there already; the
-editor's Simulation > Run demo… runs it too. Use headphones; `--hrtf me.sofa` plays it
-through your own or measured HRTFs instead of a spherical head.
+editor's Simulation > Run demo… runs it too. Each run goes to a folder in ./demo named
+after its settings (demo/flyover_binaural/), with the video, its audio and its
+thumbnail beside it; `python flyover_demo.py join` plays finished runs in one video.
+Use headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of
+a spherical head.
 
 Each listener hears the helicopter through its direct sound and its reflection off the
 grass, each through its own delay as it changes, so the pitch of its blades' tones falls

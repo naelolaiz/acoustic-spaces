@@ -215,8 +215,9 @@ def check_flights(folder: Path, step_m: float, rays: int | None = None) -> list[
     demo = load(work / "flight_demo.py").at(work)
     rows = []
     for plane in (aircraft.DEPARTURE, aircraft.ARRIVAL):
-        assert demo.main(["scene", "--vehicle", plane.name]) == 0
-        room = Room.from_yaml(work / "scene_demo.yaml")
+        run = ["scene", "--vehicle", plane.name]
+        assert demo.main(run) == 0
+        room = Room.from_yaml(demo.run_folder(demo.parser().parse_args(run)) / "scene_demo.yaml")
         args = argparse.Namespace(source=work / "scene.yaml")
         exposure, maximum, impedance = _doc29_curves(plane.operation)
         segments = plane.segments_of(Scene.from_yaml(work / "scene.yaml"))

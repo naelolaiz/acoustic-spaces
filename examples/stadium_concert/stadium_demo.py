@@ -20,13 +20,16 @@ Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
     python stadium_demo.py simulate  # simulate scene_band.yaml into results_band, binaural
     python stadium_demo.py feeds     # one signal per loudspeaker, as loud as the scene says
     python stadium_demo.py render    # every listener, binaural
-    python stadium_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
+    python stadium_demo.py video     # demo/stadium_spicy_funk_cake_binaural.mp4
 
 or `python stadium_demo.py all`, which runs them in turn and leaves out what is there
-already (the music, the scene, the simulation). The scene and its simulation go beside
-the script (scene_band.yaml, results_band); the music, the feeds, the mixes and the
-video go to ./demo (--work), and a second song goes best to a work folder of its own
-(`--song francium --work demo_francium`).
+already (the music, the scene, the simulation, the feeds, the mixes). The scene and its
+simulation go beside the script (scene_band.yaml, and results_band/binaural for the
+binaural output: each output in a folder of its own); the music and each song's feeds go
+to ./demo (--work), and each run's mixes and stills to a folder there named after its
+settings (what it plays, the listeners, the output: demo/stadium_francium_binaural/),
+with the video, its audio and its thumbnail beside it, so that a run of another song or
+with other settings writes over none of them.
 Use headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
 spherical head (the simulation takes it too). `--input drum_kit=drums.wav` has a source
 play a file of yours instead of its feed, at the level of that feed (a name the scene
@@ -56,7 +59,7 @@ earlier by the time the sound system takes to reach them (0.1 s at the mix posit
 that time and the level there against the loudest listener's. On stage it is 6 to 18
 dB(A) louder than in the audience, too much to hear both in one video, so each stop is
 turned up to the loudness of the loudest one (K-weighted, as loudness meters weigh it)
-and its caption says by how much; the mixes in demo/seats keep one gain for all.
+and its caption says by how much; the mixes of a run keep one gain for all.
 `--listeners mix_position,east_stand` mixes those listeners alone, and the video tours
 them alone, each stop of the tour there with its phrases and the last to the end.
 """
@@ -81,8 +84,11 @@ from acoustic_spaces.demos import (
     listeners_in,
     listeners_option,
     music,
+    name_part,
     picked,
     pipeline,
+    product,
+    run_folder,
     sibling,
 )
 from acoustic_spaces.demos.audio import (
@@ -334,9 +340,24 @@ def music_folder(args) -> Path:
 
 
 def music_done(args) -> bool:
-    """Whether the song's master and stems are in the folder."""
+    """Whether the song's master and stems are in the folder; for a song of your own,
+    made from the files given as they are now, with its tempo, downbeat and credit."""
     folder = music_folder(args)
-    return all((folder / f"{name}.wav").exists() for name in ("master", *song_of(args)["stems"]))
+    song = song_of(args)
+    wavs = {name: folder / f"{name}.wav" for name in ("master", *song["stems"])}
+    if not all(path.exists() for path in wavs.values()):
+        return False
+    if args.music is None:
+        return True
+    given = {"master": song["master"]} | song["stems"]
+    if any(
+        Path(file).exists() and wavs[name].stat().st_mtime < Path(file).stat().st_mtime
+        for name, file in given.items()
+    ):
+        return False
+    path = folder / "song.json"
+    kept = {k: v for k, v in song.items() if k in SONG_KEPT}
+    return path.exists() and pipeline.read_json(path) == kept
 
 
 def music_download(args) -> str | None:
@@ -376,6 +397,7 @@ def band(args) -> None:
         scene,
         "# The stadium concert example with the band on the stage, written by stadium_demo.py.\n",
         args.source.parent,
+        made_from=args.source,
     )
     print(f"wrote {args.scene}; now: {pipeline.simulate_command(simulations(args)[0], args.hrtf)}")
 
@@ -401,8 +423,10 @@ def in_use(sources: list[dict]) -> list[dict]:
 
 
 def simulations(args) -> list[pipeline.Simulation]:
-    """The one simulation the demo mixes from: the scene with the band, the mixes' output."""
-    return [pipeline.Simulation(args.scene, args.results, args.format)]
+    """The one simulation the demo mixes from: the scene with the band, the mixes' output,
+    into that output's folder in ``--results``
+    (:func:`~acoustic_spaces.demos.pipeline.results_for`)."""
+    return [pipeline.Simulation(args.scene, pipeline.results_for(args.results, args), args.format)]
 
 
 def responses_of(args) -> list[dict]:
@@ -533,7 +557,7 @@ def feeds(args) -> None:
     }
     sources = in_use(scene_of(args)["sources"])
     loudest = max(total_level(s.get("level_db", 94.0)) for s in sources)
-    out = args.work / "feeds"
+    out = feeds_folder(args)
     table = {}
     for source in sources:
         what = role(source)
@@ -552,13 +576,59 @@ def feeds(args) -> None:
     played = {k: v for k, v in song.items() if k in SONG_KEPT}
     pipeline.write_json(
         out / "feeds.json",
-        {"rate": rate, "length_s": length / rate, "song": played, "sources": table},
+        {
+            "rate": rate,
+            "length_s": length / rate,
+            "song": played,
+            "stems": sorted(song["stems"]),
+            "sources": table,
+        },
     )
     print(f"wrote {len(table)} feeds to {out}")
 
 
+def feeds_folder(args) -> Path:
+    """Where the feeds of the song a run plays go: ``feeds/<song>`` in the work folder,
+    so that runs of other songs keep theirs; or the folder the arguments name instead
+    (``feeds_at``: the helicopter demo's crossing keeps a table of its own there)."""
+    at = getattr(args, "feeds_at", None)
+    if at is not None:
+        return Path(at)
+    return args.work / "feeds" / name_part(song_of(args)["name"])
+
+
+def feeds_done(args) -> bool:
+    """Whether the feeds are there, of the song the run plays (its tempo, tour, credit
+    and stems), of every source of the scene in use, at the rate of the responses and
+    newer than the scene and the song's files."""
+    path = feeds_folder(args) / "feeds.json"
+    if not path.exists() or not args.scene.exists():
+        return False
+    table = pipeline.read_json(path)
+    song = song_of(args)
+    if table.get("song") != {k: v for k, v in song.items() if k in SONG_KEPT}:
+        return False
+    if table.get("stems") != sorted(song["stems"]):
+        return False
+    names = {source["name"] for source in in_use(scene_of(args)["sources"])}
+    if set(table.get("sources", {})) != names:
+        return False
+    if not all((path.parent / f"{name}.wav").exists() for name in names):
+        return False
+    folder = music_folder(args)
+    made = [args.scene, *(folder / f"{name}.wav" for name in ("master", *song["stems"]))]
+    if any(p.exists() and p.stat().st_mtime > path.stat().st_mtime for p in made):
+        return False
+    simulation = simulations(args)[0]
+    try:
+        entries = pipeline.read_json(simulation.results / pipeline.PARAMETERS)["responses"]
+        return table.get("rate") == pipeline.response_rate(simulation, entries)
+    except (OSError, ValueError, KeyError, IndexError):
+        return False
+
+
 def feeds_table(args) -> dict:
-    path = args.work / "feeds" / "feeds.json"
+    path = feeds_folder(args) / "feeds.json"
     if not path.exists():
         raise SystemExit(f"error: no feeds yet; run: {DEMO.command('feeds', args)}")
     return pipeline.read_json(path)
@@ -573,11 +643,13 @@ def render(args) -> None:
     auralize is not to apply it (``--equal-power``)."""
     table = feeds_table(args)
     listeners = picked(args, sorted({e["listener"] for e in responses_of(args)}))
-    feeds = {name: args.work / "feeds" / f"{name}.wav" for name in table["sources"]}
+    feeds = {name: feeds_folder(args) / f"{name}.wav" for name in table["sources"]}
     weights = {name: entry["gain_db"] for name, entry in table["sources"].items()}
     simulation = simulations(args)[0]
     mixes = [pipeline.Mix(name, simulation, name, feeds, weights) for name in listeners]
-    pipeline.render_mixes(mixes, args.work / "seats", args, equal_power=True, inputs=args.inputs)
+    pipeline.render_mixes(
+        mixes, run_folder(args) / "seats", args, equal_power=True, inputs=args.inputs
+    )
 
 
 def tour_of(args, rendered) -> list[tuple[str, float, float]]:
@@ -627,35 +699,39 @@ def video(
     also: str = "",
     heading: tuple[str, str] | None = None,
 ) -> None:
-    """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
-    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``).
-    ``run_by``, another demo and its arguments, makes the mixes in ``args.work`` (its
-    ``mix`` step) and is the run the stills give; ``also`` goes after their credit and
+    """The run's audio (``<run>.wav``), one still per stop of the tour, and its video
+    (``<run>.mp4``): the stills with a scrolling spectrogram in the panel at their foot
+    (ffmpeg, unless ``--no-mp4``). ``run_by``, another demo and its arguments, makes the
+    mixes in the folder of ``args``'s run (its ``mix`` step; ``args`` then name that
+    run's folder) and is the run the stills give; ``also`` goes after their credit and
     ``heading`` (a title and the line under it) replaces theirs."""
     from acoustic_spaces.demos.pictures import save, settings_lines
 
     demo, run_args = run_by or (DEMO, args)
     made_by = demo.command("render" if run_by is None else "mix", run_args)
     pictures = sibling(__file__, "stadium_pictures")
-    seats = pipeline.seats_of(args.work / "seats", made_by, args)
+    folder = run_folder(args) / "seats"
+    seats = pipeline.seats_of(folder, made_by, args)
     tour = tour_of(args, seats["seats"])
     pipeline.missing_mixes(seats, [name for name, _, _ in tour], made_by)
     gains = gains_of(seats, tour)
     stops = [pipeline.TourStop(name, start, start, stop, gains[name]) for name, start, stop in tour]
     audio = pipeline.tour_audio(
         stops,
-        args.work / "seats",
+        folder,
         seats,
         crossfade_s=CROSSFADE_S,
         fade_out_s=FADE_OUT_S,
         scene=args.scene,
     )
-    write(args.work / "tour.wav", audio, seats["rate"])
-    print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    sound = product(args, ".wav")
+    write(sound, audio, seats["rate"])
+    print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
+    results = simulations(args)[0].results
     drawing = pictures.Pictures(
         scene_of(args),
         args.scene.parent,
-        pictures.levels_at(args.results),
+        pictures.levels_at(results),
         seats["seats"],
         tour,
         TITLES,
@@ -666,16 +742,17 @@ def video(
         + also,
         hrtf=args.hrtf,
         tool=settings_lines(
-            demo, run_args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
+            demo, run_args, scene_of(args), pipeline.read_json(results / pipeline.PARAMETERS)
         ),
         heading=heading or pictures.HEADING,
     )
-    save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     pipeline.video(
-        args.work,
+        run_folder(args),
         [(name, stop - start) for name, start, stop in tour],
         drawing.still,
-        args.work / "tour.wav",
+        sound,
+        out=product(args, ".mp4"),
         no_mp4=args.no_mp4,
     )
 
@@ -698,12 +775,16 @@ DEMO = Demo(
             "band",
             band,
             "scene_band.yaml: the scene with the band on the stage",
-            lambda args: args.scene.exists(),
+            lambda args: pipeline.scene_made(args.scene, args.source),
         ),
         SIMULATE,
-        Step("feeds", feeds, "one signal per loudspeaker, as loud as the scene says"),
-        Step("render", render, "every listener, binaural, with one gain for all"),
-        Step("video", video, "tour.wav, the stills and tour.mp4 in the work folder"),
+        Step("feeds", feeds, "one signal per loudspeaker, as loud as the scene says", feeds_done),
+        Step(
+            "render",
+            render,
+            "every listener in --format (binaural by default), with one gain for all",
+        ),
+        Step("video", video, "the run's video, its audio and the stills, named after the run"),
     ],
     options=[
         Option(
@@ -713,6 +794,8 @@ DEMO = Demo(
             "choice",
             tuple(sorted(SONGS)),
             ("music", "feeds"),
+            named="plays",
+            replaced_by="music",
         ),
         *music.own_song_options(("music", "feeds"), stems=STEMS, downbeat=True),
         Option(
@@ -725,7 +808,12 @@ DEMO = Demo(
             filter="Scene files (*.yaml *.yml)",
         ),
         Option("scene", "the scene with the band", Path("scene_band.yaml"), "path"),
-        Option("results", "folder written by simulate", Path("results_band"), "folder"),
+        Option(
+            "results",
+            "folder written by simulate, a folder in it for each output",
+            Path("results_band"),
+            "folder",
+        ),
         *common_options(),
         input_option(),
         listeners_option(),
