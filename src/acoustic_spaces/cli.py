@@ -3387,10 +3387,14 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Each source plays the WAV file its signal names, at its sound power; every "
             "listener in use is mixed with one gain for all, and a video tours them with "
-            "stills of the scene and of how the sound was made. Everything goes to demo/ "
-            "beside the scene (--work), each run's mixes and video named after its settings; "
-            "the join step plays finished runs one after another in one video. Needs ffmpeg "
-            "for the video and Pillow (the viz extra) for the stills."
+            "stills of the scene and of how the sound was made. --sources plays some of the "
+            "sources alone, by name or by the scene's group, and --listeners some of the "
+            "listeners, in its order; --sources-play in-turn plays each source or group in a "
+            "part of its own, an option given several values (--format binaural,mono) one "
+            "part for each, and --series orders the parts, all one after another in one "
+            "video. Everything goes to demo/ beside the scene (--work), each run's mixes and "
+            "video named after its settings. Needs ffmpeg for the video and Pillow (the viz "
+            "extra) for the stills."
         ),
     )
     demo.add_argument("scene", help="the scene file; its sources' signal fields say what they play")
@@ -3400,7 +3404,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         choices=[s.name for s in SCENE_DEMO.steps] + ["all"],
         help="; ".join(f"{s.name}: {s.help}" for s in SCENE_DEMO.steps)
-        + "; all (default): every step but join, leaving out what is done already",
+        + "; all (default): every step, leaving out what is done already",
     )
     for option in SCENE_DEMO.options:
         if option.name != "scene":

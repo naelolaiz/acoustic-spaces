@@ -1,5 +1,6 @@
 """The names of the demos' runs, so that runs with other settings write over none of each
-other's files, and the join step, which plays several finished runs in one video."""
+other's files, and the runs of several parts (several values of an option, sources in
+turn, listeners each in a part), played one after another in one video."""
 
 from __future__ import annotations
 
@@ -13,9 +14,13 @@ from pathlib import Path
 import pytest
 
 from acoustic_spaces.demos import (
-    JOIN,
+    IN_TURN,
     RUN_NAME_MOST,
     RUN_RECORD,
+    Demo,
+    Option,
+    Source,
+    Step,
     joined_name,
     list_demos,
     load,
@@ -25,14 +30,7 @@ from acoustic_spaces.demos import (
     record_run,
     run_folder,
 )
-from acoustic_spaces.demos.join import (
-    DEFAULT_PART,
-    card_lines,
-    clock,
-    finished_runs,
-    joined_run_name,
-    shifted_chapter,
-)
+from acoustic_spaces.demos.join import card_lines, clock, join_parts, shifted_chapter
 from acoustic_spaces.examples import copy_examples
 
 
@@ -129,33 +127,103 @@ def test_a_written_scene_names_the_scene_it_is_made_from(tmp_path: Path) -> None
     assert beside == {"directivity": {"file": "box.csv"}}
 
 
-def test_the_join_names_the_video_after_what_its_runs_share() -> None:
-    """The joined video's name: the parts all its runs share in front and behind, and
-    between them what sets each apart, joined by +; a run with nothing of its own there
-    is "default"."""
-    departure = {
-        "run": "a",
-        "parts": [["demo", "flight"], ["plays", "departure"], ["label", "binaural"]],
-    }
-    arrival = {
-        "run": "b",
-        "parts": [["demo", "flight"], ["plays", "arrival"], ["label", "binaural"]],
-    }
-    assert joined_run_name([departure, arrival]) == "flight_departure+arrival_binaural"
-    fast = {
-        "run": "c",
-        "parts": [
-            ["demo", "flight"],
-            ["plays", "departure"],
-            ["changed", "step-8"],
-            ["label", "binaural"],
-        ],
-    }
-    assert joined_run_name([departure, fast]) == f"flight_departure_{DEFAULT_PART}+step-8_binaural"
-    kemar = {"run": "d", "parts": [["demo", "flight"], ["label", "binaural-kemar"]]}
-    plain = {"run": "e", "parts": [["demo", "flight"], ["label", "binaural"]]}
-    assert joined_run_name([plain, kemar]) == "flight_binaural+binaural-kemar"
-    assert joined_run_name([{"run": "x_y"}, {"run": "x_z"}]) == "x_y+x_z"  # no parts kept
+def test_several_values_of_an_option_play_in_turn() -> None:
+    """--vehicle departure,arrival: a run of two parts, each an ordinary run of its own
+    folder, the run named after both; the command line gives them as they came."""
+    flight = _demo("flight", "airport")
+    args = flight.parser().parse_args(["all", "--vehicle", "departure,arrival"])
+    assert args.vehicle == ("departure", "arrival")
+    resolved = flight.resolved(args)
+    assert run_folder(resolved).name == "flight_departure+arrival_binaural"
+    assert [run_folder(p).name for p in resolved.series_parts] == [
+        "flight_departure_binaural",
+        "flight_arrival_binaural",
+    ]
+    assert flight.command("all", args) == "python flight_demo.py all --vehicle departure,arrival"
+    assert flight.check(args) is None
+    # One value is an ordinary run; a value twice plays once.
+    one = flight.parser().parse_args(["all", "--vehicle", "arrival,arrival"])
+    assert one.vehicle == "arrival" and len(flight.each(one)) == 1
+    with pytest.raises(SystemExit):  # not one of its choices
+        flight.parser().parse_args(["all", "--vehicle", "departure,landing"])
+
+
+def test_the_series_orders_the_parts_outermost_first() -> None:
+    """Two options of several values play every pair, the first of the options
+    outermost; --series sets another order, and names the run after it; the listeners
+    split into parts only where --series names them."""
+    flight = _demo("flight", "airport")
+
+    def parts(*argv: str) -> tuple[str, list[str]]:
+        resolved = flight.resolved(flight.parser().parse_args(["all", *argv]))
+        return run_folder(resolved).name, [run_folder(p).name for p in resolved.series_parts]
+
+    name, names = parts("--vehicle", "departure,arrival", "--format", "binaural,mono")
+    assert name == "flight_departure+arrival_binaural+mono"
+    assert names == [
+        "flight_departure_binaural",
+        "flight_departure_mono",
+        "flight_arrival_binaural",
+        "flight_arrival_mono",
+    ]
+    name, names = parts(
+        "--vehicle", "departure,arrival", "--format", "binaural,mono", "--series", "format"
+    )
+    assert name == "flight_departure+arrival_series-format-vehicle_binaural+mono"
+    assert names[:2] == ["flight_departure_binaural", "flight_arrival_binaural"]
+    name, names = parts("--listeners", "lateral_450m,approach_2000m", "--series", "listeners")
+    assert name == "flight_departure_each-lateral_450m+approach_2000m_series-listeners_binaural"
+    assert names == [
+        "flight_departure_lateral_450m_binaural",
+        "flight_departure_approach_2000m_binaural",
+    ]
+    problem = flight.check(flight.parser().parse_args(["all", "--series", "colour"]))
+    assert problem is not None and "--series colour" in problem
+
+
+def _sources_demo(tmp_path: Path) -> Demo:
+    """A demo of four sources in two groups, three of them its own pick."""
+    sources = [
+        Source("main_left", "PA/Mains"),
+        Source("subs", "PA/Subwoofers"),
+        Source("drum_kit", "Band"),
+        Source("helicopter", "Helicopter", on=False),
+    ]
+    return Demo(
+        name="toy",
+        example="toy",
+        title="Toy",
+        description="A toy.",
+        script=tmp_path / "toy_demo.py",
+        steps=[Step("video", lambda args: None, "the video")],
+        options=[Option("work", "where", Path("demo"), "folder")],
+        sources=lambda args: sources,
+    )
+
+
+def test_the_sources_a_run_plays_by_name_or_group(tmp_path: Path) -> None:
+    """--sources picks by name or by group (PA takes PA/Mains and PA/Subwoofers); the
+    demo's own pick plays by default and leaves the run's name as it is; in turn, each
+    name given (a group as one) or each top group of the pick is a part."""
+    demo = _sources_demo(tmp_path)
+
+    def run(**values):
+        return demo.resolved(argparse.Namespace(**vars(demo.defaults()) | values))
+
+    assert run().playing == ("main_left", "subs", "drum_kit") and run_folder(run()).name == "toy"
+    assert run(sources="PA").playing == ("main_left", "subs")
+    assert run_folder(run(sources="PA")).name == "toy_PA"
+    assert run(sources="PA,Band").playing == run().playing
+    assert run_folder(run(sources="PA,Band")).name == "toy"  # the demo's own pick
+    assert run(sources="helicopter,drum_kit").playing == ("drum_kit", "helicopter")
+    turns = run(sources_play=IN_TURN)
+    assert run_folder(turns).name == "toy_each-source"
+    assert [p.playing for p in turns.series_parts] == [("main_left", "subs"), ("drum_kit",)]
+    assert [run_folder(p).name for p in turns.series_parts] == ["toy_PA", "toy_Band"]
+    given = run(sources="subs,Band", sources_play=IN_TURN)
+    assert [p.playing for p in given.series_parts] == [("subs",), ("drum_kit",)]
+    problem = demo.check(argparse.Namespace(**vars(demo.defaults()) | {"sources": "choir"}))
+    assert problem is not None and "--sources choir: no such source or group" in problem
 
 
 def test_the_join_moves_each_runs_chapters_to_its_place() -> None:
@@ -214,45 +282,36 @@ def _length_s(path: Path) -> float:
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
-def test_the_join_step_plays_finished_runs_in_turn(tmp_path: Path, capsys) -> None:
-    """join: the finished runs (a video there, as the run's record names it), each after
-    a title card, into one video in the work folder named after them, with the chapters
-    of each at their place; fewer than two, or a run that is not there, is refused."""
+def test_the_parts_of_a_run_play_in_one_video(tmp_path: Path, capsys) -> None:
+    """The parts' videos (as each part's record names it), each after a title card, into
+    one video named after the run, with the chapters of each at their place; the run's
+    folder keeps the cards and its record. A part with no video yet is refused."""
     pytest.importorskip("PIL")
     scene = copy_examples(tmp_path, ["airport"])[0]
     demo = load(scene.parent / "flight_demo.py").at(scene.parent)
-    work = demo.work_folder(demo.defaults())
-    runs = {}
-    for vehicle, seconds, tone in (("departure", 1.0, 440), ("arrival", 1.5, 660)):
-        args = demo.resolved(argparse.Namespace(**vars(demo.defaults()) | {"vehicle": vehicle}))
-        folder = run_folder(args)
-        video = product(args, ".mp4")
-        work.mkdir(parents=True, exist_ok=True)
+    args = demo.resolved(demo.parser().parse_args(["video", "--vehicle", "departure,arrival"]))
+    first, second = args.series_parts
+    for part, seconds, tone in ((first, 1.0, 440), (second, 1.5, 660)):
+        folder, video = run_folder(part), product(part, ".mp4")
+        folder.mkdir(parents=True, exist_ok=True)
+        if part is second:
+            with pytest.raises(SystemExit, match="has no video yet"):
+                join_parts(demo, args)
         _video(video, seconds, tone)
         record_run(
             folder,
             demo=demo.name,
             title=demo.title,
             run=folder.name,
-            parts=[list(part) for part in demo.run_parts(args)],
-            command=demo.command("all", args, names_only=True),
+            parts=[list(p) for p in demo.run_parts(part)],
+            command=demo.command("all", part, names_only=True),
             video=video.name,
             length_s=seconds,
             chapters=["0:00 Start"],
         )
-        runs[vehicle] = folder.name
-    record_run(work / "flight_unfinished_binaural", demo=demo.name, video=None)
-    assert [run["run"] for run in finished_runs(demo, demo.resolved(demo.defaults()))] == sorted(
-        runs.values()
-    )
-    assert demo.runs(demo.defaults()) == sorted(runs.values())
-    with pytest.raises(SystemExit, match="no finished run of the flight demo"):
-        demo.main(["join", "--runs", "flight_unfinished_binaural,flight_arrival_binaural"])
-    with pytest.raises(SystemExit, match="join needs two finished runs"):
-        demo.main(["join", "--runs", runs["arrival"]])
-    order = f"{runs['departure']},{runs['arrival']}"
-    assert demo.main(["join", "--runs", order]) == 0
-    out = work / "flight_departure+arrival_binaural.mp4"
+    out = join_parts(demo, args)
+    work = run_folder(args).parent
+    assert out == work / "flight_departure+arrival_binaural.mp4"
     assert out.exists() and f"wrote {out}" in capsys.readouterr().out
     assert _length_s(out) == pytest.approx(2 * 4.0 + 1.0 + 1.5, abs=0.15)
     chapters = (work / "flight_departure+arrival_binaural_chapters.txt").read_text().splitlines()
@@ -262,8 +321,10 @@ def test_the_join_step_plays_finished_runs_in_turn(tmp_path: Path, capsys) -> No
         "0:05 2. flight_arrival_binaural",
         "0:09 Start",
     ]
-    cards = sorted(p.name for p in (work / "flight_departure+arrival_binaural_cards").iterdir())
+    cards = sorted(p.name for p in (run_folder(args) / "cards").iterdir())
     assert cards == ["00_flight_departure_binaural.png", "01_flight_arrival_binaural.png"]
-    # The join is no run of its own: it records none, and "all" leaves it out.
-    assert not (work / "flight_departure+arrival_binaural" / RUN_RECORD).exists()
-    assert JOIN.name not in demo.all_steps()
+    record = json.loads((run_folder(args) / RUN_RECORD).read_text())
+    assert record["video"] == out.name and record["series"] == [
+        "flight_departure_binaural",
+        "flight_arrival_binaural",
+    ]

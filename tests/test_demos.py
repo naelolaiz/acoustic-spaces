@@ -19,7 +19,6 @@ from acoustic_spaces import fetch
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.demos import (
     DONE,
-    JOIN,
     SIMULATE,
     Demo,
     Option,
@@ -830,9 +829,8 @@ def test_the_examples_demos_are_listed() -> None:
     assert {demo.name for demo in demos} >= {"church", "stadium", "walk", "crossing"}
     for demo in demos:
         assert demo.title and demo.description and demo.steps
-        # Every demo joins its finished runs into one video, which all leaves out.
-        assert demo.steps[-1] is JOIN and JOIN.name not in demo.all_steps()
-        assert demo.option("runs").kind == "runs"
+        # Every demo orders the parts of a run that plays several of something.
+        assert demo.option("series").name == "series" and "video" in demo.all_steps()
         assert demo.script.exists() and demo.script.parent.name == demo.example
         own = demos_of(demo.example)
         assert demo.name in [d.name for d in own] and own[0].builds_on is None
