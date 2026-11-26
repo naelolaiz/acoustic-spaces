@@ -3265,6 +3265,14 @@ class Scene(_Model):
             "in turn)"
         ),
     )
+    tours: dict[str, list[TourStop]] | None = Field(
+        default=None,
+        description=(
+            "the tour a demo of the scene plays with a recording named, in place of tour: "
+            "by the name of a free recording, or of a file of yours without its suffix "
+            "(a song whose phrases fit other stops than the scene's tour)"
+        ),
+    )
 
     @field_validator("recording", mode="before")
     @classmethod
@@ -3339,13 +3347,18 @@ class Scene(_Model):
             raise ValueError(f"source and listener names must be unique: {', '.join(duplicates)}")
         if self.long_term is not None and self.geometry.ground is None:
             raise ValueError("long_term is for outdoor scenes (geometry.ground)")
-        for stop in self.tour or []:
-            if stop.listener not in {lis.name for lis in self.listeners}:
-                raise ValueError(f"tour: no listener {stop.listener!r} in the scene")
-            if stop.atmosphere == "still" and self.still:
-                raise ValueError(
-                    f"tour: {stop.listener!r} in still air, where the scene's air is still already"
-                )
+        tours = [("tour", self.tour or [])] + [
+            (f"tours: {name}", stops) for name, stops in (self.tours or {}).items()
+        ]
+        for where, stops in tours:
+            for stop in stops:
+                if stop.listener not in {lis.name for lis in self.listeners}:
+                    raise ValueError(f"{where}: no listener {stop.listener!r} in the scene")
+                if stop.atmosphere == "still" and self.still:
+                    raise ValueError(
+                        f"{where}: {stop.listener!r} in still air, where the scene's air is "
+                        "still already"
+                    )
         removed = self.simulation.insertion_loss_of
         problem = None if removed is None else insertion_loss_problem(self.geometry, removed)
         if problem is not None:
@@ -3445,6 +3458,11 @@ class Scene(_Model):
                 del entry["level_db"]  # the vocal effort gives it
         if self.tour is not None:  # each stop as short as it reads
             data["tour"] = [s.model_dump(mode="json", exclude_defaults=True) for s in self.tour]
+        if self.tours is not None:
+            data["tours"] = {
+                name: [s.model_dump(mode="json", exclude_defaults=True) for s in stops]
+                for name, stops in self.tours.items()
+            }
         if self.simulation.early.coherent_max_band_hz is None:
             data["simulation"]["early"]["coherent_max_band_hz"] = None
         # The open sky's material is added when the scene is read: left out, as written.

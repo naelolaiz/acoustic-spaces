@@ -976,6 +976,9 @@ tour:
   stop is heard in (`{piece: IV, listener: conductor}`); a run plays each piece the
   tour stops in, in its order, in a part of its own. The stops of a piece that give no
   length share it out, each cut at its quietest moment within 10 s.
+- `tours` gives the tour for another recording than the scene's own, by its name (a
+  free recording's, or a file of yours without its suffix), in place of `tour`: a song
+  whose phrases or sections fit other stops (the stadium's, one for each of its songs).
 - A run's `--tour` and `--listeners` give the demo another tour, without changing the
   scene.
 

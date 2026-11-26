@@ -373,22 +373,53 @@ listeners:
     orientation: {yaw: 180}
     pattern: supercardioid
 # The tour a demo of the scene plays as the song runs on: the mix position, the front of
-# the pitch, the players on the stage, the stands and the back of the pitch, each for a
-# phrase of 8 bars, and the mix position again to the end. Spicy Funk Cake is eleven
-# phrases long, so the side of the pitch and the north stand's near seats are left out
-# (`--tour` takes them, or `--listeners pitch_side,...` a tour of its own).
+# the pitch, the players on the stage, the pitch's side, the stands and the back of the
+# pitch, each for a phrase of 8 bars, and the mix position again to the end. Each song
+# of the catalogue has a tour of its own (tours): "Spicy Funk Cake" is eleven phrases
+# long, so its tour leaves out the side of the pitch and the north stand's near seats;
+# "Francium" is nineteen and a half, so the stops that take one of its sections' start
+# last two. `--tour` gives another, `--listeners pitch_side,...` a tour of those.
 tour:
   - {listener: mix_position, phrases: 1}
   - {listener: pitch_front, phrases: 1}
   - {listener: singer, phrases: 1}
   - {listener: drummer, phrases: 1}
   - {listener: guitarist, phrases: 1}
+  - {listener: pitch_side, phrases: 1}
+  - {listener: north_stand_near, phrases: 1}
   - {listener: north_stand_far, phrases: 1}
   - {listener: north_stand_top, phrases: 1}
   - {listener: east_stand, phrases: 1}
   - {listener: pitch_back, phrases: 1}
   - {listener: pitch_behind_towers, phrases: 1}
   - {listener: mix_position, to_end: true}
+tours:
+  spicy_funk_cake:
+    - {listener: mix_position, phrases: 1}
+    - {listener: pitch_front, phrases: 1}
+    - {listener: singer, phrases: 1}
+    - {listener: drummer, phrases: 1}
+    - {listener: guitarist, phrases: 1}
+    - {listener: north_stand_far, phrases: 1}
+    - {listener: north_stand_top, phrases: 1}
+    - {listener: east_stand, phrases: 1}
+    - {listener: pitch_back, phrases: 1}
+    - {listener: pitch_behind_towers, phrases: 1}
+    - {listener: mix_position, to_end: true}
+  francium:
+    - {listener: mix_position, phrases: 1}
+    - {listener: pitch_front, phrases: 2}
+    - {listener: singer, phrases: 1}
+    - {listener: drummer, phrases: 1}
+    - {listener: guitarist, phrases: 1}
+    - {listener: pitch_side, phrases: 1}
+    - {listener: north_stand_near, phrases: 1}
+    - {listener: north_stand_far, phrases: 1}
+    - {listener: north_stand_top, phrases: 2}
+    - {listener: east_stand, phrases: 2}
+    - {listener: pitch_back, phrases: 2}
+    - {listener: pitch_behind_towers, phrases: 2}
+    - {listener: mix_position, to_end: true}
 simulation:
   early: {method: image_sources, max_order: 2, diffraction: none}
   # The late sound radiates from every reflection to the listeners: in a bowl this size

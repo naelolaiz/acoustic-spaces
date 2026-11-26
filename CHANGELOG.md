@@ -47,7 +47,10 @@
 - Changed: the stadium's and the concert stage's drum kit, singer and guitar amp are in
   use, playing the recording's drums, vocal and guitar stems, and their vocal wedges,
   drum fill and side fills play monitor mixes of the stems; the stadium's scene has a
-  tour, a phrase at each of its places and the mix position again to the end.
+  tour, a phrase at each of its places and the mix position again to the end, and a
+  tour for each of its songs as `stadium_demo.py` has them (`tours`).
+- Added: a scene's `tours`, the tour its demo plays with a recording named (a free
+  one, or a file of yours by its name) in place of `tour`.
 - Added: multitrack recordings, a stem per singer or player at the level each plays at,
   which a source plays as it is (`channel: singer_f1`), and recordings built the first
   time from what they are made of: `dona_nobis_pacem`, the round "Dona nobis pacem" by

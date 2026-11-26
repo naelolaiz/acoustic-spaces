@@ -439,9 +439,10 @@ def changed(args: argparse.Namespace, scene: Scene) -> Scene:
     a speech spectrum taking its talker's (a woman's or a man's); with
     ``--vocal-effort``, every talker in use (a source with a speech spectrum) talking so
     (:meth:`~acoustic_spaces.scene.Source.talking`); with ``--atmosphere still``, in
-    still air (:func:`still_air`). ValueError for a ``--stand`` or a ``--turn`` that does
+    still air (:func:`still_air`); its tour the one it gives for the recording the run
+    plays (:func:`toured_for`). ValueError for a ``--stand`` or a ``--turn`` that does
     not read, or names a listener the scene does not have."""
-    scene = taken_in(args, scene)
+    scene = taken_in(args, toured_for(scene, getattr(args, "recording", None)))
     names = [lis.name for lis in scene.listeners]
     stand, turn = getattr(args, "stand", None), getattr(args, "turn", None)
     if stand is not None:
@@ -481,6 +482,19 @@ def changed(args: argparse.Namespace, scene: Scene) -> Scene:
     if name is not None:
         update["recording"] = free.name if free is not None else Path(name)
     return scene.model_copy(update=update)
+
+
+def toured_for(scene: Scene, recording: str | Path | None) -> Scene:
+    """``scene`` with the tour it gives for ``recording`` (a free recording's name or a
+    file of yours; None, the scene's own) in place of its ``tour``: its ``tours``' by
+    the recording's name (a file's without its suffix), where it has one."""
+    played = scene.recording if recording is None else recording
+    if not scene.tours or played is None:
+        return scene
+    name = played if isinstance(played, str) else Path(played).stem
+    if name not in scene.tours:
+        return scene
+    return scene.model_copy(update={"tour": scene.tours[name]})
 
 
 def _run(args: argparse.Namespace) -> Scene | None:

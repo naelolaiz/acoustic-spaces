@@ -808,7 +808,8 @@ def test_a_tour_hears_a_listener_in_the_weather_and_in_still_air(
 def test_a_scene_s_tour_names_its_listeners_and_one_length_a_stop(tmp_path: Path) -> None:
     """A scene's ``tour``: each stop at a listener of the scene, in its weather or in
     still air (not where its air is still already), for one length at most; written back
-    as short as it reads."""
+    as short as it reads; its ``tours`` alike, the one for the recording a run plays in
+    the tour's place."""
     from pydantic import ValidationError
 
     from acoustic_spaces.scene import TourStop
@@ -825,3 +826,18 @@ def test_a_scene_s_tour_names_its_listeners_and_one_length_a_stop(tmp_path: Path
         Scene.model_validate({**data, "tour": [{"listener": "nobody"}]})
     with pytest.raises(ValidationError, match="'far' in still air, where the scene's air"):
         Scene.model_validate({**data, "atmosphere": None})
+    # Its tours, one for a recording named, each checked as its tour is; a run that plays
+    # that recording (a free one, or a file of yours by its name) takes its tour.
+    other = [{"listener": "far", "phrases": 1}, {"listener": "near", "to_end": True}]
+    toured = Scene.model_validate({**data, "tours": {"potassium": other, "my_song": tour}})
+    assert toured.to_data()["tours"] == {"potassium": other, "my_song": tour}
+    with pytest.raises(ValidationError, match="tours: potassium: no listener 'nobody'"):
+        Scene.model_validate({**data, "tours": {"potassium": [{"listener": "nobody"}]}})
+    for played, stops in (
+        ("potassium", other),
+        (Path("songs/my_song.flac"), tour),
+        ("rubidium", tour),  # none of its own: the scene's tour
+        (None, tour),
+    ):
+        heard = scene_demo.toured_for(toured, played)
+        assert [s.model_dump(exclude_defaults=True) for s in heard.tour] == stops
