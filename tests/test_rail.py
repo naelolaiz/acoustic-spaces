@@ -2,7 +2,6 @@
 Schall 03's data sheets, its equation 1, the sound power of a moving unit and its
 directivity, a train's points and their sound, and the railway example's line source."""
 
-import argparse
 import math
 from pathlib import Path
 
@@ -12,6 +11,7 @@ import pytest
 from acoustic_spaces.demos import rail
 from acoustic_spaces.examples import example_path
 from acoustic_spaces.parameters import A_WEIGHTING_DB
+from acoustic_spaces.scene import Scene
 
 RATE = 16_000
 
@@ -310,7 +310,7 @@ def test_a_fifth_of_the_freight_trains_wagons_are_tank_wagons() -> None:
     24 wagons, 20 % within one wagon, spread along it, each with its body ringing 4 m up
     (sources 3 and 4): 4 m up 116.4 dB(A) of sound power, the locomotive's roof alone
     111.8, the train 131.9 dB(A) in all. Its first wagon, the TSI's freight wagon in
-    validation/rail_sources.py, is not one. What its roof's source plays says so, and
+    validation/rail_sources.py, is not one. The credit of its roof's source says so, and
     the other trains', which have no tank wagons, do not."""
     from acoustic_spaces.parameters import a_weighted
 
@@ -328,12 +328,17 @@ def test_a_fifth_of_the_freight_trains_wagons_are_tank_wagons() -> None:
     assert a_weighted(rail.train_power_db(loco)) == pytest.approx(111.78, abs=0.01)
     assert a_weighted(rail.train_power_db(roof)) == pytest.approx(116.35, abs=0.01)
     assert a_weighted(rail.train_power_db(points)) == pytest.approx(131.86, abs=0.01)
-    tanks_there = "and its tank wagons' bodies there"
+    from acoustic_spaces.demos.models import made_brief
+
+    railway = Scene.from_yaml(Path(example_path("railway")))
+    roof = next(s for s in railway.sources if s.name == "train_roof")
+    tanks_there = "on its roof and its tank wagons' bodies"
     for name in ("freight", "regional"):
-        roofs = rail.TRAIN_VEHICLE.feeds(argparse.Namespace(train=name), "")
-        assert (tanks_there in roofs["train_roof"]) == (name == "freight"), name
-    tram = rail.TRAM_VEHICLE.feeds(argparse.Namespace(), "")
-    assert tanks_there not in tram["tram_roof"]
+        train = roof.model_copy(update={"model": roof.model.model_copy(update={"train": name})})
+        assert (tanks_there in made_brief(train)) == (name == "freight"), name
+    street = Scene.from_yaml(Path(example_path("street")))
+    tram = next(s for s in street.sources if s.name == "tram_roof")
+    assert tanks_there not in made_brief(tram)
 
 
 def test_a_points_sound_has_its_spectrum_and_its_share_of_the_level() -> None:
@@ -576,7 +581,7 @@ def test_the_train_horn_sounds_its_notes_together_as_a_chord() -> None:
     """--horn chord: the TSI's two notes together in the train horn's blasts, the two
     109 dB(C) together 25 m ahead on EN 15153-2's site (a group's level); its made
     sound holds both notes in every blast; a recording plays as loud as the chord's
-    made blasts; and the run, its walk and its credit say it is the chord."""
+    made blasts; and its made sound is another, and its credit says it is the chord."""
     import importlib
 
     from acoustic_spaces.demos import siren
@@ -600,51 +605,54 @@ def test_the_train_horn_sounds_its_notes_together_as_a_chord() -> None:
         spectrum = np.abs(np.fft.rfft(blast))
         f = np.fft.rfftfreq(len(blast), 1.0 / RATE)
         assert sorted(f[np.argsort(spectrum)[-2:]]) == pytest.approx([370.0, 660.0], abs=1.5)
-    vehicle = rail.TRAIN_VEHICLE
-    every = ("train", "train_roof", "train_pantograph", "train_horn")
-    chord = argparse.Namespace(horn="chord", playing=every)
-    assert vehicle.horn_on(chord) and vehicle.horn_of(chord) == "chord"
-    np.testing.assert_array_equal(vehicle.horn.power("chord", RATE), horn.horn_power(RATE, kind))
+    from acoustic_spaces.demos import models
+
+    railway = Scene.from_yaml(Path(example_path("railway")))
+    blasts = next(s for s in railway.sources if s.name == "train_horn")
+    chord = blasts.model_copy(update={"model": blasts.model.model_copy(update={"signal": "chord"})})
+    assert models.horn_kind(chord.model) is kind and models.horn_kind(blasts.model) is notes
     made = horn.horn_sound(RATE, kind.power_s, kind)
-    assert vehicle.input_gain(chord, "train_horn", made, RATE) == pytest.approx(1.0, rel=1e-12)
-    blasts = argparse.Namespace(horn="blasts", playing=every)
-    assert vehicle.input_gain(blasts, "train_horn", made, RATE) != pytest.approx(1.0, rel=1e-3)
-    assert vehicle.played_by(chord) != vehicle.played_by(blasts)
-    facts = {"speed_kmh": 160.0, "horn": "chord"}
-    assert "horn: 660 and 370 Hz together, in blasts" in vehicle.credits(facts, {})
-    assert "horn: 660 and 370 Hz in turn, in blasts" in vehicle.credits(
-        facts | {"horn": "blasts"}, {}
-    )
+    assert models.input_gain(chord, made, RATE) == pytest.approx(1.0, rel=1e-12)
+    assert models.input_gain(blasts, made, RATE) != pytest.approx(1.0, rel=1e-3)
+    assert models.made_key(chord, RATE, 20.0) != models.made_key(blasts, RATE, 20.0)
+    assert "660 and 370 Hz together, in blasts" in models.made_brief(chord)
+    assert "660 and 370 Hz in turn, in blasts" in models.made_brief(blasts)
 
 
-def test_a_horns_first_blast_is_not_faded_in(tmp_path) -> None:
+def test_a_horns_first_blast_is_not_faded_in() -> None:
     """A pass's sound fades in and out over FADE_S, but a horn's blasts rise and fall
-    of themselves: its feed fades over its own rise time only, so the first blast of
-    the train's horn plays at its level after rising as every blast does; the train's
-    other sources, the fire engine's and the car's horns as the train's horn."""
+    of themselves: its made sound fades over its own rise time only, so the first blast
+    of the train's horn plays at its level after rising as every blast does; the train's
+    other sources and the fire engine's siren fade over FADE_S, the fire engine's and the
+    car's horns as the train's horn."""
     import importlib
 
-    from acoustic_spaces.demos import passby, siren
-    from acoustic_spaces.demos.audio import write
+    from acoustic_spaces.demos import models, passby
 
     horn = importlib.import_module("acoustic_spaces.demos.horn")
-    vehicle = rail.TRAIN_VEHICLE
-    assert vehicle.fade_s("train_horn") == horn.TRAIN_HORN.rise_s == horn.RISE_S
-    assert vehicle.fade_s("train") == passby.FADE_S
-    assert siren.FIRE_ENGINE_VEHICLE.fade_s(siren.FIRE_HORN) == horn.AIR_HORN.rise_s
-    assert siren.FIRE_ENGINE_VEHICLE.fade_s(siren.FIRE_SIREN) == passby.FADE_S
-    assert siren.HONKING_CAR.fade_s(siren.CAR_HORN_PART) == horn.CAR_HORN.rise_s
-    duration = 6.0
-    args = argparse.Namespace(work=tmp_path, horn="blasts", run_folder=tmp_path)
-    (tmp_path / "train").mkdir()
-    write(tmp_path / "train" / "train_horn.wav", vehicle.horn.sound("blasts", RATE, duration), RATE)
-    made = vehicle.made(args, RATE, duration, "train_horn")
-    x = passby.feed(None, args, RATE, duration, vehicle, "train_horn")
+    named = {
+        s.name: s
+        for example in ("railway", "street")
+        for s in Scene.from_yaml(Path(example_path(example))).sources
+    }
+    assert models.fade_s(named["train_horn"].model) == horn.TRAIN_HORN.rise_s == horn.RISE_S
+    assert models.fade_s(named["train"].model) == passby.FADE_S
+    assert models.fade_s(named["fire_engine_horn"].model) == horn.AIR_HORN.rise_s
+    assert models.fade_s(named["fire_engine_siren"].model) == passby.FADE_S
+    assert models.fade_s(named["car_horn"].model) == horn.CAR_HORN.rise_s
+    source = named["train_horn"]
+    x = models.made_sound(source, RATE, 20.0)
+    start, end = models.pass_times(source)
+    lead = int(round(start * RATE))
+    assert not np.any(x[:lead])
+    made = horn.horn_sound(RATE, end - start, horn.TRAIN_HORN)
+    played = x[lead:]
     rise, n = int(horn.RISE_S * RATE), len(made)
-    np.testing.assert_array_equal(x[rise : n - rise], made[rise : n - rise])
+    assert len(played) == n
+    np.testing.assert_array_equal(played[rise : n - rise], made[rise : n - rise])
     first = slice(rise, int(horn.TRAIN_HORN.blast_s * RATE) - rise)
-    assert np.sqrt(np.mean(x[first] ** 2)) > 0.9 * np.max(np.abs(made)) / 3.0
-    assert np.max(np.abs(x[:rise])) <= np.max(np.abs(made[:rise]))
+    assert np.sqrt(np.mean(played[first] ** 2)) > 0.9 * np.max(np.abs(made)) / 3.0
+    assert np.max(np.abs(played[:rise])) <= np.max(np.abs(made[:rise]))
 
 
 def test_a_sites_ground_adds_each_harmonics_reflection_in_pressure() -> None:
@@ -890,15 +898,14 @@ def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
     assert 10.0 * math.log10(ratio) == pytest.approx(10.0 * math.log10(4), abs=0.1)
 
 
-def test_the_lines_on_a_trains_stills_fit_them() -> None:
-    """The line on the stills that says what goes past, for every train on every track,
-    the credit line, and what they say of a house the train is heard in, fit the
-    still's width whole."""
+def test_what_the_stills_say_of_a_house_a_train_is_heard_in_fits_them() -> None:
+    """What the stills say of a house a train is heard in fits the still's width
+    whole."""
     pytest.importorskip("PIL")
     from PIL import Image, ImageDraw
 
     from acoustic_spaces.demos import indoors
-    from acoustic_spaces.demos.pictures import MARGIN, SIZE, fitted, font
+    from acoustic_spaces.demos.pictures import MARGIN, SIZE, font
 
     draw = ImageDraw.Draw(Image.new("RGB", SIZE))
     house_lines = ["Floor shaking 100 VdB at most, its rumble 100.0 dB(A)"]
@@ -908,20 +915,3 @@ def test_the_lines_on_a_trains_stills_fit_them() -> None:
         house_lines += house.words().split("\n")
     for line in house_lines:
         assert draw.textlength(line, font=font("Regular", 23)) <= SIZE[0] - 1010 - MARGIN, line
-    for vehicle in (rail.TRAIN_VEHICLE, rail.TRAM_VEHICLE):
-        for key in vehicle.trains:
-            for track in vehicle.tracks or (vehicle.track,):
-                train = rail.TRAINS[key]
-                info = {
-                    "train": key,
-                    "track": track,
-                    "length_m": train.length_m,
-                    "speed_kmh": train.speed_kmh,
-                    "sound_power_a_db": 133.3,
-                }
-                about = vehicle.facts(None, info)["about"]
-                for line in about.split("\n"):
-                    width = draw.textlength(line, font=font("Regular", 23))
-                    assert width <= SIZE[0] - 1010 - MARGIN, line
-                credit = vehicle.credits({"speed_kmh": train.speed_kmh}, {})
-                assert fitted(draw, credit, 19, SIZE[0] - 2 * MARGIN)[0] == credit

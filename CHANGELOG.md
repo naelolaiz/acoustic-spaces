@@ -224,6 +224,11 @@
   plays (the train's horn with `train_horn`).
 - Fixed: a police car's or a fire engine's walk was simulated again on every run, and
   the tram's credit named a pantograph it does not have.
+- Removed: the pass-by demos' own engine, now that every example's demo is a preset of
+  the demo of its scene: `demos.passby`'s `Vehicle` and its road vehicles,
+  `demos.passby_pictures`, `demos.rail.TrainVehicle`, `demos.siren`'s police car, fire
+  engine and honking car, `demos.helicopter.Helicopter` and `demos.aircraft.Aircraft`.
+  What a scene's models need of them stays.
 - Added: `engine.diffraction.diffract` takes the plane sequences the early stage tested
   (`candidates`) and then adds the terms that make paths fade at edges, as a simulation
   does; without them it is the edge diffraction alone, as before.

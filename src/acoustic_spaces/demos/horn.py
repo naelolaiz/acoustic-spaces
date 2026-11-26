@@ -1,11 +1,10 @@
-"""The horns of the pass-by demos: the fire engine's air horn
-(:class:`~acoustic_spaces.demos.siren.FireEngine`) and the street car's pair of disc
-horns (:class:`~acoustic_spaces.demos.siren.HonkingCar`), their sound, their blasts and
-their level as the rule for vehicles' horns sets them (Council Directive 70/388/EEC,
-Annex I), and the train's warning horn
-(:class:`~acoustic_spaces.demos.rail.TrainVehicle`) as the rule for trains' horns sets
-it; each a :class:`Kind`, the air horn's (:data:`AIR_HORN`) the default of every
-function here. Nothing of the simulation uses it.
+"""The horns of a scene's sources of a horn model (``model: {method: horn}``): an air
+horn (the street's fire engine's) and a car's pair of disc horns (the street's car's),
+their sound, their blasts and their level as the rule for vehicles' horns sets them
+(Council Directive 70/388/EEC, Annex I), and a train's warning horn (the railway's) as
+the rule for trains' horns sets it; each a :class:`Kind`, the air horn's
+(:data:`AIR_HORN`) the default of every function here. Nothing of the simulation uses
+it.
 
 The rule tests a horn on a bench, in a free field or an anechoic room, 2 m in front of
 it in the direction it is loudest, the horn and the microphone 1.2 m above the ground

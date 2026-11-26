@@ -159,8 +159,6 @@ module = [
     "acoustic_spaces.compare",
     "acoustic_spaces.demos",
     "acoustic_spaces.demos.audio",
-    "acoustic_spaces.demos.passby",
-    "acoustic_spaces.demos.passby_pictures",
     "acoustic_spaces.demos.pictures",
     "acoustic_spaces.demos.pipeline",
     "acoustic_spaces.demos.scene_demo",

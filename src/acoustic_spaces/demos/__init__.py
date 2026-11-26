@@ -19,13 +19,15 @@ there already (a scene file, a simulation's results).
 - :mod:`acoustic_spaces.demos.scene_demo` and :mod:`~acoustic_spaces.demos.scene_pictures`:
   the demo of any scene (``acoustic-spaces demo``), each source playing the WAV file its
   ``signal`` names.
-- :mod:`acoustic_spaces.demos.passby` and :mod:`~acoustic_spaces.demos.passby_pictures`:
-  the pass-by demos of the roadside and the street, a car, a truck, a bus, a motorcycle
-  or a police car with its siren driving past with Doppler, and the flyover demo;
-  :mod:`acoustic_spaces.demos.road`, the road vehicles' sound power (CNOSSOS-EU) and a
-  sound made to it; :mod:`acoustic_spaces.demos.siren`, the siren's sound, level and
-  directivity; :mod:`acoustic_spaces.demos.helicopter`, the helicopter that flies over
-  and its rotors' sound.
+- :mod:`acoustic_spaces.demos.models`: the sound the demo of any scene makes for a
+  source's model, from :mod:`~acoustic_spaces.demos.road` (CNOSSOS-EU's road vehicles),
+  :mod:`~acoustic_spaces.demos.siren`, :mod:`~acoustic_spaces.demos.horn`,
+  :mod:`~acoustic_spaces.demos.rail` (Schall 03's trains and trams),
+  :mod:`~acoustic_spaces.demos.plant` (construction plant and reversing alarms),
+  :mod:`~acoustic_spaces.demos.helicopter` (a helicopter's rotors) and
+  :mod:`~acoustic_spaces.demos.aircraft` (Doc 29's jets);
+  :mod:`acoustic_spaces.demos.passby`, a source going past: its fade, what goes along
+  behind it, its pitch and its levels.
 - :mod:`acoustic_spaces.fetch`: downloads, whole or one member of a remote zip archive.
 """
 
@@ -1050,8 +1052,8 @@ class Demo:
     def upstream(self, args: argparse.Namespace, step: str) -> argparse.Namespace:
         """The arguments (resolved) of the run with ``args`` (resolved) but for the
         options that matter to none of the steps up to ``step`` (:attr:`Option.steps`),
-        at their defaults: ``upstream(args, "walk")`` is the run whose trajectory a run with
-        another ``--tour`` or ``--at`` may play, as its trajectory is the same."""
+        at their defaults: ``upstream(args, "render")`` is the run whose sound a run with
+        another ``--hide`` shows, as only its video differs."""
         names = [s.name for s in self.steps]
         before = set(names[: names.index(step) + 1])
         # The sources a run plays name it apart (:meth:`run_parts`), not by their naming;

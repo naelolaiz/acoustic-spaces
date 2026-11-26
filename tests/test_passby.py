@@ -331,26 +331,6 @@ def test_the_credit_of_a_vehicle_with_a_siren_fits_its_stills(group: str) -> Non
     assert plays_line(table) == "the whole credit"
 
 
-@pytest.mark.parametrize(
-    ("span_s", "step_s"), [(10.8, 2.0), (30.0, 5.0), (104.0, 10.0), (600.0, 50.0)]
-)
-def test_the_graphs_time_axis_keeps_its_labels_apart(span_s: float, step_s: float) -> None:
-    """A car's pass labels every 2 s, a long pass (an aircraft's, 104 s) every 10 s, so
-    that the labels never crowd each other, nor the widest of them overlap."""
-    pytest.importorskip("PIL")
-    from PIL import Image, ImageDraw
-
-    from acoustic_spaces.demos.passby_pictures import GRAPH_BOX, time_step
-    from acoustic_spaces.demos.pictures import SIZE, font
-
-    width = GRAPH_BOX[2]
-    step = time_step(span_s, width)
-    assert step == step_s
-    draw = ImageDraw.Draw(Image.new("RGB", SIZE))
-    widest = draw.textlength(f"{span_s:.0f} s", font=font("Regular", 16))
-    assert step * width / span_s > widest + 10.0
-
-
 def test_the_model_options_matter_with_the_sources_that_have_them() -> None:
     """The options a model leaves to a run (--rpm a road vehicle's engine, --siren a
     siren's pattern, --horn a train horn's notes) matter for the street's sources that
@@ -425,10 +405,11 @@ def test_the_horn_blasts_as_its_rule_and_its_assumptions_say() -> None:
     level = np.sqrt(np.mean((long * horn.recorded_gain(long, rate)) ** 2))
     assert level == pytest.approx(np.sqrt(np.mean(made[full] ** 2)), rel=0.02)
     assert horn.recorded_gain(np.zeros(rate), rate) is None
-    vehicle = siren.FIRE_ENGINE_VEHICLE
-    run = argparse.Namespace()
-    assert vehicle.input_gain(run, siren.FIRE_HORN, long, rate) == horn.recorded_gain(long, rate)
-    assert vehicle.input_gain(run, siren.FIRE_SIREN, long, rate) == pytest.approx(
+    from acoustic_spaces.demos.models import input_gain
+
+    street = {s.name: s for s in Scene.from_yaml(example_path("street")).sources}
+    assert input_gain(street["fire_engine_horn"], long, rate) == horn.recorded_gain(long, rate)
+    assert input_gain(street["fire_engine_siren"], long, rate) == pytest.approx(
         siren.SOUND_RMS / audio.gated_rms(long, rate)
     )
 
@@ -639,14 +620,19 @@ def _roadside(tmp_path: Path) -> Path:
     return folder
 
 
-def test_the_demos_give_a_walks_speed_to_a_tenth_of_a_km_h() -> None:
-    """The examples' walks go at 13.89 and 19.44 m/s, 50.004 and 69.984 km/h: the
-    captions, the stills and the printouts say 50 and 70, and keep a tenth that is
-    there."""
-    from acoustic_spaces.demos.passby import kmh
+def test_the_credits_give_a_trajectorys_speed_to_a_tenth_of_a_km_h() -> None:
+    """The examples' trajectories go at 13.89 and 19.44 m/s, 50.004 and 69.984 km/h: the
+    credits say 50 and 70, and keep a tenth that is there."""
+    from acoustic_spaces.demos.models import made_brief
 
-    assert kmh(13.89 * 3.6) == "50" and kmh(19.44 * 3.6) == "70"
-    assert kmh(72.5) == "72.5" and kmh(54) == "54" and kmh(0.36) == "0.4"
+    car = next(s for s in Scene.from_yaml(example_path("street")).sources if s.name == "car")
+
+    def at(speed_m_s: float) -> str:
+        trajectory = car.trajectory.model_copy(update={"speed_m_s": speed_m_s})
+        return made_brief(car.model_copy(update={"trajectory": trajectory}))
+
+    assert made_brief(car).endswith("at 50 km/h)") and at(19.44).endswith("at 70 km/h)")
+    assert at(72.5 / 3.6).endswith("at 72.5 km/h)") and at(0.1).endswith("at 0.4 km/h)")
 
 
 def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) -> None:
@@ -1216,78 +1202,3 @@ def test_a_vehicles_sources_in_turn_are_parts_of_one_run() -> None:
     ):
         args = demo.parser().parse_args(["all", *argv])
         assert [p.sources for p in demo.each(args)] == playing, argv
-
-
-def test_the_credit_and_the_about_line_say_the_sources_that_play() -> None:
-    """The stills of a run of some of a vehicle's sources say those alone: the train's
-    roof alone (its sound power theirs), the train's horn alone; the tram's credit names
-    its bogies and roof, which it has, not a pantograph."""
-    from acoustic_spaces.demos import rail
-
-    train, tram = rail.TRAIN_VEHICLE, rail.TRAM_VEHICLE
-    facts = {"speed_kmh": 160.0, "train": "regional"}
-    assert "noise at each bogie, roof and pantograph" in train.credits(facts, {})
-    assert "noise at each roof with" in train.credits(facts | {"parts": ["train_roof"]}, {})
-    assert "noise at each bogie and roof with" in tram.credits({"speed_kmh": 50.0}, {})
-    horn = train.credits(facts | {"parts": ["train_horn"], "horn": "blasts"}, {})
-    assert horn.startswith("Train's sound made up: horn: 660 and 370 Hz in turn")
-    assert "noise" not in horn and "faded" not in horn
-    info = {
-        "train": "regional",
-        "track": "ballast",
-        "length_m": 151.0,
-        "speed_kmh": 160.0,
-        "sound_power_a_db": 120.0,
-    }
-    assert train.facts(None, info)["about"].endswith("120.0 dB(A) of sound power (Schall 03)")
-    roof = train.facts(None, info | {"playing": ["train_roof"]})["about"]
-    assert roof.endswith("(Schall 03) at its roof alone")
-    alone = info | {"playing": ["train_horn"], "horn": "chord", "horn_sound_power_a_db": 125.3}
-    assert train.facts(None, alone)["about"].endswith(
-        "\nits horn's chord alone in blasts 125.3 dB(A)"
-    )
-
-
-def test_a_trains_info_and_levels_are_of_the_sources_that_play() -> None:
-    """The train's info keeps the points at every height (its wheels shake the ground
-    whichever play), but its sound power and the levels its scene gives are those of the
-    sources that play; another pick is another info, so its sound is made again."""
-    from acoustic_spaces.demos import rail
-
-    scene = Scene.from_yaml(Path(example_path("railway")))
-    train = rail.TRAIN_VEHICLE
-    base = {"train": "s_bahn", "speed": None, "track": None, "horn": "blasts"}
-    every = train.info(argparse.Namespace(**base), scene, 120.0)
-    roof = train.info(argparse.Namespace(**base, playing=("train_roof",)), scene, 120.0)
-    assert every != roof and roof["parts"] == every["parts"]
-    assert set(roof["parts"]) == {"train", "train_roof", "train_pantograph"}
-    assert roof["playing"] == ["train_roof"] and list(train.levels(roof)) == ["train_roof"]
-    points = rail.train_points(rail.TRAINS["s_bahn"], 120.0, "ballast")
-    up = [p for p in points if p.height_m == 4.0]
-    from acoustic_spaces.parameters import a_weighted
-
-    assert roof["sound_power_a_db"] == round(a_weighted(rail.train_power_db(up)), 2)
-    assert every["sound_power_a_db"] == round(a_weighted(rail.train_power_db(points)), 2)
-    assert "horn" not in every
-    horn = train.info(argparse.Namespace(**base, playing=("train_horn",)), scene, 120.0)
-    assert list(train.levels(horn)) == ["train_horn"]
-    assert horn["sound_power_a_db"] == horn["horn_sound_power_a_db"]
-
-
-def test_the_listeners_order_is_the_tours() -> None:
-    """--listeners b,a: the passes play in that order, whatever the scene's."""
-    from acoustic_spaces.demos.passby import heard_only, stops_of
-
-    facts = {"listeners": {"verge": {}, "meadow_25m": {}, "yard_25m": {}}}
-    seats = {
-        "seats": {
-            name: {"length_s": 3.0, "loudness_db": -20.0, "rms_db": -20.0}
-            for name in facts["listeners"]
-        }
-    }
-    args = argparse.Namespace(listeners="yard_25m,verge")
-    stops = stops_of(heard_only(args, facts, "walk"), seats, "walk")
-    assert [s.key for s in stops] == ["yard_25m", "verge"]
-    assert [s.at for s in stops] == [0.0, 4.0]
-    every = stops_of(heard_only(argparse.Namespace(listeners=None), facts, "walk"), seats, "walk")
-    assert [s.key for s in every] == ["verge", "meadow_25m", "yard_25m"]

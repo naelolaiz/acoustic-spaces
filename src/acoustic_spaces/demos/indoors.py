@@ -5,8 +5,8 @@ house's closed window and the rumble the ground's vibration makes in its room, o
 either alone. Every other listener hears the pass outdoors.
 
 The window: each part of the train is simulated and played at the listener in front of
-the house as the pass-by demo plays it (:mod:`acoustic_spaces.demos.passby`), the
-façade's reflection simulated with the rest. EN ISO 12354-3 takes the room's level from
+the house as the demo of the scene plays it (:mod:`acoustic_spaces.demos.scene_demo`),
+the façade's reflection simulated with the rest. EN ISO 12354-3 takes the room's level from
 the level 2 m in front of the façade, less the façade's level difference
 (:data:`acoustic_spaces.facade.HOUSE`). The façade's reflection, which adds to the sound
 in front of it, changes the low octave bands with the distance from the wall, so where

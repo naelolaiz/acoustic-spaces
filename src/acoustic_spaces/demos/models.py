@@ -637,12 +637,20 @@ def _rail_train(source) -> str:
 
 def _rail_points(source) -> str:
     """A rail model's points in words: "its 4 bogies at the rail top", "2 points on its
-    roof, 4 m up", "its pantograph's head, 5 m up"."""
-    n = len(rail_points(source))
+    roof, 4 m up", "6 points 4 m up, on its roof and its tank wagons' bodies", "its
+    pantograph's head, 5 m up"."""
+    from acoustic_spaces.demos.rail import TRAINS
+
+    points = rail_points(source)
+    n = len(points)
     height = source.model.height
     if height == "rail_top":
         return f"its {n} bogies at the rail top" if n > 1 else "its bogie at the rail top"
     if height == "roof":
+        # Sources 3 and 4 (Tabelle 5) ring in tank wagons' bodies, 4 m up as the roof.
+        units = TRAINS[source.model.train].units
+        if any(units[point.unit].tank for point in points):
+            return f"{n} points 4 m up, on its roof and its tank wagons' bodies"
         return f"{n} points on its roof, 4 m up" if n > 1 else "its roof, 4 m up"
     return f"its {n} pantographs' heads, 5 m up" if n > 1 else "its pantograph's head, 5 m up"
 

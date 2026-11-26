@@ -17,7 +17,7 @@ import yaml
 from acoustic_spaces import rotorcraft as rc
 from acoustic_spaces.demos import audio, pipeline
 from acoustic_spaces.demos import helicopter as helicopter_module
-from acoustic_spaces.demos.helicopter import HELICOPTER_VEHICLE, POWER_RATE, POWER_S
+from acoustic_spaces.demos.helicopter import POWER_RATE, POWER_S
 from acoustic_spaces.examples import example_path
 from acoustic_spaces.scene import Scene
 
@@ -350,8 +350,10 @@ def test_the_helicopters_rotors_are_found_once_for_every_length(model: str, monk
         fresh = functools.lru_cache(getattr(helicopter_module, name).__wrapped__)
         monkeypatch.setattr(helicopter_module, name, fresh)
     rate, air = 8000, {"temperature_c": 20.0, "pressure_kpa": 101.325}
-    info = {"rate": rate, "airspeed_m_s": 40.0, "broadband": model} | air
-    made = {n: HELICOPTER_VEHICLE.emission(info, n / rate) for n in (rate, 5077)}
+    made = {
+        n: helicopter_module._sent(40.0, air["temperature_c"], air["pressure_kpa"], rate, n, model)
+        for n in (rate, 5077)
+    }
     assert calls == {"tones": 2, "bpm_bands": 2 if model == "bpm" else 0}
     trim = rc.trim(dataclasses.replace(rc.AS350_B3, broadband=model), 40.0, **air)
     ways = np.random.default_rng(1).normal(size=(5077, 3))
