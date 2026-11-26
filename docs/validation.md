@@ -1136,6 +1136,71 @@ The textbook UTD for two edges, with the second edge's distance parameter for a
 wave from a line, was up to 6 dB low there; the engine takes it from the curvature of
 the first edge's wave where it reaches the second.
 
+BTM's second order leaves out the waves bent back and forth between two edges, so for two
+screens close together `validation/edge_diffraction.py --close-screens` also checks the
+engine against the two-dimensional wave calculation of [Rows of roofs and barriers
+against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation),
+turned into a point source's field (its levels stored in
+`validation/close_screens_wave.json`): two thin rigid screens 0.5 to 4 m apart, their
+tops at z = 0, the source 3 m before the first and the listener 3 m past the second, 1
+and 1.5 m below the tops unless named, `second_order`, by default. Ray tracing and image
+sources give the same level:
+
+| two screens close together, engine - waves (dB) | 63 | 125 | 250 | 500 |
+|---|---:|---:|---:|---:|
+| 0.5 m apart, waves -9.8 to -19.5 dB | -2.41 | -2.17 | -2.77 | -2.16 |
+| 1 m apart | -1.59 | -1.50 | -2.11 | -1.29 |
+| 2 m apart | -1.12 | -1.18 | -1.32 | -0.56 |
+| 4 m apart | -0.85 | -0.70 | -0.73 | -0.10 |
+| 1 m apart, the source and the listener 0.3 and 0.5 m below the first top | -2.06 | -2.40 | -3.91 | -3.46 |
+| 1 m apart, both 3 m below the tops | -1.02 | -0.53 | -0.77 | +0.02 |
+| 1 m apart, the second 0.4 m lower | -1.00 | -1.11 | -1.97 | -1.44 |
+| 2 m apart, the second 0.4 m higher | -0.99 | -1.03 | -1.38 | -0.77 |
+
+The engine is low, as BTM's second order is (up to 2.38 dB below the waves): the second
+top stands in the first's transition zone, and paths over one edge or two leave out the
+rest of what passes between them (see [Known issues](#known-issues)). In the 63 and
+125 Hz bands, which add in pressure, the engine is within 0.36 dB of BTM's second order;
+from 250 Hz up, where it adds its paths in energy, up to 1.53 dB below it. Image sources
+also test the reflections off the second screen's front and then the first's back, in
+the gap between them, which both screens stop; the fade multiplies the two tops' terms
+for such a path, and weighs the product by the path from one top to the other that it
+stands for (see [Known issues of the edge fade](#known-issues-of-the-edge-fade)), which
+is none in the gap. Taken whole, that product put image sources up to 3.2 dB from ray
+tracing here (0.5 m apart, at 125 Hz).
+
+Where such a path can be, the product stays: under a thin ceiling 1 m above the tops of
+two screens 2 m apart (the source and the listener 3 m before and past them, 3 m below
+the tops) the reflection off the ceiling is stopped by both screens, and the product of
+the tops' terms stands for the path over both by way of the ceiling. `--ceiling` checks
+it against the same wave calculation (`validation/ceiling_wave.json`), with the ceiling
+whole, ending near the point where that path reflects, or a strip round that point; ray
+tracing by default (image sources give the same but over the strip 0.5 m wide: +0.28,
++0.08, -0.67 and -1.10 dB):
+
+| a ceiling 1 m over two screens, engine - waves (dB) | 63 | 125 | 250 | 500 |
+|---|---:|---:|---:|---:|
+| whole, waves -11.0 to -22.6 dB | +1.38 | +2.72 | +5.17 | +3.53 |
+| ending 1.01 m past the point | +0.81 | +1.06 | +3.07 | +1.92 |
+| ending 0.25 m past it | -0.07 | -0.65 | +4.15 | +0.96 |
+| ending 1 cm past it | -0.38 | -1.12 | +4.51 | -0.29 |
+| ending 1 cm short of it | -4.33 | -4.65 | +0.82 | -6.86 |
+| ending 0.25 m short of it | -3.95 | -3.78 | +2.23 | -4.86 |
+| ending 0.99 m short of it | +1.23 | -2.30 | +2.79 | +2.55 |
+| a strip 0.5 m wide round it | +0.04 | -0.26 | -1.74 | -3.20 |
+| a strip 1 m wide round it | +3.67 | -2.57 | +0.25 | -0.39 |
+| a strip 2 m wide round it | +2.85 | -0.69 | -0.28 | +1.18 |
+
+Under the whole ceiling the engine is 1.4 to 5.2 dB high: each of the two terms is found
+with the other's leg straight, and their product is not the path over both by way of the
+ceiling. Where the ceiling's end crosses the point the path reflects at, the level steps
+by 4.0, 3.5, 3.7 and 6.6 dB from 63 to 500 Hz (the waves move by 0.17 dB at most): just
+past the point the ceiling gives back about half the path, as at a reflector's edge, and
+short of it nothing does, as the path over the ceiling's end, a third edge, is not
+followed. Over these ten cases the engine is 2.2 dB from the waves on average and 6.9 dB
+at most; with the product taken whole wherever the ceiling held its point it was 2.8 dB
+on average and 8.9 dB at most, and the step 6.7 to 11.7 dB.
+
 A thin strip 2 m wide (a screen from z = -2 m to its top at z = 0), the source and the
 listener in its shadow on either side: the paths over its top and its foot run along the
 strip, along each of its faces, each way with half the coefficient at grazing incidence,
@@ -1788,6 +1853,22 @@ theory gives +6.0 dB on both sides.
   first one's foot, and behind the U by 2.0 dB (`second_order`; 4.8 dB with
   `first_order`) where it lies just behind the first side's foot and the path round that
   side's end leaves its foot.
+- **Products of two edges' terms.** Where two edges explain the events that stop a
+  path, the fade multiplies their terms, each found with the other event's leg straight,
+  and weighs the product by the path from one edge to the other that it stands for: for
+  each reflection on it, the magnitude of the Fresnel integral over the faces there, as a
+  share of the whole plane's, less what the plane gives back past the two edges
+  themselves (none between the tops of two screens, off the front of one and the back of
+  the other), and over each leg what the faces and the edges near it leave free (at an
+  inside corner a face goes on as its image in the face it meets, and hides what lies
+  past it). The weight moves smoothly with the geometry and is about a half where the
+  path reflects at a face's edge, but the product is no path over both edges by way of
+  the reflections: under a whole ceiling over two screens the level is 1.4 to 5.2 dB
+  high, over a strip of ceiling about one Fresnel zone wide the integral gives back more
+  than the whole plane, and where the ceiling ends at the point the path reflects at the
+  level steps by up to 6.6 dB, as the path over the ceiling's end (a third edge) is not
+  followed (see [Edge diffraction against the exact
+  solution](#edge-diffraction-against-the-exact-solution)).
 - **Corners of edges.** Over the edge of a thin screen (a barrier's top and ends, a
   face's free edge) a path's term takes the part of its Fresnel zone that the edge
   covers, as BTM's integral over a finite edge has it (at a free end, a corner or a
@@ -6237,7 +6318,12 @@ Results:
   that leaves too little at high frequencies: a quarter of the free field just below
   the line of two tops 10 m apart, where two knife edges leave 0.317 of it, 2.1 dB low
   from 2 kHz up, and 1.0 to 1.3 dB low just above it. As the source or the listener
-  alone crosses the line of the tops, the level steps by 0.5 and 1.0 dB at 63 Hz. The
+  alone crosses the line of the tops, the level steps by 0.5 and 1.0 dB at 63 Hz. Two
+  screens close together leave too little at low frequencies too: against a wave
+  calculation the level is 2.4 dB low at 63 Hz with the tops 0.5 m apart and 0.9 dB
+  with them 4 m apart, and up to 3.9 dB low at 250 Hz just below two tops 1 m apart, as
+  BTM's second order is low by up to 2.4 dB (see [Edge diffraction against the exact
+  solution](#edge-diffraction-against-the-exact-solution)). The
   corners of one block or wall, joined by a face, are not affected, but where the face
   is narrow against the wavelength (the next item).
 - **Thin slabs.** A desk screen, a door leaf or a pane drawn with its thickness is a slab
