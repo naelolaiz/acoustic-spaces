@@ -1518,17 +1518,17 @@ class EdgeFade:
         model, edges = self.model, self.edges
         normal = model.plane_normal[plane]
         u = np.cross(normal, [1.0, 0.0, 0.0] if abs(normal[0]) < 0.9 else [0.0, 1.0, 0.0])
-        u /= np.linalg.norm(u)
+        u /= np.linalg.norm(u, axis=-1)
         frame = np.stack([u, np.cross(normal, u), normal])  # (3, 3): rows u, v, normal
 
         def local(p):
-            return (np.asarray(p, dtype=float) - at) @ frame.T
+            return np.einsum("...j,ij->...i", np.asarray(p, dtype=float) - at, frame)
 
         inside = self._reflecting_face(plane, at, before) >= 0
         wavelength = np.asarray(wavelength, dtype=float)
         count = len(wavelength)
         levels = _levels()[1:]  # the ellipse of level 0 is the point itself
-        height = np.array([model.plane_offset[plane] - normal @ at])
+        height = np.array([model.plane_offset[plane] - np.einsum("i,i->", normal, at)])
         centre, axes = _fresnel_ellipses(
             local(before)[None],
             np.zeros((1, 3)),
@@ -1594,9 +1594,10 @@ class EdgeFade:
             angle = sides[0] * edges.wedge[e] * np.pi
             into = np.cos(angle) * edges.along[e] + np.sin(angle) * edges.normal[e]
             a = local(edges.start[e])[:2]
-            across = (into @ frame.T)[:2]
-            across /= max(float(np.linalg.norm(across)), 1e-300)  # towards the edge's face
-            gap = -float(a @ across)  # the reflection's, on the face's side when positive
+            across = np.einsum("j,ij->i", into, frame)[:2]
+            across /= max(float(np.linalg.norm(across, axis=-1)), 1e-300)  # towards the edge's face
+            # The reflection's gap to the edge, on the face's side when positive.
+            gap = -float(np.einsum("i,i->", a, across))
             radius = np.linalg.norm(np.einsum("i,rij->rj", across, first), axis=1)
             near = _beyond_line(abs(gap), radius)
             out[rows] *= np.abs(1j - 2.0 * near) if gap > 0.0 else 0.0
@@ -2791,7 +2792,7 @@ def _level_integral(area: np.ndarray) -> np.ndarray:
     weights[2:-1:2] = 2.0
     alpha = -1j * np.pi
     kernel = np.exp(-alpha * u[: count + 1]) * weights * (_LEVEL_STEP / 3.0)
-    integral = area[..., : count + 1] @ kernel
+    integral = np.einsum("...k,k->...", area[..., : count + 1], kernel)
     slope = (area[..., -1] - area[..., -3]) / (2.0 * _LEVEL_STEP)
     return np.exp(-alpha * top) * (area[..., -2] + slope / alpha) + alpha * integral
 
@@ -2819,11 +2820,11 @@ def _segment_gaps(p0, p1, start, end) -> tuple[np.ndarray, np.ndarray, np.ndarra
     d1 = np.asarray(p1, dtype=float) - p0
     d2 = end - start
     r = p0 - start
-    a = float(d1 @ d1)
+    a = float(np.einsum("i,i->", d1, d1))
     e = np.einsum("ij,ij->i", d2, d2)
     f = np.einsum("ij,ij->i", d2, r)
-    c = r @ d1
-    b = d2 @ d1
+    c = np.einsum("ij,j->i", r, d1)
+    b = np.einsum("ij,j->i", d2, d1)
     denominator = a * e - b * b
     s = np.zeros(len(start))
     np.divide(b * f - c * e, denominator, out=s, where=denominator > 1e-12 * max(a, 1e-300) * e)
