@@ -1609,11 +1609,14 @@ longer taken: the scenes a run simulates go to the work folder.
   stadium's decay after the helicopter's sound arrives.
 - **The pass**: the helicopter every 4 m along its flight at each of the 12 listeners,
   with Doppler, its sound what its rotors send each way down each early path, as in the
-  flyover. At the mix position it peaks between 81 and 82 dB(A) (about 74 from 330 m),
-  where the sound system's loudspeakers, simulated at their sound power, give 97 dB(A):
-  it is some 15 dB under the music, heard most in the song's quiet passages. High in the
-  north stand, under the roof, it peaks 10 to 12 dB lower (four runs): the sound there
-  is almost all late sound, which a few rays can lift by several decibels at one place.
+  flyover. At the mix position it peaks at 81.4 dB(A) in each of four runs (74.1 from
+  330 m), where the sound system's loudspeakers, simulated at their sound power, give
+  97.0 dB(A): it is some 16 dB under the music, heard most in the song's quiet passages.
+  In the north stand it peaks 9.8 to 10.2 dB lower at the far seats and 8.3 to 11.1 dB
+  lower at the top row, under the roof (four runs): the sound there is almost all late
+  sound, which a few rays can lift by several decibels at one place, as they lifted the
+  top row's peak in one of the four runs, for a moment, 2.4 to 2.9 dB over the others'
+  (its SEL within 0.2 dB of theirs).
 - **The video** is the stadium demo's (`demo/crossing_binaural.mp4`): the same tour,
   each stop turned up to the loudness of the loudest, the mixes keeping one gain for
   all. The tour goes on as the stadium demo's does: halfway through each of the three
