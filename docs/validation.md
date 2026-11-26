@@ -1040,6 +1040,11 @@ shortest path touches them, and checks itself against the UTD for a half-plane, 
 is exact far from the edge (within 0.03 dB). Levels are in dB re the direct sound in
 free field over the same distance, the energy averaged over the engine's eight
 frequencies in each octave band; sources and listeners are in metres from the edge.
+The engine's levels are a simulation's, with the scene's settings and the diffraction
+mode each check names: the specular paths, the edge diffraction and the terms that make
+paths fade at edges ([next
+section](#reflections-that-fade-at-edges-against-the-exact-solution)), which take the
+terms the edge diffraction leaves out (past the foot of a free-standing strip, below).
 
 Over a thin screen (first order), with the listener 28° to 33° into its shadow, the
 engine's UTD is within 0.9 dB of BTM at 63 Hz and 0.06 dB from 1 kHz up; Maekawa's chart
@@ -1147,6 +1152,33 @@ Hz as by default) against BTM:
 | the same, `first_order` | -1.39 | +0.40 | -0.31 | -0.15 |
 | (-1, 0, -0.3) to (1.5, 0, -1.9), BTM -1.2 to -8.7 dB | +0.11 | +0.01 | -0.03 | -0.14 |
 | the same, `first_order` | -0.46 | -0.82 | +0.17 | -0.18 |
+
+A strip like it in free space, 1, 2 or 4 m high, with the source 5 m before it and 0.5 m
+below its top (1 m for the higher two), and the listener 5 m past it crossing the line
+of sight over the top, 0.3 m and 0.1 mm either side of it. Above the line the direct
+sound is found over the top, past the foot on the dark side of the foot's boundary,
+where the edge diffraction leaves the foot's term to the terms that make paths fade at
+edges. The engine (every band in pressure) against BTM over both edges and over both
+along each face, with the direct sound above the line, averaged over 96 frequencies in
+each band:
+
+| the line of sight over a free strip (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 m high, largest difference, `second_order` | 0.09 | 0.02 | 0.02 | 0.01 | 0.01 | 0.00 | 0.00 | 0.00 |
+| `direct` and `first_order` | 1.00 | 1.08 | 0.38 | 0.17 | 0.04 | 0.01 | 0.00 | 0.00 |
+| step across the line, the edge diffraction alone (`direct`) | -3.43 | -3.01 | -1.67 | +1.80 | +0.20 | -0.19 | -0.33 | -0.00 |
+| 2 m high, largest difference, `second_order` | 0.05 | 0.04 | 0.01 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| `direct` and `first_order` | 1.38 | 0.39 | 0.07 | 0.04 | 0.01 | 0.01 | 0.00 | 0.00 |
+| step across the line, the edge diffraction alone | -1.79 | +1.02 | +0.61 | -0.40 | -0.30 | -0.06 | -0.03 | -0.01 |
+| 4 m high, largest difference, `second_order` | 0.01 | 0.02 | 0.01 | 0.00 | 0.00 | 0.00 | 0.00 | 0.01 |
+| `direct` and `first_order` | 0.02 | 0.03 | 0.01 | 0.01 | 0.00 | 0.00 | 0.00 | 0.01 |
+| step across the line, the edge diffraction alone | +0.98 | -0.58 | -0.07 | -0.07 | -0.07 | -0.01 | -0.00 | -0.00 |
+
+With every mode the level steps by less than 0.005 dB across the line, as BTM's does.
+`direct` and `first_order` have no path over both edges, and behind the strips 1 and
+2 m high are up to 1.4 dB from BTM at 63 Hz, as over the strip above. The edge
+diffraction alone, without those terms, steps there (with `second_order` by 2.80, 1.63
+and 0.78 dB at 63 Hz).
 
 Along a top absorbing 0.2 to 0.8, the ground wave's loss is too large against the full
 wave. The wave solver ran a block 24 m long and 12 m deep whose top alone absorbs (5 cm
@@ -1375,7 +1407,7 @@ engine's steps:
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | largest step, engine | 0.00 | 0.01 | 0.02 | 0.06 | 0.04 | 0.07 | 0.10 | 0.15 |
 | largest step, BTM | 0.00 | 0.01 | 0.02 | 0.06 | 0.04 | 0.07 | 0.10 | 0.15 |
-| largest difference, engine - BTM | 0.02 | 0.02 | 0.02 | 0.00 | 0.00 | 0.01 | 0.00 | 0.10 |
+| largest difference from BTM | 0.02 | 0.02 | 0.02 | 0.00 | 0.00 | 0.01 | 0.00 | 0.10 |
 
 The path over the top edge still touches it 8 cm from the corner there as the direct
 sound appears round the side edge. Each of an edge's four terms takes the edge's own
@@ -1434,17 +1466,28 @@ corners. BTM is taken over each of its edges, from end to end, with the geometri
 
 | a block's corners, `direct` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 0.3 m up: largest step, engine | 2.25 | 1.83 | 0.99 | 0.29 | 1.11 | 0.48 | 0.07 | 0.08 |
+| 0.3 m up: largest step, engine | 6.18 | 4.45 | 1.92 | 0.97 | 2.54 | 1.04 | 0.26 | 0.25 |
 | largest step, BTM | 0.11 | 0.03 | 0.03 | 0.04 | 0.04 | 0.05 | 0.04 | 0.03 |
-| largest difference, engine - BTM | 2.29 | 1.50 | 1.62 | 0.46 | 1.44 | 0.59 | 0.14 | 0.14 |
-| 1.8 m up: largest step, engine | 2.41 | 2.06 | 0.47 | 1.97 | 0.96 | 0.99 | 0.62 | 0.44 |
+| largest difference from BTM | 3.88 | 2.95 | 1.62 | 0.77 | 1.44 | 0.59 | 0.27 | 0.16 |
+| 1.8 m up: largest step, engine | 4.50 | 2.31 | 1.22 | 2.88 | 1.06 | 0.99 | 0.62 | 0.52 |
 | largest step, BTM | 0.04 | 0.03 | 0.04 | 0.04 | 0.04 | 0.04 | 0.05 | 0.11 |
-| largest difference, engine - BTM | 1.96 | 1.45 | 0.92 | 1.89 | 0.97 | 0.89 | 0.58 | 0.50 |
+| largest difference from BTM | 2.53 | 1.45 | 1.36 | 1.89 | 0.95 | 0.89 | 0.58 | 0.50 |
 
-Sharing the fade between the three edges at each corner as halves of a Fresnel zone, in
-a one-off check, halved the largest steps 0.3 m up (1.17 dB at 63 Hz). But it put the
-level up to 1.25 dB above BTM at 63 and 125 Hz from y = -4 to 0 m, where stopping is
-within 0.36 dB.
+The top's edge nearest the source (y = 0) has a term of the reflection off the top on
+the lit side of its boundary, where that reflection is missed, its point past the top's
+far edge (x = 2 m): the edge diffraction leaves such a term out, and the terms that make
+paths fade at edges take it. It should fade towards the corner where the two edges
+meet, and it does not: up to where its point on the edge reaches that corner
+(y = -6.32 m 0.3 m up, -6.06 m 1.8 m up) it puts the level 3.0 to 3.9 dB (1.8 m up 2.1
+to 2.5 dB) below BTM at 63 Hz, where the edge diffraction alone is within 0.8 dB
+(1.1 dB) of it, and there it stops: the largest steps, but for 2 and 4 kHz 1.8 m up, at
+y = -5.7 m, where the path over the top's far edge reaches that edge's end at y = 0 and
+the edge diffraction's own term stops. Past that point the level is the edge
+diffraction's, up to 2.3 dB (1.8 m up 2.0 dB) above BTM. In a one-off check on the edge
+diffraction alone, sharing the fade between the three edges at each corner as halves of
+a Fresnel zone halved its largest steps 0.3 m up (from 2.25 to 1.17 dB at 63 Hz), but
+put the level up to 1.25 dB above BTM at 63 and 125 Hz from y = -4 to 0 m, where
+stopping is within 0.36 dB.
 A model of such corners is an open item on the [roadmap](roadmap.md).
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
@@ -1757,7 +1800,7 @@ theory gives +6.0 dB on both sides.
   reflection): at the edges of solid wedges, on paths over two edges (`second_order`) and
   for the fade's terms of paths the edge diffraction does not have, such as second-order
   reflections that an edge cuts off. Near a solid block's corners the level steps by up
-  to 2.4 dB at 63 Hz and is up to 2.3 dB from BTM (see above); along the street such
+  to 6.2 dB at 63 Hz and is up to 3.9 dB from BTM (see above); along the street such
   terms step by up to 1.11 dB in one band and 0.57 dB(A) (see above). A path over two
   edges stops likewise where it leaves the end of one of them, while the paths over
   each edge alone fade out past the end: just over the tops of two barriers in a row,
@@ -6247,13 +6290,6 @@ Results:
   `second_order` (3.9 dB under at 250 Hz, 3.3 dB over at 2 kHz; a one-off check): on the
   line one corner's path carries the direct sound and the other takes its term off it,
   and those terms differ from the ones just beside the line.
-- **The line of sight over a strip.** Where a thin screen has a free edge below as well
-  as above (a strip 80 m long in free space, the source 5 m before it and the listener
-  5 m past it), the lower edge's term on the dark side of its boundary is left out once
-  the direct sound is found past the top, an edge of the same face: as the listener
-  crosses the line of sight over the top, the level steps by 3.4 dB at 63 Hz within
-  0.2 mm with the strip 1 m high, 1.8 dB 2 m high and 1.0 dB 4 m high (`direct`; a
-  one-off check). A barrier that stands on the ground has no such lower edge.
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect, and the paths over the top past its end, as they fade out there,
   take it too; the paths round the end change as the open ground's field along their

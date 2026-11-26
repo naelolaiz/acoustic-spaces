@@ -14,7 +14,7 @@ from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
 from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import total_energy
-from acoustic_spaces.engine.diffraction import EdgeDiffraction, find_edges, sheets
+from acoustic_spaces.engine.diffraction import EdgeDiffraction, diffract, find_edges, sheets
 from acoustic_spaces.engine.edge_fade import _FACE, EdgeFade
 from acoustic_spaces.engine.model import TraceModel
 
@@ -44,11 +44,18 @@ def _corner() -> list:
     ]
 
 
+def _free_strip() -> list:
+    """A thin strip 1 m high standing free in the plane x = 0, its top at z = 0."""
+    a = EXTENT
+    return [[(0.0, -a, -1.0), (0.0, a, -1.0), (0.0, a, 0.0), (0.0, -a, 0.0)]]
+
+
 MODELS = {
     "screen end": lambda: _ground() + _screen(0.0, EXTENT),
     "gap": lambda: _ground() + _screen(2.0, EXTENT) + _screen(-EXTENT, -2.0),
     "corner": lambda: _ground() + _corner(),
     "strip": lambda: _ground() + _screen(-1.0, 1.0),
+    "free strip": _free_strip,
 }
 
 
@@ -180,6 +187,63 @@ def test_nothing_twice_where_the_edge_diffraction_bends_it(tmp_path: Path) -> No
     for x in (-4.6, 4.6, 6.5):
         faded, plain = engine.level((x, -3.0, 1.5)), engine.level((x, -3.0, 1.5), False)
         assert np.abs(faded - plain).max() < 0.01
+
+
+#: BTM over the free strip's top and foot and over both along each face, with the direct
+#: sound, 0.1 mm above the line of sight over the top from (-5, 0, -0.5) at (5, 0, 0.5),
+#: averaged over 96 frequencies in each band (validation/edge_diffraction.py,
+#: strip_sight).
+_STRIP_SIGHT = [0.92, -0.33, -4.0, -7.67, -5.95, -5.57, -5.46, -5.9]
+
+
+@pytest.mark.parametrize("mode", ["direct", "second_order"])
+def test_no_step_at_the_line_of_sight_over_a_free_standing_strip(tmp_path: Path, mode: str) -> None:
+    """Past the foot of a strip standing free, where the direct sound is found over its
+    top, the edge diffraction leaves the foot's incident term out and the fade has it:
+    the level does not step where the listener crosses the line of sight over the top,
+    0.2 mm, and with ``second_order`` it is BTM's. The edge diffraction alone steps by
+    3.4 dB at 63 Hz there (2.8 dB with ``second_order``)."""
+    engine = _Engine(tmp_path, "free strip", (-5.0, 0.0, -0.5), mode)
+    below, above = ((5.0, 0.0, 0.5 + dz) for dz in (-1e-4, 1e-4))
+    assert np.abs(engine.level(above) - engine.level(below)).max() < 0.02
+    plain = engine.level(above, fade=False) - engine.level(below, fade=False)
+    assert abs(plain[0]) > 2.5
+    if mode == "second_order":
+        assert np.abs(engine.level(above) - np.array(_STRIP_SIGHT)).max() < 0.1
+
+
+def test_diffract_adds_the_fade_with_the_plane_sequences(tmp_path: Path) -> None:
+    """``diffract`` with the plane sequences the early stage tested adds the fade's terms
+    to the edge diffraction's, as a simulation does; without them it is the edge
+    diffraction alone."""
+    engine = _Engine(tmp_path, "free strip", (-5.0, 0.0, -0.5))
+    receiver = np.array([5.0, 0.0, 0.5001])
+    paths = early_stage.find_paths(
+        engine.model,
+        engine.source,
+        receiver,
+        engine.candidates,
+        speed_of_sound=engine.c,
+        air=engine.air,
+        max_delay_s=0.5,
+        coherent=BANDS,
+    )
+    squared = float(np.sum((receiver - engine.source) ** 2))
+    for candidates, fade in ((engine.candidates, True), (None, False)):
+        found = diffract(
+            engine.model,
+            engine.source,
+            receiver,
+            paths,
+            speed_of_sound=engine.c,
+            air=engine.air,
+            max_delay_s=0.5,
+            mode="direct",
+            coherent=BANDS,
+            candidates=candidates,
+        )
+        level = 10.0 * np.log10(total_energy(found) * 4.0 * np.pi * squared)
+        assert np.allclose(level, engine.level(receiver, fade=fade), rtol=0.0, atol=1e-9)
 
 
 def test_the_street_garden_has_no_step() -> None:
@@ -414,11 +478,14 @@ def test_a_block_of_reflections_alone(tmp_path: Path) -> None:
 def test_nothing_where_the_edge_diffraction_has_every_path(
     gallery: Room, monkeypatch, order: int, mode: str, y: float
 ) -> None:
-    """Where the edge diffraction bends every path the early stage follows, the fade
-    changes nothing. It took away the terms of reflections off faces whose planes the
-    listener is behind, though the early stage follows them nowhere at that order: at 63
-    Hz the level stepped by 2.9 dB where the listener crossed wall_3's plane (y = 8) and
-    was up to 4.1 dB low beyond it."""
+    """Round the gallery's corner, where the edge diffraction bends every path the early
+    stage follows, the fade changes nothing (past the foot of a strip standing free it
+    adds the term the edge diffraction leaves out:
+    :func:`test_no_step_at_the_line_of_sight_over_a_free_standing_strip`). It took away
+    the terms of reflections off faces whose planes the listener is behind, though the
+    early stage follows them nowhere at that order: at 63 Hz the level stepped by 2.9 dB
+    where the listener crossed wall_3's plane (y = 8) and was up to 4.1 dB low beyond
+    it."""
     scene = gallery.scene
     moved = scene.listeners[1].model_copy(update={"position": (4.0, y, 1.6)})
     room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=gallery)

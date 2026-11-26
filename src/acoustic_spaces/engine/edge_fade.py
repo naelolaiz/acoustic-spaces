@@ -102,7 +102,9 @@ cancel). A product of terms is split alike, term by term, and so are the events 
 path gets past before a term: the part of their terms in an event's diffracted wave,
 times what continues the path at its other events, is part of that wave. A term stops
 where the point it diffracts at leaves the end of its edge (the UTD has no terms for
-the corners of edges), so the level can still step slightly there; where that end lies
+the corners of edges), so the level can still step there (near a solid block's corner,
+where the term of a reflection off its top stops with the edge diffraction's terms, by
+up to 6.2 dB at 63 Hz: docs/validation.md); where that end lies
 in a plane the path reflects off next to the event, the edge goes on as its image in
 the plane, and the leg on one side of the reflection or the other takes the term. Where
 such a leg stops a path and the edge belongs to the obstacle that stops it (its own
