@@ -799,7 +799,11 @@ sources:
   a trajectory at one steady speed, and its sound power that of the train's first point
   at that height; a demo of the scene plays every point at that height (a tram's four
   bogies at the rail top, the two halves of its roof) as far behind the front as it is,
-  each a noise of its own at its own sound power, with Doppler. With `method: defra` it
+  each a noise of its own at its own sound power, with Doppler; its `--train` and
+  `--track` set every one's train and track, the train then running at its own speed
+  (the S-Bahn's 120 km/h, the regional train's 160, the intercity's 200, the freight
+  train's 100, the tram's 50) with what goes along with it, unless `--speed` says. With
+  `method: defra` it
   is construction plant, a `machine` (`breaker`, `generator` or `dumper`) of Defra's
   noise database for construction sites (2005, the data of BS 5228-1 Annex C): the
   row's level 10 m away plus 28 dB in each octave band; a demo of the scene makes the

@@ -85,7 +85,8 @@ each an ordinary run with its own name and folder, made or found as such; its vi
 plays them one after another, each after a title card of 4 s that says what sets it
 apart and how it was made, with the chapters of every part, and is named after them all
 (`demo/flight_departure+arrival_binaural.mp4`); values that come out as the same run
-(`--horn blasts,chord` on the railway when the horn does not sound) play once. Each
+(the railway's train with `--sources train,train_horn --sources-play in-turn --horn
+blasts,chord`, which plays without its horn) play once. Each
 part keeps its own level (each
 brings its loudest peak to -1 dBFS), so the parts are not comparable in level with each
 other, which the cards say; the pieces of one recording (`--piece`) are joined at one
@@ -108,11 +109,13 @@ monitors, then its band); a single turn (one name, or a pick of one top group) i
 ordinary run, and in a series of vehicles each takes its own turns (`--vehicle
 car,police_car`: the car, the police car, then its siren). A pick that is not the
 demo's own names the run (`scene_Choir_binaural`, `scene_each-Choir+Organ-pipes_binaural`), by
-what it adds and leaves out where that is shorter (`passby_regional_with-train_horn`,
+what it adds and leaves out where that is shorter (`passby_with-train_horn`,
 `stadium_spicy_funk_cake_without-guitar_amp`); the stills, credits and
-captions describe only what plays. Where the simulation keeps every source (the
-concerts, the church, the demo of any scene, the works), another pick needs no new
-simulation; the pass-by demos move the vehicle again with the parts picked.
+captions describe only what plays. Where the simulation keeps every source in use (the
+concerts, the church, the demo of any scene), another pick of them needs no new
+simulation; a pick that takes in sources the scene leaves out (the street's vehicles,
+the railway's train, the road works) simulates the scene with them, once for each such
+pick, and a run where something moves simulates its movement with the parts picked.
 
 `--listeners a,b` has a demo play those listeners alone, in that order: it mixes them
 and its video tours them in it, leaving the others out. Every demo with several
@@ -1274,35 +1277,51 @@ police car's two, the fire engine's three, the tram's two) and says how each goe
 ## Trains passing by
 
 `passby_demo.py` comes with the `railway` example too, and runs a train past its
-listeners; in the street it runs a tram down the middle of the street (`--sources
-Tram`, or `--vehicle tram`). Each listener hears one pass in turn, its pitch falling as
-it goes by, and the video follows the train on the plan, with the level heard over the
-pass drawn under it.
+listeners: it is the demo of the railway's scene (`acoustic-spaces demo scene.yaml
+--sources train,train_roof,train_pantograph`, This scene in the editor), a preset of it
+that keeps the script's command lines. In the street the demo of its scene runs a tram
+down the middle of the street (`--sources Tram`, or `--vehicle tram`). Each listener
+hears one pass in turn, its pitch falling as it goes by, and the video follows the train
+on the plan, with the level heard over the pass drawn under it.
 
 ```sh
 acoustic-spaces examples --copy . railway && cd railway
-python passby_demo.py all --train freight   # or sound, scene, walk, video one at a time
+python passby_demo.py all --train freight   # or feeds, simulate, render, video one at a time
 ```
 
-Options: `--train regional` the train (`regional`, an electric locomotive and five
-coaches, 151 m long, at 160 km/h; `s_bahn`, a four-car electric multiple unit, 67 m, at
-120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h; `freight`,
-the locomotive and 24 wagons with composite brake blocks, 5 of them tank wagons, 446 m,
-at 100 km/h), `--speed` how fast it runs (km/h; by default the train's own above,
-whatever the speed of the example's trajectory: the Run demo window's **Speed** shows
-*the train's own* while it is empty, which stands for that default), `--track ballast`
-the track it runs on (`ballast`, sleepers in ballast; `slab`, slab track;
-`slab_absorber`, slab track with absorbers; `level_crossing`), `--sources` the train's
-sources that play (`train`, `train_roof` and `train_pantograph` by default; `train_horn`
-adds its warning horn, see below), `--horn blasts` how the horn sounds (`blasts` or
-`chord`), `--indoors off` where it is heard (see below), `--step 1` how far apart the
-train is simulated along its trajectory (m), `--hrtf me.sofa` a measured head, `--input
-train=WAV` a dry recording of yours (`train_roof=WAV` and `train_pantograph=WAV` for the
-sources up on the train, `train_horn=WAV` for its horn). The tram is the street's
-sources `tram` and `tram_roof`, each with a Schall 03 model (`method: schall-03, train:
-tram, track: street`, the roof's at `height: roof`), in the demo of the street's scene:
-a low-floor tram with air conditioning, 30 m long, on its track set in the street, at
-the speed of its trajectory (50 km/h) unless `--speed` says.
+The train is the scene's sources `train` (at the rail top), `train_roof` and
+`train_pantograph`, each with a Schall 03 model (`method: schall-03, train: regional,
+track: ballast`, the others at `height: roof` and `height: pantograph`), in the group
+`Train` with its horn `train_horn`, along one trajectory at 160 km/h, simulated every
+metre. The tram is the street's sources `tram` and `tram_roof` (the group `Tram`), with
+the model `method: schall-03, train: tram, track: street` (the roof's at `height:
+roof`): a low-floor tram with air conditioning, 30 m long, on its track set in the
+street, at 50 km/h. The options are those of [a demo of any scene](#a-demo-of-any-scene),
+which takes them in every scene with a train or a tram: `--train` the train every source
+of a Schall 03 model is (`regional`, an electric locomotive and five coaches, 151 m
+long, at 160 km/h; `s_bahn`, a four-car electric multiple unit, 67 m, at 120 km/h;
+`intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h; `freight`, the
+locomotive and 24 wagons with composite brake blocks, 5 of them tank wagons, 446 m, at
+100 km/h; `tram`), at its own speed above, and what goes along with it (its horn) too,
+whatever the speed of the scene's trajectory; `--speed` how fast everything that moves
+goes (km/h; without it, as in the scene, or with `--train` the train's own: the Run
+demo window's **Speed** shows *as in the scene, or a train's own* while it is empty);
+`--track` the track it runs on (a train's `ballast`, sleepers in ballast; `slab`, slab
+track; `slab_absorber`, slab track with absorbers; `level_crossing`; a tram's
+`ballast`, `street`, `grass_low` or `grass_high`); `--sources` the sources that play
+(`train`, `train_roof` and `train_pantograph` by default; `Train` adds its warning
+horn, see below); `--horn blasts` how the horn sounds (`blasts` or `chord`); `--indoors
+off` where it is heard (see below); `--step` how far apart the train is simulated along
+its trajectory (m; by default its trajectory's, 1 m); `--hrtf me.sofa` a measured head;
+`--input train=WAV` a dry recording of yours (`train_roof=WAV` and
+`train_pantograph=WAV` for the sources up on the train, `train_horn=WAV` for its horn).
+Several values, comma separated, play one after the other in one video (`--train
+regional,freight`). A train on a track Schall 03 does not give it, or with no sources at
+a height that plays (the tram has none at the pantograph), is refused, saying why, as is
+an option that changes nothing (`--horn` while the horn does not play). The script's
+steps run as those that took them over (`sound` the feeds, `scene` the simulation of the
+scene with the train taken in, `walk` the mixes), `--from` names the scene, and its
+`--indoors train_and_rumble` and `train` read as `airborne_and_rumble` and `airborne`.
 
 - **Their sound power** is that of Schall 03 (Germany's method for the noise of railways
   and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`): for
@@ -1348,9 +1367,9 @@ the speed of its trajectory (50 km/h) unless `--speed` says.
   places are assumptions; Schall 03 gives only each unit's sound power per metre of
   track. Its sound's time structure (steady noise) is made up too; its spectrum per
   octave band is Schall 03's.
-- **The horn** (`train_horn`, the example's, played when `--sources` names it, as
-  `--sources train,train_roof,train_pantograph,train_horn`, at the train's front 2.0 m
-  above the rail top, along its trajectory): its high note (660 Hz) and its low note
+- **The horn** (`train_horn`, the example's, with a horn model, `method: horn, kind:
+  train_horn`, played when `--sources` names it, as `--sources Train`, at the train's
+  front 2.0 m above the rail top, along its trajectory): its high note (660 Hz) and its low note
   (370 Hz) in turn, the notes of the EU's rule for locomotives and passenger trains (TSI
   LOC&PAS, point 4.2.7.2.1), a second each, 0.2 s apart, every 4 s, each as loud as EN
   15153-2 lets it be, 109 dB(C) 25 m ahead of the train over an open, flat site
@@ -1370,12 +1389,11 @@ the speed of its trajectory (50 km/h) unless `--speed` says.
   own too, with `--series listeners`); a run none of whose listeners stands so is
   refused. The railway's `house_18m`
   stands 2 m in front of a house 20 m from the track; the street's pavement and balcony
-  stand in front of its houses and its offices. `train_and_rumble` plays the train
+  stand in front of its houses and its offices. `airborne_and_rumble` plays the train
   through the room's closed window and the rumble the ground's vibration makes in it,
-  `train` the train alone, `rumble` the rumble alone; in the street, the demo of its
-  scene, `airborne_and_rumble`, `airborne` and `rumble` (**indoors**, in [a demo of any
-  scene](#a-demo-of-any-scene)), with the script's `tram_and_rumble` and `tram` read as
-  the first two. The room is EN ISO 12354-3's, not the building's geometry: AGC's 4-16-4
+  `airborne` the train alone, `rumble` the rumble alone (**indoors**, in [a demo of any
+  scene](#a-demo-of-any-scene)), with the railway script's `train_and_rumble` and `train`
+  and the street's `tram_and_rumble` and `tram` read as the first two. The room is EN ISO 12354-3's, not the building's geometry: AGC's 4-16-4
   double glazing as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82 m² of
   it into a room of 50 m³. Each octave band in the room is the simulated level 2 m in
   front of the wall, the façade's reflection in it (EN ISO 12354-3's L_1,2m), less
@@ -1403,11 +1421,10 @@ the speed of its trajectory (50 km/h) unless `--speed` says.
   curves, which are the ground's), and whether that is felt, from about 65 VdB (the
   manual's threshold of perception). Outdoors nothing rumbles: the manual counts
   ground-borne noise only inside buildings. Each listener's vibration is also a track
-  for a bass shaker, `.shaker.wav` beside its mix in the run's `walk/` folder, and the
-  tour's beside the video (`passby_regional_binaural_shaker.wav`): noise in the third
-  octave at 25 Hz whose RMS is the vibration's velocity, every listener at one gain, its
-  full scale in `walk.json` (`shaker`); in the street, the demo of its scene, in
-  `moving/` and its `seats.json`.
+  for a bass shaker, `.shaker.wav` beside its mix in the run's `moving/` folder, and the
+  tour's beside the video (`passby_binaural_shaker.wav`): noise in the third octave at
+  25 Hz whose RMS is the vibration's velocity, every listener at one gain, its full
+  scale in `moving/seats.json` (`shaker`).
 - **Against Schall 03's own sum** (`validation/rail_sources.py`): in a free field, the
   engine's pass of the S-Bahn at 80 km/h and of the regional train at 160 km/h, 7.5 m
   from the track 1.2 m above the rail top and 25 m away 3.5 m above it, gives the same

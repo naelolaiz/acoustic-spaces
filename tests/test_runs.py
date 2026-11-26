@@ -238,15 +238,25 @@ def test_each_part_plays_its_own_sources_in_turn() -> None:
 
 def test_values_that_change_nothing_make_one_part() -> None:
     """Several values of an option that changes nothing with the sources picked (the
-    railway's horn when it does not sound) come out as one run, that of the default; a
-    part they change nothing for (the street's car, for its sirens) plays once, and the
-    run is named after the values that differ, not after the part's none."""
+    railway's horn when it does not sound) are refused, naming it; a part they change
+    nothing for (the railway's train without its horn, the street's car, for its
+    sirens) plays once, and the run is named after the values that differ, not after
+    the part's none."""
     railway = _demo("passby", "railway")
     args = railway.parser().parse_args(["all", "--horn", "blasts,chord"])
+    assert railway.check(args) == "--horn changes nothing: no train horn plays a made sound"
+    args = railway.parser().parse_args(
+        ["all", "--sources", "train,train_horn", "--sources-play", "in-turn"]
+        + ["--horn", "blasts,chord"]
+    )
     assert railway.check(args) is None
     resolved = railway.resolved(args)
-    assert run_folder(resolved).name == "passby_regional_binaural"
-    assert not getattr(resolved, "series_parts", None)
+    assert run_folder(resolved).name == "passby_each-train+train_horn_horn-blasts+chord_binaural"
+    assert [run_folder(p).name for p in resolved.series_parts] == [
+        "passby_train_binaural",
+        "passby_train_horn_horn-blasts_binaural",
+        "passby_train_horn_horn-chord_binaural",
+    ]
     street = _demo("passby", "street")
     args = street.parser().parse_args(
         ["all", "--sources", "car,Police car", "--siren", "wail,yelp"]
@@ -324,7 +334,7 @@ def test_a_pick_is_named_by_how_it_differs_from_the_demos_own(tmp_path: Path) ->
     song = "stadium_spicy_funk_cake"
     train = "train,train_roof,train_pantograph"  # the railway's own pick
     for demo_, sources, named in (
-        (railway, train + ",train_horn", "passby_regional_with-train_horn"),
+        (railway, train + ",train_horn", "passby_with-train_horn"),
         (stadium, "PA,Monitors,drum_kit,singer_voice", f"{song}_without-guitar_amp"),
         (stadium, "PA/Mains,PA/Subwoofers,Monitors,Band", f"{song}_without-PA-Fills+PA-Delays"),
     ):

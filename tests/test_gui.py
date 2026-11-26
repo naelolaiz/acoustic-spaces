@@ -4714,7 +4714,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     # far, how fast and so how long the car drives in the run.
     speed = road.fields["speed"]
     assert isinstance(speed, NumbersField) and speed.edit.text() == ""
-    assert speed.edit.placeholderText() == "as in the scene"
+    assert speed.edit.placeholderText() == "as in the scene, or a train's own"
 
     def unit(name: str) -> str:
         return road.fields[name].findChild(QLabel).text()
@@ -5148,8 +5148,8 @@ def test_demo_dialog_shows_sources_play_where_the_run_has_turns(qapp, monkeypatc
     """Sources play shows only where the sources would play in more than one part in
     turn: not for the stadium's PA alone, ticked wholly (one group, one part), but for
     the PA and the band; not for the lakeside's own pick, all of it in its PA; for the
-    railway's own pick of three sources of no group, which its Trajectories box shows
-    moving, with no ticks."""
+    railway's own pick, three of the four sources of its group Train (the horn not),
+    which its Trajectories box ticks to move."""
     from acoustic_spaces import examples
     from acoustic_spaces.gui.demo_dialog import DemoDialog
 
@@ -5176,14 +5176,16 @@ def test_demo_dialog_shows_sources_play_where_the_run_has_turns(qapp, monkeypatc
     assert not lakeside._rows["sources_play"].isRowVisible(lakeside.fields["sources_play"])
     lakeside.deleteLater()
     railway = DemoDialog(scene=example_path("railway"))
-    assert railway.fields["sources"].ticked() == ["train", "train_roof", "train_pantograph"]
+    sources = railway.fields["sources"]
+    assert sources.ticked() == ["train", "train_roof", "train_pantograph"]
+    (train,) = [
+        sources.tree.topLevelItem(k)
+        for k in range(sources.tree.topLevelItemCount())
+        if sources.tree.topLevelItem(k).text(0) == "Train"
+    ]
+    assert train.childCount() == 4 and train.checkState(0) == Qt.CheckState.PartiallyChecked
     assert railway._rows["sources_play"].isRowVisible(railway.fields["sources_play"])
-    assert railway.movement.note.text() == (
-        "What this run moves along its trajectory, as the options below pick what plays; "
-        "Edit movement… changes a trajectory."
-    )
     assert railway.movement.ticked() == ["train", "train_roof", "train_pantograph"]
-    assert railway.movement.table.isColumnHidden(railway.movement.MOVES)
     railway.deleteLater()
 
 

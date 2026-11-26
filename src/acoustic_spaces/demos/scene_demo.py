@@ -128,7 +128,13 @@ from acoustic_spaces.i18n import N_
 from acoustic_spaces.parameters import OCTAVE_BANDS_HZ, VOCAL_EFFORT_DB_A
 from acoustic_spaces.scene import Scene, TourStop
 from acoustic_spaces.scene import Source as SceneSource
-from acoustic_spaces.scene.model import ATMOSPHERES, CHANNELS, SIREN_PATTERNS
+from acoustic_spaces.scene.model import (
+    ATMOSPHERES,
+    CHANNELS,
+    RAIL_TRACKS,
+    RAIL_TRAINS,
+    SIREN_PATTERNS,
+)
 
 #: What the feeds are brought to (gated RMS, full scale): the loudness every source's
 #: signal has before the simulation's sound powers set the balance.
@@ -538,15 +544,22 @@ MODEL_OPTIONS: dict[str, tuple[str, str]] = {
     "siren": ("siren", "pattern"),
     "horn": ("horn", "signal"),
     "blows": ("defra", "blows_per_minute"),
+    "train": ("schall-03", "train"),
+    "track": ("schall-03", "track"),
 }
+#: The model options that change what a source is, not only its made sound: set only
+#: in the sources in use, the model so changed checked (a tram's track is no train's).
+CHECKED_OPTIONS = ("train", "track")
 
 
 def modelled(args: argparse.Namespace, source: SceneSource) -> SceneSource:
     """``source`` with what the run's options set in its model (:data:`MODEL_OPTIONS`):
     ``--rpm`` a road vehicle's engine, ``--siren`` a siren's pattern where it can sound
     it (its ``patterns``), ``--horn`` a train horn's signal (``chord`` only a train
-    horn sounds), ``--blows`` a breaker's blows a minute; as it is otherwise, its sound
-    power anew where it changes."""
+    horn sounds), ``--blows`` a breaker's blows a minute, ``--train`` and ``--track`` a
+    rail model's train and track, in a source in use; as it is otherwise, its sound
+    power anew where it changes. ValueError for a train on a track Schall 03 does not
+    give it, or at a height where it has no sources."""
     model = source.model
     if model is None:
         return source
@@ -555,6 +568,8 @@ def modelled(args: argparse.Namespace, source: SceneSource) -> SceneSource:
         value = getattr(args, option, None)
         if value is None or isinstance(value, tuple) or model.method != method:
             continue  # several values: each part of the run sets one
+        if option in CHECKED_OPTIONS and not source.in_use:
+            continue
         if option == "siren" and value not in model.patterns:
             continue
         if option == "horn" and value == "chord" and model.kind != "train_horn":
@@ -564,7 +579,26 @@ def modelled(args: argparse.Namespace, source: SceneSource) -> SceneSource:
         changes[field] = float(value) if option in ("rpm", "blows") else value
     if not changes or all(getattr(model, k) == v for k, v in changes.items()):
         return source
+    if any(MODEL_OPTIONS[option][1] in changes for option in CHECKED_OPTIONS):
+        from pydantic import ValidationError
+
+        try:
+            changed_model = type(model).model_validate({**model.model_dump(), **changes})
+        except ValidationError as exc:
+            given = " ".join(
+                f"{flag_of(option)} {getattr(args, option)}"
+                for option in CHECKED_OPTIONS
+                if getattr(args, option, None) is not None
+            )
+            said = "; ".join(e["msg"].removeprefix("Value error, ") for e in exc.errors())
+            raise ValueError(f"{given}: {source.name}: {said}") from None
+        return source.model_copy(update={"model": changed_model})
     return source.model_copy(update={"model": model.model_copy(update=changes)})
+
+
+def flag_of(name: str) -> str:
+    """The flag of the demo's option ``name`` (``--train``)."""
+    return "--" + name.replace("_", "-")
 
 
 def with_models(args: argparse.Namespace, scene: Scene) -> Scene:
@@ -1181,6 +1215,41 @@ def train_horns_of(args: argparse.Namespace) -> list[str]:
     ]
 
 
+def rail_train(key: str) -> str:
+    """A train of :data:`~acoustic_spaces.demos.rail.TRAINS` in words, with its own
+    speed: "an S-Bahn (a four-car electric multiple unit, 120 km/h)"."""
+    from acoustic_spaces.demos.rail import TRAINS
+
+    train = TRAINS[key]
+    what, _, more = train.title.partition(": ")
+    return f"{what} ({more + ', ' if more else ''}{train.speed_kmh:g} km/h)"
+
+
+def trains_of(args: argparse.Namespace) -> list[str]:
+    """The trains and trams of the run (its sources in use with a rail model, whose
+    train ``--train`` and track ``--track`` set), by name."""
+    found = _current(getattr(args, "scene", None))
+    if found is None:
+        return []
+    try:
+        scene = taken_in(args, found)
+    except ValueError:
+        return []
+    return [
+        s.name
+        for s in scene.sources
+        if s.in_use and s.model is not None and s.model.method == "schall-03"
+    ]
+
+
+def trains_moot(args: argparse.Namespace) -> str | None:
+    """Why ``--train`` or ``--track`` changes nothing in the run, or None: no train or
+    tram plays (a source with a schall-03 model)."""
+    if unread(args) or trains_of(args):
+        return None
+    return "no train or tram plays (a source with a schall-03 model)"
+
+
 def stems_played(played: Played | None) -> dict[str, float]:
     """The stems ``played`` plays and their gains (dB): none for a file or a channel."""
     if played is None or played[1] is None:
@@ -1381,13 +1450,15 @@ def moving_scene(args: argparse.Namespace) -> Scene:
 def run_trajectories(args: argparse.Namespace, scene: Scene) -> Scene:
     """``scene`` with each trajectory that moves at the run's ``--speed`` (km/h; along
     keyframes, through their places at that speed:
-    :func:`~acoustic_spaces.walkthrough.at_speed`) and its places ``--step`` apart (m),
-    where the run gives them; as it is otherwise."""
+    :func:`~acoustic_spaces.walkthrough.at_speed`), or without it, a train ``--train``
+    gives at its own (:func:`own_speeds`), and its places ``--step`` apart (m), where
+    the run gives them; as it is otherwise."""
     from acoustic_spaces.walkthrough import at_speed, movers
 
     speed = getattr(args, "speed", None)
     step = getattr(args, "step_m", None)
-    if speed is None and step is None:
+    own = own_speeds(args, scene) if speed is None else {}
+    if speed is None and step is None and not own:
         return scene
     moving = {(kind, item.name) for kind, item in movers(scene)}
     update = {}
@@ -1397,12 +1468,46 @@ def run_trajectories(args: argparse.Namespace, scene: Scene) -> Scene:
             if (kind, item.name) in moving:
                 if speed is not None:
                     item = at_speed(item, float(speed) / 3.6)
+                elif kind == "sources" and item.name in own:
+                    item = at_speed(item, own[item.name])
                 if step is not None:
                     trajectory = item.trajectory.model_copy(update={"step_m": float(step)})
                     item = item.model_copy(update={"trajectory": trajectory})
             items.append(item)
         update[kind] = items
     return scene.model_copy(update=update)
+
+
+def own_speeds(args: argparse.Namespace, scene: Scene) -> dict[str, float]:
+    """The speed (m/s) of each source that goes as the train ``--train`` gives (one
+    value; the run's ``--speed`` none), by name: the train's own (Schall 03's for it,
+    :data:`~acoustic_spaces.demos.rail.TRAINS`), for each source in use of ``scene``
+    with a rail model that moves, and each that goes along with one (:func:`goes_with`:
+    its horn on its front); none otherwise, each going as its trajectory goes."""
+    train = getattr(args, "train", None)
+    if train is None or isinstance(train, tuple) or getattr(args, "speed", None) is not None:
+        return {}
+    from acoustic_spaces.demos.rail import TRAINS
+    from acoustic_spaces.walkthrough import movers
+
+    moving = [item for kind, item in movers(scene) if kind == "sources" and item.in_use]
+    trains = [s for s in moving if s.model is not None and s.model.method == "schall-03"]
+    own = TRAINS[str(train)].speed_kmh / 3.6
+    return {s.name: own for s in moving if any(goes_with(s, t) for t in trains)}
+
+
+def goes_with(a: SceneSource, b: SceneSource) -> bool:
+    """Whether the sources ``a`` and ``b`` (each with a trajectory) go along together:
+    from the same place in plan through the same places at the same times, whatever
+    their heights (a train's horn on its front, 2 m over its rail top)."""
+    from acoustic_spaces.walkthrough import knots
+
+    one, other = knots(a), knots(b)
+    return (
+        one.times.shape == other.times.shape
+        and np.allclose(one.times, other.times)
+        and np.allclose(one.positions[:, :2], other.positions[:, :2])
+    )
 
 
 def timeline_of(args: argparse.Namespace, moving: list[str]) -> str:
@@ -2391,8 +2496,12 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     over = float(movement.times[-1])
     followers, leads = {}, {}
     for source in trailing:
-        # Its points behind its first, a column each, as long as its first's feed.
+        # Its points behind its first, a column each, as long as its first's feed; a
+        # source of one point (a train's pantograph) has its lead behind the front alone.
         lead, behind = models.trail(source)
+        leads[source.name] = lead
+        if not behind and not table["sources"][source.name].get("behind"):
+            continue
         y, r = read(feeds_folder(args) / BEHIND / f"{source.name}.wav")
         y = np.asarray(y).reshape(len(y), -1)
         if table["sources"][source.name].get("behind") != len(behind) or y.shape[1] != len(behind):
@@ -2405,7 +2514,6 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
             (lag, (lasting(y[:, k], r, over + FADE_OUT_S) if made else y[:, k], r))
             for k, (lag, _offset) in enumerate(behind)
         ]
-        leads[source.name] = lead
     for name, (x, r) in list(feeds.items()):
         if table["sources"][name].get("made"):  # a made sound: silent after its pass
             feeds[name] = (lasting(x, r, over + FADE_OUT_S), r)
@@ -3417,13 +3525,14 @@ DEMO = Demo(
             "speed",
             "the speed every trajectory that moves goes at in this run (km/h), along its "
             "points, or through its keyframes' places in turn; a source whose model gives "
-            "its sound power at its speed (a road vehicle's) sounds as it does at that "
-            "speed (default: as in the scene)",
+            "its sound power at its speed (a road vehicle's, a train's) sounds as it does "
+            "at that speed (default: as in the scene; a train --train gives, and what goes "
+            "along with it, at the train's own)",
             None,
             "float",
             steps=("feeds", "render", "video"),
             unit="km/h",
-            unset="as in the scene",
+            unset="as in the scene, or a train's own",
             moot=lambda args: None if unread(args) or moving_of(args) else "nothing moves",
         ),
         Option(
@@ -3480,6 +3589,38 @@ DEMO = Demo(
             moot=lambda args: (
                 None if unread(args) or train_horns_of(args) else "no train horn plays a made sound"
             ),
+        ),
+        Option(
+            "train",
+            "the train every train or tram of the run is (a source with a schall-03 model): "
+            + "; ".join(f"{key}, {rail_train(key)}" for key in RAIL_TRAINS)
+            + ": its sound power Schall 03's at the train's own speed, each of its sources "
+            "playing its points behind its front, as long as it is, the train and what "
+            "goes along with it (its horn) at that speed unless --speed says; the scene "
+            "so changed is simulated once (default: each source's own train, as fast as "
+            "its trajectory goes)",
+            None,
+            "choice",
+            RAIL_TRAINS,
+            steps=("simulate", "feeds", "render", "video"),
+            unset="each source's own",
+            moot=trains_moot,
+        ),
+        Option(
+            "track",
+            "the track every train or tram of the run runs on (a source with a schall-03 "
+            "model), for Schall 03's corrections to its sound power: a train's ballast "
+            "(sleepers in ballast), slab (slab track), slab_absorber (slab track with "
+            "absorbers) or level_crossing (Tabelle 7); a tram's ballast, street (set in "
+            "the street), grass_low or grass_high (grassed, the grass low or up to the "
+            "rail top; Tabelle 15); the scene so changed is simulated once (default: "
+            "each source's own)",
+            None,
+            "choice",
+            RAIL_TRACKS,
+            steps=("simulate", "feeds", "render", "video"),
+            unset="each source's own",
+            moot=trains_moot,
         ),
         Option(
             "blows",

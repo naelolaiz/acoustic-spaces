@@ -50,7 +50,7 @@ import functools
 import math
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, get_args
 
 import numpy as np
 import yaml
@@ -1865,6 +1865,9 @@ RailTrain = Literal["s_bahn", "regional", "intercity", "freight", "tram"]
 RailTrack = Literal[
     "ballast", "slab", "slab_absorber", "level_crossing", "street", "grass_low", "grass_high"
 ]
+#: The trains and the tracks, in that order (a demo's --train and --track).
+RAIL_TRAINS: tuple[str, ...] = get_args(RailTrain)
+RAIL_TRACKS: tuple[str, ...] = get_args(RailTrack)
 #: The heights of a train's sources above the rail top, Schall 03's h = 1, 2 and 3 (m).
 RAIL_HEIGHTS_M: dict[str, float] = {"rail_top": 0.0, "roof": 4.0, "pantograph": 5.0}
 RailHeight = Literal["rail_top", "roof", "pantograph"]

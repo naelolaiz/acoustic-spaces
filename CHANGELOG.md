@@ -47,6 +47,14 @@
   before 4.4.0 still work but `--scene` (the scenes go to the work folder, now `demo`),
   `--indoors works` and `works_and_rumble` read as `airborne` and
   `airborne_and_rumble`, and its first run simulates again.
+- Changed: the railway's `passby_demo.py` is the demo of its scene, its train the
+  scene's sources with a Schall 03 model and its horn one with a horn model (the group
+  `Train`); its options and steps before 4.4.0 still work (`--indoors train` and
+  `train_and_rumble` as `airborne` and `airborne_and_rumble`), and its runs are named as
+  the demo of any scene's (`passby_train-freight_binaural`). The demo of any scene's
+  `--train` and `--track` set every train's or tram's, `--train` at its own speed, and
+  what goes along with it, unless `--speed` says; a train on a track Schall 03 does not
+  give it, or with no sources at a height that plays, is refused, saying why.
 - Changed: an option that changes nothing in a run is refused naming it (`--rpm changes
   nothing: no road vehicle plays a made sound`), and `--rpm` and `--blows` are refused
   unless positive.

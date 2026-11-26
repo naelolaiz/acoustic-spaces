@@ -10,9 +10,9 @@
 # along one trajectory, at the rail top, on the roof and at the pantograph, Schall 03's
 # heights; each plays the train's points at that height one behind the other (its
 # bogies, its cars' roofs, its pantograph), so the train goes by as long as it is. They
-# are left out of simulations until ticked, as is the train's horn at its front, and
-# passby_demo.py runs one of four trains past, its horn sounding with --sources
-# train,train_roof,train_pantograph,train_horn.
+# are left out of simulations until ticked, as is the train's horn at its front (the
+# group Train), and passby_demo.py runs one of four trains past, its horn sounding with
+# --sources Train.
 name: Railway across a meadow
 geometry:
   ground:
@@ -62,55 +62,66 @@ sources:
     spacing_m: 2.5
     level_db: [94.9, 92.0, 91.8, 95.8, 99.1, 98.2, 93.2, 78.0]
     directivity: {file: line.csv}
-  # A regional train at 160 km/h: the sound power of its front point at each height
-  # (the locomotive's first bogie, its roof, its pantograph), Schall 03's, with its
-  # directivity round the track (train.csv); the demo plays the train's other points
-  # behind them.
+  # A regional train (an electric locomotive and five coaches) at 160 km/h on sleepers
+  # in ballast, its front where the sources stand: its sources at the rail top (its
+  # bogies), on its roof (4 m up) and at its pantograph (5 m up), Schall 03's (Germany's
+  # method for the noise of railways, 2014), with its directivity round the track
+  # (train.csv). The sound power of each is its first point's (the locomotive's first
+  # bogie, its roof, its pantograph); the demo plays the train's points behind them
+  # too, each as far behind as it is. Its pass is simulated every metre.
   - name: train
+    group: Train
     enabled: false
     position: [-150, 0, 0.2]
-    level_db: [111.2, 108.2, 110.2, 111.9, 114.7, 113.8, 108.8, 93.2]
+    model: {method: schall-03, train: regional, track: ballast}
     directivity: {file: train.csv}
     trajectory:
       to: [[150, 0, 0.2]]
       speed_m_s: 44.44
       doppler: true
       face_forward: true
+      step_m: 1
   - name: train_roof
+    group: Train
     enabled: false
     position: [-150, 0, 4.2]
-    level_db: [112.1, 110.2, 114.9, 112.0, 109.0, 106.5, 101.9, 95.8]
+    model: {method: schall-03, train: regional, track: ballast, height: roof}
     directivity: {file: train.csv}
     trajectory:
       to: [[150, 0, 4.2]]
       speed_m_s: 44.44
       doppler: true
       face_forward: true
+      step_m: 1
   - name: train_pantograph
+    group: Train
     enabled: false
     position: [-150, 0, 5.2]
-    level_db: [101.7, 100.6, 101.1, 99.7, 99.5, 100.3, 95.5, 89.6]
+    model: {method: schall-03, train: regional, track: ballast, height: pantograph}
     directivity: {file: train.csv}
     trajectory:
       to: [[150, 0, 5.2]]
       speed_m_s: 44.44
       doppler: true
       face_forward: true
+      step_m: 1
   # The train's warning horn at its front, 2.0 m above the rail top: its high note (660
   # Hz) and its low note (370 Hz) in turn, each 109 dB(C) 25 m ahead (the most EN
   # 15153-2 allows), a second each every 4 s; its sound power averaged over its blasts
   # and pauses, with the directivity of a siren the National Bureau of Standards
   # measured (siren.csv).
   - name: train_horn
+    group: Train
     enabled: false
     position: [-150, 0, 2.2]
-    level_db: [86.8, 86.9, 123.6, 134.8, 130.6, 128.6, 126.2, 125.3]
+    model: {method: horn, kind: train_horn}
     directivity: {file: siren.csv}
     trajectory:
       to: [[150, 0, 2.2]]
       speed_m_s: 44.44
       doppler: true
       face_forward: true
+      step_m: 1
 listeners:
   - name: tsi_7m5
     position: [0, 7.5, 1.4]

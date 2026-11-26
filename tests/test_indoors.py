@@ -1,6 +1,6 @@
-"""The pass-by demos heard in the house a listener stands in front of: the façade's
-level difference, the rumble of the ground's vibration, the two in the railway demo's
-mix, and what is felt there."""
+"""The demos heard in the house a listener stands in front of: the façade's level
+difference, the rumble of the ground's vibration, the two in the railway demo's mix,
+and what is felt there."""
 
 from __future__ import annotations
 
@@ -441,108 +441,60 @@ def _a_energy(x: np.ndarray) -> float:
     return float(np.sum(spectrum * (a_gain(f) ** 2)[:, None])) / len(x)
 
 
-def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path, monkeypatch) -> None:
-    """--indoors train_and_rumble, mono, at tsi_7m5, 2 m in front of a house: each part
-    of the train some 35 to 39 dB(A) quieter inside than in front of it, the rumble
-    one more part whose floor shakes as the curve says at the house's wall, the
-    house's 3 dB more. In the mix the rumble has the energy its SEL gives in the
-    engine's units (to 0.05 dB), the rail top's sound is as much under its sound
-    outdoors as their SELs are (to 0.5 dB), and the two are as far apart as their SELs
-    (to 1 dB). What is felt there is the floor's vibration, outdoors the ground's. The
-    rumble alone simulates nothing and plays the rumble alone; another --indoors walks
-    again."""
+def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path) -> None:
+    """--indoors train_and_rumble (the script's, the demo's airborne_and_rumble), mono,
+    at tsi_7m5, 2 m in front of a house: the train some 35 to 39 dB(A) quieter inside
+    than outdoors, near what ISO 717-1 rates traffic's spectrum; the house's floor
+    shaking as the curve says at its wall, the house's 3 dB more, the rumble 50 dB under
+    it in dB(A); outdoors the ground under the listener shaking as the curve says there.
+    In the mix the room's sound is as far under the sound outdoors as their SELs are (to
+    0.5 dB), and what is felt there is the floor's vibration, outdoors the ground's."""
     pytest.importorskip("PIL")
-    from acoustic_spaces.demos import load, passby, pipeline, rail
+    from acoustic_spaces.demos import load, pipeline, rail, scene_demo
+    from acoustic_spaces.demos.audio import read
 
-    added = []
-    real_summed = passby.summed
-
-    def summed(played):
-        added.append([np.array(x) for x in played])
-        return real_summed(played)
-
-    monkeypatch.setattr(passby, "summed", summed)
     folder = _long_railway(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
-    assert demo.option("indoors").choices == indoors.choices("train")
     common = ["--train", "s_bahn", "--speed", "80", "--step", "8", "--no-mp4"]
     common += ["--format", "mono", "--listeners", "tsi_7m5"]
-    outdoors = ["walk", *common]
-    run = ["all", *common, "--indoors", "train_and_rumble"]
-    assert demo.main(["sound", *common]) == 0 and demo.main(["scene", *common]) == 0
-    assert demo.main(outdoors) == 0
-    out = pipeline.read_json(run_of(demo, *common) / "walk" / "walk.json")["listeners"]["tsi_7m5"]
+    heard = {}
+    for where in ((), ("--indoors", "train_and_rumble")):
+        run = ["all", *common, *where]
+        assert demo.main(run) == 0
+        moving = demo.run_folder(demo.parser().parse_args(run)) / scene_demo.MOVING
+        seats = pipeline.read_json(moving / pipeline.SEATS)
+        x, _ = read(moving / "tsi_7m5.mono.wav")
+        energy = _a_energy(np.asarray(x).reshape(len(x), -1)) / seats["gain"] ** 2
+        heard[bool(where)] = (seats, energy)
+    (out, out_energy), (inside, in_energy) = heard[False], heard[True]
     curve = vibration.CURVES[rail.TRAINS["s_bahn"].curve]
     # Outdoors: the ground under the listener, 7.5 m from the track.
-    assert out["shaking"] == "ground" and "inside" not in out
-    assert out["vibration_vdb"] == pytest.approx(curve.level(7.5, 80.0), abs=0.05)
-    assert demo.main(run) == 0
-    work = run_of(demo, *run[1:])
-    facts = pipeline.read_json(work / "walk" / "walk.json")
-    assert facts["indoors"] == "train_and_rumble" and facts["plays"].endswith(
-        "; indoors train_and_rumble"
-    )
-    heard = facts["listeners"]["tsi_7m5"]
-    assert heard["inside"] == "house" and heard["shaking"] == "floor"
-    assert heard["about"] == (
+    seat = out["seats"]["tsi_7m5"]
+    assert seat["shaking"] == "ground" and "inside" not in seat
+    assert seat["vibration_vdb"] == pytest.approx(curve.level(7.5, 80.0), abs=0.01)
+    assert inside["indoors"] == "airborne_and_rumble"
+    seat = inside["seats"]["tsi_7m5"]
+    assert seat["inside"] == "house" and seat["shaking"] == "floor"
+    assert seat["about"] == (
         "Inside the house here, through a closed window (EN ISO 12354-3)\n"
         "and the rumble of the floors and walls (FTA)"
     )
-    assert facts["shaker"]["hz"] == 25.0
-    assert (work / "walk" / "s_bahn__tsi_7m5.shaker.wav").exists()
-    parts = heard["parts"]
-    assert list(parts) == ["train", "train_roof", "train_pantograph", "rumble"]
-    energy = sum(10.0 ** (p["sel_a_db"] / 10.0) for p in parts.values())
-    assert heard["sel_a_db"] == pytest.approx(10.0 * math.log10(energy), abs=0.02)
-    # The train through the window: some 35 to 39 dB(A) under 2 m in front of it, near
-    # what ISO 717-1 gives traffic's spectrum, Rw + Ctr + 10 lg(V / (6 T0 S)) = 34.6 dB.
+    # The floor: the curve at the house's wall, 9.5 m from the track, at 80 km/h, + 3 dB.
+    assert seat["vibration_vdb"] == pytest.approx(curve.level(HOUSE_WALL_M, 80.0) + 3.0, abs=0.01)
+    assert seat["rumble_a_db"] == pytest.approx(seat["vibration_vdb"] - 50.0, abs=0.01)
+    assert inside["shaker"]["hz"] == 25.0
+    # The train through the window: some 35 to 39 dB(A) under outdoors, near what ISO
+    # 717-1 gives traffic's spectrum, Rw + Ctr + 10 lg(V / (6 T0 S)) = 34.6 dB.
     rw, _, ctr = facade.weighted(facade.GLAZING_R_DB[:5])
     traffic = rw + ctr + facade.HOUSE.room_term_db
     assert traffic == pytest.approx(34.6, abs=0.05)
-    for name in ("train", "train_roof", "train_pantograph"):
-        assert 0.0 < out["parts"][name]["sel_a_db"] - parts[name]["sel_a_db"] - traffic < 4.0
-    # The floor: the curve at the house's wall, 9.5 m from the track, at 80 km/h, + 3 dB.
-    assert heard["vibration_vdb"] == pytest.approx(curve.level(HOUSE_WALL_M, 80.0) + 3.0, abs=0.05)
-    assert parts["rumble"]["max_a_db"] == pytest.approx(heard["vibration_vdb"] - 50.0, abs=0.01)
-    # In the mix: the rumble at its SEL in the engine's own units, the rail top's sound
-    # through the window as much under its sound outdoors as their SELs are, and the
-    # two as far apart as their SELs say. The pass-by's own sound of a train's part is
-    # within 0.6 dB of its SEL, outdoors as indoors (the rail top's 0.6 dB under it on
-    # this meadow): so the last within 1 dB.
-    from acoustic_spaces import Scene
-
-    scene = Scene.from_yaml(work / "scene_demo.yaml")
-    loudest = max(each.sound_power_db for each in scene.sources if each.in_use)
-    played = added[-1]
-    assert len(played) == 4
-    rumble = _a_energy(played[3]) / RATE
-    wanted = float(indoors.mean_square(10.0 ** (parts["rumble"]["sel_a_db"] / 10.0), loudest))
-    assert 10.0 * math.log10(rumble / wanted) == pytest.approx(0.0, abs=0.05)
-    through = 10.0 * math.log10(_a_energy(added[0][0]) / _a_energy(played[0]))
-    told = out["parts"]["train"]["sel_a_db"] - parts["train"]["sel_a_db"]
-    # The wall's reflection, some 4 m longer, combs the sound every 86 Hz or so, which
-    # moves its energy within each band against the filter's crossovers, where the
-    # façade's level difference steps by 9 to 11 dB: the 500 Hz and 1 kHz bands lose
-    # 0.3 dB less than it says (measured), so to 0.5 dB.
-    assert through == pytest.approx(told, abs=0.5)
-    under = 10.0 * math.log10(_a_energy(played[0]) / _a_energy(played[3]))
-    told = parts["train"]["sel_a_db"] - parts["rumble"]["sel_a_db"]
-    assert under == pytest.approx(told, abs=1.0)
-    # The rumble alone: nothing simulated, the rumble alone in the mix.
-    rumble = [*common, "--indoors", "rumble"]
-    again = demo.resolved(demo.parser().parse_args(["all", *rumble]))
-    assert not demo.is_done(demo.step("walk"), again)
-    assert demo.main(["sound", *rumble]) == 0 and demo.main(["scene", *rumble]) == 0
-
-    def nothing(*args, **kwargs):
-        raise AssertionError("the rumble alone simulates nothing")
-
-    monkeypatch.setattr("acoustic_spaces.walkthrough.simulate_trajectory", nothing)
-    assert demo.main(["walk", *rumble]) == 0
-    alone = pipeline.read_json(run_of(demo, *rumble) / "walk" / "walk.json")["listeners"]["tsi_7m5"]
-    assert "parts" not in alone and "pitch_semitones" not in alone
-    assert alone["sel_a_db"] == pytest.approx(parts["rumble"]["sel_a_db"], abs=0.01)
-    assert len(added[-1]) == 1
+    sel_out = out["movement"]["passes"]["tsi_7m5"]["sel_a_db"]
+    sel_in = inside["movement"]["passes"]["tsi_7m5"]["sel_a_db"]
+    assert 0.0 < sel_out - sel_in - traffic < 4.0
+    # In the mixes, each in the engine's units (its gain taken off): as far apart as the
+    # SELs say.
+    under = 10.0 * math.log10(out_energy / in_energy)
+    assert under == pytest.approx(sel_out - sel_in, abs=0.5)
 
 
 def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, monkeypatch) -> None:
@@ -679,15 +631,17 @@ def test_listeners_in_turn_hear_indoors_only_at_a_house() -> None:
     assert heard == {
         "tsi_7m5": "off",
         "meadow_25m": "off",
-        "house_18m": "train_and_rumble",
+        "house_18m": "airborne_and_rumble",
         "behind_barrier_25m": "off",
     }
     outdoors = [p for p in demo.parts(args) if p.listeners != "house_18m"]
     for part in outdoors:
         alone = parsed("--listeners", part.listeners)
         assert demo.run_name(demo.resolved(part)) == demo.run_name(demo.resolved(alone))
-    refused = indoors.no_house("train", "this run")
-    assert refused.startswith("--indoors hears the train in a house")
+    refused = (
+        "--indoors hears the room behind a listener that stands 0.5 to 2 m in front of a "
+        "building's wall; no listener of this run does"
+    )
     for argv in (
         ("--indoors", "train", "--listeners", "meadow_25m"),
         ("--indoors", "train", "--listeners", "meadow_25m,tsi_7m5", "--series", "listeners"),

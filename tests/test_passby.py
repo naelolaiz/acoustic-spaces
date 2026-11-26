@@ -711,29 +711,6 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
     )
 
 
-def test_a_vehicles_sources_left_out_walk_at_the_demos_speed(tmp_path: Path) -> None:
-    """At --speed, the sources of a vehicle that a run leaves out (the train's horn)
-    walk at that speed too in the demo's scene, out of use: its sources still go along
-    one walk, which the walk step checks."""
-    import shutil
-
-    from acoustic_spaces import Scene
-    from acoustic_spaces.demos import load
-    from acoustic_spaces.demos.passby import car_problem
-    from acoustic_spaces.demos.rail import TRAIN_VEHICLE
-
-    for example, vehicle, run in (("railway", TRAIN_VEHICLE, ["--train", "s_bahn"]),):
-        folder = tmp_path / f"{example}_{vehicle.name}"
-        shutil.copytree(Path(example_path(example)).parent, folder)
-        demo = load(folder / "passby_demo.py").at(folder)
-        assert demo.main(["scene", *run, "--speed", "30"]) == 0
-        scene = Scene.from_yaml(run_of(demo, *run, "--speed", "30") / "scene_demo.yaml")
-        assert car_problem(scene, "scene_demo.yaml", vehicle) is None, vehicle.name
-        mine = [s for s in scene.sources if s.name in vehicle.every_part()]
-        assert any(not s.in_use for s in mine)
-        assert {round(s.trajectory.speed_m_s, 4) for s in mine} == {round(30.0 / 3.6, 4)}
-
-
 def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -> None:
     """The roadside's demo keeps a car's steady keyframes as they are, with Doppler and
     CNOSSOS-EU's power at their speed; with --speed it drives through their places (each
@@ -1136,7 +1113,6 @@ def _passby(example: str):
 @pytest.mark.parametrize(
     ("example", "name", "playing"),
     [
-        ("railway", "passby_regional_binaural", ("train", "train_roof", "train_pantograph")),
         ("airport", "flight_departure_binaural", None),
         ("helicopter_flyover", "flyover_binaural", None),
     ],
@@ -1174,23 +1150,33 @@ def test_a_street_run_plays_the_sources_it_picks() -> None:
     assert demo.check(two) is None and demo.moving(two) == ["fire_engine_siren", "fire_engine_horn"]
 
 
-def test_options_that_change_nothing_for_the_sources_picked_are_left_out() -> None:
+def test_options_that_change_nothing_for_the_sources_picked_are_refused() -> None:
     """--horn without the train's horn and --track with its horn alone change nothing:
-    the run takes them at their defaults, its name and its command without them."""
+    a run of one part is refused, naming the option; a part of several where it changes
+    nothing takes it at its default, its name without it."""
     railway = _passby("railway")
 
-    def run(demo, *argv: str):
-        return demo.resolved(demo.parser().parse_args(["all", *argv]))
+    def run(*argv: str):
+        return railway.parser().parse_args(["all", *argv])
 
-    assert run(railway, "--horn", "chord").horn == "blasts"
-    assert railway.run_name(run(railway, "--horn", "chord")) == "passby_regional_binaural"
-    every = "train,train_roof,train_pantograph,train_horn"
-    chord = run(railway, "--sources", every, "--horn", "chord")
-    assert railway.run_name(chord) == "passby_regional_with-train_horn_horn-chord_binaural"
-    horn = run(railway, "--sources", "train_horn", "--track", "slab")
-    assert (
-        horn.track == "ballast" and railway.run_name(horn) == "passby_regional_train_horn_binaural"
+    assert railway.check(run("--horn", "chord")) == (
+        "--horn changes nothing: no train horn plays a made sound"
     )
+    assert railway.check(run("--sources", "train_horn", "--track", "slab")) == (
+        "--track changes nothing: no train or tram plays (a source with a schall-03 model)"
+    )
+    chord = railway.resolved(run("--sources", "Train", "--horn", "chord"))
+    assert railway.check(chord) is None
+    assert railway.run_name(chord) == "passby_Train_horn-chord_binaural"
+    turns = run("--sources", "train,train_horn", "--sources-play", "in-turn", "--track", "slab")
+    assert railway.check(turns) is None
+    parts = [
+        (p.sources, p.track, railway.run_name(railway.resolved(p))) for p in railway.parts(turns)
+    ]
+    assert parts == [
+        ("train", "slab", "passby_train_track-slab_binaural"),
+        ("train_horn", None, "passby_train_horn_binaural"),
+    ]
 
 
 def test_a_pass_by_run_refuses_sources_its_scene_has_not() -> None:
