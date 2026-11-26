@@ -196,6 +196,15 @@
   plays (the train's horn with `train_horn`).
 - Fixed: a police car's or a fire engine's walk was simulated again on every run, and
   the tram's credit named a pantograph it does not have.
+- Added: `engine.diffraction.diffract` takes the plane sequences the early stage tested
+  (`candidates`) and then adds the terms that make paths fade at edges, as a simulation
+  does; without them it is the edge diffraction alone, as before.
+- Fixed (results change): the validation report's edge diffraction checks are measured
+  as a simulation has them, with those terms. Simulated levels do not change: they never
+  stepped at the line of sight over a free-standing screen (that known issue was the
+  edge diffraction alone), and near a solid block's corners they step by up to 6.2 dB at
+  63 Hz, not 2.4 dB, so the error a result lists for corners of edges (`not_counted`) is
+  now up to 3.9 dB.
 - Changed: every demo run is named after its settings (what it plays, the listeners,
   the options changed, the output; a pick of sources by what it adds or leaves out,
   `with-train_horn`), and its mixes, stills and the scenes made for it go

@@ -120,17 +120,15 @@ Edge diffraction:
   ends and corners, each term weighted for its own boundary: past a screen's corners of
   45° to 170° within 0.17 dB of BTM (a right-angled one within 0.1 dB, where they
   stepped by 2.8 dB), and beside a bend of a screen's top within 0.03 dB.
-- [ ] The same at the corners of solid wedges, where three edges meet: sharing the fade
-  between them as halves of a Fresnel zone came out up to 1.25 dB above BTM at 63 and
-  125 Hz near a block's corner, so their paths still stop at the ends.
+- [ ] The same at the corners of solid wedges, where three edges meet and the level
+  steps by up to 6.2 dB at 63 Hz near a block's corner, most of it where the fade's term
+  of a reflection off the top stops: sharing the fade between the edges as halves of a
+  Fresnel zone, checked on the edge diffraction alone, came out up to 1.25 dB above BTM
+  at 63 and 125 Hz there, so their paths still stop at the ends.
 - [ ] The same for the edge fade's terms and for paths over two edges, which still stop
   at the ends of their edges: in sight just over two barriers in a row the level steps
   by up to 6 dB where the way passes the end of one (see
   [Known issues](validation.md#known-issues-of-the-edge-fade)).
-- [ ] The lower edge's term of a strip with a free edge below, kept on its dark side
-  where the direct sound is found past the top: the level steps by up to 3.4 dB at
-  63 Hz across the line of sight over the top (see
-  [Known issues](validation.md#known-issues)).
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
