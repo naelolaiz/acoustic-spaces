@@ -3183,7 +3183,9 @@ msgid ""
 "those behind it too; construction plant's, Defra's row for the machine plus "
 "28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its beeps and "
 "pauses; a helicopter's, its rotors' sound in level flight at its speed "
-"through the air, its directivity too"
+"through the air, its directivity too; an aircraft's by ECAC Doc 29, its NPD "
+"curves at the highest thrust of the flight it flies along the trajectory's "
+"ground track, its flight and directivity too"
 msgstr ""
 "El mètode que dona la potència acústica de la font en lloc de la que hi "
 "poseu, i el so que hi reprodueix una demostració de l'escena (model: al "
@@ -3198,7 +3200,9 @@ msgstr ""
 "alarma de marxa enrere, la del tipus B de la SAE J994, en mitjana sobre els "
 "senyals i les pauses; la d'un helicòpter, el so dels seus rotors en vol "
 "horitzontal a la seva velocitat respecte a l'aire, i també la seva "
-"directivitat"
+"directivitat; la d'una aeronau segons l'ECAC Doc 29, les seves corbes NPD a "
+"l'empenta més alta del vol que fa al llarg de la traça a terra de la "
+"trajectòria, i també el seu vol i la seva directivitat"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -3268,6 +3272,29 @@ msgstr "el mètode de Pegg"
 #: acoustic_spaces/gui/inspector.py
 msgid "Brooks, Pope and Marcolini's airfoil self-noise"
 msgstr "el soroll propi del perfil aerodinàmic de Brooks, Pope i Marcolini"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Doc 29: {aircraft} {operation}, flown along the trajectory's ground track; "
+"its sound power at {thrust} lb of thrust, the highest of its flight, its "
+"directivity too"
+msgstr ""
+"Doc 29: {aircraft} {operation}, que vola al llarg de la traça a terra de la "
+"trajectòria; la seva potència acústica a {thrust} lb d'empenta, la més alta "
+"del seu vol, i també la seva directivitat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "JETW, Volume 3's hypothetical twin jet,"
+msgstr "JETW, el birreactor hipotètic del volum 3,"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "taking off by the ICAO-A procedure"
+msgstr "enlairant-se pel procediment ICAO-A"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "landing down a 3° approach"
+msgstr "aterrant per una aproximació de 3°"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "given by its model"
@@ -5844,6 +5871,12 @@ msgstr ""
 #, python-brace-format
 msgid "Directivity index: {values} dB (63 Hz to 8 kHz)"
 msgstr "Índex de directivitat: {values} dB (de 63 Hz a 8 kHz)"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the model, at the highest thrust of the flight"
+msgstr "{tip}. La dona el model, a l'empenta més alta del vol"
 
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py

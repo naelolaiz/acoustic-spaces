@@ -5204,12 +5204,12 @@ straight).
 
 ## An aircraft in the engine against Doc 29
 
-`validation/aircraft_noise.py` holds the airport example's flight demo
-(`acoustic_spaces.demos.aircraft`, see [Aircraft taking off and
-landing](demos.md#aircraft-taking-off-and-landing)) against Doc 29's own levels: JETW's
-source (`doc29.source`), simulated in the engine, against its NPD curves in the
-scene's air, and the example's flights against Doc 29's sum over the same flight
-path's segments. Over the meadow and the runway, which scatter nothing, the late rays
+`validation/aircraft_noise.py` holds a scene's Doc 29 aircraft (a source of `model:
+{method: doc-29}`, `acoustic_spaces.demos.aircraft`; the airport example's jets, see
+[Aircraft taking off and landing](demos.md#aircraft-taking-off-and-landing)) against
+Doc 29's own levels: JETW's source (`doc29.source`), simulated in the engine, against
+its NPD curves in the scene's air, and the example's flights against Doc 29's sum over
+the same flight path's segments. Over the meadow and the runway, which scatter nothing, the late rays
 bring the microphones no sound.
 
 **The source against its NPD curves.** JETW flies straight and level at 160 kt, the
@@ -5245,8 +5245,8 @@ absorbs nothing. Measured as Doc 29 defines its levels, that source's SEL - L_AS
 departure's curves are 1.9 to 2.2 dB under 10 lg(πd/V). Volume 3's aircraft are
 hypothetical, and its arrival curves seem not to follow those definitions.
 
-**The airport's flights.** The demo's departure and arrival, simulated every 20 m at
-each listener, their level following their thrust:
+**The airport's flights.** The example's departure and arrival as their model flies
+them, simulated every 20 m at each listener, their level following their thrust:
 
 | listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|

@@ -649,12 +649,14 @@ Movement:
   Appendix B5, eq. B-14) for the engines' installation correction, and their effect on
   the climb in the performance calculation.
 - [x] Aircraft taking off and landing in a scene, heard in a demo, its levels checked
-  against Doc 29's: the airport example's twin jet, flown by Doc 29's Appendix B.
+  against Doc 29's: the airport example's twin jet, flown by Doc 29's Appendix B; a
+  scene's source of a Doc 29 model (`model: {method: doc-29}`) is flown along its
+  trajectory's ground track, with its sound power and directivity.
 - [ ] Houses under the airport example's flights, and an aircraft flying over at
   cruise.
 - [ ] The L_Amax of a pass with fast time weighting, and with slow time weighting in the
-  captions of vehicles other than the aircraft (whose captions give it), as measured,
-  beside the highest quasi-static level the captions give now.
+  stills of sources other than an aircraft's (whose stills give it), as measured,
+  beside the highest quasi-static level they give now.
 - [x] Ground-borne vibration from trains, trams and construction plant, and the rumble
   it makes in a building's rooms, by the US FTA's general method: overall levels from
   its curves and tables against its limits and damage criteria, for the railway's

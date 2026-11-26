@@ -1110,22 +1110,6 @@ def _passby(example: str):
     return load(Path(example_path(example)).parent / script.get(example, "passby_demo.py"))
 
 
-@pytest.mark.parametrize(
-    ("example", "name", "playing"),
-    [
-        ("airport", "flight_departure_binaural", None),
-    ],
-)
-def test_a_pass_by_run_by_default_is_named_and_plays_as_before(example, name, playing) -> None:
-    """A run with every option at its default keeps its name and plays what it played
-    before --sources: the train at every height without its horn; a demo whose vehicles
-    have one source each has no --sources."""
-    demo = _passby(example)
-    args = demo.resolved(demo.defaults())
-    assert demo.run_name(args) == name and getattr(args, "playing", None) == playing
-    assert ("sources" in {o.name for o in demo.options}) == (playing is not None)
-
-
 def test_a_street_run_plays_the_sources_it_picks() -> None:
     """--sources on the street: the sources named play, the run named after them; what
     the demo moves and says plays is those alone; names joined with + play together in

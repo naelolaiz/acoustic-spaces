@@ -57,7 +57,7 @@ command to run.
 depends on them goes into a folder of that name in the work folder: the mixes, the
 trajectories, the stills, the scenes written for that run and its record, `run.json`.
 Its video and the files that go with it lie beside that folder under the same name (the
-sound, `_thumbnail.png`, `_chapters.txt`), as `demo/flight_departure_binaural.mp4` and
+sound, `_thumbnail.png`, `_chapters.txt`), as `demo/flight_binaural.mp4` and
 `demo/flight_arrival_binaural.mp4`, so that a run with other settings writes over
 nothing of another's and a run with the same settings finds what it made. The name
 gives, in order: the demo (for the demo of any scene, the scene file's name; for an
@@ -78,36 +78,35 @@ run that differs only in what later steps do with them (a pass at another `--at`
 
 **Several of something in one video.** A choice or a number that changes what a run
 plays or how it sounds, and `--format`, take several values, comma separated: `python
-flight_demo.py all --vehicle departure,arrival` plays the take-off and then the landing,
-`--speed 50,80` a car at each speed, `--format binaural,mono` each mix. The run is then
+passby_demo.py all --speed 50,80` plays the roadside's car at each speed, `--format
+binaural,mono` each mix. The run is then
 made of parts, one for each value (every pair of values when two options take several),
 each an ordinary run with its own name and folder, made or found as such; its video
 plays them one after another, each after a title card of 4 s that says what sets it
 apart and how it was made, with the chapters of every part, and is named after them all
-(`demo/flight_departure+arrival_binaural.mp4`); values that come out as the same run
+(`demo/passby_speed-50+80_binaural.mp4`); values that come out as the same run
 (the railway's train with `--sources train,train_horn --sources-play in-turn --horn
 blasts,chord`, which plays without its horn) play once. Each
 part keeps its own level (each
 brings its loudest peak to -1 dBFS), so the parts are not comparable in level with each
 other, which the cards say; the pieces of one recording (`--piece`) are joined at one
 level instead, the loudest peak of them at -1 dBFS. `--series` sets the order of the parts, outermost first, by
-the options' names (`--series format,vehicle` plays both flights binaural, then both
+the options' names (`--series format,speed` plays both speeds binaural, then both
 mono), and with `listeners` in it makes each listener a part of its own (otherwise the
-tour of each part visits them); the run's name then says the order (`series-format-vehicle`).
+tour of each part visits them); the run's name then says the order (`series-format-speed`).
 `--hrtf` with no binaural part is refused, as for one run.
 
-**The sources a run plays.** Every demo but the airport's flight lists the sources it
-can play, in the groups its scene gives them, and plays its own pick of them by
-default; the flight plays one source, the aircraft (`--vehicle` picks which), and takes
-no `--sources`. Elsewhere `--sources` names others, by name or by group, comma separated:
+**The sources a run plays.** Every demo lists the sources it can play, in the groups its
+scene gives them, and plays its own pick of them by default. `--sources` names others,
+by name or by group, comma separated:
 `--sources PA` plays every source of the groups under `PA` (`PA/Mains`,
 `PA/Fills`...), `--sources PA,Band` those of both. `--sources-play together` (the
 default) plays them in one mix; `--sources-play in-turn` plays each name given (a group
 as one) in a part of its own, one after another in one video as above, or without
 `--sources` each top group of the demo's pick (the stadium's sound system, its
 monitors, then its band); a single turn (one name, or a pick of one top group) is an
-ordinary run, and in a series of vehicles each takes its own turns (`--vehicle
-car,police_car`: the car, the police car, then its siren). A pick that is not the
+ordinary run (in the street, `--sources "car,Police car"` plays the car, then the police
+car with its siren). A pick that is not the
 demo's own names the run (`scene_Choir_binaural`, `scene_each-Choir+Organ-pipes_binaural`), by
 what it adds and leaves out where that is shorter (`passby_with-train_horn`,
 `stadium_spicy_funk_cake_without-guitar_amp`); the stills, credits and
@@ -1731,59 +1730,62 @@ wing-engined twin jet JETW (ECAC Doc 29 Volume 3) takes off from a runway across
 meadow, or lands on it, and each listener hears its pass in turn, binaurally: under the
 departure 4 km from its start of roll, beside the runway 450 m from its centre line
 (2.5 km from the start of roll) and under the approach 2 km before the threshold, all
-1.2 m above the grass. It is the [road vehicles' demo](#vehicles-passing-by) with the
-jet in the car's place (`acoustic_spaces.demos.aircraft`): the same steps (the first
-one `aircraft`), options and video, but no `--speed`, since Doc 29 times the flight.
+1.2 m above the grass. It is the [demo of the scene](#a-demo-of-any-scene) (This scene
+in the editor), a preset of it that keeps the script's command lines.
 
 ```sh
 acoustic-spaces examples --copy . airport && cd airport
 python flight_demo.py all                     # the departure
-python flight_demo.py all --vehicle arrival   # the arrival
+python flight_demo.py all --sources arrival   # the arrival
 ```
 
-Options: `--vehicle arrival` the landing instead of the take-off, `--step 4` how far
-apart the jet is simulated along its flight (m), `--hrtf me.sofa` a measured head,
-`--input departure=WAV` a dry recording of yours, `--listeners lateral_450m` the
-listeners it is simulated and heard at.
+Options: `--sources arrival` the landing instead of the take-off (the script's
+`--vehicle arrival`), `--sources departure,arrival` the two one after the other in one
+video, `--step 4` how far apart the jet is simulated along its flight (m), `--hrtf
+me.sofa` a measured head, `--input departure=WAV` a dry recording of yours,
+`--listeners lateral_450m` the listeners it is simulated and heard at. `--speed` is
+refused, as Doc 29 times the flight. The script's steps run as the ones that took them
+over: `aircraft` the feeds, `scene` the simulation, `walk` the mixes; `--from` names
+the scene.
 
-- **The flight.** The example's sources `departure` and `arrival` are points whose
-  trajectories give the ground track, along the runway's centre line in the example. The
-  demo flies JETW along it as Doc 29's Appendix B does, at Volume 3's default weights in
-  the scene's air (15 °C at sea level, ANP's reference headwind of 8 kt), and writes the
-  flight into the demo's scene as the trajectory's keyframes, its pitch falling as it
-  passes (Doppler). The departure flies the ICAO-A noise abatement procedure: from
-  standing at its start of roll, it lifts off 1493 m down the runway at 301 km/h, climbs
-  at take-off thrust to 1500 ft (457 m, 4.0 km from the start of roll), cuts back to
-  climb thrust by 4.3 km and is 740 m up at the end of its trajectory, 6.5 km out, after
-  95.0 s. The arrival comes down a 3° approach from 225 m up at 253 km/h, 120 m up over
-  the approach's listener, touches down 290 m past the threshold, puts on reverse thrust
-  and rolls out to 50 km/h 1.6 km down the runway, after 92.7 s. A trajectory of your
-  own gives another ground track (Edit movement…); the departure's starts where its
-  trajectory does, and the arrival touches down where its trajectory first comes down to
-  the runway, at most 1 m up.
+- **The flight.** The example's sources `departure` and `arrival` are points of a Doc 29
+  model ([sources](scenes.md#sources-and-directivity)) whose trajectories give the
+  ground track, along the runway's centre line in the example. The model flies JETW
+  along it as Doc 29's Appendix B does, at Volume 3's default weights in the scene's air
+  (15 °C at sea level, ANP's reference headwind of 8 kt), and gives the trajectory the
+  flight's keyframes, its pitch falling as it passes (Doppler). The departure flies the
+  ICAO-A noise abatement procedure: from standing at its start of roll, it lifts off
+  1493 m down the runway at 301 km/h, climbs at take-off thrust to 1500 ft (457 m, 4.0
+  km from the start of roll), cuts back to climb thrust by 4.3 km and is 740 m up at the
+  end of its trajectory, 6.5 km out, after 95.0 s. The arrival comes down a 3° approach
+  from 225 m up at 253 km/h, 120 m up over the approach's listener, touches down 290 m
+  past the threshold, puts on reverse thrust and rolls out to 50 km/h 1.6 km down the
+  runway, after 92.7 s. A trajectory of your own gives another ground track (Edit
+  movement…); the departure's starts where its trajectory does, and the arrival touches
+  down where its trajectory first comes down to the runway, at most 1 m up.
 - **Its sound** is noise with the octave spectrum of its sound power, which comes from
   its NPD curves and spectral class ([an aircraft in a
   scene](outdoor.md#aircraft-by-ecac-doc-29)): 156.0 dB(A) at the departure's highest
   thrust (25,000 lb, at its start of roll) and 145.7 dB(A) at the arrival's (its reverse
   thrust, 10,000 lb), louder and softer as the thrust changes along the flight: the
   departure's climb thrust 8.0 dB under its start of roll, the arrival's approach 2.3 dB
-  under its reverse thrust and the end of its roll-out 3.5 dB under. Its directivity is
-  its engines' installation correction (under the wings), in a table beside the demo's
-  scene in the run's folder (`scene_demo_departure.csv`). `departure/engines.wav` there
-  is the made sound,
-  dry, as long as the flight. `--input departure=WAV` plays a dry recording instead, at
-  least as long as the flight, its level following the recording's.
-- **The pass**: the jet every 4 m along its flight at each listener in turn, through
-  the direct sound and its reflection off the ground. Places 4 m apart follow the exact
-  field of a flyover closely from 100 m away and more
-  ([validation](validation.md#moving-sources-against-the-exact-field)).
-  A flight of 6.5 km is some 1600 places at each listener, which takes a while.
+  under its reverse thrust and the end of its roll-out 3.5 dB under. Its directivity,
+  which the model gives too, is its engines' installation correction (under the wings).
+  It fades in and out over the first and last second of the flight. Its feed
+  (`departure.wav` in the run's feeds) is that sound, dry, as long as the flight.
+  `--input departure=WAV` plays a dry recording instead, mixed down to mono, with the
+  engines' directivity, its level following the recording's rather than the thrust.
+- **The pass**: the jet every 4 m along its flight, on one clock with every listener,
+  through the direct sound and its reflection off the ground. Places 4 m apart follow
+  the exact field of a flyover closely from 100 m away and more
+  ([validation](validation.md#moving-sources-against-the-exact-field)). A flight of 6.5
+  km is some 1600 places, which takes a while.
 
-The captions give the pass's L_Amax, the highest level of the jet's places, each as
-heard with the jet standing there, and its SEL over the whole flight. They also give it
-as Doc 29 measures it: L_ASmax, the highest level through a sound level meter's slow
-time weighting, which lags about a second behind the passing jet, and the SEL over the
-time that level is within 10 dB of its highest.
+The stills give the pass's L_Amax, the highest level of the jet's places, each as heard
+with the jet standing there, and its SEL over the whole flight. They also give it as
+Doc 29 measures it: L_ASmax, the highest level through a sound level meter's slow time
+weighting, which lags about a second behind the passing jet, and the SEL over the time
+that level is within 10 dB of its highest.
 
 While the jet is in the air, what each listener hears is within 1.0 dB of Doc 29's own
 sum over the same flight path's segments, but for the arrival's SEL at

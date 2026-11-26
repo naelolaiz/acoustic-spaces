@@ -825,9 +825,24 @@ sources:
   m); finding its rotors' sound takes some seconds, once for each flight in a run of the
   tool. A demo of the scene plays down each early path what the rotors send the way the
   path leaves the helicopter, at the time it leaves ([a helicopter flying
-  over](demos.md#a-helicopter-flying-over)). A siren's, a horn's, an alarm's and a
-  train's directivity is the source's own (the examples' `siren.csv`, `train.csv` and
-  `tram.csv`; see [demos](demos.md#vehicles-passing-by)). The editor shows the model on
+  over](demos.md#a-helicopter-flying-over)). With `method: doc-29` it is an `aircraft`
+  (`jetw`, the hypothetical twin jet of ECAC Doc 29's Volume 3, its engines under its
+  wings) on an `operation`, a `departure` or an `arrival`: the model flies it along the
+  ground track of its trajectory's places as Doc 29 does (Appendix B, at Volume 3's
+  default weights, in the scene's air), the departure by the ICAO-A noise abatement
+  procedure from its start of roll at the source's position, the arrival down a 3°
+  approach to touch down where its places first come down to the runway, at most 1 m
+  up, then its reverse thrust and roll-out. It gives the trajectory the flight's
+  heights, speeds, timing and facing as keyframes, and the source the sound power of its
+  NPD curves at the flight's highest thrust, with its spectral class's spectrum, and
+  its engines' installation correction as directivity ([an aircraft in a
+  scene](outdoor.md#aircraft-by-ecac-doc-29)). So it needs a trajectory with Doppler and
+  no `speed_m_s` of its own; a demo of the scene plays noise with that spectrum, louder
+  and softer as the thrust changes along the flight, and a run's `--speed` changes
+  nothing of it ([aircraft taking off and
+  landing](demos.md#aircraft-taking-off-and-landing)). A siren's, a horn's, an alarm's
+  and a train's directivity is the source's own (the examples' `siren.csv`, `train.csv`
+  and `tram.csv`; see [demos](demos.md#vehicles-passing-by)). The editor shows the model on
   the source's page (**Model**), with the sound power it gives.
 - `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
   the sound power and on the impulse responses, so a mix made with `auralize` hears

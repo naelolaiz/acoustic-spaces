@@ -253,7 +253,9 @@ MODEL_TIP = N_(
     "height, a demo playing those behind it too; construction plant's, Defra's row for "
     "the machine plus 28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its "
     "beeps and pauses; a helicopter's, its rotors' sound in level flight at its speed "
-    "through the air, its directivity too"
+    "through the air, its directivity too; an aircraft's by ECAC Doc 29, its NPD curves at "
+    "the highest thrust of the flight it flies along the trajectory's ground track, its "
+    "flight and directivity too"
 )
 #: A siren model on its page, as loud as the siren NBS measured, or louder or quieter.
 SIREN_TEXT = N_(
@@ -282,6 +284,17 @@ ROTORCRAFT_HELICOPTERS = {"as350_b3": N_("an Airbus Helicopters AS350 B3 at 2,25
 ROTORCRAFT_BROADBAND = {
     "pegg": N_("Pegg's method"),
     "bpm": N_("Brooks, Pope and Marcolini's airfoil self-noise"),
+}
+#: A Doc 29 model on its page: the aircraft, its operation and the highest thrust of its
+#: flight, at which its sound power is given.
+AIRCRAFT_TEXT = N_(
+    "Doc 29: {aircraft} {operation}, flown along the trajectory's ground track; its sound "
+    "power at {thrust} lb of thrust, the highest of its flight, its directivity too"
+)
+AIRCRAFT_NAMES = {"jetw": N_("JETW, Volume 3's hypothetical twin jet,")}
+AIRCRAFT_OPERATIONS = {
+    "departure": N_("taking off by the ICAO-A procedure"),
+    "arrival": N_("landing down a 3° approach"),
 }
 #: The directivity list's choice for a source whose model gives its directivity.
 MODEL_DIRECTIVITY = N_("given by its model")
@@ -3413,14 +3426,22 @@ def plays_text(scene, item) -> str:
     return _("the scene's recording: {what}").format(what=what)
 
 
-def model_text(model, speed_m_s: float | None = None) -> str:
+def model_text(model, speed_m_s: float | None = None, thrust_lb: float | None = None) -> str:
     """A source's model (``model``) in words, on its page: none; a road vehicle's
     method, its category and the engine of its made sound; a siren's pattern, those it
     can sound and how loud it is; a horn's kind, its notes and how loud they sound; a
     rail vehicle's train, its track and the height of its sources; construction
-    plant's row of Defra's database (a breaker's blows); an alarm's beeps."""
+    plant's row of Defra's database (a breaker's blows); an alarm's beeps; a
+    helicopter's rotors at ``speed_m_s`` through the air; an aircraft's operation and
+    the highest thrust of its flight, ``thrust_lb``."""
     if model is None:
         return _("none")
+    if model.method == "doc-29":
+        return _(AIRCRAFT_TEXT).format(
+            aircraft=_(AIRCRAFT_NAMES[model.aircraft]),
+            operation=_(AIRCRAFT_OPERATIONS[model.operation]),
+            thrust=f"{thrust_lb:.0f}",
+        )
     if model.method == "rotorcraft":
         return _(ROTORCRAFT_TEXT).format(
             helicopter=_(ROTORCRAFT_HELICOPTERS[model.helicopter]),
@@ -4001,11 +4022,18 @@ class PointPage(Page):
             per_band = isinstance(item.level_db, list) and not talking and not modelled
             through_air = modelled and getattr(item.model, "through_air", False)
             speed = item.model_speed_m_s() if through_air else None
-            self.model.setText(model_text(item.model, speed))
+            flight = item.model_flight()
+            thrust = max(flight.powers) if flight is not None else None
+            self.model.setText(model_text(item.model, speed, thrust))
             self.level.setValue(item.sound_power_db)
             self.level.setEnabled(not per_band and not talking and not modelled)
             tip = _(LEVEL_TIP)
-            if modelled and item.model.needs is not None:
+            if flight is not None:
+                # Translators: {tip} is the sound power's tip.
+                tip = _("{tip}. Given by the model, at the highest thrust of the flight").format(
+                    tip=tip
+                )
+            elif modelled and item.model.needs is not None:
                 # Translators: {tip} is the sound power's tip.
                 tip = _("{tip}. Given by the model, at the speed of the trajectory").format(tip=tip)
             elif modelled:  # a siren's or a horn's, at any speed

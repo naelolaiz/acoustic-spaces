@@ -12,7 +12,7 @@ other, which the cards say. Parts that differ only in what is heard at one level
 (:attr:`~acoustic_spaces.demos.Option.one_level`: the movements of a symphony) are
 joined at the level of the loudest of them instead, as their records say what brought
 each to its peak (``peak_gain_db``). The joined video is named after the run
-(``flight_departure+arrival_binaural.mp4``), in the work folder beside the parts', with
+(``flight_each-departure+arrival_binaural.mp4``), in the work folder beside the parts', with
 the chapters of every part.
 """
 

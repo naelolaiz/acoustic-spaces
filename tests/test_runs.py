@@ -60,24 +60,24 @@ def test_a_long_name_ends_in_a_digest() -> None:
 
 
 def test_every_demo_names_its_runs_after_their_settings() -> None:
-    """At its defaults, a run is named after its demo, what it plays where the demo
-    gives a choice of it, and its output; another setting, listeners, HRTFs or format
-    is another name, and the name of a run at its defaults again is the same."""
+    """At its defaults, a run is named after its demo and its output; what it plays,
+    where it is not the demo's own pick, another setting, listeners, HRTFs or format is
+    another name, and the name of a run at its defaults again is the same."""
     flight = _demo("flight", "airport")
-    args = flight.defaults()
-    assert flight.run_name(flight.resolved(args)) == "flight_departure_binaural"
 
-    def name(**values) -> str:
-        return flight.run_name(flight.resolved(argparse.Namespace(**vars(args) | values)))
+    def name(*argv: str) -> str:
+        return flight.run_name(flight.resolved(flight.parser().parse_args(["all", *argv])))
 
-    assert name(vehicle="arrival") == "flight_arrival_binaural"
-    assert name(listeners="lateral_450m") == "flight_departure_lateral_450m_binaural"
-    assert name(step_m=8.0) == "flight_departure_step-8_binaural"
-    assert name(format="ambix3") == "flight_departure_ambix3"
-    assert name(hrtf=Path("/x/kemar.sofa")) == "flight_departure_binaural-kemar"
-    assert name(no_mp4=True, again=False) == "flight_departure_binaural"  # never named
+    assert name() == "flight_binaural"  # the departure, its own pick
+    assert name("--sources", "arrival") == name("--vehicle", "arrival")
+    assert name("--sources", "arrival") == "flight_arrival_binaural"
+    assert name("--listeners", "lateral_450m") == "flight_lateral_450m_binaural"
+    assert name("--step", "8") == "flight_step-8_binaural"
+    assert name("--format", "ambix3") == "flight_ambix3"
+    assert name("--hrtf", "/x/kemar.sofa") == "flight_binaural-kemar"
+    assert name("--no-mp4") == "flight_binaural"  # never named
     many = ",".join(f"listener_number_{k}" for k in range(9))
-    assert name(listeners=many).startswith("flight_departure_9-listeners-")
+    assert name("--listeners", many).startswith("flight_9-listeners-")
     # Every demo at its defaults: a name of its own in its work folder, a preset of the
     # demo of any scene's too, as its defaults are not that demo's.
     for demo in list_demos():
@@ -131,24 +131,25 @@ def test_a_written_scene_names_the_scene_it_is_made_from(tmp_path: Path) -> None
 
 
 def test_several_values_of_an_option_play_in_turn() -> None:
-    """--vehicle departure,arrival: a run of two parts, each an ordinary run of its own
+    """--format binaural,mono: a run of two parts, each an ordinary run of its own
     folder, the run named after both; the command line gives them as they came."""
     flight = _demo("flight", "airport")
-    args = flight.parser().parse_args(["all", "--vehicle", "departure,arrival"])
-    assert args.vehicle == ("departure", "arrival")
+    args = flight.parser().parse_args(["all", "--format", "binaural,mono"])
+    assert args.format == ("binaural", "mono")
     resolved = flight.resolved(args)
-    assert run_folder(resolved).name == "flight_departure+arrival_binaural"
+    assert run_folder(resolved).name == "flight_binaural+mono"
     assert [run_folder(p).name for p in resolved.series_parts] == [
-        "flight_departure_binaural",
-        "flight_arrival_binaural",
+        "flight_binaural",
+        "flight_mono",
     ]
-    assert flight.command("all", args) == "python flight_demo.py all --vehicle departure,arrival"
+    command = flight.command("all", args, names_only=True)
+    assert command == "python flight_demo.py all --format binaural,mono"
     assert flight.check(args) is None
     # One value is an ordinary run; a value twice plays once.
-    one = flight.parser().parse_args(["all", "--vehicle", "arrival,arrival"])
-    assert one.vehicle == "arrival" and len(flight.each(one)) == 1
+    one = flight.parser().parse_args(["all", "--format", "mono,mono"])
+    assert one.format == "mono" and len(flight.each(one)) == 1
     with pytest.raises(SystemExit):  # not one of its choices
-        flight.parser().parse_args(["all", "--vehicle", "departure,landing"])
+        flight.parser().parse_args(["all", "--levels", "matched,loudest"])
 
 
 def test_the_series_orders_the_parts_outermost_first() -> None:
@@ -161,25 +162,22 @@ def test_the_series_orders_the_parts_outermost_first() -> None:
         resolved = flight.resolved(flight.parser().parse_args(["all", *argv]))
         return run_folder(resolved).name, [run_folder(p).name for p in resolved.series_parts]
 
-    name, names = parts("--vehicle", "departure,arrival", "--format", "binaural,mono")
-    assert name == "flight_departure+arrival_binaural+mono"
+    name, names = parts("--sources", "departure,arrival", "--format", "binaural,mono")
+    assert name == "flight_each-departure+arrival_binaural+mono"
     assert names == [
-        "flight_departure_binaural",
-        "flight_departure_mono",
+        "flight_binaural",
+        "flight_mono",
         "flight_arrival_binaural",
         "flight_arrival_mono",
     ]
     name, names = parts(
-        "--vehicle", "departure,arrival", "--format", "binaural,mono", "--series", "format"
+        "--sources", "departure,arrival", "--format", "binaural,mono", "--series", "format"
     )
-    assert name == "flight_departure+arrival_series-format-vehicle_binaural+mono"
-    assert names[:2] == ["flight_departure_binaural", "flight_arrival_binaural"]
+    assert name == "flight_each-departure+arrival_series-format-sources_binaural+mono"
+    assert names[:2] == ["flight_binaural", "flight_arrival_binaural"]
     name, names = parts("--listeners", "lateral_450m,approach_2000m", "--series", "listeners")
-    assert name == "flight_departure_each-lateral_450m+approach_2000m_series-listeners_binaural"
-    assert names == [
-        "flight_departure_lateral_450m_binaural",
-        "flight_departure_approach_2000m_binaural",
-    ]
+    assert name == "flight_each-lateral_450m+approach_2000m_series-listeners_binaural"
+    assert names == ["flight_lateral_450m_binaural", "flight_approach_2000m_binaural"]
     problem = flight.check(flight.parser().parse_args(["all", "--series", "colour"]))
     assert problem is not None and "--series colour" in problem
 
@@ -220,20 +218,28 @@ def test_each_part_plays_its_own_sources_in_turn() -> None:
         "passby_police_car_siren_step-2_binaural",
     ]
     flight = _demo("flight", "airport")
-    for argv, problem in (
-        (["--series", "sources", "--vehicle", "departure,arrival"], "no choice of sources"),
-        (["--format", "mono,ambix3", "--hrtf", "me.sofa"], "--hrtf is for binaural mixes"),
-    ):
-        found = flight.check(flight.parser().parse_args(["all", *argv]))
-        assert found is not None and problem in found, found
+    found = flight.check(
+        flight.parser().parse_args(["all", "--format", "mono,ambix3", "--hrtf", "me.sofa"])
+    )
+    assert found == "--hrtf is for binaural mixes"
     one = flight.resolved(
         flight.parser().parse_args(["all", "--listeners", "lateral_450m", "--series", "listeners"])
     )
-    assert run_folder(one).name == "flight_departure_lateral_450m_binaural"
+    assert run_folder(one).name == "flight_lateral_450m_binaural"
     # Each demo's --series names what it has.
     assert "sources (with --sources-play in-turn)" in street.option("series").help
-    assert "--sources-play" not in flight.option("series").help
-    assert "(vehicle, step, format)" in flight.option("series").help
+    toy = Demo(
+        name="toy",
+        example="toy",
+        title="Toy",
+        description="A toy.",
+        script=Path("toy_demo.py"),
+        steps=[Step("video", lambda args: None, "the video")],
+        options=[Option("work", "where", Path("demo"), "folder")],
+    )
+    found = toy.check(toy.parser().parse_args(["video", "--series", "sources"]))
+    assert found == "--series sources: this demo gives no choice of sources"
+    assert "sources" not in toy.option("series").help
 
 
 def test_values_that_change_nothing_make_one_part() -> None:
@@ -406,6 +412,7 @@ def test_the_parts_of_a_run_play_in_one_video(tmp_path: Path, capsys) -> None:
     scene = copy_examples(tmp_path, ["airport"])[0]
     demo = load(scene.parent / "flight_demo.py").at(scene.parent)
     args = demo.resolved(demo.parser().parse_args(["video", "--vehicle", "departure,arrival"]))
+    assert run_folder(args).name == "flight_each-departure+arrival_binaural"
     first, second = args.series_parts
     for part, seconds, tone in ((first, 1.0, 440), (second, 1.5, 660)):
         folder, video = run_folder(part), product(part, ".mp4")
@@ -427,23 +434,21 @@ def test_the_parts_of_a_run_play_in_one_video(tmp_path: Path, capsys) -> None:
         )
     out = join_parts(demo, args)
     work = run_folder(args).parent
-    assert out == work / "flight_departure+arrival_binaural.mp4"
+    assert out == work / "flight_each-departure+arrival_binaural.mp4"
     assert out.exists() and f"wrote {out}" in capsys.readouterr().out
     assert _length_s(out) == pytest.approx(2 * 4.0 + 1.0 + 1.5, abs=0.15)
-    chapters = (work / "flight_departure+arrival_binaural_chapters.txt").read_text().splitlines()
+    chapters = (work / f"{out.stem}_chapters.txt").read_text().splitlines()
     assert chapters == [
-        "0:00 1. flight_departure_binaural",
+        "0:00 1. flight_binaural",
         "0:04 Start",
         "0:05 2. flight_arrival_binaural",
         "0:09 Start",
     ]
     cards = sorted(p.name for p in (run_folder(args) / "cards").iterdir())
-    assert cards == ["00_flight_departure_binaural.png", "01_flight_arrival_binaural.png"]
+    assert cards == ["00_flight_binaural.png", "01_flight_arrival_binaural.png"]
     record = json.loads((run_folder(args) / RUN_RECORD).read_text())
-    assert record["video"] == out.name and record["series"] == [
-        "flight_departure_binaural",
-        "flight_arrival_binaural",
-    ]
+    assert record["video"] == out.name
+    assert record["series"] == ["flight_binaural", "flight_arrival_binaural"]
 
 
 def _rms_db(path: Path, start_s: float, end_s: float) -> float:

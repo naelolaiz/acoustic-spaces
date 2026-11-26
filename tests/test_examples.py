@@ -1836,8 +1836,8 @@ def test_the_talkers_speak_at_normal_effort(name: str) -> None:
 
 
 def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
-    """The tours' --listeners help says a --tour given keeps its own order; the demo
-    with no --sources (one aircraft) is the one the docs and the changelog name."""
+    """The tours' --listeners help says a --tour given keeps its own order; every demo
+    picks its sources (--sources), as the docs say."""
     demos = {demo.name: demo for demo in list_demos()}
     kept = "a --tour given keeps its own order, this option leaving out the others"
     for name in ("stadium", "crossing", "orchestra", "church", "lakeside", "walk"):
@@ -1847,16 +1847,14 @@ def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
         for demo in list_demos()
         if "sources" not in {option.name for option in demo.options}
     )
-    assert without == [("airport", "flight")]
+    assert without == []
     root = EXAMPLES.parent
     if not (root / "docs" / "demos.md").is_file():
         pytest.skip("the docs are in the source checkout only")
     docs = " ".join((root / "docs" / "demos.md").read_text(encoding="utf-8").split())
-    assert "Every demo but the airport's flight lists the sources it can play" in docs
+    assert "Every demo lists the sources it can play" in docs
     assert "the `--listeners` (or no `--listeners`, every listener's mixes serving any " in docs
     assert "choice of them) and the `--sources` this one gets." in docs
-    changelog = " ".join((root / "CHANGELOG.md").read_text(encoding="utf-8").split())
-    assert "(all but the airport's flight, which plays one aircraft" in changelog
 
 
 def test_the_title_card_is_the_one_before_each_part() -> None:

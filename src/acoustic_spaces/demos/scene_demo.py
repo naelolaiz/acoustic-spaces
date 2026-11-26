@@ -1119,6 +1119,11 @@ def made_of(args: argparse.Namespace, scene: Scene) -> dict[str, tuple[Path, Sou
                 f"error: {name} is a helicopter in level flight (a rotorcraft model): its sound "
                 "is that of its flight, so its trajectory moves in every run"
             )
+        if models.flies(run[name]) and models.stands(run[name]):
+            raise SystemExit(
+                f"error: {name} is an aircraft Doc 29 flies (a doc-29 model): its sound is "
+                "that of its flight, so its trajectory moves in every run"
+            )
     standing = any(models.stands(run[name]) for name in wanted)
     length = run_length_s(args, played) if standing else None
     out: dict[str, tuple[Path, Source, float | None]] = {}
@@ -1500,7 +1505,8 @@ def run_trajectories(args: argparse.Namespace, scene: Scene) -> Scene:
         items = []
         for item in getattr(scene, kind):
             if (kind, item.name) in moving:
-                if speed is not None:
+                # An aircraft's model flies it at its procedure's speeds.
+                if speed is not None and not (kind == "sources" and flown_by_model(item)):
                     item = at_speed(item, float(speed) / 3.6)
                 elif kind == "sources" and item.name in own:
                     item = at_speed(item, own[item.name])
@@ -1510,6 +1516,27 @@ def run_trajectories(args: argparse.Namespace, scene: Scene) -> Scene:
             items.append(item)
         update[kind] = items
     return scene.model_copy(update=update)
+
+
+def flown_by_model(source) -> bool:
+    """Whether ``source`` (a scene source) is flown by its model (Doc 29's), which sets
+    its trajectory's speeds."""
+    return source.model is not None and models.flies(source)
+
+
+def speed_moot(args: argparse.Namespace) -> str | None:
+    """Why ``--speed`` changes nothing in the run, or None: nothing moves, or only
+    aircraft that their model flies at their procedure's speeds."""
+    if unread(args):
+        return None
+    moving = moving_of(args)
+    if not moving:
+        return "nothing moves"
+    scene = _run(args)
+    flown = {s.name for s in scene.sources if flown_by_model(s)} if scene is not None else set()
+    if set(moving) <= flown:
+        return "Doc 29 flies each aircraft that moves at its procedure's speeds (a doc-29 model)"
+    return None
 
 
 def own_speeds(args: argparse.Namespace, scene: Scene) -> dict[str, float]:
@@ -2079,6 +2106,8 @@ def feeds(args: argparse.Namespace, demo: Demo | None = None) -> None:
                 "brief": models.made_brief(source),
             }
             table[name] |= {} if source.model.steady else {"now_and_then": True}
+            # Faded in and out, as a horn's blasts and an alarm's beeps are not.
+            table[name]["fades"] = models.fade_s(source.model) == models.FADE_S
             table[name] |= {"each_way": True} if models.sends_each_way(source) else {}
             print(f"{name:>20}: {models.made_words(source)}")
             continue
@@ -2241,7 +2270,7 @@ def trajectories_of(args: argparse.Namespace) -> dict:
     }
 
 
-def levels_along(movement, source, listener: str, offset_db=None) -> list[float | None]:
+def levels_along(movement, source, listener: str, offset_db=None, gains=None) -> list[float | None]:
     """The A-weighted level (dB) of ``source`` (a scene source) at ``listener`` at each
     moment of ``movement``, as simulated, as a still listener's and a pass-by's are
     (:meth:`~acoustic_spaces.engine.response.Response.levels_or_held`); None at a
@@ -2250,7 +2279,9 @@ def levels_along(movement, source, listener: str, offset_db=None) -> list[float 
     all of them: each where its trajectory had it as long before as the point is behind
     it, while its pass lasts, its sound power against the source's, their energies
     added band by band. ``offset_db`` (8,) changes each octave band's level by that much
-    (a façade's level difference, for the room behind it)."""
+    (a façade's level difference, for the room behind it); ``gains``, a function of the
+    moments' times giving dB, by that much at each moment (an aircraft's thrust along its
+    flight: :func:`~acoustic_spaces.demos.models.gains_along`)."""
     from acoustic_spaces.parameters import a_weighted
 
     power = source.power_db("octave")
@@ -2277,6 +2308,8 @@ def levels_along(movement, source, listener: str, offset_db=None) -> list[float 
             bands = 10.0 * np.log10(total)
     if offset_db is not None:
         bands = bands + np.asarray(offset_db, dtype=float)
+    if gains is not None:
+        bands = bands + np.asarray(gains(times), dtype=float)[:, None]
     levels: list[float | None] = []
     for row in bands:
         level = float(a_weighted(row))
@@ -2340,7 +2373,10 @@ def pass_heard(movement, sounding: list, now_and_then: dict | None = None):
     heard at each place as loud as its feed plays there: its mean square around the
     moment it is there against the feeds'
     (:func:`~acoustic_spaces.demos.passby.blocks_loudness`), its sound power being the
-    average over its sounding and its pauses. The points that follow a source along its
+    average over its sounding and its pauses; one whose made sound's level its model
+    sets (an aircraft's thrust: ``now_and_then`` a function of the moments' times giving
+    dB, :func:`~acoustic_spaces.demos.models.gains_along`) is heard at each place as loud
+    as that. The points that follow a source along its
     trajectory (a train's behind its front, :func:`~acoustic_spaces.demos.models.trail`)
     are heard with it, each as long after it as it is behind, its sound power against
     the source's, their energies added (:func:`~acoustic_spaces.demos.passby.trailed`),
@@ -2374,7 +2410,9 @@ def pass_heard(movement, sounding: list, now_and_then: dict | None = None):
             responses = [movement.result[movement.key(source.name, name, k)] for k in ks]
             heard = times[ks] + np.array([r.direct_delay_s for r in responses])
             levels = np.array([r.levels_or_held(power) for r in responses])
-            if source.name in (now_and_then or {}):
+            if callable((now_and_then or {}).get(source.name)):
+                levels = levels + np.asarray(now_and_then[source.name](times[ks]))[:, None]
+            elif source.name in (now_and_then or {}):
                 x, rate = now_and_then[source.name]
                 loud = blocks_loudness(mono(x), rate, times[ks], FEED_RMS)
                 with np.errstate(divide="ignore"):
@@ -2408,8 +2446,10 @@ def passes_of(
     its trajectory's first leg to its last
     (:func:`~acoustic_spaces.demos.passby.pitch_change`); and, for each that has a model,
     its speed and the sound power the model gives it, in air at ``temperature_c``
-    (:func:`~acoustic_spaces.demos.models.model_line`). None for a listener that
-    moves."""
+    (:func:`~acoustic_spaces.demos.models.model_line`); where an aircraft passes (a
+    model read through the slow time weighting, Doc 29's), its L_ASmax and its SEL over
+    the 10 dB-down time too (:attr:`~acoustic_spaces.walkthrough.PassBy.slow_a`). None
+    for a listener that moves."""
     from types import SimpleNamespace
 
     from acoustic_spaces.demos.models import model_line
@@ -2443,6 +2483,11 @@ def passes_of(
             "leq_a_db": round(level.equivalent_a, 4),
             "closest_m": round(float(distances.min()), 4),
         }
+        if any(getattr(s.model, "slow_weighted", False) for s in moving if s.model):
+            # As Doc 29 measures an aircraft's: L_ASmax and the SEL 10 dB down.
+            slow = level.slow_a
+            entry["max_as_db"] = round(slow.max_db, 4)
+            entry["sel_10db_down_a_db"] = round(slow.exposure_db, 4)
         if first.trajectory.doppler:
             # Its legs, those that go somewhere (not where it stands before it sets off).
             keep = np.concatenate(
@@ -2587,6 +2632,11 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     now_and_then = {
         name: feeds[name] for name in feeds if table["sources"][name].get("now_and_then")
     }
+    along = {}  # a made sound whose level its model sets: as loud as it says
+    for source in sounding:
+        gains = models.gains_along(source) if source.model is not None else None
+        if gains is not None and table["sources"][source.name].get("made"):
+            now_and_then[source.name] = along[source.name] = gains
     walking = [s for s in sounding if ("sources", s.name) in movement.copies]
     shaking = shaking_of(walking)
     houses = None
@@ -2609,12 +2659,17 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     for name in names:
         facing = houses.house_of(name) if houses is not None else None
         if facing is None or house is None:
-            levels[name] = {s.name: levels_along(movement, s, name) for s in sounding}
+            levels[name] = {
+                s.name: levels_along(movement, s, name, gains=along.get(s.name)) for s in sounding
+            }
         elif house.airborne:
             # The room's: the level 2 m in front of its wall, through the window.
             at = indoors.front_name(name) if name in fronts else name
             through = house.facade.indoor_db()
-            levels[name] = {s.name: levels_along(movement, s, at, through) for s in sounding}
+            levels[name] = {
+                s.name: levels_along(movement, s, at, through, gains=along.get(s.name))
+                for s in sounding
+            }
         else:  # the rumble alone: nothing of the sources comes in
             levels[name] = {s.name: [None] * len(times) for s in sounding}
     talkers = [s for s in sounding if s.spectrum != "flat"]
@@ -3269,7 +3324,10 @@ def plays_line(
     elif made:
         parts.append(
             models.made_credits(
-                [(name, v.get("brief", v["credit"]), not v.get("now_and_then")) for name, v in made]
+                [
+                    (name, v.get("brief", v["credit"]), v.get("fades", not v.get("now_and_then")))
+                    for name, v in made
+                ]
             )
         )
     others = [
@@ -3575,14 +3633,15 @@ DEMO = Demo(
             "the speed every trajectory that moves goes at in this run (km/h), along its "
             "points, or through its keyframes' places in turn; a source whose model gives "
             "its sound power at its speed (a road vehicle's, a train's) sounds as it does "
-            "at that speed (default: as in the scene; a train --train gives, and what goes "
-            "along with it, at the train's own)",
+            "at that speed; an aircraft its model flies keeps its procedure's (default: as "
+            "in the scene; a train --train gives, and what goes along with it, at the "
+            "train's own)",
             None,
             "float",
             steps=("feeds", "render", "video"),
             unit="km/h",
             unset="as in the scene, or a train's own",
-            moot=lambda args: None if unread(args) or moving_of(args) else "nothing moves",
+            moot=speed_moot,
         ),
         Option(
             "step_m",

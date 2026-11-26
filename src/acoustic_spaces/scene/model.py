@@ -51,7 +51,7 @@ import functools
 import math
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal, get_args
+from typing import Annotated, Any, ClassVar, Literal, get_args
 
 import numpy as np
 import yaml
@@ -2165,6 +2165,122 @@ class RotorcraftModel(_Model):
         return balloon
 
 
+#: The aircraft a Doc 29 model flies: Volume 3's hypothetical twin jet.
+AircraftName = Literal["jetw"]
+#: What a Doc 29 model's aircraft does: take off or land.
+AircraftOperation = Literal["departure", "arrival"]
+
+
+class AircraftModel(_Model):
+    """An aircraft of ECAC Doc 29 (5th edition) taking off or landing: ``aircraft``
+    (JETW, Volume 3's hypothetical twin jet with its engines under its wings) flown by
+    its procedure for ``operation`` (the departure by ICAO-A noise abatement, the
+    arrival down a 3° approach, then its reverse thrust and roll-out) along the ground
+    track of its trajectory's places, at Volume 3's default weights, in the scene's air
+    (Appendix B): the departure from its start of roll at its first place, the arrival
+    touching down where its places first come down to the runway, 1 m up. The model
+    gives the trajectory its heights, speeds, timing and facing, as keyframes; the
+    source's sound power is that of its NPD curves' maximum level 1000 ft under it at
+    the flight's highest thrust, with its spectral class's spectrum, and its
+    directivity its engines' installation correction. A demo of the scene plays noise
+    made to that power, louder and softer as the thrust changes along the flight."""
+
+    method: Literal["doc-29"] = Field(
+        description="the method that gives the source's flight, sound power and "
+        "directivity: doc-29, an aircraft taking off or landing by ECAC Doc 29"
+    )
+    aircraft: AircraftName = Field(
+        default="jetw",
+        description="the aircraft: jetw, Doc 29 Volume 3's hypothetical twin jet",
+    )
+    operation: AircraftOperation = Field(
+        description="departure (taking off by the ICAO-A procedure from its start of roll) "
+        "or arrival (landing down a 3° approach where its trajectory first comes down to "
+        "the runway)"
+    )
+
+    needs: ClassVar[str | None] = "Doc 29 flies an aircraft along a ground track"
+    steady: ClassVar[bool] = False
+    #: Whether it gives the source's directivity too.
+    radiates: ClassVar[bool] = True
+    #: Whether it flies the source's trajectory: its heights, speeds, timing and facing.
+    flies: ClassVar[bool] = True
+    #: Whether a pass of it is read through the slow time weighting too (L_ASmax, and the
+    #: SEL over the 10 dB-down time), as Doc 29 reads an aircraft's.
+    slow_weighted: ClassVar[bool] = True
+
+    def problem(self, source: Source) -> str | None:
+        """What keeps ``source`` from flying as the model has it: no ground track, a
+        speed of its own, no Doppler, or an arrival that never comes down to the
+        runway."""
+        from acoustic_spaces.demos.aircraft import flight_problem
+
+        trajectory = source.trajectory
+        if trajectory is None:
+            return f"{self.needs}: give the source a trajectory"
+        if "speed_m_s" in trajectory.model_fields_set:
+            return (
+                f"Doc 29 flies the {self.operation} at its procedure's speeds: give its "
+                "trajectory no speed_m_s"
+            )
+        if not trajectory.doppler:
+            return "an aircraft's pitch falls as it passes: give its trajectory doppler: true"
+        later = (
+            [k.position for k in trajectory.keyframes]
+            if trajectory.keyframes is not None
+            else list(trajectory.to)
+        )
+        return flight_problem(self.operation, [source.position, *later])
+
+    def flight(self, source: Source, temperature_c: float, pressure_kpa: float):
+        """Its flight (:class:`~acoustic_spaces.doc29.source.Flight`) along the ground
+        track of the places of ``source``'s trajectory, in air at ``temperature_c`` and
+        ``pressure_kpa`` (:func:`acoustic_spaces.demos.aircraft.flown`)."""
+        from acoustic_spaces.demos.aircraft import flown
+
+        trajectory = source.trajectory
+        later = (
+            [k.position for k in trajectory.keyframes]
+            if trajectory.keyframes is not None
+            else list(trajectory.to)
+        )
+        return flown(self.operation, [source.position, *later], temperature_c, pressure_kpa)
+
+    def flight_power_db(
+        self, flight, temperature_c: float, humidity_percent: float, pressure_kpa: float
+    ) -> list[float]:
+        """The sound power per octave band (dB re 1 pW) at the highest thrust of
+        ``flight``, in air at ``temperature_c``, ``humidity_percent`` and
+        ``pressure_kpa`` (:func:`acoustic_spaces.demos.aircraft.flight_power_db`)."""
+        from acoustic_spaces.demos.aircraft import flight_power_db
+
+        return flight_power_db(
+            self.operation, flight, temperature_c, humidity_percent, pressure_kpa
+        )
+
+    def gains_db(self, flight, times) -> np.ndarray:
+        """How far under its sound power it sounds at ``times`` (s into ``flight``, dB),
+        as its thrust changes (:func:`acoustic_spaces.demos.aircraft.flight_gains_db`)."""
+        from acoustic_spaces.demos.aircraft import flight_gains_db
+
+        return flight_gains_db(self.operation, flight, times)
+
+    def directivity(self, speed_m_s=None, temperature_c=None, pressure_kpa=None):
+        """Its engines' installation correction as a directivity, in its frame
+        (:func:`acoustic_spaces.demos.aircraft.engines_directivity`); it takes no speed
+        or air."""
+        from acoustic_spaces.demos.aircraft import engines_directivity
+
+        return engines_directivity()
+
+    def power_db(
+        self, speed_m_s: float | None, temperature_c: float, pressure_kpa: float = 101.325
+    ) -> list[float]:
+        """Its sound power comes with its flight (:meth:`flight_power_db`), which takes
+        the source's trajectory."""
+        raise ValueError(f"{self.needs}: its sound power comes with its flight")
+
+
 #: The models a source's sound power and made sound can come from (``model``), by their
 #: method.
 SourceModel = Annotated[
@@ -2174,7 +2290,8 @@ SourceModel = Annotated[
     | RailVehicleModel
     | PlantModel
     | AlarmModel
-    | RotorcraftModel,
+    | RotorcraftModel
+    | AircraftModel,
     Field(discriminator="method"),
 ]
 
@@ -2186,9 +2303,13 @@ class Source(_Model):
     _air_c: float = PrivateAttr(default=20.0)
     _air_kpa: float = PrivateAttr(default=101.325)
     _wind: tuple[float, float, float] = PrivateAttr(default=(0.0, 0.0, 0.0))
+    _air_rh: float = PrivateAttr(default=50.0)
     #: The speed its model last took (m/s, :meth:`model_speed_m_s`), which a copy of it
     #: standing at a place of its trajectory keeps.
     _speed_m_s: float | None = PrivateAttr(default=None)
+    #: The flight a model that flies it gives it (:meth:`model_flight`), which a copy of
+    #: it standing at a place of its trajectory keeps.
+    _flight: Any = PrivateAttr(default=None)
 
     name: str
     group: str | None = _group_field()
@@ -2416,20 +2537,45 @@ class Source(_Model):
         if scene_air is not None:  # in a scene: its air, not the default's
             air, atmosphere = scene_air
             self._air_c, self._air_kpa = air.temperature_c, air.pressure_kpa
+            self._air_rh = air.humidity_percent
             self._wind = wind_at(atmosphere, float(self.position[2]))
+        if getattr(self.model, "flies", False):
+            self._fly()
         self.__dict__["level_db"] = self.model_level_db()
         return self
 
+    def _fly(self) -> None:
+        """Its trajectory, position and orientation as its model flies it along the ground
+        track of its trajectory's places, in its air (:meth:`AircraftModel.flight`): the
+        flight's keyframes, its trajectory's Doppler, step and start kept."""
+        assert self.trajectory is not None
+        flight = self.model.flight(self, self._air_c, self._air_kpa)
+        first = flight.positions[0]
+        yaw, pitch, roll = (round(v, 4) for v in flight.orientations[0])
+        self.__dict__["position"] = tuple(round(float(v), 4) for v in first)
+        self.__dict__["orientation"] = Orientation(yaw=yaw, pitch=pitch, roll=roll)
+        given = self.trajectory.model_dump(exclude={"to", "keyframes", "speed_m_s"})
+        given = {k: v for k, v in given.items() if k in self.trajectory.model_fields_set}
+        self.__dict__["trajectory"] = Trajectory.model_validate(
+            given | {"keyframes": flight.keyframes()}
+        )
+        self._flight = flight
+
     @model_serializer(mode="wrap")
     def _without_a_given_level(self, handler: SerializerFunctionWrapHandler):
-        """Its fields, but the sound power where the vocal effort or the model gives it, and
-        the directivity where the model gives that: as it was given, so that what is
-        written reads again."""
+        """Its fields, but the sound power where the vocal effort or the model gives it, the
+        directivity where the model gives that, and the speed of a trajectory the model
+        flies: as it was given, so that what is written reads again."""
         data = handler(self)
         if isinstance(data, dict) and (self.vocal_effort is not None or self.model is not None):
             data.pop("level_db", None)
             if getattr(self.model, "radiates", False):
                 data.pop("directivity", None)
+            trajectory = data.get("trajectory")
+            if getattr(self.model, "flies", False) and isinstance(trajectory, dict):
+                trajectory.pop("speed_m_s", None)
+                if not trajectory.get("to"):
+                    trajectory.pop("to", None)
         return data
 
     def model_speed_m_s(self) -> float | None:
@@ -2440,7 +2586,7 @@ class Source(_Model):
         (a moment of a walkthrough) keeps the speed it took there."""
         if self.model is None:
             raise ValueError(f"{self.name!r} has no model")
-        if self.model.needs is None:
+        if self.model.needs is None or getattr(self.model, "flies", False):
             return None
         if self.trajectory is None:
             if self._speed_m_s is not None:
@@ -2463,8 +2609,24 @@ class Source(_Model):
         scene's air (20 °C and 101.325 kPa, no wind, until a scene gives it its own)."""
         if self.model is None:
             raise ValueError(f"{self.name!r} has no model")
+        if getattr(self.model, "flies", False):
+            return self.model.flight_power_db(
+                self.model_flight(), self._air_c, self._air_rh, self._air_kpa
+            )
         self._speed_m_s = self.model_speed_m_s()
         return self.model.power_db(self._speed_m_s, self._air_c, self._air_kpa)
+
+    def model_flight(self):
+        """The flight its :attr:`model` flies it (:class:`~acoustic_spaces.doc29.source.
+        Flight`), for a method that flies it (Doc 29's), in the scene's air; None for
+        any other."""
+        if self.model is None or not getattr(self.model, "flies", False):
+            return None
+        if self._flight is None:
+            if self.trajectory is None:
+                raise ValueError(f"{self.model.needs}: give the source a trajectory")
+            self._fly()
+        return self._flight
 
     def model_directivity(self):
         """The directivity its :attr:`model` gives it, for a method that gives one
@@ -2479,6 +2641,8 @@ class Source(_Model):
         pattern of a siren, sets the power with it."""
         copy = super().model_copy(update=update, deep=deep)
         if copy.model is not None and (copy.model.needs is None or copy.trajectory is not None):
+            if getattr(copy.model, "flies", False) and copy.trajectory is not None:
+                copy._fly()
             copy.__dict__["level_db"] = copy.model_level_db()
         return copy
 
@@ -3986,9 +4150,11 @@ class Scene(_Model):
             if source.model is None:
                 continue
             wind = wind_at(self.atmosphere, float(source.position[2]))
-            air = (self.air.temperature_c, self.air.pressure_kpa, wind)
-            if (source._air_c, source._air_kpa, source._wind) != air:
-                source._air_c, source._air_kpa, source._wind = air
+            air = (self.air.temperature_c, self.air.pressure_kpa, wind, self.air.humidity_percent)
+            if (source._air_c, source._air_kpa, source._wind, source._air_rh) != air:
+                source._air_c, source._air_kpa, source._wind, source._air_rh = air
+                if getattr(source.model, "flies", False) and source.trajectory is not None:
+                    source._fly()
                 source.__dict__["level_db"] = source.model_level_db()
         return self
 

@@ -1892,7 +1892,9 @@ def test_a_source_page_shows_its_model(window) -> None:
     street's road vehicles by CNOSSOS-EU at the speed of their trajectories; the police
     car's and the fire engine's sirens and horns, at any speed, by what they sound; the
     tram's sources by Schall 03, at the speed of their trajectories; the road works'
-    machines by Defra's rows and the alarm by SAE J994."""
+    machines by Defra's rows and the alarm by SAE J994; the helicopter's rotors at its
+    speed through the air; the airport's jets by Doc 29, at the highest thrust of the
+    flight their model flies."""
     window.open_example(example_path("street"))
     page = window.inspector.pages["sources"]
     names = [source.name for source in window.document.scene.sources]
@@ -1944,6 +1946,26 @@ def test_a_source_page_shows_its_model(window) -> None:
         "Reversing alarm: SAE J994 Type B, 1200 Hz beeps 1.5 times a second, 107 dB(A) 1.2 m "
         "in front of it"
     )
+    window.open_example(example_path("helicopter_flyover"))
+    window.select("sources", 0)
+    assert page.model.text() == (
+        "Helicopter: an Airbus Helicopters AS350 B3 at 2,250 kg, its rotors in level flight "
+        "at 67.5 m/s through the air, their broadband noise by Pegg's method; its "
+        "directivity too"
+    )
+    window.open_example(example_path("airport"))
+    names = [source.name for source in window.document.scene.sources]
+    window.select("sources", names.index("departure"))
+    assert page.model.text() == (
+        "Doc 29: JETW, Volume 3's hypothetical twin jet, taking off by the ICAO-A procedure, "
+        "flown along the trajectory's ground track; its sound power at 25000 lb of thrust, "
+        "the highest of its flight, its directivity too"
+    )
+    tip = ". Given by the model, at the highest thrust of the flight"
+    assert page.level.toolTip().endswith(tip) and not page.level.isEnabled()
+    window.select("sources", names.index("arrival"))
+    assert "landing down a 3° approach" in page.model.text()
+    assert "at 10000 lb of thrust" in page.model.text()
 
 
 def test_a_source_plays_a_wav_in_a_demo(window, monkeypatch, tmp_path: Path) -> None:
@@ -4924,13 +4946,13 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
 
 def test_demo_dialog_plays_several_of_a_choice_one_after_another(qapp, monkeypatch) -> None:
     """A choice that takes several values is a list to pick one from, its default
-    picked: the airport's departure. Several… turns it into a tick for each, the one
-    picked ticked; ticking the arrival too plays both, one after another in one video,
-    in the list's order, which dragging the rows changes, and One only goes back to the
-    first ticked. The Trajectories box shows what the run moves, with no ticks. A run with
-    none ticked cannot go. The Video box lists the parts, and its order of them and
-    whether each listener is a part of its own change --series. All and None tick every
-    choice or none."""
+    picked: the airport's binaural format. Several… turns it into a tick for each, the
+    one picked ticked; ticking mono too plays both, one after another in one video, in
+    the list's order, which dragging the rows changes, and One only goes back to the
+    first ticked. The Trajectories box shows what the run moves. A run with none ticked
+    cannot go. The Video box lists the parts, and its order of them and whether each
+    listener is a part of its own change --series. All and None tick every choice or
+    none."""
     from PySide6.QtCore import QModelIndex
     from PySide6.QtWidgets import QDialogButtonBox
 
@@ -4941,68 +4963,56 @@ def test_demo_dialog_plays_several_of_a_choice_one_after_another(qapp, monkeypat
     dialog = DemoDialog(scene=example_path("airport"))
     ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
     assert dialog.picker.currentData() == "flight"
-    vehicle, box = dialog.fields["vehicle"], dialog.movement
-    assert isinstance(vehicle, ChoicesField) and vehicle.names == ["departure", "arrival"]
-    assert vehicle.ticked() == ["departure"] and vehicle.value() == "departure"
-    assert not vehicle.combo.isHidden() and vehicle.list.isHidden()
-    assert vehicle.combo.currentText() == "departure"
-    # The Trajectories box: what moves, no ticks to click.
-    assert box.ticked() == ["departure"] and not box.editable
-    assert box.table.isColumnHidden(box.MOVES)
-    assert [box.movers[r][1] for r in range(len(box.movers)) if not box.table.isRowHidden(r)] == [
-        "departure"
-    ]
-    assert box.note.text().startswith("What this run moves along its trajectory")
+    fmt, box = dialog.fields["format"], dialog.movement
+    assert isinstance(fmt, ChoicesField) and fmt.names[:3] == ["binaural", "mono", "stereo"]
+    assert fmt.ticked() == ["binaural"] and fmt.value() == "binaural"
+    assert not fmt.combo.isHidden() and fmt.list.isHidden()
+    # The Trajectories box: what moves, the departure the script plays.
+    assert box.ticked() == ["departure"]
     assert dialog.command.text() == "python flight_demo.py all"
-    assert dialog.summary.text().startswith("The departing jet flies 6500 m")
-    assert dialog.parts.text() == "This run makes one video, flight_departure_binaural.mp4."
+    assert dialog.parts.text() == "This run makes one video, flight_binaural.mp4."
 
-    # The arrival picked instead: the box shows it.
-    vehicle.combo.setCurrentText("arrival")
-    assert dialog.command.text() == "python flight_demo.py all --vehicle arrival"
-    assert box.ticked() == ["arrival"]
-    vehicle.combo.setCurrentText("departure")
+    # Mono picked instead.
+    fmt.combo.setCurrentIndex(fmt.names.index("mono"))
+    assert dialog.command.text() == "python flight_demo.py all --format mono"
+    fmt.combo.setCurrentIndex(fmt.names.index("binaural"))
 
-    # Several…: the departure ticked alone; the arrival ticked too plays both, in the
-    # list's order.
-    vehicle.several.setChecked(True)
-    assert vehicle.combo.isHidden() and not vehicle.list.isHidden()
-    assert vehicle.ticked() == ["departure"]
+    # Several…: binaural ticked alone; mono ticked too plays both, in the list's order.
+    fmt.several.setChecked(True)
+    assert fmt.combo.isHidden() and not fmt.list.isHidden()
+    assert fmt.ticked() == ["binaural"]
     assert dialog.command.text() == "python flight_demo.py all"
-    vehicle.list.item(1).setCheckState(Qt.CheckState.Checked)
-    assert dialog.command.text() == "python flight_demo.py all --vehicle departure,arrival"
-    assert dialog.chosen()[2].vehicle == ("departure", "arrival")
-    assert box.ticked() == ["departure", "arrival"] and dialog.problem.text() == ""
-    assert "The departing jet" in dialog.summary.text()
-    assert "The landing jet" in dialog.summary.text()
+    fmt.list.item(1).setCheckState(Qt.CheckState.Checked)
+    assert dialog.command.text() == "python flight_demo.py all --format binaural,mono"
+    assert dialog.chosen()[2].format == ("binaural", "mono")
+    assert box.ticked() == ["departure"] and dialog.problem.text() == ""
     assert dialog.parts.text() == (
-        "This run makes one video, flight_departure+arrival_binaural.mp4, of 2 parts, one "
-        "after another, each after a title card of 4 s:\n1. Vehicle: departure\n"
-        "2. Vehicle: arrival"
+        "This run makes one video, flight_binaural+mono.mp4, of 2 parts, one after "
+        "another, each after a title card of 4 s:\n1. Format: binaural\n2. Format: mono"
     )
-    # The arrival first: set as the window keeps it, or its row dragged up.
-    vehicle.set_value(("arrival", "departure"))
-    vehicle.changed.emit()
-    assert dialog.command.text() == "python flight_demo.py all --vehicle arrival,departure"
-    assert dialog.summary.text().startswith("The landing jet")
-    vehicle.list.model().moveRow(QModelIndex(), 1, QModelIndex(), 0)  # departure up
-    assert vehicle.order == ["departure", "arrival"]
-    assert dialog.command.text() == "python flight_demo.py all --vehicle departure,arrival"
+    # Mono first: set as the window keeps it, or its row dragged up.
+    fmt.set_value(("mono", "binaural"))
+    fmt.changed.emit()
+    assert dialog.command.text() == "python flight_demo.py all --format mono,binaural"
+    fmt.list.model().moveRow(QModelIndex(), 1, QModelIndex(), 0)  # binaural up
+    assert fmt.order[:2] == ["binaural", "mono"]
+    assert dialog.command.text() == "python flight_demo.py all --format binaural,mono"
 
-    # None ticked cannot run; All ticks them both again.
-    vehicle.none.click()
-    assert vehicle.ticked() == [] and vehicle.order == ["departure", "arrival"]
-    assert dialog.problem.text() == "Cannot run: --vehicle names none: tick one at least"
+    # None ticked cannot run; All ticks them all.
+    fmt.none.click()
+    assert fmt.ticked() == [] and fmt.order[:2] == ["binaural", "mono"]
+    assert dialog.problem.text() == "Cannot run: --format names none: tick one at least"
     assert not ok.isEnabled()
-    vehicle.all.click()
-    assert vehicle.value() == ("departure", "arrival") and ok.isEnabled()
+    fmt.all.click()
+    assert fmt.value() == tuple(fmt.order) and ok.isEnabled()
     # One only: the first ticked, picked from the list again.
-    vehicle.list.item(0).setCheckState(Qt.CheckState.Unchecked)
-    vehicle.one.click()
-    assert not vehicle.several.isChecked() and vehicle.list.isHidden()
-    assert vehicle.value() == "arrival" and vehicle.combo.currentText() == "arrival"
-    vehicle.pick(("departure", "arrival"))
-    assert vehicle.several.isChecked() and dialog.problem.text() == "" and ok.isEnabled()
+    fmt.none.click()
+    fmt.list.item(1).setCheckState(Qt.CheckState.Checked)
+    fmt.one.click()
+    assert not fmt.several.isChecked() and fmt.list.isHidden()
+    assert fmt.value() == "mono"
+    fmt.pick(("binaural", "mono"))
+    assert fmt.several.isChecked() and dialog.problem.text() == "" and ok.isEnabled()
 
     # The Video box: the listeners each in a part of their own, and the order of the
     # parts; dragged, the order changes --series.
@@ -5011,21 +5021,21 @@ def test_demo_dialog_plays_several_of_a_choice_one_after_another(qapp, monkeypat
     assert dialog._rows["series"].isRowVisible(series)  # three listeners to split
     assert series.split_box.currentIndex() == 0
     rows = [series.list.item(r).text() for r in range(series.list.count())]
-    assert rows == ["Vehicle"] and series.list.isHidden()  # one kind of part: no order
-    assert series.dims == ["vehicle"] and series.value() is None
+    assert rows == ["Format"] and series.list.isHidden()  # one kind of part: no order
+    assert series.dims == ["format"] and series.value() is None
     series.split_box.setCurrentIndex(1)
-    assert dialog.command.text().endswith(" --vehicle departure,arrival --series vehicle,listeners")
+    assert dialog.command.text().endswith(" --format binaural,mono --series format,listeners")
     rows = [series.list.item(r).text() for r in range(series.list.count())]
-    assert rows == ["Vehicle", "Listeners"] and not series.list.isHidden()
+    assert rows == ["Format", "Listeners"] and not series.list.isHidden()
     assert dialog.parts.text().splitlines()[1:3] == [
-        "1. Vehicle: departure; Listeners: departure_4km",
-        "2. Vehicle: departure; Listeners: lateral_450m",
+        "1. Listeners: departure_4km; Format: binaural",
+        "2. Listeners: lateral_450m; Format: binaural",
     ]
     series.list.model().moveRow(QModelIndex(), 1, QModelIndex(), 0)  # the listeners outermost
-    assert dialog.command.text().endswith(" --series listeners,vehicle")
-    assert dialog.chosen()[2].series == "listeners,vehicle" and dialog.problem.text() == ""
+    assert dialog.command.text().endswith(" --series listeners,format")
+    assert dialog.chosen()[2].series == "listeners,format" and dialog.problem.text() == ""
     series.split_box.setCurrentIndex(0)
-    assert "--series" not in dialog.command.text()  # the jets alone: the default
+    assert "--series" not in dialog.command.text()  # the formats alone: the default
     dialog.deleteLater()
 
     # A scene with one listener and one of everything has nothing to choose in the

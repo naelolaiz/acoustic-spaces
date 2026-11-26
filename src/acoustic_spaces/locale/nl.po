@@ -3181,7 +3181,9 @@ msgid ""
 "those behind it too; construction plant's, Defra's row for the machine plus "
 "28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its beeps and "
 "pauses; a helicopter's, its rotors' sound in level flight at its speed "
-"through the air, its directivity too"
+"through the air, its directivity too; an aircraft's by ECAC Doc 29, its NPD "
+"curves at the highest thrust of the flight it flies along the trajectory's "
+"ground track, its flight and directivity too"
 msgstr ""
 "De methode die het geluidsvermogen van de bron geeft in plaats van het "
 "vermogen dat u opgeeft, en het geluid dat een demo van de scène ervoor "
@@ -3196,7 +3198,9 @@ msgstr ""
 "plus 28 dB; dat van een achteruitrijalarm, dat van type B van SAE J994, "
 "gemiddeld over piepen en pauzes; dat van een helikopter, het geluid van zijn "
 "rotoren in horizontale vlucht bij zijn snelheid ten opzichte van de lucht, "
-"ook zijn richtingskarakteristiek"
+"ook zijn richtingskarakteristiek; dat van een vliegtuig volgens ECAC Doc 29, "
+"zijn NPD-curven bij de hoogste stuwkracht van de vlucht die het langs het "
+"grondspoor van het traject vliegt, ook zijn vlucht en richtingskarakteristiek"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -3267,6 +3271,29 @@ msgstr "de methode van Pegg"
 msgid "Brooks, Pope and Marcolini's airfoil self-noise"
 msgstr ""
 "het eigengeluid van het vleugelprofiel volgens Brooks, Pope en Marcolini"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Doc 29: {aircraft} {operation}, flown along the trajectory's ground track; "
+"its sound power at {thrust} lb of thrust, the highest of its flight, its "
+"directivity too"
+msgstr ""
+"Doc 29: {aircraft} {operation}, gevlogen langs het grondspoor van het "
+"traject; zijn geluidsvermogen bij {thrust} lb stuwkracht, de hoogste van "
+"zijn vlucht, ook zijn richtingskarakteristiek"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "JETW, Volume 3's hypothetical twin jet,"
+msgstr "JETW, het hypothetische tweemotorige straalvliegtuig uit deel 3,"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "taking off by the ICAO-A procedure"
+msgstr "opstijgend volgens de ICAO-A-procedure"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "landing down a 3° approach"
+msgstr "landend via een nadering van 3°"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "given by its model"
@@ -5858,6 +5885,12 @@ msgstr ""
 #, python-brace-format
 msgid "Directivity index: {values} dB (63 Hz to 8 kHz)"
 msgstr "Richtingsindex: {values} dB (63 Hz tot 8 kHz)"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the model, at the highest thrust of the flight"
+msgstr "{tip}. Gegeven door het model, bij de hoogste stuwkracht van de vlucht"
 
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py

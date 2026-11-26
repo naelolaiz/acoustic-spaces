@@ -50,6 +50,7 @@ METHOD_WORDS = {
     "defra": "construction plant",
     "sae-j994": "a reversing alarm",
     "rotorcraft": "a helicopter",
+    "doc-29": "an aircraft",
 }
 #: Each rail model's height, for the seeds of its points' noise: the old pass-by demo's
 #: order of a train's sources.
@@ -64,9 +65,22 @@ def speed_kmh(source) -> float | None:
     (km/h), where its method takes one (None for one that takes no speed)."""
     from acoustic_spaces.scene.model import steady_speed_m_s
 
-    if source.model.needs is None:
+    if source.model.needs is None or flies(source):
         return None
     return 3.6 * steady_speed_m_s(source.position, source.trajectory, source.model.needs)
+
+
+def flies(source) -> bool:
+    """Whether the model of ``source`` (a scene source with a model) flies its trajectory
+    (Doc 29's: its heights, speeds and timing)."""
+    return bool(getattr(source.model, "flies", False))
+
+
+def flight_kmh(source) -> tuple[float, float]:
+    """The speeds (km/h) ``source``, whose model flies it (:func:`flies`), starts and
+    ends its flight at."""
+    flight = source.model_flight()
+    return 3.6 * float(flight.speeds[0]), 3.6 * float(flight.speeds[-1])
 
 
 def driven_kmh(source) -> float:
@@ -172,6 +186,13 @@ def made_key(
     }
     if getattr(source.model, "through_air", False):
         what |= {"airspeed_m_s": source.model_speed_m_s(), "pressure_kpa": float(pressure_kpa)}
+    if flies(source):  # its flight, and its sound power in the air it flies in
+        flight = source.model_flight()
+        what |= {
+            "flight": [list(flight.times), [list(p) for p in flight.positions]],
+            "powers": list(flight.powers),
+            "level_db": list(source.level_db),
+        }
     return hashlib.sha256(json.dumps(what, sort_keys=True).encode()).hexdigest()[:12]
 
 
@@ -268,6 +289,8 @@ def made_sound(
         from acoustic_spaces.demos.plant import alarm_sound
 
         x = alarm_sound(int(rate), duration)
+    elif model.method == "doc-29":
+        x = engines_sound(source, int(rate), duration)
     else:
         from acoustic_spaces.demos.rail import point_sound
 
@@ -285,6 +308,45 @@ def made_sound(
         return x
     lead = np.zeros((int(round(start * rate)), *x.shape[1:]))
     return np.concatenate([lead, faded(x, int(rate), fade_s(model))])
+
+
+#: The seed of an aircraft's made noise, the old flight demo's.
+AIRCRAFT_SEED = 0
+#: How often an aircraft's made sound's gain follows its thrust (Hz).
+GAIN_RATE_HZ = 100.0
+
+
+def engines_sound(source, rate: int, duration_s: float) -> np.ndarray:
+    """The sound of the engines of ``source``, whose Doc 29 model flies it, along its
+    flight, ``duration_s`` long at ``rate``: noise with the octave spectrum of its sound
+    power, at an RMS of SOUND_RMS at its highest thrust, its gain following its thrust
+    along the flight (:meth:`~acoustic_spaces.scene.AircraftModel.gains_db`)."""
+    from acoustic_spaces.demos.road import _to_bands
+
+    n = int(round(duration_s * rate))
+    noise = np.random.default_rng(AIRCRAFT_SEED).standard_normal(n)
+    x = _to_bands(noise, rate, np.asarray(source.level_db, dtype=float))
+    x *= SOUND_RMS / float(np.sqrt(np.mean(x**2)))
+    coarse = np.arange(0.0, duration_s + 1.0 / GAIN_RATE_HZ, 1.0 / GAIN_RATE_HZ)
+    flight = source.model_flight()
+    gains = np.interp(np.arange(n) / rate, coarse, source.model.gains_db(flight, coarse))
+    return x * 10.0 ** (gains / 20.0)
+
+
+def gains_along(source):
+    """How far under its sound power the made sound of ``source`` (a scene source with a
+    model) plays at moments of the run's clock (a function of their times, s, giving dB),
+    where its model sets that (an aircraft's thrust along its flight); None for any
+    other."""
+    gains_db = getattr(source.model, "gains_db", None)
+    if gains_db is None or stands(source):
+        return None
+    flight, start = source.model_flight(), float(source.trajectory.start_s)
+
+    def along(times) -> np.ndarray:
+        return np.asarray(gains_db(flight, np.asarray(times, dtype=float) - start))
+
+    return along
 
 
 def input_gain(source, x: np.ndarray, rate: int) -> float | None:
@@ -346,6 +408,8 @@ def made_words(source) -> str:
         return (
             f"{_rotors(source)}, sent each way down each path; straight down in its feed, to hear"
         )
+    if model.method == "doc-29":
+        return f"{_jet(source)}, its engines' noise made to its NPD curves along its flight"
     kind = CATEGORIES[model.category].name
     return (
         f"CNOSSOS-EU {kind}{_speed_words(source)}, made to the method's sound power (tyres "
@@ -377,6 +441,15 @@ def model_line(source, temperature_c: float) -> str:
     elif model.method == "rotorcraft":
         power = a_weighted(np.asarray(source.level_db, dtype=float))
         what = f"its rotors' model, {source.model_speed_m_s():.1f} m/s through the air"
+    elif model.method == "doc-29":
+        power = a_weighted(np.asarray(source.level_db, dtype=float))
+        first, last = flight_kmh(source)
+        thrust = max(source.model_flight().powers)
+        return (
+            f"Sound power of {source.name}: {power:.1f} dB(A) at {thrust:.0f} lb of thrust "
+            f"({_jet(source)}, its NPD curves); from {round(first, 1):g} to "
+            f"{round(last, 1):g} km/h"
+        )
     else:
         power = a_weighted(np.asarray(model.power_db(None, temperature_c), dtype=float))
         if model.method == "siren":
@@ -432,6 +505,12 @@ def made_credit(source) -> str:
         return (
             f"Sound made up for {source.name}: {_rotors(source)}; faded in and out over "
             f"{FADE_S:g} s"
+        )
+    if model.method == "doc-29":
+        return (
+            f"Sound made up for {source.name}: noise made to the NPD curves and spectral class "
+            f"of {_jet(source)}, its thrust along its flight by Doc 29's Appendix B; faded in "
+            f"and out over {FADE_S:g} s"
         )
     kind = CATEGORIES[model.category]
     cylinders = CYLINDER_WORDS.get(model.cylinders, str(model.cylinders))
@@ -493,6 +572,8 @@ def made_brief(source) -> str:
         )
     if model.method == "rotorcraft":
         return _rotors(source)
+    if model.method == "doc-29":
+        return f"noise made to the NPD curves of {_jet(source)} along its flight"
     kind = CATEGORIES[model.category]
     tyres = "tyres and " if kind.rolling_a is not None else ""
     cylinders = CYLINDER_WORDS.get(model.cylinders, str(model.cylinders))
@@ -530,6 +611,17 @@ def _rotors(source) -> str:
         "tones from the blades' steady loads (Ffowcs Williams and Hawkings) and their "
         f"broadband noise by {BROADBAND[model.broadband]}"
     )
+
+
+def _jet(source) -> str:
+    """A Doc 29 model's aircraft and operation in words: "Doc 29's twin jet JETW taking off
+    (ICAO-A procedure)", "Doc 29's twin jet JETW landing (a 3° approach)"."""
+    from acoustic_spaces.demos.aircraft import JET, PROCEDURES
+
+    if source.model.operation == "departure":
+        procedure = PROCEDURES["D"].replace("_", "-")
+        return f"Doc 29's twin jet {JET} taking off ({procedure} procedure)"
+    return f"Doc 29's twin jet {JET} landing (a 3° approach)"
 
 
 def _rail_train(source) -> str:
@@ -642,7 +734,9 @@ def _horn_loudness(model) -> str:
 
 
 __all__ = [
+    "AIRCRAFT_SEED",
     "FADE_S",
+    "GAIN_RATE_HZ",
     "HORN_BRIEF",
     "HORN_NOUNS",
     "HORN_RULES",
@@ -652,7 +746,11 @@ __all__ = [
     "SOUND_RMS",
     "blows_of",
     "driven_kmh",
+    "engines_sound",
     "fade_s",
+    "flies",
+    "flight_kmh",
+    "gains_along",
     "horn_kind",
     "input_gain",
     "made_brief",

@@ -65,6 +65,18 @@
 - Changed: the helicopter flyover's `flyover_demo.py` is the demo of its scene, its
   helicopter of a rotorcraft model in place of its `level_db`, `directivity` and
   `helicopter.csv`; its options, steps and runs' names before 4.4.0 still work.
+- Added: a source's `model` may be an aircraft of ECAC Doc 29 (`doc-29`: its
+  `aircraft`, Volume 3's JETW, on an `operation`, a departure or an arrival): it flies
+  the source along its trajectory's ground track by the operation's procedure in the
+  scene's air, the trajectory taking the flight's keyframes, and gives its sound power
+  and its directivity; the demo of any scene plays its noise louder and softer as the
+  thrust changes, and gives a pass's L_ASmax and its SEL 10 dB down too. A standing
+  aircraft, a trajectory with a speed of its own or no Doppler, or an arrival that never
+  comes down to the runway, is refused, saying why.
+- Changed: the airport's `flight_demo.py` is the demo of its scene, its jets of a Doc 29
+  model in place of `jetw.csv` and the flight the script wrote into its scene; its
+  options and steps before 4.4.0 still work (`--vehicle` as `--sources`), and its runs
+  are named as the demo of any scene's (`flight_arrival_binaural`).
 - Changed: an option that changes nothing in a run is refused naming it (`--rpm changes
   nothing: no road vehicle plays a made sound`), and `--rpm` and `--blows` are refused
   unless positive.
@@ -173,9 +185,7 @@
   what plays or how it sounds, and `--format`, take several values (`--vehicle
   departure,arrival`, `--speed 50,80`), each value a run of its own played after a title
   card, in the order `--series` sets; `--sources` picks the sources a demo plays, by
-  name or group (all but the airport's flight, which plays one aircraft, `--vehicle`
-  picking which),
-  and `--sources-play in-turn` plays them one after another; `--series listeners`
+  name or group, and `--sources-play in-turn` plays them one after another; `--series listeners`
   gives each listener a part. In Run demo, **Several…** turns a choice into a list to
   tick and drag, the sources' tree says what each plays and takes your WAV, and the
   Video box lists the parts the run makes and sets their order.
