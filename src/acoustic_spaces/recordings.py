@@ -65,6 +65,26 @@ _RSG_STEMS = "RSG_Complete_Project/Abgabe_RSG_DEGA/1_Audio/2_SPICY_FUNK_CAKE/2_S
 STEM_NAMES = ("drums", "bass", "guitar", "keys", "brass", "vocal", "backing")
 #: How far a song's stems may be off its master (s), which they are lined up with.
 STEMS_LAG_S = 5.0
+#: The gated RMS (ITU-R BS.1770) a source's feed has when it plays at its sound power:
+#: a multitrack recording's stems are built or recorded so where they play loudest.
+LEVEL_RMS = 0.1
+#: The stems of the church's "Dona nobis pacem" (built by
+#: :mod:`acoustic_spaces.demos.dona_nobis_pacem`), named after the church's sources
+#: that play them: its 19 singers, by their names in VocalSet, and the two sides of its
+#: organ's manual and pedal.
+_DONA_STEMS = (
+    *(
+        f"singer_{singer}"
+        for singer in (
+            *("f1", "f5", "f2", "f3", "f8", "f4", "f6", "f7", "f9"),
+            *("m1", "m4", "m2", "m10", "m3", "m5", "m8", "m7", "m6", "m11"),
+        )
+    ),
+    "organ_manual_c",
+    "organ_manual_cis",
+    "organ_pedal_c",
+    "organ_pedal_cis",
+)
 
 
 @dataclass(frozen=True)
@@ -75,7 +95,10 @@ class Recording:
     name: str
     #: What it is called, for the editor and the demo's messages (marked for translation).
     title: str
-    #: ``song`` (a stereo master) or ``speech`` (one talker, mono).
+    #: ``song`` (a stereo master, and maybe its stems), ``speech`` (one talker, mono) or
+    #: ``multitrack`` (a stem per player or singer, at the levels they play at: a
+    #: source plays its stem as it is, so that at :data:`LEVEL_RMS` it plays at its
+    #: sound power; its master is the stems added up).
     kind: str
     licence: str
     #: The line a video that plays it shows, as its licence asks.
@@ -101,6 +124,14 @@ class Recording:
     stems: tuple[tuple[str, tuple[File, ...]], ...] = ()
     #: MB read from the server to fetch the stems.
     stems_mb: float = 0.0
+    #: For a recording built rather than downloaded as it is: ``module:function``, which
+    #: is called with the recording and the folder (:func:`data_folder` for None) and
+    #: writes its stems and its master there from what it downloads
+    #: (:attr:`download_mb`).
+    build: str | None = None
+    #: The parts of the music in time: when each starts (s) and what plays in it, as the
+    #: still of a stop that starts in it says.
+    sections: tuple[tuple[float, str], ...] = ()
 
     @property
     def stem_names(self) -> tuple[str, ...]:
@@ -109,7 +140,8 @@ class Recording:
 
     def summary(self) -> str:
         """``Title (kind, licence, N MB download)``: what the editor offers."""
-        stems = f"; {len(self.stems)} stems, {self.stems_mb:g} MB more" if self.stems else ""
+        more = f", {self.stems_mb:g} MB more" if self.stems_mb else ""
+        stems = f"; {len(self.stems)} stems{more}" if self.stems else ""
         return (
             f"{self.title} ({self.kind}, {self.licence}, {self.download_mb:g} MB download{stems})"
         )
@@ -257,6 +289,25 @@ RECORDINGS = (
         stems_mb=37,
         bpm=132.0,  # from its first downbeat, at its start
     ),
+    Recording(
+        name="dona_nobis_pacem",
+        title=N_('"Dona nobis pacem", a choir of 19 singers and an organ'),
+        kind="multitrack",
+        licence="CC BY 4.0",
+        credit="Singers: VocalSet by J. Wilkins, P. Seetharaman, A. Wahl, B. Pardo (CC BY "
+        "4.0, doi:10.5281/zenodo.1442513), with note annotations from Annotated-VocalSet by "
+        "B. Faghih and J. Timoney (CC BY 4.0, doi:10.5281/zenodo.7061507); retuned and "
+        "time-aligned · Organ: VCSL pipe organ, sampled by Simon Dalzell (Ivy Audio), "
+        'Versilian Studios (CC0) · "Dona nobis pacem", traditional round',
+        download_mb=127,
+        stems=tuple((name, ()) for name in _DONA_STEMS),
+        build="acoustic_spaces.demos.dona_nobis_pacem:build",
+        sections=(
+            (0.0, "Verse 1: the organ alone, full"),
+            (26.0, "Verse 2: the choir alone"),
+            (52.0, "Verse 3: the choir with the organ, quiet"),
+        ),
+    ),
     *(
         Recording(
             name=f"ace_{talker.lower()}",
@@ -274,6 +325,11 @@ RECORDINGS = (
 )
 #: The names a scene can give as its recording.
 NAMES = tuple(item.name for item in RECORDINGS)
+#: Every stem a source's channel may name: those of the recordings on offer, a song's
+#: (:data:`STEM_NAMES`) first.
+ALL_STEMS = tuple(
+    dict.fromkeys([*STEM_NAMES, *(name for item in RECORDINGS for name in item.stem_names)])
+)
 #: The names two of the ACE talkers had before 4.4.0, still read as theirs.
 ALIASES = {"speech_male": "ace_m4", "speech_female": "ace_f2"}
 
@@ -345,6 +401,9 @@ def get_stems(item: Recording | str, folder: str | Path | None = None) -> dict[s
     paths = {name: stem_file(item, name, folder) for name in item.stem_names}
     if all(path.exists() for path in paths.values()):
         return paths
+    if item.build is not None:
+        _built(item, folder)
+        return paths
     master, rate = decoded(get(item, folder))
     out = stems_folder(item, folder)
     out.mkdir(parents=True, exist_ok=True)
@@ -403,6 +462,9 @@ def get(item: Recording | str, folder: str | Path | None = None) -> Path:
         if new == item.name and kept.exists():
             kept.replace(path)  # fetched under its old name
             return path
+    if item.build is not None:
+        _built(item, folder)
+        return path
     if item.tar is not None:
         url, member = item.tar
         print(f"reading {url} for {item.title}")
@@ -418,12 +480,23 @@ def get(item: Recording | str, folder: str | Path | None = None) -> Path:
     return path
 
 
+def _built(item: Recording, folder: str | Path | None) -> None:
+    """The recording built (:attr:`Recording.build`): its stems and its master."""
+    import importlib
+
+    module, function = (item.build or "").split(":")
+    print(f"building {item.title}")
+    getattr(importlib.import_module(module), function)(item, folder)
+
+
 __all__ = [
     "ACE",
     "ACE_DOI",
     "ACE_TALKERS",
     "ALIASES",
+    "ALL_STEMS",
     "FOLDER",
+    "LEVEL_RMS",
     "NAMES",
     "RECORDINGS",
     "STEMS_LAG_S",

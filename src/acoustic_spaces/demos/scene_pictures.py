@@ -152,8 +152,12 @@ class Pictures:
         variants: Mapping[str, tuple[str, dict]] | None = None,
         room=None,
         hide: Sequence[str] = (),
+        sections: Sequence[tuple[float, str]] = (),
     ):
         self.scene, self.report, self.seats, self.stops = scene, report, seats, list(stops)
+        #: The parts of the music the recording has in time (when each starts, s, and
+        #: what plays in it): a stop's still says the one it starts in.
+        self.sections = sorted(sections)
         self.hide = set(hide)
         self.outdoors = None
         #: The view from the side drawn last: what it showed, its caption and its pixels.
@@ -407,6 +411,9 @@ class Pictures:
         stop = self.stops[k]
         seat = self.seats.get(stop.key, {})
         lines: list = []
+        section = self.section_at(stop.start)
+        if section is not None:
+            lines.append(section)
         level = self.level_at(stop.key, t)
         if level is not None:
             lines.append(f"{level:.0f} dB(A) here, as simulated")
@@ -453,6 +460,13 @@ class Pictures:
         if self.fmt == "binaural":
             lines.append(("L and R mark your ears", MUTED))
         return lines
+
+    def section_at(self, t: float) -> str | None:
+        """What plays in the part of the music a stop starting at ``t`` (s, in the
+        recording) is in, a second into it so that a stop starting just before a part
+        is in that part; None for a recording without parts."""
+        parts = [what for start, what in self.sections if start <= t + 1.0]
+        return parts[-1] if parts else None
 
     def title(self, listener: str) -> tuple[str, str]:
         """The listener's name, in still air for its mix in still air, and where its stop

@@ -86,8 +86,8 @@ from acoustic_spaces.materials.ground import band_absorption, surface_impedance
 from acoustic_spaces.materials.libraries import find_material, read_library
 from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB, VOCAL_EFFORT_DB_A, VocalEffort
 from acoustic_spaces.recordings import ALIASES as RECORDING_ALIASES
+from acoustic_spaces.recordings import ALL_STEMS, STEM_NAMES
 from acoustic_spaces.recordings import NAMES as RECORDING_NAMES
-from acoustic_spaces.recordings import STEM_NAMES
 
 Vector3 = tuple[float, float, float]
 Coefficient = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -1803,16 +1803,18 @@ class Source(_Model):
     @field_validator("channel")
     @classmethod
     def _stem_or_mix(cls, value):
-        """A stem's name, or a mix of stems, by the names stems go by
-        (:data:`~acoustic_spaces.recordings.STEM_NAMES`), each mix's gain a finite
-        number of dB."""
+        """A stem's name, or a mix of stems, by the names stems go by: a song's
+        (:data:`~acoustic_spaces.recordings.STEM_NAMES`) or those of a multitrack
+        recording of the catalogue (:data:`~acoustic_spaces.recordings.ALL_STEMS`), each
+        mix's gain a finite number of dB."""
         names = [value] if isinstance(value, str) and value not in CHANNELS else []
         names += list(value) if isinstance(value, dict) else []
         for name in names:
-            if name not in STEM_NAMES:
+            if name not in ALL_STEMS:
                 raise ValueError(
                     f"{name!r}: a channel names left, right or mono, or a stem of the "
-                    f"recording, {', '.join(STEM_NAMES)}, or a mix of them"
+                    f"recording (a song's {', '.join(STEM_NAMES)}, or a singer's or a "
+                    "player's of a multitrack recording), or a mix of them"
                 )
         if isinstance(value, dict):
             if not value:

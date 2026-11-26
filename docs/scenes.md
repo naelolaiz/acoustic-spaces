@@ -782,10 +782,10 @@ sources:
   mixed down; without a channel it is mixed down to mono.
 - The scene's `recording` is the file a source with a `channel` and no `signal` plays: a
   file relative to the scene's folder, or the name of one of the free recordings
-  (`spicy_funk_cake`, `great_british_summer`, `potassium`, `francium`, `rubidium`, and
-  the ACE corpus's talkers `ace_f1` to `ace_m9`; see [a demo of any
-  scene](demos.md#a-demo-of-any-scene)), which the demo downloads the first time and
-  keeps for every scene. A name without a suffix must be a free recording's or a file
+  (`spicy_funk_cake`, `great_british_summer`, `potassium`, `francium`, `rubidium`, the
+  church's choir and organ `dona_nobis_pacem`, and the ACE corpus's talkers `ace_f1` to
+  `ace_m9`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which the demo
+  downloads (or builds) the first time and keeps for every scene. A name without a suffix must be a free recording's or a file
   that is there, so a mistyped free name is refused. Left and right are the
   recording's, so the loudspeaker on the audience's left plays `left`. A source with
   neither a signal nor a channel is silent in the demo. The simulation reads neither.
@@ -795,7 +795,11 @@ sources:
   mono. The free songs `spicy_funk_cake`, `francium` and `rubidium` have their stems,
   downloaded with them the first time a source plays one; a recording of yours takes
   its stems from the run (`--stem vocal=vox.wav`). A stem the recording has not is left
-  out of a mix, and a source none of whose stems it has stays silent.
+  out of a mix, and a source none of whose stems it has stays silent. The multitrack
+  `dona_nobis_pacem` has a stem per singer and per side of the organ's divisions, named
+  after the church's sources that play them (`singer_f1`, `organ_pedal_c`); a source
+  plays such a stem as it is, at the level it was built at, so that its sound power is
+  where it plays loudest.
 - `simulate` reports the sound pressure level per octave band and A-weighted (`spl_db`
   and `spl_a_db` in `parameters.json`), the editor's results show it per band, and
   `inspect` lists each source's sound power. In a band whose G is undefined, the level

@@ -44,6 +44,26 @@
   and lined up with the song by their onsets; the demo of any scene's `--stem` gives the
   stems of a recording of yours. "Spicy Funk Cake"'s phrases now run from its first
   downbeat, 0.5 s in.
+- Changed: the stadium's and the concert stage's drum kit, singer and guitar amp are in
+  use, playing the recording's drums, vocal and guitar stems, and their vocal wedges,
+  drum fill and side fills play monitor mixes of the stems; the stadium's scene has a
+  tour, a phrase at each of its places and the mix position again to the end.
+- Added: multitrack recordings, a stem per singer or player at the level each plays at,
+  which a source plays as it is (`channel: singer_f1`), and recordings built the first
+  time from what they are made of: `dona_nobis_pacem`, the round "Dona nobis pacem" by
+  19 singers of VocalSet and an organ from VCSL's samples (127 MB), a stem per singer
+  and per side of the organ's divisions. The stills name the part of the music playing.
+- Added: the demo of any scene takes in the sources and listeners the scene leaves out
+  that `--sources`, `--listeners` or its tour pick, simulating a scene with them in the
+  work folder, and `--ir-length` (**Response length** in Run demo) sets how long the
+  responses run. Where `--listeners` reorders a tour whose last stop runs to the end,
+  the last stop named runs to the end.
+- Changed: the church's `church_demo.py` is the demo of its scene, the choir and the
+  organ's pipes the scene's sources (left out of the church's own simulations) playing
+  the stems of `dona_nobis_pacem`, its six places the scene's tour, its responses 9 s
+  long; its options, its `--tour` and its steps before 4.4.0 still work but `--scene`
+  and `--results` (the scenes and results go to the work folder), and its first run
+  simulates again.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

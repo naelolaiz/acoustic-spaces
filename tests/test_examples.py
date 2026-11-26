@@ -14,9 +14,10 @@ import pytest
 import yaml
 from conftest import skip_without_extra
 
+from acoustic_spaces import recordings
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
-from acoustic_spaces.demos import PATH_KINDS, demo_for, list_demos, load, pipeline
+from acoustic_spaces.demos import PATH_KINDS, demo_for, list_demos, load, pipeline, scene_demo
 from acoustic_spaces.engine import simulate
 from acoustic_spaces.examples import (
     GROUPS,
@@ -455,250 +456,132 @@ def test_a_demo_plays_only_what_its_example_holds(demo, tmp_path: Path) -> None:
             assert item.position == items[item.name].position, (path.name, item.name)
 
 
-def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
-    """church_demo.py's choir and organ: the tune and every voice of the organ fill a
+def test_church_choir_and_organ_are_built_for_the_catalogue() -> None:
+    """The church's choir and organ, a multitrack recording of the catalogue built from
+    VocalSet's takes and VCSL's samples: the tune and every voice of the organ fill a
     verse, every key has a sample at most two semitones away, the two sides of the organ
-    share the notes, and the scene it writes is the church with 19 singers, the organ's
-    four sources and the tour's listeners, the example's own, without problems."""
-    demo = _script("church", "church_demo")
-    assert sum(beats for _, beats in demo.TUNE) == demo.BEATS
-    for voice, notes in demo.ORGAN.items():
-        assert sum(note[1] for note in notes) == demo.BEATS, voice
-    assert demo.sample_name(60) == "C3"  # VCSL's names: C3 is middle C
+    share the notes, and the recording has a stem for each source of the church's Choir
+    and Organ pipes groups, each named after it and played by it, and the verses as its
+    parts in time."""
+    from acoustic_spaces.demos import dona_nobis_pacem as music
+
+    assert sum(beats for _, beats in music.TUNE) == music.BEATS
+    for voice, notes in music.ORGAN.items():
+        assert sum(note[1] for note in notes) == music.BEATS, voice
+    assert music.sample_name(60) == "C3"  # VCSL's names: C3 is middle C
     for division, voices in (("manual", "SAT"), ("pedal", "B")):
-        for midi, start, end in demo.organ_events(voices):
-            assert 0.0 <= start < end <= demo.BEATS
+        for midi, start, end in music.organ_events(voices):
+            assert 0.0 <= start < end <= music.BEATS
             for key in (midi, midi + 12) if division == "manual" else (midi,):
-                assert abs(demo.nearest_sample(key, division) - key) <= 2, (division, key)
-    files = demo.organ_needed()
+                assert abs(music.nearest_sample(key, division) - key) <= 2, (division, key)
+    files = music.organ_needed()
     assert set(files) == {"Loud", "Quiet", "Loud Pedal", "Quiet Pedal"}
     assert all(name.endswith("_rr1.wav") for name in files["Quiet"])
     # Verse 3 slows down and holds the last chord; the music ends after the church rings.
-    assert demo.beat_time(3, demo.BEATS) - demo.VERSES[3] > demo.BEATS
-    assert demo.end_of_music() > demo.beat_time(3, 21.0) + demo.LAST_CHORD_S
-
-    args = _demo_args(
-        demo.DEMO,
-        source=example_path("church"),
-        scene=tmp_path / "scene_choir.yaml",
-        results=tmp_path / "results_choir",
-    )
-    demo.scene(args)
-    room = Room.from_yaml(args.scene)
-    assert room.problems() == []
-    names = [source.name for source in room.scene.sources]
-    assert len([name for name in names if name.startswith("singer_")]) == 19
-    assert [name for name in names if name.startswith("organ_")] == list(demo.ORGAN_SOURCES)
-    assert {item.name for item in room.scene.listeners} == {name for name, _ in demo.TOUR}
-    assert demo.DEMO.listeners(args) == [name for name, _ in demo.TOUR]
-    assert room.scene.simulation.ir_length_s >= 9.0
-    # The tour's own, without --listeners: its places at its times, to the end of the music.
-    starts = dict(demo.TOUR)
-    ends = [t for _, t in demo.TOUR[1:]] + [demo.end_of_music()]
-    assert demo.tour_of(args) == [(n, t, e) for (n, t), e in zip(demo.TOUR, ends, strict=True)]
-    # --listeners: the tour at those places alone, from the start to the end of the
-    # music, on the times the tour keeps for them (each place left out giving its time
-    # to the one before), taken in the order --listeners gives them.
-    tour = demo.tour_of(argparse.Namespace(**vars(args) | {"listeners": "conductor,nave-back"}))
-    assert tour == [
-        ("conductor", 0.0, starts["conductor"]),
-        ("nave-back", starts["conductor"], demo.end_of_music()),
-    ]
-    tour = demo.tour_of(argparse.Namespace(**vars(args) | {"listeners": "nave-back,conductor"}))
-    assert tour == [
-        ("nave-back", 0.0, starts["conductor"]),
-        ("conductor", starts["conductor"], demo.end_of_music()),
-    ]
-    # --tour gives its own order and times: --listeners only leaves places out of it.
-    given = {"tour": "nave-back:0,side-aisle:10,conductor:30", "listeners": "conductor,nave-back"}
-    tour = demo.tour_of(argparse.Namespace(**vars(args) | given))
-    assert tour == [("nave-back", 0.0, 30.0), ("conductor", 30.0, demo.end_of_music())]
-    with pytest.raises(SystemExit, match="visits none of the listeners"):
-        demo.tour_of(
-            argparse.Namespace(**vars(args) | {"tour": "nave-back:0", "listeners": "conductor"})
-        )
-    # The mixes weigh each source by the sound power the scene gives it.
-    weights = {source["name"]: source["level_db"] for source in demo.scene_of(args)["sources"]}
+    assert music.beat_time(3, music.BEATS) - music.VERSES[3] > music.BEATS
+    assert music.end_of_music() > music.beat_time(3, 21.0) + music.LAST_CHORD_S
+    item = recordings.named("dona_nobis_pacem")
+    assert item.kind == "multitrack" and item.build == f"{music.__name__}:build"
+    assert item.stem_names == tuple(music.SOURCE_NAMES) and len(item.stem_names) == 23
+    assert item.download_mb == music.MUSIC_MB
+    assert [start for start, _ in item.sections] == list(music.VERSES.values())
     church = Scene.from_yaml(example_path("church"))
-    assert weights == {s.name: s.level_db for s in church.sources if s.name in weights}
-    assert weights[f"singer_{demo.SINGERS[0]}"] == 88.0 and weights["organ_pedal_c"] == 102.0
-    # Its choir, organ and places are the church's, left out of the church's simulations
-    # (but nave-back and nave-middle, which the tour shares): the editor shows them.
-    own = {item.name: item for item in [*church.sources, *church.listeners]}
-    for item in [*room.scene.sources, *room.scene.listeners]:
-        assert item.model_copy(update={"enabled": own[item.name].enabled}) == own[item.name]
-    assert [name for name, item in own.items() if item.in_use] == [
+    groups = {s.name: s.group for s in church.sources}
+    for name in music.SOURCE_NAMES:
+        assert groups[name] == ("Organ pipes" if name in music.ORGAN_SOURCES else "Choir")
+    assert {s.name: s.channel for s in church.sources if s.channel} == {
+        name: name for name in music.SOURCE_NAMES
+    }
+    assert church.recording == "dona_nobis_pacem"
+
+
+def test_church_demo_is_a_preset_of_its_scene(tmp_path: Path) -> None:
+    """church_demo.py is the demo of the church's scene with its choir and organ taken
+    in (left out of the church's own simulations) and responses 9 s long; the scene's
+    tour visits the script's six places at its times, to the end of the music, taking
+    in the four the church leaves out; --listeners tours some of them in its order, the
+    last to the end; the script's --tour form, steps and --from still read; --sources
+    plays a pick of the choir and the organ, named after it, in turn too."""
+    demo = _script("church", "church_demo")
+    folder = copy_examples(tmp_path, ["church"])[0].parent
+    parser = demo.DEMO.parser()
+    args = demo.DEMO.resolved(
+        parser.parse_args(
+            ["all", "--from", str(folder / "scene.yaml"), "--work", str(tmp_path / "demo")]
+        )
+    )
+    assert demo.DEMO.check(args) is None
+    assert args.run_folder.name == "scene_Choir+Organ-pipes_binaural"
+    singers = [name for name in demo_music().SOURCE_NAMES if name.startswith("singer_")]
+    assert list(args.playing) == demo_music().SOURCE_NAMES
+    plays = scene_demo.plays(args)
+    title = recordings.named("dona_nobis_pacem").title
+    assert plays["singer_f5"] == f"{title}, its singer_f5 stem"
+    assert plays["altar"] == "silent"
+    run = Scene.from_yaml(scene_demo.run_scene_file(args))
+    assert run.simulation.ir_length_s == 9.0
+    assert len([s for s in run.sources if s.in_use]) == 25
+    tour = ["nave-back", "side-aisle", "front-pews", "conductor", "in-the-choir", "nave-middle"]
+    assert set(tour) <= {lis.name for lis in run.listeners if lis.in_use}
+    stops = scene_demo.tour_given(args, run)
+    length = demo_music().end_of_music()
+    timed = scene_demo.timed_tour(stops, length, None)
+    starts = [0.0, 11.5, 25.0, 37.5, 51.0, 63.5]
+    assert timed == [
+        (name, a, b) for name, a, b in zip(tour, starts, [*starts[1:], length], strict=True)
+    ]
+    # --listeners: those places in its order, each for its stop, the last to the end.
+    two = demo.DEMO.resolved(
+        argparse.Namespace(**vars(args) | {"listeners": "conductor,nave-back"})
+    )
+    assert scene_demo.timed_tour(scene_demo.tour_given(two, run), length, None) == [
+        ("conductor", 0.0, 13.5),
+        ("nave-back", 13.5, length),
+    ]
+    # The script's --tour (listener:start_s) and its steps still read.
+    old = parser.parse_args(["video", "--tour", "nave-back:0,side-aisle:10,conductor:30"])
+    assert old.tour == "nave-back:10s,side-aisle:20s,conductor:end"
+    assert {s: demo.DEMO.step(s).name for s in ("music", "scene", "feeds")} == {
+        "music": "recording",
+        "scene": "recording",
+        "feeds": "feeds",
+    }
+    # A pick of the choir and the organ, by group or by name, and in turn.
+    choir = demo.DEMO.resolved(argparse.Namespace(**vars(args) | {"sources": "Choir"}))
+    assert choir.run_folder.name == "scene_Choir_binaural" and list(choir.playing) == singers
+    turns = argparse.Namespace(**vars(args) | {"sources_play": "in-turn"})
+    assert [part.run_folder.name for part in demo.DEMO.each(turns)] == [
+        "scene_Choir_binaural",
+        "scene_Organ-pipes_binaural",
+    ]
+    wav = tmp_path / "take.wav"
+    wav.write_bytes(b"")
+    assert "no such source plays here" in demo.DEMO.check(
+        argparse.Namespace(**vars(choir) | {"inputs": {"organ_pedal_c": wav}})
+    )
+    # The church's own simulations keep the choir and the organ out, as before.
+    church = Scene.from_yaml(folder / "scene.yaml")
+    assert [item.name for item in [*church.sources, *church.listeners] if item.in_use] == [
         "altar",
         "organ",
         "nave-front",
         "nave-middle",
         "nave-back",
     ]
-    # --input takes the names of the scene's sources, as the editor's table lists them.
-    plays = demo.plays(args)
-    assert list(plays) == names
-    assert plays["singer_f5"] == "VocalSet singer f5 (mezzo-soprano), verses 2 and 3"
-    assert plays["organ_pedal_cis"] == "the organ's pedal, C# side, verses 1 and 3"
 
 
-def test_church_demo_plays_the_sources_picked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """church_demo.py's --sources: every singer (Choir) and every side of the organ
-    (Organ pipes) by default, the run named as before; a pick mixes those sources alone,
-    with their weights, names the run after it, takes --input for them alone, shares the
-    feeds of every source, and its captions, stills and credit say what plays."""
-    demo = _script("church", "church_demo")
-    paths = {
-        "source": EXAMPLES / "church" / "scene.yaml",  # the script's own: at its default
-        "scene": tmp_path / "scene_choir.yaml",
-        "results": tmp_path / "results_choir",
-        "work": tmp_path / "demo",
-    }
-    every = _demo_args(demo.DEMO, **paths)
-    assert every.run_folder.name == "church_binaural"
-    assert list(every.playing) == demo.SOURCE_NAMES and len(demo.SOURCE_NAMES) == 23
-    groups = {source.group for source in demo.DEMO.sources(every)}
-    assert groups == {"Choir", "Organ pipes"}
-    assert all(source.on for source in demo.DEMO.sources(every))
-    demo.scene(every)
-    table = {"sources": demo.SOURCE_NAMES}
-    mixes = demo.mixes_of(every, table)
-    assert [mix.key for mix in mixes] == [name for name, _ in demo.TOUR]
-    assert pipeline.only_playing(mixes, every) == mixes  # every feed and weight, as before
+def demo_music():
+    """The church's choir and organ, built (:mod:`acoustic_spaces.demos.dona_nobis_pacem`)."""
+    from acoustic_spaces.demos import dona_nobis_pacem
 
-    choir = _demo_args(demo.DEMO, **paths, sources="Choir")
-    assert choir.run_folder.name == "church_Choir_binaural"
-    singers = [f"singer_{singer}" for singer in demo.SINGERS]
-    assert list(choir.playing) == singers
-    for mix in pipeline.only_playing(demo.mixes_of(choir, table), choir):
-        assert list(mix.feeds) == singers and set(mix.weights) == set(singers)
-        assert mix.info["sources"] == singers
-    assert list(demo.plays(choir)) == singers
-    wav = tmp_path / "take.wav"
-    wav.write_bytes(b"")
-    assert "no such source plays here" in demo.DEMO.check(
-        argparse.Namespace(**vars(choir) | {"inputs": {"organ_pedal_c": wav}})
-    )
-    assert demo.DEMO.check(argparse.Namespace(**vars(choir) | {"sources": "Bells"})).startswith(
-        "--sources Bells: no such source or group here"
-    )
-    # The feeds are of every source, whatever plays: a pick never makes them again.
-    feeds = every.work / "feeds"
-    feeds.mkdir(parents=True)
-    for name in demo.SOURCE_NAMES:
-        (feeds / f"{name}.wav").write_bytes(b"")
-    results = demo.simulations(choir)[0].results
-    results.mkdir(parents=True)
-    pipeline.write_json(results / pipeline.PARAMETERS, {"responses": [{}]})
-    monkeypatch.setattr(demo.pipeline, "response_rate", lambda simulation, entries: 48_000)
-    pipeline.write_json(feeds / "feeds.json", {"rate": 48_000, "sources": demo.SOURCE_NAMES})
-    assert demo.feeds_done(choir) and demo.feeds_done(every)
-    pipeline.write_json(feeds / "feeds.json", {"rate": 48_000, "sources": singers})
-    assert not demo.feeds_done(choir)
-
-    # In turn: the choir, then the organ, each a run of its own.
-    turns = argparse.Namespace(**vars(demo.DEMO.defaults()) | paths | {"sources_play": "in-turn"})
-    assert demo.DEMO.resolved(turns).run_folder.name == "church_each-source_binaural"
-    names = [part.run_folder.name for part in demo.DEMO.each(turns)]
-    assert names == ["church_Choir_binaural", "church_Organ-pipes_binaural"]
-
-    # What plays when, in words: as before for every source; a part left out says so.
-    who = demo.who_plays(demo.SOURCE_NAMES)
-    verses = [demo.VERSES[1] + 1.0, demo.VERSES[2] + 1.0, demo.VERSES[3] + 1.0]
-    assert [demo.what_plays(t, who) for t in verses] == [
-        "Verse 1: the organ alone, full",
-        "Verse 2: the choir alone",
-        "Verse 3: the choir with the organ, quiet",
-    ]
-    organ = demo.who_plays(list(demo.ORGAN_SOURCES))
-    assert [demo.what_plays(t, organ) for t in verses] == [
-        "Verse 1: the organ alone, full",
-        "Verse 2: the choir alone, left out of this run: nothing plays",
-        "Verse 3: the organ, quiet; the choir left out of this run",
-    ]
-    assert demo.who_plays(singers[:3]) == {"choir": "3 of the 19 singers"}
-    some = ["singer_f1", "organ_pedal_c"]
-    assert demo.who_plays(some) == {
-        "choir": "singer f1",
-        "organ": "the C side of the organ's pedal",
-    }
-    assert demo.who_plays(["organ_pedal_c", "organ_pedal_cis"]) == {"organ": "the organ's pedal"}
-    assert demo.what_plays(verses[0], demo.who_plays(singers)).endswith("nothing plays")
-    assert demo.sounding(some, verses[0]) == ["organ_pedal_c"]
-    assert demo.sounding(some, verses[2]) == some
-
-    # The stills: drawn of the sources that play, credited to the recordings heard.
-    pytest.importorskip("PIL")
-    pictures = _script("church", "church_pictures")
-    scene = demo.scene_of(every)
-    report = {
-        "responses": [
-            {
-                "source": s["name"],
-                "listener": item["name"],
-                "spl_a_db": 60.0 - 0.1 * k,
-                "parameters": {"c80": [1.0 if s["name"].startswith("organ") else -1.0] * 8},
-            }
-            for k, s in enumerate(scene["sources"])
-            for item in scene["listeners"]
-        ]
-    }
-    tour = demo.tour_of(every)
-
-    def drawing(names, fmt="binaural", stops=tour):
-        who = demo.who_plays(names)
-        return pictures.Pictures(
-            scene,
-            report,
-            {},
-            stops,
-            demo.TITLES,
-            lambda t: demo.what_plays(t, who),
-            lambda t: demo.sounding(names, t),
-            demo.VOICES,
-            heard=names,
-            who=who,
-            fmt=fmt,
-        )
-
-    whole = drawing(demo.SOURCE_NAMES)
-    assert whole.title_line() == "A choir and an organ in a church, simulated"
-    assert whole.subtitle() == (
-        "The church example of acoustic_spaces (a stone nave, 9500 m³), heard binaurally at "
-        "six places"
-    )
-    lines = [line for line, _ in whole.lines("conductor", verses[2])]
-    assert lines[0] == "Verse 3: the choir with the organ, quiet"
-    assert lines[1].startswith("The choir: ") and " · the organ: " in lines[1]
-    assert lines[2] == "Clarity C80 here (0.5-2 kHz): choir -1.0 dB, organ +1.0 dB"
-    assert pictures.CREDIT == pictures.credit_of(True, True)
-    assert "VocalSet" in pictures.CREDIT and "VCSL" in pictures.CREDIT
-
-    two = argparse.Namespace(**vars(choir) | {"listeners": "conductor,nave-back"})
-    alone = drawing(singers, "mono", demo.tour_of(two))
-    assert {s["name"] for s in alone.sources} == set(singers)
-    assert alone.title_line() == "A choir in a church, simulated"
-    assert alone.subtitle().endswith("mixed as mono, heard at two places")
-    lines = [line for line, _ in alone.lines("conductor", verses[0])]
-    assert lines[0] == "Verse 1: the organ alone, left out of this run: nothing plays"
-    assert " organ" not in lines[1] and lines[2] == "Clarity C80 here (0.5-2 kHz): choir -1.0 dB"
-    assert alone.still(0).size == (1920, 1080) and alone.thumbnail().size == (1280, 720)
-    credit = pictures.credit_of(choir=True, organ=False)
-    assert "VocalSet" in credit and "VCSL" not in credit and "harmonisation" not in credit
-    both = drawing(some)
-    assert both.title_line() == "A singer of a choir and part of an organ in a church, simulated"
-    lines = [line for line, _ in both.lines("nave-back", verses[2])]
-    assert lines[0] == "Verse 3: singer f1 with the C side of the organ's pedal, quiet"
-    assert lines[1].startswith("Singer f1: ") and " · the pipes: " in lines[1]
-    assert both.still(5).size == (1920, 1080)
+    return dona_nobis_pacem
 
 
-def test_church_demo_tunes_and_times_a_take() -> None:
-    """A take sung slower than the tune, 30 cents sharp and each note a little off:
-    church_demo.py moves each note onto its beat, the singer's own offset away and 60 %
+def test_church_choir_tunes_and_times_a_take() -> None:
+    """A take sung slower than the tune, 30 cents sharp and each note a little off: the
+    church's choir moves each note onto its beat, the singer's own offset away and 60 %
     of each note's error."""
-    demo = _script("church", "church_demo")
+    demo = demo_music()
     rate, beat_s, offset = 16_000, 0.8, 30.0
     errors = [(-1) ** k * 10.0 for k in range(sum(1 for m, _ in demo.TUNE if m is not None))]
     x, notes, t = np.zeros(int(22.0 * rate)), [], 1.0
@@ -1495,14 +1378,25 @@ def test_the_lakeside_demo_is_a_preset_of_the_demo_of_its_scene(tmp_path: Path) 
     assert second.scene == folder / "demo" / "scenes" / "scene_still-air.yaml"
     assert still.atmosphere is None and scene.atmosphere is not None
     assert still.simulation.seed == 1  # the same draws in both: the weather's difference
-    phrase = music.phrase_s({"bpm": 110})  # Spicy Funk Cake's
+    phrase = music.phrase_s({"bpm": 110})  # Spicy Funk Cake's, from its first downbeat
+    downbeat = 0.5
 
-    def tour(*argv: str, length_s: float = 195.0) -> list[tuple[str, float, float]]:
+    def tour(*argv: str, length_s: float = 195.0) -> list[tuple[str, float, float | str]]:
+        """Each stop's mix and its cuts, in phrases from the first downbeat; the music's
+        start 0 and its end "end"."""
         resolved = _lake(folder, *argv)[2]
         scene = scene_demo.scene_of(resolved)
         stops = scene_demo.tour_given(resolved, scene)
-        timed = scene_demo.timed_tour(stops, length_s, scene_demo.tempo_of(resolved, scene))
-        return [(key, round(a / phrase, 6), round(b / phrase, 6)) for key, a, b in timed]
+        tempo = scene_demo.tempo_of(resolved, scene)
+        assert tempo == (110.0, downbeat)
+        timed = scene_demo.timed_tour(stops, length_s, tempo)
+
+        def cut(t: float) -> float | str:
+            if t == length_s:
+                return "end"
+            return 0 if t == 0 else round((t - downbeat) / phrase, 6)
+
+        return [(key, cut(a), cut(b)) for key, a, b in timed]
 
     assert tour() == [
         ("audience", 0, 2),
@@ -1537,7 +1431,7 @@ def test_the_lakeside_demo_is_a_preset_of_the_demo_of_its_scene(tmp_path: Path) 
     # two) and --last-phrases (0 to the end); --listeners thins out a --tour given.
     assert tour("--tour", "bedroom_window:still:1,audience", "--last-phrases", "0") == [
         ("bedroom_window.still", 0, 1),
-        ("audience", 1, round(195.0 / phrase, 6)),
+        ("audience", 1, "end"),
     ]
     assert tour("--tour", "boat:evening:2,garden::1,audience:evening") == [
         ("boat", 0, 2),
@@ -1626,8 +1520,8 @@ def test_the_lakeside_demo_plays_a_song_of_your_own(tmp_path: Path, monkeypatch)
 
 def test_the_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path) -> None:
     """``--sources`` picks the loudspeakers that play, by name or as the PA group, all
-    three by default; the stage's single source, left out of the scene, is none of them,
-    and an ``--input`` for a loudspeaker left out is refused."""
+    three by default; the stage's single source, left out of the scene, plays when it is
+    picked, taken in; an ``--input`` for a loudspeaker left out is refused."""
     from acoustic_spaces.demos import run_folder
 
     folder = copy_examples(tmp_path, ["lakeside_concert"])[0].parent
@@ -1636,14 +1530,21 @@ def test_the_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path) -> None
         ("main_left", "PA", True),
         ("main_right", "PA", True),
         ("subs", "PA", True),
+        ("stage", None, False),
     ]
     assert every.playing == ("main_left", "main_right", "subs")
     assert run_folder(_lake(folder, "--sources", "PA")[2]) == run_folder(every)
     subs = _lake(folder, "--sources", "subs")[2]
     assert subs.playing == ("subs",) and run_folder(subs).name == "scene_subs_binaural"
     stage = _lake(folder, "--sources", "stage")
-    assert stage[0].check(stage[1]) == (
-        "--sources stage: no such source or group here; it has main_left, main_right, subs, PA"
+    assert stage[0].check(stage[1]) is None and stage[2].playing == ("stage",)
+    assert run_folder(stage[2]).name == "scene_stage_binaural"
+    taken = Scene.from_yaml(scene_demo.run_scene_file(stage[2]))
+    assert [s.name for s in taken.sources if s.in_use] == ["stage", *every.playing]
+    tower = _lake(folder, "--sources", "tower")
+    assert tower[0].check(tower[1]) == (
+        "--sources tower: no such source or group here; it has main_left, main_right, subs, "
+        "stage, PA"
     )
     (folder / "bass.wav").write_bytes(b"")
     fed = _lake(folder, "--sources", "subs", "--input", "main_left=bass.wav")
@@ -1783,7 +1684,8 @@ def test_left_and_right_are_the_audience_s_in_every_example() -> None:
     stadium = _script("stadium_concert", "stadium_demo")
     for example in ("stadium_concert", "concert_stage"):
         data = yaml.safe_load((EXAMPLES / example / "scene.yaml").read_text(encoding="utf-8"))
-        given = [s for s in data["sources"] if "channel" in s]
+        # The sound system's (the monitors play mixes of the band's stems).
+        given = [s for s in data["sources"] if s.get("channel") in ("left", "right", "mono")]
         assert given
         for source in given:
             guessed = stadium.role({k: v for k, v in source.items() if k != "channel"})
@@ -1826,7 +1728,7 @@ def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
     with no --sources (one vehicle each) are the three the docs and the changelog name."""
     demos = {demo.name: demo for demo in list_demos()}
     kept = "a --tour given keeps its own order, this option leaving out the others"
-    for name in ("stadium", "crossing", "orchestra", "church"):
+    for name in ("stadium", "crossing", "orchestra", "church", "lakeside", "walk"):
         assert kept in " ".join(demos[name].option("listeners").help.split()), name
     without = sorted(
         (demo.example, demo.name)

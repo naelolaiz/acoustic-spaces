@@ -2394,6 +2394,154 @@ def test_a_source_plays_a_stem_of_the_recording_or_a_mix_of_them(
         )
 
 
+def _built_choir(item, folder) -> None:
+    """A multitrack recording's build for the test below: a singer at LEVEL_RMS while
+    singing, from 1 s; an organ pipe at LEVEL_RMS in its full part and 11 dB below in
+    its quiet one; and their sum, the master."""
+    from acoustic_spaces import recordings
+
+    rate = 16_000
+    singer = np.r_[np.zeros(rate), _tone(2.0, 300.0, rate, 1.0)]
+    singer *= recordings.LEVEL_RMS / audio.gated_rms(singer, rate)
+    full = _tone(1.5, 100.0, rate, 1.0)
+    full *= recordings.LEVEL_RMS / audio.gated_rms(full, rate)
+    organ = np.r_[full, full * 10 ** (-11 / 20)]
+    stems = {"singer_f1": singer, "organ_pedal_c": organ}
+    for name, x in stems.items():
+        audio.write(recordings.stem_file(item, name, folder), x, rate)
+    audio.write(recordings.file_of(item, folder), singer + organ, rate)
+
+
+def test_a_multitrack_recording_is_built_and_its_stems_play_as_they_are(
+    tmp_path: Path, monkeypatch, recordings_folder: Path
+) -> None:
+    """A recording of the catalogue built from what it is made of (the church's choir
+    and organ) is built once, by the recording step, into its stems and their sum; a
+    source that plays one of its stems plays it as it is, at the level it was built at,
+    so that an organ's quiet verse stays 11 dB under its full one, and a mix of them is
+    brought to the feeds' gated RMS. The sources and listeners the scene leaves out that
+    the run picks (--sources, --listeners, the tour) are taken in, the scene so changed
+    simulated, as it is with --ir-length; the stills say what plays in the part of the
+    music a stop starts in."""
+    import dataclasses
+    import types
+
+    import yaml
+
+    from acoustic_spaces import recordings
+    from acoustic_spaces.cli import main as cli
+    from acoustic_spaces.demos import scene_demo, scene_pictures
+    from acoustic_spaces.demos.scene_demo import DEMO, FEED_RMS, plays, recording_download
+    from acoustic_spaces.scene import Scene, model
+
+    choir = dataclasses.replace(
+        recordings.named("dona_nobis_pacem"),
+        name="test_choir",
+        stems=(("singer_f1", ()), ("organ_pedal_c", ())),
+        build=f"{__name__}:_built_choir",
+        download_mb=3,
+    )
+    monkeypatch.setattr(recordings, "RECORDINGS", (*recordings.RECORDINGS, choir))
+    monkeypatch.setattr(recordings, "NAMES", (*recordings.NAMES, "test_choir"))
+    monkeypatch.setattr(model, "RECORDING_NAMES", (*model.RECORDING_NAMES, "test_choir"))
+    scene = _any_scene(tmp_path)
+    monkeypatch.chdir(scene.parent)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["recording"] = "test_choir"
+    data["sources"][0].pop("signal")
+    data["sources"][0]["channel"] = "singer_f1"
+    data["sources"][1].pop("signal")
+    data["sources"][1]["channel"] = "organ_pedal_c"
+    # The fan: a mix of the two, left out of the scene's own simulations until picked.
+    data["sources"][2] |= {"channel": {"singer_f1": 0, "organ_pedal_c": -6}, "enabled": False}
+    data["listeners"].append({"name": "aisle", "position": [2.0, 3.0, 1.2], "enabled": False})
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    demo = DEMO.at(scene.parent)
+    args = demo.resolved(demo.parser().parse_args(["all", "--scene", "scene.yaml"]))
+    assert demo.check(args) is None
+    title = choir.title
+    assert plays(args) == {
+        "talker": f"{title}, its singer_f1 stem",
+        "radio": f"{title}, its organ_pedal_c stem",
+    }
+    assert [(s.name, s.on) for s in demo.sources(args)] == [
+        ("talker", True),
+        ("radio", True),
+        ("fan", False),
+    ]
+    assert scene_demo.run_scene_file(args) == scene.parent / "scene.yaml"
+    assert recording_download(args) == (
+        f"what {title} is built from (CC BY 4.0, 3 MB), built into its 2 stems and kept "
+        "for every scene"
+    )
+    assert cli(["demo", "scene.yaml", "recording"]) == 0
+    assert recording_download(args) is None
+    assert recordings.stems_there(choir) and recordings.file_of(choir).exists()
+
+    # --sources fan takes the fan in, and --listeners aisle the aisle: the scene so
+    # changed is the run's, named after what it takes in.
+    given = [
+        "--scene",
+        "scene.yaml",
+        "--sources",
+        "talker,radio,fan",
+        "--listeners",
+        "aisle,seat-b",
+    ]
+    taken = demo.resolved(demo.parser().parse_args(["all", *given]))
+    assert demo.check(taken) is None
+    assert plays(taken)["fan"] == f"{title}, a mix of its stems singer_f1, organ_pedal_c -6 dB"
+    assert [(s.name, s.on) for s in demo.sources(taken)] == [
+        ("talker", True),
+        ("radio", True),
+        ("fan", False),
+    ]
+    assert taken.run_folder.name == "scene_with-fan_aisle+seat-b_binaural"
+    run = scene_demo.run_scene_file(taken)
+    assert run.name == "scene_with-fan+aisle.yaml"
+    written = Scene.from_yaml(run)
+    assert [s.name for s in written.sources if s.in_use] == ["talker", "radio", "fan"]
+    assert [lis.name for lis in written.listeners if lis.in_use][-1] == "aisle"
+    assert demo.listeners(taken)[-1] == "aisle"
+    # A tour that visits a place the scene leaves out takes it in too.
+    toured = demo.resolved(
+        demo.parser().parse_args(["all", "--scene", "scene.yaml", "--tour", "aisle:1s"])
+    )
+    assert "aisle" in demo.listeners(toured)
+    longer = demo.resolved(
+        demo.parser().parse_args(["all", "--scene", "scene.yaml", "--ir-length", "0.5"])
+    )
+    assert scene_demo.run_scene_file(longer).name == "scene_responses-0p5s.yaml"
+    assert Scene.from_yaml(scene_demo.run_scene_file(longer)).simulation.ir_length_s == 0.5
+    short = demo.parser().parse_args(["all", "--scene", "scene.yaml", "--ir-length", "0"])
+    assert demo.check(short).startswith("--ir-length is how long the responses run")
+
+    # The feeds: a stem as it is, a mix at the feeds' gated RMS.
+    assert cli(["demo", "scene.yaml", "feeds", *given[2:]]) == 0
+    folder = scene_demo.feeds_folder(taken)
+    feed = {k: audio.read(folder / f"{k}.wav")[0].ravel() for k in ("talker", "radio", "fan")}
+    singer = audio.read(recordings.stem_file(choir, "singer_f1"))[0].ravel()
+    organ = audio.read(recordings.stem_file(choir, "organ_pedal_c"))[0].ravel()
+    np.testing.assert_allclose(feed["talker"], singer, atol=1e-7)
+    np.testing.assert_allclose(feed["radio"], organ, atol=1e-7)
+    rate = 16_000
+    quiet = audio.gated_rms(feed["radio"][int(1.6 * rate) :], rate)
+    assert 20 * np.log10(quiet / audio.gated_rms(feed["radio"][: int(1.4 * rate)], rate)) == (
+        pytest.approx(-11.0, abs=0.05)
+    )
+    assert audio.gated_rms(feed["radio"][: int(1.4 * rate)], rate) == pytest.approx(
+        FEED_RMS, rel=1e-3
+    )
+    mix = singer + organ * 10 ** (-6 / 20)
+    np.testing.assert_allclose(feed["fan"], mix * FEED_RMS / audio.gated_rms(mix, rate), atol=1e-6)
+
+    # The stills say what plays in the part of the music a stop starts in, a second in.
+    parts = types.SimpleNamespace(sections=sorted(recordings.named("dona_nobis_pacem").sections))
+    assert scene_pictures.Pictures.section_at(parts, 11.5) == "Verse 1: the organ alone, full"
+    assert scene_pictures.Pictures.section_at(parts, 25.0) == "Verse 2: the choir alone"
+    assert scene_pictures.Pictures.section_at(types.SimpleNamespace(sections=[]), 3.0) is None
+
+
 def test_free_recordings_are_downloaded_once(tmp_path: Path, monkeypatch) -> None:
     """A free recording comes as one WAV file in the recordings folder: a song's files
     decoded and added together, or a talk taken out of its corpus's tar archive; one

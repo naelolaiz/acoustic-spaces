@@ -203,6 +203,7 @@ LABELS = {
     "--band": N_("Band's scene"),
     "--downbeat": N_("First downbeat"),
     "--stem": N_("Stems"),
+    "--ir-length": N_("Response length"),
     "--rays": N_("Rays per band"),
     "--out": N_("Written to"),
     "--vehicle": N_("Vehicle"),
@@ -232,6 +233,7 @@ ADVANCED = frozenset(
         "--step",
         "--stand",
         "--turn",
+        "--ir-length",
     }
 )
 

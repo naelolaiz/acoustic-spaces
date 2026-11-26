@@ -105,7 +105,7 @@ as one) in a part of its own, one after another in one video as above, or withou
 monitors, then its band); a single turn (one name, or a pick of one top group) is an
 ordinary run, and in a series of vehicles each takes its own turns (`--vehicle
 car,police_car`: the car, the police car, then its siren). A pick that is not the
-demo's own names the run (`church_Choir_binaural`, `church_each-source_binaural`), by
+demo's own names the run (`scene_Choir_binaural`, `scene_each-Choir+Organ-pipes_binaural`), by
 what it adds and leaves out where that is shorter (`passby_regional_with-train_horn`,
 `stadium_spicy_funk_cake_without-guitar_amp`); the stills, credits and
 captions describe only what plays. Where the simulation keeps every source (the
@@ -221,9 +221,11 @@ sources:
 | `great_british_summer` | "Great British Summer" by Tom McKenzie, its stereo master ([Zenodo](https://doi.org/10.5281/zenodo.19683001)) | CC BY 4.0 | 50 MB |
 | `potassium` | "Potassium" by Software-Entwicklungskit, its stereo master ([album](https://github.com/ichbinsoftware/everythingisfree)) | CC0 1.0 | 6 MB |
 | `francium`, `rubidium` | "Francium" and "Rubidium" by Software-Entwicklungskit, electronic, each its stereo master and 6 or 5 stems (the album's own, added up by part) ([album](https://github.com/ichbinsoftware/everythingisfree)) | CC0 1.0 | 7 or 6 MB, stems 35 or 37 MB |
+| `dona_nobis_pacem` | the round "Dona nobis pacem", 19 singers of VocalSet retuned and timed to one score, with an organ from VCSL's samples: multitrack, a stem per singer and per side of the organ's divisions, built the first time from what it is made of ([the church's demo](#a-choir-and-an-organ-in-the-church)) | CC BY 4.0 | 127 MB |
 | `ace_f1` to `ace_f5`, `ace_m1` to `ace_m9` | a woman or a man talking, anechoic, about a minute: the 14 talkers of the ACE challenge corpus ([Zenodo](https://doi.org/10.5281/zenodo.6257551)); `speech_male` and `speech_female`, their names before 4.4.0, are still read as `ace_m4` and `ace_f2` | CC BY 4.0 | 16 to 145 MB, read as far as the talk |
 
-They are the songs the lakeside demo plays and the talks of the gallery's. A free
+They are the songs the lakeside demo plays, the church's choir and organ and the talks of
+the gallery's. A free
 recording is kept as one WAV file in the user's data folder (`acoustic-spaces/recordings`
 under `~/.local/share` on Linux, `~/Library/Application Support` on macOS,
 `%LOCALAPPDATA%` on Windows; `ACOUSTIC_SPACES_RECORDINGS` names another), so every
@@ -241,7 +243,10 @@ with it the first time one plays, lined up with its master by their onsets (the 
 above 2 kHz, to the millisecond, which hold where the master was mastered apart from
 its stems) and cut to its length; a song without them leaves those sources silent.
 `--stem vocal=vox.wav`, once per stem, gives the stems of a recording of yours, lined up
-with it so in the feeds.
+with it so in the feeds. A multitrack recording (the church's) has a stem per player or
+singer, at the level each plays at: one gated RMS where it plays loudest, so that a
+source playing its stem as it is plays at its sound power there, and quieter where the
+music is (an organ's quiet verse); its master is the stems added up.
 `--recording ace_f1` plays another free recording in a run, in place of the scene's
 own, or `--recording song.flac` a file of yours; a source with a speech spectrum that
 plays a talker takes its talker's, a woman's or a man's, so that the levels and the STI
@@ -254,6 +259,17 @@ changes a talker's sound power or speech spectrum simulates the scene as it play
 written once to `scenes/` in the work folder (`scene_vocal-effort-raised.yaml`, its
 results beside the scene's own), and a run back to the scene as it is finds its own.
 
+**What the scene leaves out.** A source or a listener the scene leaves out of its own
+simulations (`enabled: false`, unticked in the editor) is taken in by a run that picks
+it: a source `--sources` names, by its name or its group, and a listener `--listeners`
+names or the tour visits. So the church keeps its choir and the places it is heard from
+out of its own simulations, and its demo takes them in (`--sources Choir`). The scene so
+changed is simulated once, as with `--vocal-effort`, written as
+`scenes/scene_with-helicopter.yaml`, say, or where it takes in more,
+`scenes/scene_with-23-left-out-<digest>.yaml`.
+`--ir-length 9` runs the responses that long, where a room's own simulations cut its
+reverberation short.
+
 ```sh
 acoustic-spaces demo scene.yaml                 # every step, into demo/ beside the scene
 acoustic-spaces demo scene.yaml recording       # download the scene's free recording
@@ -265,14 +281,17 @@ acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
 ```
 
 - **recording**: downloads the free recording the scene names, unless it is there or
-  no source plays it; the editor's Run demo window says so above Run, with its size.
+  no source plays it, or builds it from what it is made of (the church's); the editor's
+  Run demo window says so above Run, with its size.
 - **feeds**: each source's file (its `signal`, or the scene's `recording`), at the
   scene's sample rate, its `channel` or mixed down to mono. A file mixed down is brought
   to one gated RMS (unweighted); its left and right channels share one gain that
   brings their mean square to it, so a recording's stereo balance stays and how loud
   each source plays against the others is its sound power in the scene (`level_db`,
   with its feed's gain and equalizer), as the simulation says, and not how loud the
-  recording happens to be. Sources with neither stay silent and are listed as such.
+  recording happens to be. A stem of a multitrack recording plays as it is, at the
+  level it was built at, and a mix of stems is brought to that gated RMS. Sources with
+  neither stay silent and are listed as such.
   `--input SOURCE=WAV` plays another file instead of a source's signal or the
   recording, without changing the scene (the source's `channel` is taken out of it in
   the same way), and gives a silent source one.
@@ -465,32 +484,41 @@ pacem" three times: the organ alone on full stops, the choir alone, then the cho
 the organ on quiet stops, slowing into a held last chord and the church's reverberation
 (1:26 in all). It mixes the piece at six places and makes a video that tours them: under
 the organ at the back, along the south wall, the front pews, the conductor, the back row
-of the choir and the middle of the nave. The choir, the organ's pipes and those places
-are the example's: its Choir, Organ pipes and Choir concert groups, left out of the
-church's own simulations until ticked in the editor, and its listeners `nave-back` and
-`nave-middle`.
+of the choir and the middle of the nave. It is the [demo of the church's
+scene](#a-demo-of-any-scene) (`acoustic-spaces demo scene.yaml --sources
+Choir,"Organ pipes"`, This scene in the editor), the scene's own [tour](scenes.md#tour-of-a-demo)
+and all. The choir and the organ's pipes are the example's Choir and Organ pipes groups,
+and four of the places its Choir concert group, all left out of the church's own
+simulations: the demo takes them in, the sources by `--sources` (the choir and the organ
+by default), the places as its tour visits them. Each source plays its stem of the
+scene's recording, `dona_nobis_pacem` in the [catalogue](#a-demo-of-any-scene),
+which the `recording` step builds the first time from what it is made of (below) and
+keeps for every scene.
 
 ```sh
 acoustic-spaces examples --copy . church && cd church
-python church_demo.py music     # 19 takes, their annotations, 27 organ samples (127 MB)
-python church_demo.py scene     # scene_choir.yaml: the church with the choir and the organ
-acoustic-spaces simulate scene_choir.yaml --out results_choir/binaural --output binaural   # 10-20 min on 4 cores
-python church_demo.py feeds     # demo/feeds: one WAV per singer and per side of the organ
-python church_demo.py render    # demo/church_binaural/seats: the whole piece at each listener
-python church_demo.py video     # demo/church_binaural.mp4, its sound, stills and thumbnail
+python church_demo.py all        # every step, into demo/ beside the scene
+python church_demo.py recording  # 19 takes, their annotations, 27 organ samples (127 MB), built
+python church_demo.py simulate   # the church with its choir, organ and places, 9 s responses
+python church_demo.py render     # the whole piece at each listener
+python church_demo.py video      # demo/scene_Choir+Organ-pipes_binaural.mp4, its sound, stills
 ```
 
-Options: `--tour nave-back:0,conductor:25,...` (listener:start in seconds), `--listeners
-nave-back,conductor` (those places alone, in that order, in `render` and `video`),
-`--sources Choir` (the singers or the organ's pipes by name, or the groups `Choir` and
-`Organ pipes`; a verse whose part is left out is silent, as its caption says), `--format` for
-another output the simulation wrote (`ambix3`, `5.0`, ...; the tour [decodes it to two
-ears](#running-a-demo)), `--no-mp4` for the audio and stills only. The scene and its
-simulation go beside the script (`scene_choir.yaml`, `results_choir/binaural`, a
-folder for each output), the rest to `./demo` (`--work`). `all` runs every step in turn, leaving out what is done already.
+Its options are the demo of any scene's: `--tour nave-back:12s,conductor:end` (a tour of
+your own), `--listeners nave-back,conductor` (those places alone, in that order, each
+for its stop of the tour, the last to the end of the music), `--sources Choir` (the
+singers or the organ's pipes by name, or the groups `Choir` and `Organ pipes`), `--input
+singer_f1=take.wav` (a file of yours in place of a stem), `--ir-length` (how long the
+responses run: 9 s by default, as the bass rings for nearly ten; the church's own
+simulations keep 7 s), `--format` for another output (the tour [decodes it to two
+ears](#running-a-demo)), `--no-mp4` for the audio and stills only. The script's own
+command lines still work: its `--tour` (listener:start in seconds, from the music's
+start) reads as the demo's, `--from` is `--scene`, and its steps `music` (the recording
+and the feeds) and `scene` (the recording) run as the ones that took them over.
 
 - **The choir.** Each singer sang the tune alone in a recording booth, at their own tempo
-  and a little off pitch here and there. `feeds` moves each take towards the tune (each
+  and a little off pitch here and there. The recording's build moves each take towards
+  the tune (each
   singer's own offset fully, 60 % of each note's error) and warps it in time so that every
   note starts on the beat, from the dataset's note annotations; after that the voices
   start within about 40 ms of each other and sit about 16 cents from the tune on average,
@@ -504,27 +532,31 @@ folder for each output), the rest to `./demo` (`--work`). `all` runs every step 
   across the gallery, 9.5 m up for the manual and 8.6 m for the pedal towers, facing the
   nave (105 dB for each half of the manual, 102 dB for each pedal tower).
 - **How loud.** The responses are per unit of sound power and `auralize` scales each
-  source by its `level_db`; the feeds are brought to one gated RMS where they play
-  loudest, so the balance between the singers and the organ is the scene's.
-- **One gain for all listeners.** `render` scales the six mixes by one gain (the loudest
-  peak at -1 dBFS), so the level differences between places are the simulation's.
-- **The cuts** fall where the music breathes (the rest in the middle of the tune, the gaps
-  between verses), with a 1 s crossfade. Time is the performers': a listener far from the
-  choir hears it up to 80 ms later than one near it, as in the church.
-- **The pictures** draw the church from above and from the side, each listener with an
-  arrow the way they face and the current one with L and R at its ears, the sources as
-  dots with see-through cones the way they face, and lines from each source playing to
-  the listener, brighter where it is louder. The caption gives the clarity C80 there.
+  source by its `level_db`. The recording is multitrack: each stem is built at one gated
+  RMS where it plays loudest (each singer's singing, each division's first verse over
+  its two sides), the organ's quiet verse 11 dB under its full one, and each source
+  plays its stem as it is, so the balance between the singers and the organ is the
+  scene's.
+- **One gain for all listeners.** The six mixes share one gain, so the level differences
+  between places are the simulation's.
+- **The cuts** are the scene's tour: each place for a number of seconds, the last to the
+  end, so they fall where the music breathes (the rest in the middle of the tune, the
+  gaps between verses), with a 1 s crossfade. Time is the performers': a listener far
+  from the choir hears it up to 80 ms later than one near it, as in the church.
+- **The pictures** are the demo of any scene's: the church from above with the listener
+  of the moment, what plays in the verse, the level there, how long the sound takes to
+  arrive, the reverberation time T30 and the clarity C80 at mid frequencies.
 
 **Limits.** A "virtual choir": the takes were recorded separately, so the singers do not
 hear each other or the room; their timing and tuning are evened out by the script, not by
 listening. The organ samples hold a little of the room they were recorded in, and the
 organ is four points, not a case full of pipes. The model is the example's: the floor
-plan raised 18 m, with no gallery floor under the organ and no columns or furniture;
-`ir_length_s` is raised to 9 s, as the bass rings for nearly ten. Binaural is through the
+plan raised 18 m, with no gallery floor under the organ and no columns or furniture; the
+demo's responses run 9 s, as the bass rings for nearly ten. Binaural is through the
 spherical head model unless `--hrtf` names a SOFA file.
 
-**Recordings and licences.** `music` writes these credits to `demo/music/SOURCES.txt`.
+**Recordings and licences.** The video's credit line is the recording's in the
+catalogue; what it is made of:
 
 - The singers: Wilkins, Seetharaman, Wahl and Pardo, **VocalSet: A Singing Voice
   Dataset** (ISMIR 2018), <https://doi.org/10.5281/zenodo.1442513>, **CC BY 4.0**. The
@@ -544,7 +576,8 @@ spherical head model unless `--hrtf` names a SOFA file.
   about a second of the room they were recorded in (30 dB down after 0.7 to 0.9 s); the
   release fade removes most of it.
 - The music: "Dona nobis pacem" is a traditional round (public domain). The organ's
-  harmonisation (`ORGAN` in `church_demo.py`) was written for the demo; use it freely.
+  harmonisation (`ORGAN` in `acoustic_spaces.demos.dona_nobis_pacem`) was written for the
+  demo; use it freely.
 - Changes, as CC BY asks to say: each take is retuned towards the tune by resampling,
   time-warped so that its notes start on the beat (WSOLA, which keeps the pitch), cut
   into two verses, brought to one level and mixed through the simulated church. The organ
@@ -749,7 +782,7 @@ simulation) run as the ones that took them over.
   at 30 m, in the evening's weather, every octave from 500 Hz to 4 kHz is within 1 dB
   of 1 kHz, 250 Hz 1.3 dB down, 8 kHz 1.9 dB down and 63 and 125 Hz 1.8 to 1.9 dB up.
   The scene's single source in the middle of the stage (120 dB sound power) is
-  left out until ticked. The scene hears the place 140 m behind the stage, upwind
+  left out until ticked, or picked (`--sources stage`). The scene hears the place 140 m behind the stage, upwind
   (`behind_stage`), and lets the responses run 3.5 s past the latest direct sound, the
   far shore's, 1.6 s late (5.2 s in all).
 - **The weather** is the example's: a breeze from the park out over the lake, 2.5 m/s
