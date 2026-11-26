@@ -44,6 +44,13 @@ from acoustic_spaces.walkthrough import moment_name
 
 #: Where the plan is drawn on a still: left, top, width, height.
 PLAN_BOX = (MARGIN, 172, 860, 640)
+#: Outdoors, with the view from the side under it: the most the plan takes of that box's
+#: height, and the side view's from under the plan's caption to SIDE_BOTTOM.
+PLAN_OVER_SIDE = 360
+SIDE_BOTTOM = 832
+#: What a still can leave out (``--hide``): the view from the side, the wind and the
+#: weather zones, and the ground's materials with what stands on it, from above.
+HIDDEN = ("side", "wind", "ground")
 #: The octave bands the reverberation time is averaged over (Hz).
 MID_BANDS = (500, 1000)
 
@@ -81,6 +88,19 @@ def wrapped(draw, words: str, weight: str, size: int, width: float, lines: int) 
     return [line.rstrip() + "…"], f
 
 
+def wrapped_line(draw, words: str, width: float, size: int = 20) -> tuple:
+    """``words`` in one line no wider than ``width`` pixels: in ``size`` pixels, smaller
+    down to 14 where they need it, cut with an ellipsis where even that is too wide."""
+    for s in range(size, 13, -1):
+        f = font("SemiBold", s)
+        if draw.textlength(words, font=f) <= width:
+            return words, f
+    line = words
+    while line and draw.textlength(line + "…", font=f) > width:
+        line = line[:-1]
+    return line.rstrip() + "…", f
+
+
 def nice_length(metres: float) -> float:
     """A round length (1, 2, 5, 10...) of about a quarter of ``metres``, for a scale bar."""
     target = max(metres / 4.0, 1e-3)
@@ -106,7 +126,13 @@ class Pictures:
     ``report``'s levels those where they are heard): whether the sources are heard
     through a house's window (``airborne``), what to say of each listener's house
     (``about``), the rumble of its floors and walls (``rumble_a_db``), and how hard the
-    ground or a house's floor shakes at each listener (``vibration_vdb``)."""
+    ground or a house's floor shakes at each listener (``vibration_vdb``).
+    ``room``, the scene's :class:`~acoustic_spaces.room.Room`: outdoors, the stills
+    draw its ground, its weather and the view from the side
+    (:mod:`~acoustic_spaces.demos.outdoor_pictures`), but those named in ``hide``
+    (:data:`HIDDEN`). Indoors they give the room's reverberation time and, where
+    something other than speech plays, its clarity C80, by ISO 3382-1; outdoors,
+    where those say nothing of a room, neither."""
 
     def __init__(
         self,
@@ -124,8 +150,20 @@ class Pictures:
         movement: dict | None = None,
         indoors: dict | None = None,
         variants: Mapping[str, tuple[str, dict]] | None = None,
+        room=None,
+        hide: Sequence[str] = (),
     ):
         self.scene, self.report, self.seats, self.stops = scene, report, seats, list(stops)
+        self.hide = set(hide)
+        self.outdoors = None
+        #: The view from the side drawn last: what it showed, its caption and its pixels.
+        self._side = None
+        if room is not None and room.outdoor is not None:
+            from acoustic_spaces.demos.outdoor_pictures import Outdoors
+
+            self.outdoors = Outdoors(room)
+        #: Whether the scene is a room (no ground), where ISO 3382-1's parameters hold.
+        self.indoor = "ground" not in (scene.get("geometry") or {})
         # The mixes of a listener in still air (audience.still): its name, its results.
         self.where = {key: listener for key, (listener, _) in (variants or {}).items()}
         #: how many listeners the stops are at (a listener heard twice, as in the
@@ -143,7 +181,7 @@ class Pictures:
         self.outline = np.asarray(outline, dtype=float).reshape(-1, 2, 2)
         # A source whose sound does not reach the listener (None) is left out. A mix in
         # still air takes its listener's numbers in its own results.
-        self.levels, self.sti, self.t30 = {}, {}, {}
+        self.levels, self.sti, self.t30, self.c80 = {}, {}, {}, {}
         own = {e["listener"]: e["listener"] for e in report["responses"]}
         for results, named in [
             (report, own),
@@ -158,6 +196,7 @@ class Pictures:
                     self.levels[at] = e["spl_a_db"]
                 self.sti[at] = (e.get("speech") or {}).get("sti")
                 self.t30[at] = _mid(e.get("parameters", {}).get("t30", []), bands)
+                self.c80[at] = _mid(e.get("parameters", {}).get("c80", []), bands)
         points = [self.outline.reshape(-1, 2)] if len(self.outline) else []
         points.append(np.array([s["position"][:2] for s in self.sources], dtype=float))
         points.append(np.array([lis["position"][:2] for lis in self.listeners.values()]))
@@ -234,15 +273,22 @@ class Pictures:
         ``t``, the trajectories dotted and every mover where it is then. ``current`` is
         the mix of the moment: a listener's, or its in still air."""
         key, current = current, self.where.get(current, current)
+        sources = [self.placed("sources", s, t) for s in self.sources]
+        listeners = {name: self.placed("listeners", lis, t) for name, lis in self.listeners.items()}
+        if self.outdoors is not None and "ground" not in self.hide:
+            self.outdoors.ground(img, plan)
         draw = ImageDraw.Draw(img)
         for (xa, ya), (xb, yb) in self.outline:
             draw.line([plan(xa, ya), plan(xb, yb)], fill=LINE, width=2)
+        if self.outdoors is not None and "wind" not in self.hide:
+            clear = [s["position"][:2] for s in sources]
+            clear += [lis["position"][:2] for lis in listeners.values()]
+            self.outdoors.wind(img, plan, key in self.where, clear)
+            draw = ImageDraw.Draw(img)
         if t is not None:
             self.draw_paths(draw, plan)
         r = self.marker(plan)
         label = font("Regular", 16)
-        sources = [self.placed("sources", s, t) for s in self.sources]
-        listeners = {name: self.placed("listeners", lis, t) for name, lis in self.listeners.items()}
         if current is not None and current in listeners:
             playing = {s["name"] for s in self.playing}
             rays(
@@ -332,6 +378,18 @@ class Pictures:
         values = [v for v in values if v is not None]
         return sum(values) / len(values) if values else None
 
+    def c80_at(self, listener: str) -> float | None:
+        """The clarity C80 (dB, ISO 3382-1) at ``listener`` of the playing sources that
+        are not talkers, their mean; None where only speech plays (whose clarity the STI
+        gives) or none has one."""
+        values = [
+            self.c80.get((s["name"], listener))
+            for s in self.playing
+            if s.get("spectrum", "flat") == "flat"
+        ]
+        values = [v for v in values if v is not None]
+        return sum(values) / len(values) if values else None
+
     def nearest(self, listener: str, t: float | None = None) -> tuple[str, float] | None:
         """The playing source nearest the listener, and how far it is (m), at ``t``."""
         at = self.placed("listeners", self.listeners[self.where.get(listener, listener)], t)
@@ -363,10 +421,13 @@ class Pictures:
         lag = seat["arrival_s"] if "arrival_s" in seat else seat.get("lag_s")
         if lag is not None:
             lines.append(f"The sound arrives {lag * 1e3:.0f} ms after it leaves")
-        t30 = self.t30_at(stop.key)
+        t30 = self.t30_at(stop.key) if self.indoor else None
+        where = " where the trajectories start" if seat.get("moves") else ""
         if t30 is not None:
-            where = " where the trajectories start" if seat.get("moves") else ""
             lines.append(f"Reverberation time T30 {t30:.1f} s{where} (mean of 500 Hz and 1 kHz)")
+        c80 = self.c80_at(stop.key) if self.indoor else None
+        if c80 is not None:
+            lines.append(f"Clarity C80 {c80:+.1f} dB{where} (mean of 500 Hz and 1 kHz)")
         near = self.nearest(stop.key, t)
         if near is not None:
             lines.append(f"Nearest playing: {near[0].replace('_', ' ')}, {near[1]:.1f} m away")
@@ -418,8 +479,16 @@ class Pictures:
             else f"{len(self.playing)} of {counted(len(self.sources), 'source')} playing"
         )
         heading(draw, f"{name}, simulated", f"{playing}, heard at {counted(self.places, 'place')}")
-        plan = self.plan(*PLAN_BOX)
+        side = self.outdoors is not None and "side" not in self.hide
+        if side:
+            left, top, width, _height = PLAN_BOX
+            plan = self.plan(left, top, width, PLAN_OVER_SIDE)
+            plan = Plan(plan.left, top, plan.s, self.box)
+        else:
+            plan = self.plan(*PLAN_BOX)
         self.draw_scene(img, plan, stop.key, t)
+        if side:
+            self.draw_side(img, plan, stop.key, t)
         draw = ImageDraw.Draw(img)
         x = 1010
         if self.fmt == "binaural":
@@ -430,6 +499,57 @@ class Pictures:
         tour_column(draw, x, y + 22, entries, k, row=28)
         footer(draw, self.credit, self.tool)
         return img
+
+    def side_source(self, key: str, t: float | None = None) -> dict | None:
+        """The playing source the view from the side goes through at the mix ``key``: the
+        one heard loudest there, as simulated (the nearest, where none is heard); where
+        it is at ``t``."""
+        if not self.playing:
+            return None
+        levels = self.levels_of(key, t)
+        heard = [s for s in self.playing if s["name"] in levels]
+        if heard:
+            source = max(heard, key=lambda s: levels[s["name"]])
+        else:
+            near = self.nearest(key, t)
+            source = next(s for s in self.playing if s["name"] == near[0])
+        return self.placed("sources", source, t)
+
+    def draw_side(self, img: Image.Image, plan: Plan, key: str, t: float | None = None) -> None:
+        """Under the plan, the view from the side through the source heard loudest at
+        the mix ``key`` and its listener (:meth:`Outdoors.side`), with its caption."""
+        name = self.where.get(key, key)
+        source = self.side_source(key, t)
+        if source is None or name not in self.listeners:
+            return
+        listener = self.placed("listeners", self.listeners[name], t)
+        others = [
+            self.placed("listeners", lis, t)
+            for other, lis in self.listeners.items()
+            if other != name and lis.get("enabled", True) is not False
+        ]
+        left, _top, width, _height = PLAN_BOX
+        caption_y = plan.top + plan.size[1] + 22
+        top = caption_y + 34
+        box = (left, top, width, SIDE_BOTTOM - top)
+        # A moving picture draws it again only where what it shows has moved (to a
+        # centimetre): the frames of a listener standing still with sources that stand.
+        where = tuple(
+            tuple(round(float(v), 2) for v in item["position"])
+            for item in (source, listener, *others)
+        )
+        cache = (key, source["name"], where, box)
+        area = (int(left) - 40, int(top) - 8, int(left + width) + 40, int(SIDE_BOTTOM) + 16)
+        if self._side is not None and self._side[0] == cache:
+            said = self._side[1]
+            img.paste(self._side[2], area[:2])
+        else:
+            said = self.outdoors.side(img, box, source, listener, others, still=key in self.where)
+            self._side = (cache, said, img.crop(area))
+        draw = ImageDraw.Draw(img)
+        words = f"From the side, {source['name'].replace('_', ' ')} to you ({said})"
+        lines, f = wrapped_line(draw, words, width)
+        text(draw, (left, caption_y), lines, f, MUTED)
 
     def stop_at(self, t: float) -> tuple[int, float]:
         """The stop playing at ``t`` (s of the tour), and the moment of its mix then (s,
@@ -483,4 +603,13 @@ class Pictures:
         return img
 
 
-__all__ = ["MID_BANDS", "PLAN_BOX", "Pictures", "counted", "nice_length", "wrapped"]
+__all__ = [
+    "HIDDEN",
+    "MID_BANDS",
+    "PLAN_BOX",
+    "Pictures",
+    "counted",
+    "nice_length",
+    "wrapped",
+    "wrapped_line",
+]

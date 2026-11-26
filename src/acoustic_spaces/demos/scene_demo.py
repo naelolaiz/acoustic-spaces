@@ -206,6 +206,19 @@ def _scene_at(path: str, _changed: int) -> Scene | None:
         return None
 
 
+def hidden(args: argparse.Namespace) -> list[str]:
+    """What ``--hide`` leaves out of the stills, by name."""
+    given = getattr(args, "hide", None) or ""
+    return [part.strip() for part in str(given).split(",") if part.strip()]
+
+
+def scene_pictures_hidden() -> tuple[str, ...]:
+    """What the stills can leave out (``--hide``)."""
+    from acoustic_spaces.demos.scene_pictures import HIDDEN
+
+    return HIDDEN
+
+
 def _current(scene: str | Path | None) -> Scene | None:
     if not scene or not Path(scene).exists():
         return None
@@ -705,6 +718,9 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
             length_of_stop(last)
         except ValueError as exc:
             return f"--last-stop: {exc}: give phrases (2), seconds (12s) or end"
+    unknown = [part for part in hidden(args) if part not in scene_pictures_hidden()]
+    if unknown:
+        return f"--hide {unknown[0]}: give one or more of {', '.join(scene_pictures_hidden())}"
     resolved = demo.resolved(args)
     path = Path(resolved.scene)
     if not path.exists():
@@ -1548,7 +1564,8 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         variants = {
             f"{name}.{STILL}": (name, pipeline.read_json(still)) for name in still_stops(args)
         }
-    outline = outline_edges(Room.from_scene(scene))[0]
+    room = Room.from_scene(scene)
+    outline = outline_edges(room)[0]
     drawing = scene_pictures.Pictures(
         data,
         outline,
@@ -1563,6 +1580,8 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         movement=seats.get("movement"),
         indoors=None if indoors is None else indoors.pictures(),
         variants=variants,
+        room=room,
+        hide=hidden(args),
     )
     pictures.save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     if moving:
@@ -1751,6 +1770,22 @@ DEMO = Demo(
             None,
             steps=("video",),
             named="never",
+        ),
+        Option(
+            "hide",
+            "what the stills of an outdoor scene leave out, comma-separated: side, the view "
+            "from the side through the source heard loudest and you, with the sound's rays; "
+            "wind, the wind and the weather zones from above; ground, the ground's materials "
+            "and what stands on it, from above (default: none, they show it all)",
+            None,
+            steps=("video",),
+            unset="nothing",
+            moot=lambda args: (
+                "the scene is a room"
+                if (found := _current(getattr(args, "scene", None))) is not None
+                and found.geometry.ground is None
+                else None
+            ),
         ),
         Option(
             "bpm",

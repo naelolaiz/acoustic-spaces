@@ -465,7 +465,8 @@ def demo(script: Path, example: str = "street") -> Demo:
                 indoors.choices(NOUN),
                 steps=("render", "video"),
             ),
-            shared["listeners"],
+            # --tour, its earlier name here, as before This scene took it for its tour.
+            dataclasses.replace(shared["listeners"], aliases=("--tour",)),
             *sources_options(help=SOURCES_HELP, steps=("render", "video")),
             shared["credit"],
             Option(

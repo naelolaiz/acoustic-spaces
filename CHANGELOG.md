@@ -33,6 +33,11 @@
   work but `--scene`, `--still`, `--results` and `--still-results` (the scenes and
   results go to the work folder). `--recording` takes a file of yours, and
   `--last-stop` sets how long a tour's last stop lasts.
+- Added: the stills of the demo of any scene draw an outdoor scene's ground by its
+  materials and its wind, and under the plan the view from the side with the rays the
+  simulation finds to the listener (`--hide` leaves them out); indoors they add the
+  clarity C80 where something other than speech plays, and outdoors leave out T30
+  and C80 (ISO 3382-1).
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

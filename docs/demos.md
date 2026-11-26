@@ -293,11 +293,28 @@ acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
   drawn from its own model, with its sources (those that play in colour, with a ray to
   the listener), the listeners and the one of the moment as a head, and beside it the
   A-weighted level there of the sources that play, as simulated, when their sound
-  arrives, the reverberation time T30 at mid frequencies (the mean of the 500 Hz and 1
-  kHz bands), the nearest source that plays and, where a talker plays, the STI of the
+  arrives, the nearest source that plays and, where a talker plays, the STI of the
   speech of the one loudest there (IEC 60268-16), rated as ISO 9921 rates it (bad below
   0.30, poor, fair, good, excellent from 0.75); it counts the scene's background noise
   (coverage `noise_db`) but not the other sources that play, which the still then says.
+  In a room they give its reverberation time T30 and, where something other than speech
+  plays, its clarity C80, each the mean of the 500 Hz and 1 kHz bands (ISO 3382-1);
+  outdoors, where those say nothing of a room, neither. Outdoors the plan draws the
+  ground by its materials (water, soft and hard ground), the buildings, barriers and
+  plants on it, and the wind of each of the atmosphere's weathers, its zones dashed and
+  labelled with their wind 10 m up and their temperature; under it, the view from the
+  side through the source heard loudest and the listener, across the whole ground, its
+  heights stretched as the caption says. There the bold lines are the eigenrays the
+  simulation finds from that source to the listener over the open ground, in the
+  profile it takes along that way (the weathers' mean, each weighted by its length);
+  the faint ones a ray every degree from the source, each bending in the weather it is
+  over at each step and fading at each bounce by what the ground there does not reflect
+  at 1 kHz (its plane-wave reflection factor, or its absorption coefficient); masts
+  show the wind's component along the plane in each weather, and the air is tinted
+  blue where a weather is cooler at the ground. In still air the rays are the direct
+  sound and its reflection off the ground. Over a terrain the view draws its profile
+  and the line of sight. `--hide side,wind,ground` leaves the view from the side, the
+  wind or the ground's colours out.
   `--credit` puts a line about the recordings on the stills (who made them, their
   licence); without it the line gives the free recording's credit, when one plays, and
   says which source plays which other file.
@@ -759,8 +776,10 @@ simulation) run as the ones that took them over.
   to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.66 s
   at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
 - **The pictures** are the demo of any scene's: the lake from above with the
-  loudspeakers, the places and the listener of the moment, and beside it what is heard
-  there, in still air or in the scene's own weather.
+  loudspeakers, the places, the listener of the moment and the three weathers' wind,
+  and under it the view from the side, from the loudspeaker heard loudest there to the
+  listener: the simulation's own rays bending down over the water to the far shore, up
+  behind the stage, straight in still air; beside it what is heard there.
 
 **Limits.** The arrays are a generic box's pattern, not a product's measured one; there
 is no crowd, no wind noise and no other sound of the evening. The

@@ -144,6 +144,10 @@ msgid "Last stop"
 msgstr "Ultima fermata"
 
 #: acoustic_spaces/demos/__init__.py
+msgid "Leave out"
+msgstr "Ometti"
+
+#: acoustic_spaces/demos/__init__.py
 msgid "Downloads folder"
 msgstr "Cartella dei download"
 
