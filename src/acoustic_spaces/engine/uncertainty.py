@@ -263,10 +263,11 @@ EDGE_ERRORS_DB = {
     },
     # Where a path's point on an edge reaches the edge's end, with direct: a thin
     # screen's edges fade out past their free ends, within 0.10 dB of BTM at a screen's
-    # corner, but the edges of a solid block stop at its corners, as the UTD has no terms
-    # for the corners of edges.
+    # right-angled corner and 0.17 dB at corners of 45 to 170 degrees, but the edges of a
+    # solid block stop at its corners, as the UTD has no terms for the corners of edges.
+    # Measured as a simulation has it, with the terms that make paths fade at edges.
     "corners of edges": {
-        "pressure": (2.29, 1.50, 1.62, 1.89, 1.44, 0.89, 0.58, 0.50),
+        "pressure": (3.88, 2.95, 1.62, 1.89, 1.44, 0.89, 0.58, 0.50),
         "energy": (_NOT,) * 8,
     },
     # The solver for whole rows, where a response has its path: against a wave

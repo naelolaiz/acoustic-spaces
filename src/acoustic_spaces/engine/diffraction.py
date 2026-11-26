@@ -14,7 +14,13 @@ sound, or its reflection off either face of the edge. Where that wave arrives, i
 are added to it coherently, frequency by frequency, which changes its energy per band; on
 the far side of its boundary, where the edge cuts the wave off, the terms make a new path.
 At the boundary itself both sides carry a quarter of the wave's energy, so levels stay
-continuous where the direct sound or a reflection disappears behind an edge.
+continuous where the direct sound or a reflection disappears behind an edge. Where the
+wave is missed on the lit side or found on the dark side, the edge diffraction leaves
+the term out (near an end of the edge that fades it counts it either way,
+:func:`near_fading_end`): the terms that make specular paths fade at edges, which a simulation
+adds, count it for the paths they follow (:mod:`~acoustic_spaces.engine.edge_fade`), as
+past the lower edge of a free-standing screen, where the direct sound is found over its
+top.
 
 In the bands where the paths add in energy, each specular path interferes with the
 terms of its own wave only, as it adds to the other paths in energy: each term counts in
@@ -1858,7 +1864,11 @@ class EdgeDiffraction:
         # specular path, if it was found. A term counts on the lit side of its boundary
         # when the path is there, and on the dark side when it is not; where the two
         # disagree (the path is blocked by something else, lies beyond the highest
-        # order, or passes round the end of the edge) the term is left out.
+        # order, or passes round the end of the edge) the term is not counted here. The
+        # terms that make specular paths fade at edges, which a simulation adds
+        # (:mod:`~acoustic_spaces.engine.edge_fade`), have it where the path is found or
+        # an edge just cuts it off: past the lower edge of a free-standing screen, with
+        # the direct sound found over its top, the incident wave's term at that edge.
         found, images, orders, front, sequences = self._specular(listener, paths, c)
         phi_r = c["phi_r"]
         angle = boundary_angles(n, phi_r, c["phi_s"])
@@ -3463,10 +3473,20 @@ def diffract(
     mode: str = "first_order",
     edges: Edges | None = None,
     coherent: int = 0,
+    candidates: list[np.ndarray] | None = None,
 ) -> EarlyReflections:
     """``paths`` from one source to one listener with the sound diffracted at the
-    model's edges added; see :class:`EdgeDiffraction`."""
-    return EdgeDiffraction(
+    model's edges added; see :class:`EdgeDiffraction`. With ``candidates``, the plane
+    sequences the early stage tested for ``paths`` (as
+    :func:`~acoustic_spaces.engine.early.find_paths` takes them), also the terms at the
+    edges of every specular path, found or just missed, as a simulation adds them
+    (:class:`~acoustic_spaces.engine.edge_fade.EdgeFade`). Without them this is the
+    edge diffraction alone, which leaves to those terms the ones of waves found on the
+    dark side of their boundary or missed on its lit side: past the lower edge of a
+    free-standing screen, with the direct sound found over its top, the incident wave's
+    term at that edge, so that the level steps by a few dB at low frequencies where the
+    listener crosses the line of sight over the top."""
+    diffraction = EdgeDiffraction(
         model,
         source,
         speed_of_sound=speed_of_sound,
@@ -3476,7 +3496,14 @@ def diffract(
         mode=mode,
         edges=edges,
         coherent=coherent,
-    ).apply(listener, paths, max_delay_s)
+    )
+    bent = diffraction.apply(listener, paths, max_delay_s)
+    if candidates is None:
+        return bent
+    from acoustic_spaces.engine.edge_fade import EdgeFade  # it builds on this module
+
+    fade = EdgeFade(diffraction, candidates)
+    return fade.join(bent, fade.terms(listener, paths, max_delay_s, bent))
 
 
 __all__ = [

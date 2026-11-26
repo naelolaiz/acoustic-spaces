@@ -30,6 +30,10 @@ half-plane, which is exact far from the edge, and the engine against it:
 - two thin screens in a row, second order;
 - a thin strip, second order: the source and the listener in its shadow on either
   side, the paths over both its edges along each of its faces, against BTM;
+- a thin strip standing free, 1, 2 and 4 m high: the listener crosses the line of sight
+  over its top, where the direct sound is found over the top past its foot, against
+  BTM over both edges and over both along each face; the engine with each mode, and
+  the edge diffraction alone;
 - a thin screen, a right-angled corner and a wedge open over 225 degrees, first order,
   with the listener on the shadow boundary and 10.5 degrees into the shadow: the whole
   early stage (``early_paths``) with every band added in energy and as by default,
@@ -60,18 +64,24 @@ half-plane, which is exact far from the edge, and the engine against it:
   listener crosses the plane of a block's top;
 - the cost of the early stage with each mode, in a hall with alcoves.
 
-Every comparison is of the energy in each octave band, averaged over the engine's eight
-frequencies in the band (BTM's at a shadow boundary over 96), relative to the direct
-sound in free field over the same distance. The engine's levels are given twice: with
-its paths and the terms of their coefficients added in energy, and in the 63 and 125 Hz
+The engine's levels are a simulation's with the scene's settings and the diffraction
+mode each check names (``early_paths`` where named): the specular paths, the edge
+diffraction and the terms that make paths fade at edges. Every comparison is of the
+energy in each octave band, averaged over the engine's eight frequencies in the band
+(BTM's at a shadow boundary, past a screen's corners of other angles and at the line
+of sight over a free strip over 96), relative to the direct sound in free field over
+the same distance. Where a check says so, the engine's levels are given twice: with its
+paths and the terms of their coefficients added in energy, and in the 63 and 125 Hz
 bands in pressure, as the engine adds them there by default
-(``simulation.early.coherent_max_band_hz``). BTM takes the engine's speed of sound in
-the scenes' air, at 20 °C.
+(``simulation.early.coherent_max_band_hz``); the walks past corners and over a free
+strip have every band in pressure. BTM takes the engine's speed of sound in the
+scenes' air, at 20 °C.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import math
 import tempfile
@@ -85,7 +95,7 @@ from acoustic_spaces.air import speed_of_sound
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
 from acoustic_spaces.engine.coherent import total_energy
-from acoustic_spaces.engine.diffraction import EdgeDiffraction, band_frequencies, find_edges
+from acoustic_spaces.engine.diffraction import band_frequencies, diffract, find_edges
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
@@ -277,22 +287,65 @@ def barrier_quads(width: float, run: float = 0) -> list:
     ]
 
 
-def engine(room: Room, mode: str, model: TraceModel | None = None, edges=None, coherent: int = 0):
+def engine(
+    room: Room,
+    mode: str,
+    model: TraceModel | None = None,
+    edges=None,
+    coherent: int = 0,
+    fade: bool = True,
+):
     """The engine's paths from the room's source to its listener, with their total
     level per band in dB re the direct sound in free field; in the lowest ``coherent``
-    bands the paths and the terms of their coefficients add in pressure."""
+    bands the paths and the terms of their coefficients add in pressure. As a
+    simulation has them with the scene's early-stage settings and diffraction in
+    ``mode``, without the air: the specular paths of the sequences of reflections it
+    tests (by default those its rays find, with the planes of the edges' faces), the
+    edge diffraction and the terms that make paths fade at edges. Without ``fade``, the
+    direct sound and the edge diffraction alone."""
     model = TraceModel.from_room(room) if model is None else model
     source = np.array(room.scene.sources[0].position)
     receiver = np.array(room.scene.listeners[0].position)
     air = np.zeros(len(OCTAVE_BANDS_HZ))
     c = room.speed_of_sound()
+    candidates = []
+    if fade:
+        early = room.scene.simulation.early
+        simulate = importlib.import_module("acoustic_spaces.engine.simulate")
+        candidates = simulate._candidates(
+            model,
+            source,
+            early.method,
+            early.max_order,
+            early.rays,
+            room.scene.simulation.performance.threads,
+            simulate._Edges(model),
+            mode,
+        )
     paths = early_stage.find_paths(
-        model, source, receiver, [], speed_of_sound=c, air=air, max_delay_s=0.5, coherent=coherent
+        model,
+        source,
+        receiver,
+        candidates,
+        speed_of_sound=c,
+        air=air,
+        max_delay_s=0.5,
+        coherent=coherent,
     )
     if mode != "none":
-        paths = EdgeDiffraction(
-            model, source, speed_of_sound=c, air=air, mode=mode, edges=edges, coherent=coherent
-        ).apply(receiver, paths, 0.5)
+        paths = diffract(
+            model,
+            source,
+            receiver,
+            paths,
+            speed_of_sound=c,
+            air=air,
+            max_delay_s=0.5,
+            mode=mode,
+            edges=edges,
+            coherent=coherent,
+            candidates=candidates if fade else None,
+        )
     squared = float(np.sum((receiver - source) ** 2))
     with np.errstate(divide="ignore"):
         level = 10.0 * np.log10(total_energy(paths) * 4.0 * np.pi * squared)
@@ -374,7 +427,8 @@ def _cross_y(source, receiver) -> float:
 
 
 def _double_path(paths) -> tuple[np.ndarray, np.ndarray]:
-    """The points on the two edges of the one path over two edges."""
+    """The points on the two edges of the one path over two edges (of the edge
+    diffraction alone: products of the fade's terms run over two edges too)."""
     double = [p for p in paths.points if len(p) == 4]
     assert len(double) == 1, f"{len(double)} paths over two edges"
     return double[0][1], double[0][2]
@@ -411,9 +465,9 @@ def second_order(folder: Path) -> list[dict]:
     for name, quads, e1, e2, half, source, receiver in cases:
         source, receiver = np.array(source), np.array(receiver)
         room = _room(folder, "second", quads, source, receiver)
-        paths, level = engine(room, "second_order")
+        _, level = engine(room, "second_order")
         _, pressure = engine(room, "second_order", coherent=COHERENT)
-        p1, p2 = _double_path(paths)
+        p1, p2 = _double_path(engine(room, "second_order", fade=False)[0])
         centres = (float((p1 - e1.origin) @ e1.direction), float((p2 - e2.origin) @ e2.direction))
         began = time.perf_counter()
         btm = btm_second(e1, e2, source, receiver, centres, half)
@@ -486,6 +540,68 @@ def thin_strip(folder: Path) -> list[dict]:
             simulation = {"early": {"diffraction": mode}}
             room = _room(folder, "strip", strip_quads(), source, receiver, simulation)
             row[f"{mode}_minus_btm_db"] = (whole_early_stage(room) - reference).tolist()
+        rows.append(row)
+    return rows
+
+
+#: The free-standing strips of :func:`strip_sight`: their height (m), and how far below
+#: the top the source stands 5 m before them, and so how far above it the line of sight
+#: over the top passes 5 m behind them.
+STRIP_SIGHT = ((1.0, 0.5), (2.0, 1.0), (4.0, 1.0))
+#: Where the listener stands behind them: how far above the line of sight (m).
+SIGHT_OFFSETS = (-0.3, -1e-4, 1e-4, 0.3)
+
+
+def strip_sight(folder: Path) -> list[dict]:
+    """A thin strip standing free (:func:`strip_quads`), 1, 2 and 4 m high
+    (:data:`STRIP_SIGHT`), the source 5 m before it and the listener 5 m past it round
+    the line of sight over its top (:data:`SIGHT_OFFSETS`): BTM over its top and its
+    foot and over both along each face, with the direct sound above the line, against
+    the engine (every band in pressure) with each mode, and with the edge diffraction
+    alone. Past the foot, where the direct sound is found over the top, the edge
+    diffraction leaves the foot's incident term to the terms that make paths fade at
+    edges: the step across the line, 0.2 mm, and the largest difference from BTM. BTM
+    is averaged over 96 frequencies in each band, as the engine lets each of its eight
+    stand for its slice of the band (at those eight BTM's level 0.3 m above the line
+    behind the strip 4 m high is 0.18 dB above its level at 32 in the 4 kHz band)."""
+    k = 2.0 * np.pi * band_frequencies(96)[0].ravel() / C
+    top = Edge([0, 0, 0], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
+    rows = []
+    for height, below in STRIP_SIGHT:
+        foot = Edge([0, 0, -height], [0, 1, 0], [0, 0, 1], [1, 0, 0], 2.0)
+        source = np.array([-5.0, 0.0, -below])
+        exact, found = [], {}
+        for offset in SIGHT_OFFSETS:
+            receiver = np.array([5.0, 0.0, below + offset])
+            distance = float(np.linalg.norm(receiver - source))
+            # Sampled finely: the top's terms are on their boundary.
+            pressure = btm_first(top, source, receiver, k, du=0.001)
+            pressure = pressure + btm_first(foot, source, receiver, k, du=0.001)
+            for e1, e2 in ((top, foot), (foot, top)):
+                pressure = pressure + 2.0 * btm_second(e1, e2, source, receiver, (0, 0), True, k)
+            if offset > 0.0:
+                pressure = pressure + np.exp(-1j * k * distance) / distance
+            exact.append(band_level(pressure, distance))
+            for mode in ("direct", "first_order", "second_order"):
+                simulation = {"early": {"diffraction": mode}}
+                room = _room(folder, "sight", strip_quads(height), source, receiver, simulation)
+                for fade in (True, False):
+                    level = engine(room, mode, coherent=8, fade=fade)[1]
+                    found.setdefault((mode, fade), []).append(level)
+        exact = np.array(exact)
+        row = {
+            "height": height,
+            "source": source.tolist(),
+            "receivers": [[5.0, 0.0, below + offset] for offset in SIGHT_OFFSETS],
+            "btm_db": exact.tolist(),
+            "btm_step_db": (exact[2] - exact[1]).tolist(),
+        }
+        for (mode, fade), levels in found.items():
+            levels = np.array(levels)
+            row[mode if fade else f"{mode}, the edge diffraction alone"] = {
+                "step_db": (levels[2] - levels[1]).tolist(),
+                "largest_difference_db": np.abs(levels - exact).max(axis=0).tolist(),
+            }
         rows.append(row)
     return rows
 
@@ -1211,6 +1327,16 @@ def main() -> None:
             print(f"| BTM without the paths over both | {_row(alone)} |")
             for mode in ("second_order", "first_order"):
                 print(f"| {mode} - BTM | {_row(row[f'{mode}_minus_btm_db'])} |")
+
+        results["strip_sight"] = strip_sight(folder)
+        print(f"\n| the line of sight over a free strip (dB) | {header} |\n{rule}")
+        for row in results["strip_sight"]:
+            print(f"| {row['height']:g} m high: BTM 0.1 mm above | {_row(row['btm_db'][2])} |")
+            print(f"| BTM's step across the line | {_row(row['btm_step_db'])} |")
+            for mode in ("direct", "first_order", "second_order"):
+                for key in (mode, f"{mode}, the edge diffraction alone"):
+                    print(f"| {key}: step | {_row(row[key]['step_db'])} |")
+                    print(f"| largest difference | {_row(row[key]['largest_difference_db'])} |")
 
         results["shadow_boundary"] = shadow_boundary(folder)
         print(f"\n| at a shadow boundary, level re free field (dB) | {header} |\n{rule}")

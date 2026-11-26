@@ -1716,8 +1716,10 @@ def test_a_way_through_the_corner_of_a_screen(tmp_path: Path) -> None:
 
 
 def _direct(tmp_path: Path, quads, source, listener) -> np.ndarray:
-    """The level of the direct sound and the paths over the edges of the rigid ``quads``
-    (``direct``), every band in pressure (dB re the direct sound in free field)."""
+    """The level a simulation gives past the rigid ``quads`` with ``direct``: the
+    specular paths, the paths over the edges and the terms that make paths fade at
+    edges (validation/edge_diffraction.py's engine), every band in pressure (dB re the
+    direct sound in free field)."""
     room = edge_diffraction._room(tmp_path, "direct", quads, source, listener)
     return edge_diffraction.engine(room, "direct", coherent=8)[1]
 
