@@ -182,6 +182,8 @@ LEVELS = (MATCHED, AS_SIMULATED)
 #: The folder of the scenes as the runs that change them play them
 #: (:func:`run_scene_file`), in the work folder.
 SCENES = "scenes"
+#: The folder of the work folder that keeps the sounds the sources' models make.
+MADE = "made"
 
 
 def work_of(args: argparse.Namespace) -> Path:
@@ -201,13 +203,19 @@ def feeds_folder(args: argparse.Namespace) -> Path:
     """Where a run's feeds go: ``feeds/<scene>`` in the work folder, or with the files
     ``--input`` gives the sources, ``feeds/<scene>_<what plays>``
     (:func:`~acoustic_spaces.demos.run_plays`), and for a recording of several pieces,
-    ``_<the piece>`` after it: what a run feeds hangs on nothing else, so that the runs
-    that play the same share them."""
+    ``_<the piece>`` after it; where a source's sound is made (:func:`made_of`), the
+    ``--speed`` and ``--rpm`` it is made at, when the run gives them: what a run feeds
+    hangs on nothing else, so that the runs that play the same share them."""
     plays = run_plays(args)
     scene = _run(args)
     piece = piece_of(args, scene) if scene is not None else None
     name = name_part(stem_of(args)) + (f"_{plays}" if plays else "")
-    return work_of(args) / "feeds" / (name + (f"_{name_part(piece)}" if piece else ""))
+    name += f"_{name_part(piece)}" if piece else ""
+    if scene is not None and made_of(args, scene):
+        for option in ("speed", "rpm"):
+            value = getattr(args, option, None)
+            name += f"_{option}-{float(value):g}" if value is not None else ""
+    return work_of(args) / "feeds" / name
 
 
 def stem_of(args: argparse.Namespace) -> str:
@@ -422,11 +430,13 @@ def run_listeners(args: argparse.Namespace) -> list[str]:
 
 def left_out(scene: Scene) -> list[Source]:
     """The sources the scene leaves out that a run could take in (:func:`taken_in`):
-    those with a signal or a channel, each off unless ``--sources`` names it."""
+    those with a signal, a channel or a model to make their sound, each off unless
+    ``--sources`` names it."""
     return [
         Source(source.name, source.group, False)
         for source in scene.sources
-        if not source.in_use and (source.signal is not None or source.channel is not None)
+        if not source.in_use
+        and (source.signal is not None or source.channel is not None or source.model is not None)
     ]
 
 
@@ -505,6 +515,13 @@ def _run(args: argparse.Namespace) -> Scene | None:
         return None if found is None else changed(args, found)
     except ValueError:
         return None
+
+
+def unread(args: argparse.Namespace) -> bool:
+    """Whether the scene as the run plays it cannot be read (:func:`_run`): an option
+    that hangs on what is in it is then not said to be moot, as :func:`problems` says
+    what is wrong with the scene."""
+    return _run(args) is None
 
 
 def talkers_of(args: argparse.Namespace) -> list[str]:
@@ -712,6 +729,7 @@ def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Played | Non
     inputs = getattr(args, "inputs", None) or {}
     recording = recording_of(scene, piece_of(args, scene))
     stems = stems_of(args, scene)
+    made = made_of(args, scene)
     out: dict[str, Played | None] = {}
     for source in scene.sources:
         if not source.in_use:
@@ -720,6 +738,8 @@ def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Played | Non
         if file is not None:
             channel = source.channel if source.channel in CHANNELS else None
             out[source.name] = (Path(file), channel)
+        elif source.name in made:
+            out[source.name] = (made[source.name][0], None)
         elif source.channel is None or recording is None:
             out[source.name] = None
         elif not source.stems:
@@ -733,6 +753,42 @@ def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Played | Non
             else:
                 out[source.name] = (recording, have)
     return out
+
+
+def made_of(args: argparse.Namespace, scene: Scene) -> dict[str, tuple[Path, Source]]:
+    """The sources in use of ``scene`` that play the sound their model makes (a source
+    with a model, and neither a signal, a channel nor a file from ``--input``), each with
+    the file that sound is kept in, in the work folder's ``made``
+    (:func:`~acoustic_spaces.demos.models.made_file`), and the source as the run plays
+    it (at ``--speed``, :func:`run_trajectories`)."""
+    from acoustic_spaces.demos import models
+
+    inputs = getattr(args, "inputs", None) or {}
+    wanted = [
+        s.name
+        for s in scene.sources
+        if s.in_use and s.model is not None and s.signal is None and s.channel is None
+    ]
+    wanted = [name for name in wanted if name not in inputs]
+    if not wanted:
+        return {}
+    run = {s.name: s for s in run_trajectories(args, scene).sources}
+    rate, warmth = int(scene.simulation.sample_rate), scene.air.temperature_c
+    rpm = getattr(args, "rpm", None)
+    folder = work_of(args) / MADE
+    return {
+        name: (models.made_file(folder, run[name], rate, warmth, rpm), run[name]) for name in wanted
+    }
+
+
+def engines_of(args: argparse.Namespace) -> list[str]:
+    """The road vehicles of the run that play the sound their model makes (whose engines
+    ``--rpm`` turns), by name."""
+    found = _run(args)
+    if found is None:
+        return []
+    made = made_of(args, found)
+    return [name for name, (_, source) in made.items() if source.model.method == "cnossos-eu"]
 
 
 def stems_played(played: Played | None) -> dict[str, float]:
@@ -770,7 +826,13 @@ def plays(args: argparse.Namespace) -> dict[str, str]:
     out = {}
     own = argparse.Namespace(**{**vars(args), "inputs": None})
     sources = {source.name: source for source in found.sources}
+    made = made_of(own, found)
     for name, played in signals_of(own, found).items():
+        if name in made:
+            from acoustic_spaces.demos.models import made_words
+
+            out[name] = made_words(made[name][1], getattr(args, "rpm", None))
+            continue
         if played is None:
             wanted = sources[name].stems if sources[name].signal is None else {}
             heard = recording_of(found)
@@ -1010,6 +1072,29 @@ def responses_of(args: argparse.Namespace, demo: Demo | None = None) -> list[dic
     return pipeline.responses_of(simulations(args)[0], args, run)
 
 
+def scene_error(exc: Exception) -> str:
+    """What is wrong with a scene that does not read, in words: each of a validation's
+    errors where it is (a source or a listener by its name) and what it says."""
+    from pydantic import ValidationError
+
+    if not isinstance(exc, ValidationError):
+        return str(exc)
+    parts = []
+    for error in exc.errors():
+        where = ".".join(str(part) for part in error["loc"])
+        given = error.get("input")
+        if (
+            len(error["loc"]) == 2
+            and error["loc"][0] in ("sources", "listeners")
+            and isinstance(given, dict)
+            and given.get("name")
+        ):
+            where = f"{str(error['loc'][0])[:-1]} {given['name']}"
+        text = error["msg"].removeprefix("Value error, ")
+        parts.append(f"{where}: {text}" if where else text)
+    return "; ".join(parts)
+
+
 def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     """A scene is needed, it must be there, and a source of it must play a WAV file
     that is there (its signal, or the one ``--input`` gives it); one of those
@@ -1038,7 +1123,7 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     try:
         scene = Scene.from_yaml(path)
     except Exception as exc:  # the scene's own message
-        return f"{path.name}: {exc}"
+        return f"{path.name}: {scene_error(exc)}"
     try:
         scene = changed(resolved, scene)
     except ValueError as exc:
@@ -1073,8 +1158,9 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
             f"those that play: {', '.join(signals)}"
         )
     downloaded = recordings.file_of(free, piece=piece_of(resolved, scene)) if free else None
+    made = made_of(resolved, scene)
     for name, (signal, _channel) in signals.items():
-        if signal == downloaded:  # the recording step downloads it
+        if signal == downloaded or name in made:  # the recording or the feeds step makes it
             continue
         if not signal.exists():
             return f"{name} plays {signal}, which is not there"
@@ -1089,6 +1175,19 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     except ValueError as exc:
         return f"--moving: {exc}"
     movers = [item for _kind, item in movers(moving)]
+    moved = {item.name for item in movers}
+    for source in scene.sources:
+        # A model gives a sound power as the source goes: it does not stand.
+        if source.name not in signals or source.model is None or source.name in moved:
+            continue
+        if chosen and source.name not in chosen:
+            continue
+        if not source.trajectory.enabled:
+            return (
+                f"{source.name}'s trajectory is off in {path.name}, but {source.model.needs}: "
+                "turn it on (Moving on its trajectory)"
+            )
+        return f"--moving leaves {source.name} standing, but {source.model.needs}: name it too"
     for item in movers:
         if item.trajectory.doppler and len(movers) > 1:
             return (
@@ -1319,11 +1418,18 @@ def feeds(args: argparse.Namespace, demo: Demo | None = None) -> None:
     read_in: dict[Path, tuple[np.ndarray, dict[bool, float]]] = {}
     entries = feed_entries(args, scene)
     stems: dict[str, np.ndarray] | None = None
+    made = made_of(args, scene)
     for name, played in signals_of(args, scene).items():
         if played is None:
             silent.append(name)
             continue
         signal, channel = played
+        if name in made and not signal.exists():
+            from acoustic_spaces.demos.models import made_sound
+
+            source = made[name][1]
+            x = made_sound(source, rate, scene.air.temperature_c, getattr(args, "rpm", None))
+            write(signal, x, rate)
         if not signal.exists():
             if free is not None and signal == recordings.file_of(free, piece=piece):
                 raise SystemExit(
@@ -1355,6 +1461,13 @@ def feeds(args: argparse.Namespace, demo: Demo | None = None) -> None:
         write(out / f"{name}.wav", y, rate)
         length = max(length, len(y))
         table[name] = entries[name] | {"length_s": len(y) / rate}
+        if name in made:  # it sounds along its pass alone: never played again
+            from acoustic_spaces.demos.models import made_credit, made_words
+
+            turning = getattr(args, "rpm", None)
+            table[name] |= {"made": True, "credit": made_credit(made[name][1], turning)}
+            print(f"{name:>20}: {made_words(made[name][1], turning)}")
+            continue
         which = "" if channel is None else f", {channel_words(channel)}"
         print(f"{name:>20}: {signal.name}{which} ({len(y) / rate:.1f} s)")
     if not table:
@@ -1537,6 +1650,89 @@ def speech_along(movement, scene: Scene, source, listener: str) -> list[float | 
     return out
 
 
+def lasting(x: np.ndarray, rate: float, seconds: float) -> np.ndarray:
+    """``x`` (samples, channels) with silence after it to last ``seconds``; as it is when
+    it lasts that long already."""
+    n = int(math.ceil(seconds * rate))
+    if len(x) >= n:
+        return x
+    return np.concatenate([x, np.zeros((n - len(x), *x.shape[1:]), dtype=x.dtype)])
+
+
+def passes_of(
+    movement, sounding: list, names: list[str], c: float, temperature_c: float
+) -> dict[str, dict]:
+    """The pass of the sources of ``sounding`` (scene sources) that move, at each listener
+    of ``names`` that stands, as a pass-by is measured: each place's level as with the
+    source standing there (quasi-static, its sound power through the place's response,
+    :meth:`~acoustic_spaces.engine.response.Response.levels_or_held`) at the time it is
+    heard there, over the moments of its trajectory (from when it sets off to its end),
+    the sources' energies added band by band at the first's times
+    (:func:`~acoustic_spaces.demos.passby.heard_together`); with those, the loudest
+    (L_Amax) and when, the sound exposure level (SEL), the equivalent level over the pass,
+    how close the first comes, and, where it moves with Doppler, how far the pitch of its
+    direct sound falls from its trajectory's first leg to its last
+    (:func:`~acoustic_spaces.demos.passby.pitch_change`); and, for each that has a model,
+    its speed and the sound power the model gives it, in air at ``temperature_c``
+    (:func:`~acoustic_spaces.demos.models.model_line`). None for a listener that moves."""
+    from types import SimpleNamespace
+
+    from acoustic_spaces.demos.models import model_line
+    from acoustic_spaces.demos.passby import heard_together, pitch_change
+    from acoustic_spaces.parameters import a_weighted
+    from acoustic_spaces.walkthrough import PassBy, knots
+
+    moving = [s for s in sounding if ("sources", s.name) in movement.copies]
+    if not moving:
+        return {}
+    times = np.asarray(movement.times, dtype=float)
+    listeners = {lis.name: lis for lis in movement.room.scene.listeners}
+    out: dict[str, dict] = {}
+    for name in names:
+        if ("listeners", name) in movement.copies or name not in listeners:
+            continue
+        passes = []
+        for source in moving:
+            path = knots(source)
+            start = float(source.trajectory.start_s)
+            ks = [k for k, t in enumerate(times) if start - 1e-9 <= t <= path.duration_s + 1e-9]
+            power = source.power_db("octave")
+            responses = [movement.result[movement.key(source.name, name, k)] for k in ks]
+            heard = times[ks] + np.array([r.direct_delay_s for r in responses])
+            levels = np.array([r.levels_or_held(power) for r in responses])
+            levels_a = np.array([a_weighted(row) for row in levels])
+            passes.append(PassBy(source.name, name, heard, levels, levels_a))
+        level = heard_together(passes)
+        first = moving[0]
+        path = knots(first)
+        at = np.asarray(listeners[name].position, dtype=float)
+        positions, _ = path.at(times)
+        distances = np.linalg.norm(positions - at, axis=1)
+        # Kept to four decimals, so that the stills' and the printouts' tenths are the
+        # values' own, not rounded twice.
+        entry = {
+            "heard_s": [round(float(t), 4) for t in level.times],
+            "levels_a_db": [round(float(v), 2) for v in level.levels_a],
+            "max_a_db": round(level.max_a, 4),
+            "max_s": round(level.max_time, 4),
+            "sel_a_db": round(level.exposure_a, 4),
+            "leq_a_db": round(level.equivalent_a, 4),
+            "closest_m": round(float(distances.min()), 4),
+        }
+        if first.trajectory.doppler:
+            # Its legs, those that go somewhere (not where it stands before it sets off).
+            keep = np.concatenate(
+                [[True], np.linalg.norm(np.diff(path.positions, axis=0), axis=1) > 1e-9]
+            )
+            legs = SimpleNamespace(positions=path.positions[keep], times=path.times[keep])
+            entry["pitch_semitones"] = round(pitch_change(legs, at, None, c), 4)
+        about = [model_line(s, temperature_c) for s in moving if s.model is not None]
+        if about:
+            entry["about"] = "\n".join(about)
+        out[name] = entry
+    return out
+
+
 def played_until(x: np.ndarray, rate: float, seconds: float) -> np.ndarray:
     """``x`` (samples, channels) at ``rate`` played again from its start, AGAIN_S after it
     ends, as many times as it takes to last ``seconds``, and cut there; as it is when it
@@ -1594,7 +1790,9 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     # (heard_for): a recording shorter than that plays again from its start.
     over = float(movement.times[-1])
     for name, (x, r) in list(feeds.items()):
-        if len(x) and len(x) < (over + FADE_OUT_S) * r:
+        if table["sources"][name].get("made"):  # a made sound: silent after its pass
+            feeds[name] = (lasting(x, r, over + FADE_OUT_S), r)
+        elif len(x) and len(x) < (over + FADE_OUT_S) * r:
             feeds[name] = (played_until(x, r, over + FADE_OUT_S), r)
             print(
                 f"{name} plays {len(x) / r:.1f} s, and what moves goes on for {over:.1f} s: "
@@ -1609,6 +1807,12 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     speech = {
         name: {s.name: speech_along(movement, scene, s, name) for s in talkers} for name in names
     }
+    passes = passes_of(movement, sounding, names, room.speed_of_sound(), scene.air.temperature_c)
+    for name, heard in passes.items():
+        print(
+            f"{name}: L_Amax {heard['max_a_db']:.1f} dB(A), SEL {heard['sel_a_db']:.1f} dB(A), "
+            f"closest {heard['closest_m']:.1f} m"
+        )
     peak = max(float(abs(mixes[name]).max(initial=0.0)) for name in names)
     gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
     weights = {s.name: s.sound_power_db for s in sounding}
@@ -1651,7 +1855,12 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
         "moving": moving,
         "trajectories": trajectories_of(args),
         "seats": info,
-        "movement": {"times": [float(t) for t in times], "levels_a_db": levels, "sti": speech},
+        "movement": {
+            "times": [float(t) for t in times],
+            "levels_a_db": levels,
+            "sti": speech,
+            "passes": passes,
+        },
     }
     pipeline.write_json(folder / pipeline.SEATS, seats)
     print(f"wrote {folder}: {len(names)} mixes, {places} places along the trajectories")
@@ -2130,6 +2339,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
             out=product(args, ".mp4"),
             stills=[(stop.key, stop.at + min(0.5, stop.length / 2)) for stop in stops],
             no_mp4=args.no_mp4,
+            chapters=drawing.chapters(),
             shown=drawing.shown_at,
         )
         return
@@ -2143,6 +2353,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         sound,
         out=product(args, ".mp4"),
         no_mp4=args.no_mp4,
+        chapters=drawing.chapters(),
         shown=drawing.shown,
     )
 
@@ -2156,17 +2367,21 @@ def played_signals(
     :func:`~acoustic_spaces.demos.audio.gated_rms` mixes it, over FEED_RMS squared (1
     where it plays at its sound power); where something moves (``movement``, the moving
     mixes' entry of seats.json), played again from its start as those mixes play it
-    (:func:`played_until`)."""
+    (:func:`played_until`), but a sound a model makes, silent after its pass
+    (:func:`lasting`)."""
     from acoustic_spaces.demos.scene_pictures import block_powers
 
     over = None if not movement else float(movement["times"][-1]) + FADE_OUT_S
+    table = feeds_table(args) if over is not None else {"sources": {}}
     out: dict[str, np.ndarray] = {}
     for name in names:
         path = feeds_folder(args) / f"{name}.wav"
         if not path.exists():
             continue
         x, rate = read(path)
-        if over is not None:
+        if over is not None and table["sources"].get(name, {}).get("made"):
+            x = lasting(x, rate, over)
+        elif over is not None:
             x = played_until(x, rate, over)
         out[name] = block_powers(mono(x), rate) / FEED_RMS**2
     return out
@@ -2195,14 +2410,19 @@ def plays_line(
 ) -> str:
     """What the sources ``names`` play (None: every one fed), for the stills when
     ``--credit`` says nothing: the credit the free recording's licence asks for, when
-    one of them plays it (its piece ``piece``, for one of several), and each other file
-    by source."""
+    one of them plays it (its piece ``piece``, for one of several), how each made sound
+    was made, and each other file by source."""
     kept = str(recordings.file_of(free, piece=piece)) if free is not None else None
     fed = {name: v for name, v in table["sources"].items() if names is None or name in names}
     parts = (
         [free.credit] if free is not None and any(v["signal"] == kept for v in fed.values()) else []
     )
-    others = [f"{name}: {Path(v['signal']).name}" for name, v in fed.items() if v["signal"] != kept]
+    parts += [v["credit"] for v in fed.values() if v.get("made")]
+    others = [
+        f"{name}: {Path(v['signal']).name}"
+        for name, v in fed.items()
+        if v["signal"] != kept and not v.get("made")
+    ]
     if others:
         parts.append("Playing " + ", ".join(others))
     return " · ".join(parts)
@@ -2263,7 +2483,7 @@ DEMO = Demo(
             named="plays",
             moot=lambda args: (
                 None
-                if recording_heard(args)
+                if unread(args) or recording_heard(args)
                 else "no source plays the scene's recording: give one a channel"
             ),
         ),
@@ -2388,7 +2608,9 @@ DEMO = Demo(
             steps=("simulate", "render", "video"),
             unset="as in the scene",
             aliases=("--voice",),
-            moot=lambda args: None if talkers_of(args) else "no source in use talks",
+            moot=lambda args: (
+                None if unread(args) or talkers_of(args) else "no source in use talks"
+            ),
         ),
         Option(
             "ir_length",
@@ -2488,13 +2710,15 @@ DEMO = Demo(
         Option(
             "speed",
             "the speed every trajectory that moves goes at in this run (km/h), along its "
-            "points, or through its keyframes' places in turn (default: as in the scene)",
+            "points, or through its keyframes' places in turn; a source whose model gives "
+            "its sound power at its speed (a road vehicle's) sounds as it does at that "
+            "speed (default: as in the scene)",
             None,
             "float",
-            steps=("render", "video"),
+            steps=("feeds", "render", "video"),
             unit="km/h",
             unset="as in the scene",
-            moot=lambda args: None if moving_of(args) else "nothing moves",
+            moot=lambda args: None if unread(args) or moving_of(args) else "nothing moves",
         ),
         Option(
             "step_m",
@@ -2507,7 +2731,21 @@ DEMO = Demo(
             steps=("render", "video"),
             unit="m",
             unset="each trajectory's own",
-            moot=lambda args: None if moving_of(args) else "nothing moves",
+            moot=lambda args: None if unread(args) or moving_of(args) else "nothing moves",
+        ),
+        Option(
+            "rpm",
+            "how fast the engine turns in the made sound of every road vehicle that plays "
+            "one (a source with a cnossos-eu model), revolutions a minute (default: each "
+            "vehicle's own, its model's rpm)",
+            None,
+            "float",
+            steps=("feeds", "render", "video"),
+            unit="rpm",
+            unset="each vehicle's own",
+            moot=lambda args: (
+                None if unread(args) or engines_of(args) else "no road vehicle plays a made sound"
+            ),
         ),
         Option(
             "work",

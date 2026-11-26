@@ -3171,6 +3171,38 @@ msgstr "een meersporenopname"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The standard method that gives the source's sound power in place of the one "
+"you give, and the sound a demo of the scene plays for it (model: in the "
+"scene file): a road vehicle's of CNOSSOS-EU, at the speed of its trajectory, "
+"in the scene's air"
+msgstr ""
+"De genormeerde methode die het geluidsvermogen van de bron geeft in plaats "
+"van het vermogen dat u opgeeft, en het geluid dat een demo van de scène "
+"ervoor speelt (model: in het scènebestand): dat van een wegvoertuig volgens "
+"CNOSSOS-EU, bij de snelheid van zijn traject, in de lucht van de scène"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "light motor vehicles"
+msgstr "lichte motorvoertuigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "medium heavy vehicles"
+msgstr "middelzware voertuigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "heavy vehicles"
+msgstr "zware voertuigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "mopeds"
+msgstr "bromfietsen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "motorcycles"
+msgstr "motorfietsen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The source's sound power level in all bands together (dB re 1 pW); Spectrum "
 "spreads it over the bands"
 msgstr ""
@@ -5136,6 +5168,15 @@ msgstr "de opname van de scène: {what}"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid ""
+"CNOSSOS-EU category {category} ({kind}); its made sound's engine: "
+"{cylinders} cylinders at {rpm} rpm"
+msgstr ""
+"CNOSSOS-EU categorie {category} ({kind}); de motor van zijn gemaakte geluid: "
+"{cylinders} cilinders bij {rpm} tpm"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "file: {name}"
 msgstr "bestand: {name}"
 
@@ -5621,6 +5662,12 @@ msgstr ""
 #, python-brace-format
 msgid "Directivity index: {values} dB (63 Hz to 8 kHz)"
 msgstr "Richtingsindex: {values} dB (63 Hz tot 8 kHz)"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the model, at the speed of the trajectory"
+msgstr "{tip}. Gegeven door het model, bij de snelheid van het traject"
 
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py
@@ -9593,8 +9640,9 @@ msgid ""
 "kHz. The meadow, the road and the yard are parts of the ground, each with "
 "its impedance; a reflection near where two meet takes some of each, as much "
 "as each covers of its Fresnel zone. A car at 50 km/h and a truck at 70 km/h "
-"drive along the road, their pitch falling as they pass (Doppler): they are "
-"left out of simulations until ticked, and passby_demo.py plays one."
+"drive along the road, their pitch falling as they pass (Doppler), each with "
+"CNOSSOS-EU's sound power for its kind and speed: they are left out of "
+"simulations until ticked, and a demo of the scene plays them."
 msgstr ""
 "Buiten: verkeer op een weg tussen een weiland en een verharde binnenplaats, "
 "gehoord op 7.5, 25 en 50 m boven het gras en op 25 m boven de binnenplaats. "
@@ -9605,9 +9653,10 @@ msgstr ""
 "delen van de grond, elk met een eigen impedantie; een reflectie dicht bij "
 "waar twee elkaar raken neemt van elk iets, zoveel als elk van haar "
 "fresnelzone bedekt. Een auto met 50 km/h en een vrachtwagen met 70 km/h "
-"rijden over de weg, hun toonhoogte daalt bij het passeren (Doppler): ze "
-"blijven buiten de simulaties tot ze aangevinkt worden, en passby_demo.py "
-"speelt er één."
+"rijden over de weg, hun toonhoogte daalt bij het passeren (Doppler), elk met "
+"het geluidsvermogen volgens CNOSSOS-EU voor zijn soort en snelheid: ze "
+"blijven buiten de simulaties tot ze aangevinkt worden, en een demo van de "
+"scène speelt ze af."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"

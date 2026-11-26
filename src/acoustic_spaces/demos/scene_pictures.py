@@ -14,6 +14,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from acoustic_spaces.demos.pictures import (
+    FAINT,
     LINE,
     LISTENER,
     MARGIN,
@@ -48,6 +49,18 @@ PLAN_BOX = (MARGIN, 172, 860, 640)
 #: height, and the side view's from under the plan's caption to SIDE_BOTTOM.
 PLAN_OVER_SIDE = 360
 SIDE_BOTTOM = 832
+#: Where a source passes the stop's listener, the plan and, under it, the graph of the
+#: level heard over the pass, in place of the view from the side: left, top, width,
+#: height.
+PASS_PLAN_BOX = (MARGIN, 172, 860, 470)
+GRAPH_BOX = (MARGIN + 64, 700, 796, 150)
+#: How far the graph reaches under its top (dB), and its grid (dB, s).
+RANGE_DB = 40.0
+GRID_DB = 10.0
+GRID_S = 2.0
+#: The least room (pixels) between the time axis's labels: where GRID_S would crowd
+#: them (a long pass, an aircraft's), they come every 5, 10, 20, 50... s instead.
+LABEL_GAP_PX = 60.0
 #: What a still can leave out (``--hide``): the view from the side, the wind and the
 #: weather zones, and the ground's materials with what stands on it, from above.
 HIDDEN = ("side", "wind", "ground")
@@ -95,6 +108,23 @@ def _mid(values: Sequence, bands: Sequence[float]) -> float | None:
     unless both bands have one."""
     picked = [v for v, f in zip(values, bands, strict=False) if f in MID_BANDS and v is not None]
     return sum(picked) / len(picked) if len(picked) == len(MID_BANDS) else None
+
+
+def time_step(span_s: float, width_px: float) -> float:
+    """How far apart (s) the time axis of a graph ``width_px`` wide over ``span_s`` labels
+    its seconds: :data:`GRID_S`, or the first of 5, 10, 20, 50... s that leaves
+    :data:`LABEL_GAP_PX` between labels."""
+    step, k = GRID_S, 0
+    while step * width_px / max(span_s, 1e-9) < LABEL_GAP_PX:
+        step = GRID_S * (2.5, 5.0, 10.0)[k % 3] * 10.0 ** (k // 3)
+        k += 1
+    return step
+
+
+def pass_levels(heard: dict) -> np.ndarray:
+    """The levels a pass (``heard``, a listener's) holds at its times (dB(A)), minus
+    infinity where nothing is heard (written null)."""
+    return np.asarray([-math.inf if v is None else v for v in heard["levels_a_db"]], dtype=float)
 
 
 def counted(n: int, word: str) -> str:
@@ -328,6 +358,10 @@ class Pictures:
         self.moments = np.asarray((movement or {}).get("times", [0.0]), dtype=float)
         self.along = (movement or {}).get("levels_a_db", {})
         self.sti_along = (movement or {}).get("sti", {})
+        #: Where sources move past a listener that stands, the pass heard there, by
+        #: listener (:func:`~acoustic_spaces.demos.scene_demo.passes_of`).
+        self.passes = (movement or {}).get("passes", {}) or {}
+        self.span = max((v["heard_s"][-1] for v in self.passes.values()), default=0.0) + 0.5
         self.credit, self.tool, self.fmt = credit, tool, fmt
         self.indoors = dict(indoors or {})
         self.sources = [s for s in scene["sources"] if s.get("enabled", True) is not False]
@@ -538,6 +572,11 @@ class Pictures:
         where nothing moves). A source whose sound does not reach the listener (None)
         adds nothing, and None when nothing of them is heard."""
         values: list[float | None] = list(self.levels_of(listener, t, k).values())
+        if t is not None and listener in self.passes:  # the pass's, as it is heard then
+            moving = {name for kind, name in self.paths if kind == "sources"}
+            others = self.levels_of(listener, t, k)
+            values = [v for name, v in others.items() if name not in moving]
+            values.append(self.heard_at(listener, t))
         rumble = self.indoors.get("rumble_a_db", {}).get(listener)
         if listener in self.indoors.get("about", {}) and not self.indoors.get("airborne", True):
             values = []  # in the house, the rumble alone
@@ -613,8 +652,19 @@ class Pictures:
         if section is not None:
             lines.append(section)
         level = self.level_at(stop.key, t, k)
+        heard = self.passes.get(stop.key)
         if level is not None:
-            lines.append(f"{level:.0f} dB(A) here, as simulated")
+            lines.append(f"{level:.0f} dB(A) here{' now' if heard else ''}, as simulated")
+        if heard is not None:
+            lines += [
+                f"Loudest {heard['max_a_db']:.1f} dB(A) (L_Amax), {heard['max_s']:.1f} s in",
+                f"Sound exposure level {heard['sel_a_db']:.1f} dB(A) (SEL)",
+                f"Closest {heard['closest_m']:.1f} m away",
+            ]
+            if "pitch_semitones" in heard:
+                lines.append(
+                    f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)"
+                )
         speech = (
             None if stop.key in self.indoors.get("about", {}) else self.speech_at(stop.key, t, k)
         )
@@ -635,7 +685,7 @@ class Pictures:
         c80 = self.c80_at(stop.key, k) if self.indoor else None
         if c80 is not None:
             lines.append(f"Clarity C80 {c80:+.1f} dB{where} (mean of 500 Hz and 1 kHz)")
-        near = self.nearest(stop.key, t, k)
+        near = None if heard is not None else self.nearest(stop.key, t, k)
         if near is not None:
             lines.append(f"Nearest playing: {near[0].replace('_', ' ')}, {near[1]:.1f} m away")
         shaking = self.indoors.get("vibration_vdb", {}).get(stop.key)
@@ -654,6 +704,8 @@ class Pictures:
             lines.append(("In the scene's own wind and weather", MUTED))
         if about is not None:
             lines += [(line, MUTED) for line in about.split("\n")]
+        if heard is not None and "about" in heard:
+            lines += [(line, MUTED) for line in heard["about"].split("\n")]
         if t is not None and self.paths:
             walking = ", ".join(name.replace("_", " ") for _kind, name in self.paths)
             lines.append((f"Moving along their trajectories: {walking}", MUTED))
@@ -678,6 +730,18 @@ class Pictures:
             name = f"{name}, in still air"
         return name, f"Stop {k} of {len(names)}" if self.where else f"Listener {k} of {len(names)}"
 
+    def chapters(self) -> list[str]:
+        """The video's chapters: when each stop starts (m:ss), what plays then of a
+        recording in parts, and the stop's listener, as the tour on the stills names it."""
+        from acoustic_spaces.demos.audio import mmss
+
+        out = []
+        for stop in self.stops:
+            title = self.title(stop.key)[0]
+            section = self.section_at(stop.start)
+            out.append(f"{mmss(stop.at)} " + (f"{section} · {title}" if section else title))
+        return out
+
     # -- the pictures ------------------------------------------------------------------
 
     def still(self, k: int, t: float | None = None) -> Image.Image:
@@ -693,8 +757,11 @@ class Pictures:
             else f"{len(self.playing)} of {counted(len(self.sources), 'source')} playing"
         )
         heading(draw, f"{name}, simulated", f"{playing}, heard at {counted(self.places, 'place')}")
-        side = self.outdoors is not None and "side" not in self.hide
-        if side:
+        passing = stop.key in self.passes
+        side = self.outdoors is not None and "side" not in self.hide and not passing
+        if passing:
+            plan = self.plan(*PASS_PLAN_BOX)
+        elif side:
             left, top, width, _height = PLAN_BOX
             plan = self.plan(left, top, width, PLAN_OVER_SIDE)
             plan = Plan(plan.left, top, plan.s, self.box)
@@ -704,6 +771,8 @@ class Pictures:
         if side:
             self.draw_side(img, plan, stop.key, t, k)
         draw = ImageDraw.Draw(img)
+        if passing:
+            self.graph(draw, stop.key, t)
         x = 1010
         if self.fmt == "binaural":
             badge(draw, x, 172)
@@ -713,6 +782,76 @@ class Pictures:
         tour_column(draw, x, y + 22, entries, k, row=28)
         footer(draw, self.credit, self.tool)
         return img
+
+    def heard_at(self, listener: str, t: float) -> float | None:
+        """The A-weighted level of the pass heard at ``listener`` at ``t`` (s of the
+        trajectories), as simulated; None before its sound arrives and after its last
+        place's, and while nothing of it is heard."""
+        heard = self.passes[listener]
+        times = heard["heard_s"]
+        if not times[0] <= t <= times[-1]:
+            return None
+        levels = pass_levels(heard)
+        k = int(np.searchsorted(times, t, side="right"))
+        if not np.all(np.isfinite(levels[max(k - 1, 0) : k + 1])):
+            return None
+        return float(np.interp(t, times, levels))
+
+    def graph(self, draw, listener: str, t: float | None, box=GRAPH_BOX) -> None:
+        """The level of the pass heard at ``listener``, as simulated: what has passed
+        bright, what is to come faint, the loudest moment marked and, at ``t``, where the
+        pass is."""
+        left, top, width, height = box
+        heard = self.passes[listener]
+        times = np.asarray(heard["heard_s"], dtype=float)
+        levels = pass_levels(heard)
+        ceiling = GRID_DB * math.ceil((heard["max_a_db"] + 2.0) / GRID_DB)
+        floor = ceiling - RANGE_DB
+
+        def at(time: float, level: float) -> tuple[float, float]:
+            share = (ceiling - min(max(level, floor), ceiling)) / RANGE_DB
+            return left + width * time / self.span, top + height * share
+
+        small = font("Regular", 16)
+        text(
+            draw,
+            (left - 64, top - 34),
+            "Level heard here, dB(A), as simulated",
+            font("Medium", 18),
+            MUTED,
+        )
+        level = floor
+        while level <= ceiling + 1e-9:
+            y = at(0.0, level)[1]
+            draw.line([(left, y), (left + width, y)], fill=LINE, width=1)
+            text(draw, (left - 10, y), f"{level:.0f}", small, FAINT, "rm")
+            level += GRID_DB
+        step = time_step(self.span, width)
+        for j in range(int(self.span / step + 1e-9) + 1):
+            x = at(j * step, floor)[0]
+            text(draw, (x, top + height + 8), f"{j * step:.0f} s", small, FAINT, "ma")
+        points = [at(a, b) for a, b in zip(times, levels, strict=True)]
+        if t is None:
+            draw.line(points, fill=LISTENER, width=3)
+        else:
+            split = int(np.searchsorted(times, t))
+            if split < len(points):
+                draw.line(points[max(split - 1, 0) :], fill=FAINT, width=2)
+            if split > 0:
+                now = self.heard_at(listener, t)
+                past = points[:split] + ([at(t, now)] if now is not None else [])
+                if len(past) > 1:
+                    draw.line(past, fill=LISTENER, width=3)
+        x, y = at(heard["max_s"], heard["max_a_db"])
+        draw.ellipse([x - 5, y - 5, x + 5, y + 5], fill=SOURCE)
+        text(draw, (x + 10, y - 4), f"L_Amax {heard['max_a_db']:.1f}", small, SOURCE, "ld")
+        if t is not None:
+            x = at(min(t, self.span), floor)[0]
+            draw.line([(x, top), (x, top + height)], fill=TEXT, width=1)
+            now = self.heard_at(listener, t)
+            if now is not None:
+                x, y = at(t, now)
+                draw.ellipse([x - 6, y - 6, x + 6, y + 6], fill=LISTENER)
 
     def side_source(self, key: str, t: float | None = None, k: int | None = None) -> dict | None:
         """The source the view from the side goes through at the mix ``key``, of those

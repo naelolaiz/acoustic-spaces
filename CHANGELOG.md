@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added: a source's `model`, its sound power by a method in place of `level_db`:
+  CNOSSOS-EU's road vehicles by category, at the speed of the source's trajectory in the
+  scene's air (**Model** on its page in the editor). The demo of any scene makes such a
+  vehicle's sound (tyres and an engine, `--rpm`), gives its passes on the stills
+  (L_Amax, SEL, how close, the Doppler fall), and writes its videos' chapters.
+- Changed: the roadside's `passby_demo.py` is the demo of its scene, the car and the
+  truck the scene's sources with a model; its options and steps before 4.4.0 still
+  work (`--vehicle` as `--sources`), and its runs are named as the demo of any scene's
+  (`passby_binaural`).
 - Changed: a source's or listener's `walk` is its `trajectory`, in the scene file, the
   editor (**Moving**, and **Trajectories** in Run demo) and the API (`simulate_trajectory`,
   `render_trajectory`, `trajectory_points`, `animate_trajectory`, `walkthrough --mover`);
@@ -102,8 +111,8 @@
   what plays or how it sounds, and `--format`, take several values (`--vehicle
   departure,arrival`, `--speed 50,80`), each value a run of its own played after a title
   card, in the order `--series` sets; `--sources` picks the sources a demo plays, by
-  name or group (all but the airport's flight, the helicopter flyover and the roadside
-  demo, which play one vehicle, `--vehicle` picking which where there are several),
+  name or group (all but the airport's flight and the helicopter flyover, which play
+  one vehicle, `--vehicle` picking which where there are several),
   and `--sources-play in-turn` plays them one after another; `--series listeners`
   gives each listener a part. In Run demo, **Several…** turns a choice into a list to
   tick and drag, the sources' tree says what each plays and takes your WAV, and the

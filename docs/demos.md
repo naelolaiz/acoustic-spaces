@@ -95,11 +95,10 @@ mono), and with `listeners` in it makes each listener a part of its own (otherwi
 tour of each part visits them); the run's name then says the order (`series-format-vehicle`).
 `--hrtf` with no binaural part is refused, as for one run.
 
-**The sources a run plays.** Every demo but the airport's flight, the helicopter
-flyover and the roadside demo lists the sources it can play, in the groups its scene
-gives them, and plays its own pick of them by default; those three play one source
-each, the vehicle (`--vehicle` picks which, where there are several), and take no
-`--sources`. Elsewhere `--sources` names others, by name or by group, comma separated:
+**The sources a run plays.** Every demo but the airport's flight and the helicopter
+flyover lists the sources it can play, in the groups its scene gives them, and plays
+its own pick of them by default; those two play one source each, the vehicle
+(`--vehicle` picks which, where there are several), and take no `--sources`. Elsewhere `--sources` names others, by name or by group, comma separated:
 `--sources PA` plays every source of the groups under `PA` (`PA/Mains`,
 `PA/Fills`...), `--sources PA,Band` those of both. `--sources-play together` (the
 default) plays them in one mix; `--sources-play in-turn` plays each name given (a group
@@ -431,6 +430,22 @@ from place to place ([moving sources and
 Doppler](spatial-audio.md#moving-sources-and-doppler)), all from the one simulation of
 the moving run, as the editor's **Render movement…** plays it. With other trajectories
 on as well, the demo says to leave them standing.
+
+**Vehicles with a model.** A source whose sound power a [model](scenes.md#sources-and-directivity)
+gives (a road vehicle of CNOSSOS-EU) plays, without a `signal` or a `channel` of its own,
+a sound made to that power at the speed of its trajectory: tyre noise and the firing of
+its engine (`--rpm` turns every such engine faster or slower), silent until it sets off,
+faded in and out over the first and last second of its pass and silent after it
+(as in [vehicles passing by](#vehicles-passing-by), **their sound**). A run at another
+`--speed` or `--rpm` makes its sounds again, into feeds of its own. Such a vehicle does
+not stand: the demo refuses a run whose trajectory for it is off (in the scene, or by
+`--moving`). Where a source moves past a listener who stands, the stills give the pass
+as a pass-by is measured, each place's level as if the source stood there at the time it
+is heard: the level at that moment, the loudest (L_Amax) and when, the sound exposure
+level (SEL), how close it comes and how far the pitch of its direct sound falls, with
+the level over the pass drawn under the plan; and, for a vehicle with a model, its
+speed and sound power. In **Run demo** the Trajectories box ticks what the run takes in
+(`--sources`), and says how each mover goes in the run, at `--speed` too.
 
 Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds in
 `feeds/`, the scene as a run changes it in `scenes/`, the results in
@@ -966,6 +981,14 @@ another (`--recording`).
 
 `passby_demo.py` comes with two outdoor examples, `roadside` and `street`: a vehicle
 drives past and each listener hears one pass in turn, its pitch falling as it goes by.
+In the roadside it is [the demo of its scene](#a-demo-of-any-scene) with the car taken
+in: the car and the truck have a CNOSSOS-EU `model` in the scene, and that demo makes
+their sound and gives their passes (**vehicles with a model**). The script's command
+lines still work there: `--vehicle truck` reads as `--sources truck`, `--vehicle
+car,truck` plays each in a part of its own, `--from` as `--scene`, and its `sound`,
+`scene` and `walk` steps run as `feeds`, `simulate` and `render`; its runs are named as
+that demo names them (`demo/passby_binaural`, `demo/passby_truck_binaural`), and what
+follows of the demo's own scene (`scene_demo.yaml`) and of `--siren` is the street's.
 The video follows the vehicle on the plan, with the level heard over the pass drawn
 under it. `--vehicle` picks what goes past: in the roadside a passenger car (`car`) or
 an articulated truck (`truck`), in the street the car (with `car_horn`, its horn, when

@@ -125,12 +125,15 @@ def test_room_surfaces_and_materials(tmp_path: Path) -> None:
 
     talker = nodes_named(doc)["talker"]
     np.testing.assert_allclose(talker["translation"], gltf([2.0, 3.0, 1.5]))
+    # Its sound power per band, as its normal voice gives it: about 78 dB in all.
+    voice = room.scene.sources[0].level_db
     assert talker["extras"] == {
         "kind": "source",
         "directivity": "omni",
         "directivity_index_db": [0.0] * 8,
-        "level_db": 78.0,
+        "level_db": voice,
     }
+    assert 10.0 * np.log10(np.sum(10.0 ** (np.asarray(voice) / 10.0))) == pytest.approx(78, abs=0.5)
     assert "children" not in talker  # no aim for an omnidirectional source
     seat = nodes_named(doc)["seat-a"]
     np.testing.assert_allclose(seat["translation"], [6.0, 1.2, -3.0])

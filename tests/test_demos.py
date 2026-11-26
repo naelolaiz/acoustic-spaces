@@ -2456,6 +2456,7 @@ def test_a_multitrack_recording_is_built_and_its_stems_play_as_they_are(
     the run picks (--sources, --listeners, the tour) are taken in, the scene so changed
     simulated, as it is with --ir-length; the stills say what plays in the part of the
     music a stop starts in."""
+    pytest.importorskip("PIL")
     import dataclasses
     import types
 

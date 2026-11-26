@@ -3187,6 +3187,38 @@ msgstr "una registrazione multitraccia"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The standard method that gives the source's sound power in place of the one "
+"you give, and the sound a demo of the scene plays for it (model: in the "
+"scene file): a road vehicle's of CNOSSOS-EU, at the speed of its trajectory, "
+"in the scene's air"
+msgstr ""
+"Il metodo normato che dà la potenza sonora della sorgente al posto di quella "
+"che indicate, e il suono che una demo della scena le fa suonare (model: nel "
+"file della scena): quella di un veicolo stradale di CNOSSOS-EU, alla "
+"velocità della sua traiettoria, nell'aria della scena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "light motor vehicles"
+msgstr "veicoli leggeri"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "medium heavy vehicles"
+msgstr "veicoli pesanti medi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "heavy vehicles"
+msgstr "veicoli pesanti"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "mopeds"
+msgstr "ciclomotori"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "motorcycles"
+msgstr "motocicli"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The source's sound power level in all bands together (dB re 1 pW); Spectrum "
 "spreads it over the bands"
 msgstr ""
@@ -5149,6 +5181,15 @@ msgstr "la registrazione della scena: {what}"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid ""
+"CNOSSOS-EU category {category} ({kind}); its made sound's engine: "
+"{cylinders} cylinders at {rpm} rpm"
+msgstr ""
+"CNOSSOS-EU categoria {category} ({kind}); il motore del suo suono costruito: "
+"{cylinders} cilindri a {rpm} giri/min"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "file: {name}"
 msgstr "file: {name}"
 
@@ -5636,6 +5677,12 @@ msgstr ""
 #, python-brace-format
 msgid "Directivity index: {values} dB (63 Hz to 8 kHz)"
 msgstr "Indice di direttività: {values} dB (da 63 Hz a 8 kHz)"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the model, at the speed of the trajectory"
+msgstr "{tip}. La dà il modello, alla velocità della traiettoria"
 
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py
@@ -9631,8 +9678,9 @@ msgid ""
 "kHz. The meadow, the road and the yard are parts of the ground, each with "
 "its impedance; a reflection near where two meet takes some of each, as much "
 "as each covers of its Fresnel zone. A car at 50 km/h and a truck at 70 km/h "
-"drive along the road, their pitch falling as they pass (Doppler): they are "
-"left out of simulations until ticked, and passby_demo.py plays one."
+"drive along the road, their pitch falling as they pass (Doppler), each with "
+"CNOSSOS-EU's sound power for its kind and speed: they are left out of "
+"simulations until ticked, and a demo of the scene plays them."
 msgstr ""
 "All'aperto: traffico su una strada tra un prato e un cortile pavimentato, "
 "ascoltato a 7.5, 25 e 50 m di distanza sull'erba e a 25 m sul cortile. Su un "
@@ -9644,8 +9692,9 @@ msgstr ""
 "riflessione vicino al punto in cui due si incontrano prende un po' di "
 "ciascuna, tanto quanto ognuna copre della sua zona di Fresnel. Un'auto a 50 "
 "km/h e un camion a 70 km/h percorrono la strada e la loro altezza scende al "
-"passaggio (Doppler): restano fuori dalle simulazioni finché non vengono "
-"spuntati, e passby_demo.py ne riproduce uno."
+"passaggio (Doppler), ciascuno con la potenza sonora di CNOSSOS-EU per il suo "
+"tipo e la sua velocità: restano fuori dalle simulazioni finché non vengono "
+"spuntati, e una demo della scena li riproduce."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"

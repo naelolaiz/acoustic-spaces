@@ -17,7 +17,15 @@ from conftest import skip_without_extra
 from acoustic_spaces import recordings
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
-from acoustic_spaces.demos import PATH_KINDS, demo_for, list_demos, load, pipeline, scene_demo
+from acoustic_spaces.demos import (
+    PATH_KINDS,
+    audio,
+    demo_for,
+    list_demos,
+    load,
+    pipeline,
+    scene_demo,
+)
 from acoustic_spaces.engine import simulate
 from acoustic_spaces.examples import (
     GROUPS,
@@ -1527,6 +1535,54 @@ def test_the_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path) -> None
     assert fed[0].check(fed[1]) == "--input main_left: no such source plays here; it has subs"
 
 
+def test_the_passby_demo_is_a_preset_of_the_demo_of_its_scene(tmp_path: Path) -> None:
+    """passby_demo.py is the demo of the roadside's scene with its car taken in, the
+    vehicles each in a part of their own: each command line of the script it was reads
+    as the demo of any scene's (the vehicle as the sources that play, the example's
+    scene as the scene, --speed, --rpm and --input as they were), its steps run as
+    those that took them over, and --rpm says it is moot where no sound is made."""
+    from acoustic_spaces.demos import run_folder
+    from acoustic_spaces.demos.scene_demo import DEMO
+
+    road = _script("roadside", "passby_demo").DEMO
+    assert (road.name, road.example, road.title) == (
+        "passby",
+        "roadside",
+        "A car or a truck passing the meadow",
+    )
+    parser = road.parser()
+    read = {
+        ("all", "--vehicle", "truck"): {"sources": "truck"},
+        ("all", "--vehicle", "car,truck"): {"sources": "car,truck"},
+        ("all", "--from", "other.yaml"): {"scene": "other.yaml"},
+        ("all", "--speed", "50,100"): {"speed": (50.0, 100.0)},
+        ("all", "--rpm", "3000"): {"rpm": 3000.0},
+        ("all", "--input", "car=pass.wav"): {"inputs": {"car": Path("pass.wav")}},
+    }
+    for argv, given in read.items():
+        args = parser.parse_args(list(argv))
+        assert {name: getattr(args, name) for name in given} == given, argv
+    for old, new in {"sound": "feeds", "scene": "simulate", "walk": "render"}.items():
+        assert road.step(old).name == new
+    args = parser.parse_args(["all"])
+    assert (args.sources, args.sources_play) == ("car", "in-turn") and road.check(args) is None
+    assert run_folder(road.resolved(args)).name == "passby_binaural"
+    general = DEMO.at(EXAMPLES / "roadside").parser()
+    same = general.parse_args(["all", "--scene", "scene.yaml", "--sources", "car"])
+    assert run_folder(DEMO.at(EXAMPLES / "roadside").resolved(same)).name == ("scene_car_binaural")
+    assert road.command("all", args) == "python passby_demo.py all"
+    truck = parser.parse_args(["all", "--vehicle", "truck"])
+    assert road.command("all", truck) == "python passby_demo.py all --sources truck"
+    # A recording of the car's: no sound is made, so no engine turns.
+    wav = tmp_path / "pass.wav"
+    audio.write(wav, np.zeros((1600, 1)), 16_000)
+    taken = parser.parse_args(["all", "--input", f"car={wav}"])
+    assert road.check(taken) is None
+    assert road.check(parser.parse_args(["all", "--input", f"car={wav}", "--rpm", "3000"])) == (
+        "no road vehicle plays a made sound"
+    )
+
+
 def test_the_gallery_walk_is_a_preset_of_the_demo_of_its_scene() -> None:
     """walk_demo.py is the demo of the gallery's scene with the walker and the one turning
     alone: each command line of the script it was reads as the demo of any scene's (the
@@ -1702,7 +1758,7 @@ def test_the_talkers_speak_at_normal_effort(name: str) -> None:
 
 def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
     """The tours' --listeners help says a --tour given keeps its own order; the demos
-    with no --sources (one vehicle each) are the three the docs and the changelog name."""
+    with no --sources (one vehicle each) are the two the docs and the changelog name."""
     demos = {demo.name: demo for demo in list_demos()}
     kept = "a --tour given keeps its own order, this option leaving out the others"
     for name in ("stadium", "crossing", "orchestra", "church", "lakeside", "walk"):
@@ -1712,25 +1768,19 @@ def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
         for demo in list_demos()
         if "sources" not in {option.name for option in demo.options}
     )
-    assert without == [
-        ("airport", "flight"),
-        ("helicopter_flyover", "flyover"),
-        ("roadside", "passby"),
-    ]
+    assert without == [("airport", "flight"), ("helicopter_flyover", "flyover")]
     root = EXAMPLES.parent
     if not (root / "docs" / "demos.md").is_file():
         pytest.skip("the docs are in the source checkout only")
     docs = " ".join((root / "docs" / "demos.md").read_text(encoding="utf-8").split())
     assert (
-        "Every demo but the airport's flight, the helicopter flyover and the roadside demo "
-        "lists the sources it can play"
+        "Every demo but the airport's flight and the helicopter flyover lists the sources it "
+        "can play"
     ) in docs
     assert "the `--listeners` (or no `--listeners`, every listener's mixes serving any " in docs
     assert "choice of them) and the `--sources` this one gets." in docs
     changelog = " ".join((root / "CHANGELOG.md").read_text(encoding="utf-8").split())
-    assert "(all but the airport's flight, the helicopter flyover and the roadside demo," in (
-        changelog
-    )
+    assert "(all but the airport's flight and the helicopter flyover, which play one" in (changelog)
 
 
 def test_the_title_card_is_the_one_before_each_part() -> None:

@@ -1012,13 +1012,20 @@ class SourcesField(QWidget):
     def set_sources(self, sources: list[Source]) -> None:
         """The rows: ``sources``, in their groups, ticked as picked before; the demo's own
         pick where what was picked names none of them (another vehicle's sources, or
-        none)."""
+        none). The same sources in the same groups keep their rows: a tick that takes a
+        source in or leaves it out changes what the demo picks, while the tick is still
+        being made on its row."""
         sources = list(sources)
         if sources == self.sources:
             return
+        rows = {(source.name, source.group) for source in self.sources}
+        same = bool(rows) and rows == {(source.name, source.group) for source in sources}
         self.sources = sources
         if self.names_none_of(sources):
             self.picked = None
+        if same:
+            self._show_ticks()
+            return
         self._build_tree()
 
     def _build_tree(self) -> None:
@@ -1502,7 +1509,7 @@ def trajectory_text(item) -> str:
         ).format(count=count, length=path.length_m, time=path.duration_s)
     else:
         text = _("At {speed:g} m/s ({kmh:.1f} km/h), {length:.1f} m in {time:.1f} s").format(
-            speed=trajectory.speed_m_s,
+            speed=round(trajectory.speed_m_s, 2),
             kmh=3.6 * trajectory.speed_m_s,
             length=path.length_m,
             time=path.duration_s,
@@ -1512,12 +1519,13 @@ def trajectory_text(item) -> str:
 
 class TrajectoriesBox(QGroupBox):
     """What moves in a run: a row for each source and listener of the scene with a trajectory,
-    ticked when it moves; one left out of the scene's simulations shows only when it is
-    ticked (the pass-by demos' vehicle, which they put in the scenes they write). With
+    ticked when it moves; one left out of the scene's simulations shows only when the run
+    takes it in (:attr:`run`: a source its ``--sources`` picks) or it is ticked (the
+    pass-by demos' vehicle, which they put in the scenes they write). With
     :meth:`set_mode` ``editable`` (a demo with a ``movers`` option, ``--moving``) the
-    ticks are the run's, starting as the scene's Moving sets them; otherwise they show
-    what the demo moves. Edit movement… asks for the Movement panel on the selected
-    mover (:attr:`edit`)."""
+    ticks are the run's, starting as the scene's Moving and the run's picks set them;
+    otherwise they show what the demo moves. Edit movement… asks for the Movement panel
+    on the selected mover (:attr:`edit`)."""
 
     #: A tick changed.
     changed = Signal()
@@ -1538,6 +1546,9 @@ class TrajectoriesBox(QGroupBox):
         self.movers = [(kind, item.name, item.trajectory.enabled) for kind, item in movers]
         #: Whether each mover is in the scene's simulations.
         self.used = [item.in_use for _kind, item in movers]
+        #: What the run moves without ``--moving``, those it takes in among them; None:
+        #: the scene's own movers.
+        self.run: list[str] | None = None
         self.editable = False
         layout = QVBoxLayout(self)
         # As tall as its contents, however tall the window is.
@@ -1581,6 +1592,8 @@ class TrajectoriesBox(QGroupBox):
             self.table.setItem(row, self.NAME, name)
             self.table.setItem(row, self.KIND, what)
             self.table.setItem(row, self.TRAJECTORY, trajectory)
+        #: How each mover goes in the scene, as the Trajectory column says it.
+        self.scene_texts = [trajectory_text(item) for _kind, item in movers]
         self.table.itemChanged.connect(self._ticked)
         layout.addWidget(self.table)
         row = QHBoxLayout()
@@ -1614,14 +1627,22 @@ class TrajectoriesBox(QGroupBox):
 
     @property
     def own(self) -> list[str]:
-        """The movers in use whose trajectory is on in the scene."""
+        """What the run moves without ``--moving``: :attr:`run`, or the movers in use
+        whose trajectory is on in the scene."""
+        if self.run is not None:
+            return list(self.run)
         pairs = zip(self.movers, self.used, strict=True)
         return [name for (_kind, name, on), used in pairs if on and used]
 
+    def in_run(self, row: int) -> bool:
+        """Whether the mover of ``row`` is in the run's simulations: in the scene's, or
+        taken in by the run (:attr:`run`)."""
+        return self.used[row] or (self.run is not None and self.movers[row][1] in self.run)
+
     @property
     def any_used(self) -> bool:
-        """Whether a mover is in the scene's simulations."""
-        return any(self.used)
+        """Whether a mover is in the run's simulations."""
+        return any(self.in_run(row) for row in range(len(self.movers)))
 
     def ticked(self) -> list[str]:
         return [
@@ -1640,7 +1661,7 @@ class TrajectoriesBox(QGroupBox):
         self._tick(ticked)
         rows_shown = []
         for row, (_kind, name, _on) in enumerate(self.movers):
-            hidden = name not in ticked and (alone or not self.used[row])
+            hidden = name not in ticked and (alone or not self.in_run(row))
             self.table.setRowHidden(row, hidden)
             if not self.table.isRowHidden(row):
                 rows_shown.append(row)
@@ -1665,6 +1686,16 @@ class TrajectoriesBox(QGroupBox):
         names = moving_names(value)
         self._tick(self.own if names is None else names)
         self.changed.emit()
+
+    def show_run(self, texts: dict[str, str]) -> None:
+        """The Trajectory column: how each mover goes in the run (``texts``, by name: at
+        its ``--speed``), or in the scene."""
+        self.table.blockSignals(True)
+        for row, (_kind, name, _on) in enumerate(self.movers):
+            text = texts.get(name, self.scene_texts[row])
+            self.table.item(row, self.TRAJECTORY).setText(text)
+            self.table.item(row, self.TRAJECTORY).setToolTip(text)
+        self.table.blockSignals(False)
 
     def _tick(self, names: list[str]) -> None:
         """Tick ``names``; the ticks can be clicked only when they are the run's."""
@@ -2373,6 +2404,13 @@ class DemoDialog(QDialog):
         names = None
         if option is None and demo.moving is not None:
             names = self._moving(demo, args)
+        elif option is not None and demo.moving is not None:
+            # What the run moves as the scene and its picks have it, without --moving.
+            unset = argparse.Namespace(**(vars(args) | {option.name: None}))
+            box.run = self._moving(demo, unset)
+        else:
+            box.run = None
+        box.show_run(self._trajectories(demo, args))
         if not box.any_used and not names:
             note = _(
                 "Nothing in this scene moves. Edit movement… gives a source or a listener a "
@@ -2411,6 +2449,29 @@ class DemoDialog(QDialog):
         except Exception:
             return []
         return out
+
+    @staticmethod
+    def _trajectories(demo: Demo, args: argparse.Namespace) -> dict[str, str]:
+        """How each mover goes in a run with ``args`` (:attr:`Demo.trajectories`: at its
+        ``--speed``), by name, in a few words (:func:`trajectory_text`), its parts'
+        ways apart where they differ; none when the demo cannot tell."""
+        if demo.trajectories is None:
+            return {}
+        out: dict[str, list[str]] = {}
+        try:
+            for part in demo.each(args):
+                scene = demo.trajectories(part)
+                for kind in ("listeners", "sources"):
+                    for item in getattr(scene, kind):
+                        if item.trajectory is None or not item.trajectory.enabled:
+                            continue
+                        texts = out.setdefault(item.name, [])
+                        text = trajectory_text(item)
+                        if text not in texts:
+                            texts.append(text)
+        except Exception:  # the line under the form says what is wrong
+            return {}
+        return {name: "; ".join(texts) for name, texts in out.items()}
 
     def _edit_movement(self, kind: str, name: str) -> None:
         self.edit_request = (kind, name)
@@ -2483,8 +2544,9 @@ class DemoDialog(QDialog):
                 moved = True
         if moved and self.isVisible():
             self._fit(self.width())
-        if demo.moving is not None and all(o.kind != "movers" for o in demo.options):
-            self._show_movement(demo, args)  # what it moves may follow an option (--vehicle)
+        if demo.moving is not None:
+            # What it moves may follow an option (--vehicle, --sources).
+            self._show_movement(demo, args)
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
         self.parts.setText(self._parts_text(demo, args))
         self.summary.setText(self._summary(demo, args) or "")

@@ -243,6 +243,19 @@ RECORDING_KINDS = {
     "speech": N_("speech"),
     "multitrack": N_("a multitrack recording"),
 }
+MODEL_TIP = N_(
+    "The standard method that gives the source's sound power in place of the one you give, "
+    "and the sound a demo of the scene plays for it (model: in the scene file): a road "
+    "vehicle's of CNOSSOS-EU, at the speed of its trajectory, in the scene's air"
+)
+#: CNOSSOS-EU's road vehicle categories, as a source's model names them.
+ROAD_CATEGORIES = {
+    "1": N_("light motor vehicles"),
+    "2": N_("medium heavy vehicles"),
+    "3": N_("heavy vehicles"),
+    "4a": N_("mopeds"),
+    "4b": N_("motorcycles"),
+}
 LEVEL_TIP = N_(
     "The source's sound power level in all bands together (dB re 1 pW); Spectrum spreads "
     "it over the bands"
@@ -3321,6 +3334,23 @@ def plays_text(scene, item) -> str:
     return _("the scene's recording: {what}").format(what=what)
 
 
+def model_text(model) -> str:
+    """A source's model (``model``) in words, on its page: none, or the method, the
+    vehicle's category and the engine of its made sound."""
+    if model is None:
+        return _("none")
+    kind = ROAD_CATEGORIES.get(model.category)
+    return _(
+        "CNOSSOS-EU category {category} ({kind}); its made sound's engine: {cylinders} "
+        "cylinders at {rpm} rpm"
+    ).format(
+        category=model.category,
+        kind=_(kind) if kind else model.category,
+        cylinders=model.cylinders,
+        rpm=f"{model.rpm:g}",
+    )
+
+
 def _fill(combo: QComboBox, choices) -> None:
     """Fill a list with (value, text) pairs: the text shows, translated, and the value
     is the item's data."""
@@ -3597,6 +3627,9 @@ class PointPage(Page):
             )
         )
         self.spectrum.activated.connect(self._spectrum)
+        self.model = QLabel()
+        self.model.setWordWrap(True)
+        self.model.setToolTip(_(MODEL_TIP))
         self.vocal_effort = QComboBox()
         _fill(self.vocal_effort, VOCAL_EFFORTS)
         self.vocal_effort.setToolTip(_(VOCAL_EFFORT_TIP))
@@ -3721,6 +3754,8 @@ class PointPage(Page):
             form.addRow(self.directivity_index)
             form.addRow(self.near_field)
             form.addRow(self.pattern)
+            form.addRow(_("Model"), self.model)
+            self._form.labelForField(self.model).setToolTip(_(MODEL_TIP))
             form.addRow(_("Sound power"), self.level)
             form.addRow(_("Spectrum"), self.spectrum)
             form.addRow(_("Vocal effort"), self.vocal_effort)
@@ -3829,11 +3864,16 @@ class PointPage(Page):
                 text = _("Directivity index: {values} dB (63 Hz to 8 kHz)").format(values=values)
             self.directivity_index.setText(text)
             talking = item.vocal_effort is not None
-            per_band = isinstance(item.level_db, list) and not talking
+            modelled = item.model is not None
+            per_band = isinstance(item.level_db, list) and not talking and not modelled
+            self.model.setText(model_text(item.model))
             self.level.setValue(item.sound_power_db)
-            self.level.setEnabled(not per_band and not talking)
+            self.level.setEnabled(not per_band and not talking and not modelled)
             tip = _(LEVEL_TIP)
-            if talking:
+            if modelled:
+                # Translators: {tip} is the sound power's tip.
+                tip = _("{tip}. Given by the model, at the speed of the trajectory").format(tip=tip)
+            elif talking:
                 # Translators: {tip} is the sound power's tip.
                 tip = _("{tip}. Given by the vocal effort").format(tip=tip)
             elif per_band:
@@ -3844,9 +3884,9 @@ class PointPage(Page):
             self.level.setToolTip(tip)
             self._form.labelForField(self.level).setToolTip(tip)
             _choose(self.spectrum, item.spectrum)
-            self.spectrum.setEnabled(not per_band)
+            self.spectrum.setEnabled(not per_band and not modelled)
             _choose(self.vocal_effort, item.vocal_effort)
-            self.vocal_effort.setEnabled(item.spectrum != "flat")
+            self.vocal_effort.setEnabled(item.spectrum != "flat" and not modelled)
             self.gain.setValue(item.gain_db)
             self.eq.setText("" if item.eq_db is None else numbers_text(item.eq_db))
             self.delay.setValue(item.delay_ms)

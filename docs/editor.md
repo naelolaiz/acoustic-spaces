@@ -144,8 +144,10 @@ The editor works on the same scene files as the command line.
   height and spacing), its directivity (a pattern, a SOFA or CSV file of measured data,
   or an array file, whose elements **Add up the array's elements one by one** sums near
   its listeners), its sound power per band, its **Spectrum** (flat, or male or female
-  speech), a talker's **Vocal effort** (which then gives the sound power) and the
-  **Gain**, **Equalizer** and **Delay** of its feed. It shows the directivity index per
+  speech), a talker's **Vocal effort** (which then gives the sound power), the
+  **Model** that gives a road vehicle's sound power (set in the scene file:
+  [sources](scenes.md#sources-and-directivity)) and the **Gain**, **Equalizer** and
+  **Delay** of its feed. It shows the directivity index per
   band, opens the polar patterns, and the selected source shows its balloon in the 3D
   view. **Plays** says what the source plays in a demo of the scene: **Choose WAV…**
   picks a dry recording, **Silent** takes it away, and without one it plays its

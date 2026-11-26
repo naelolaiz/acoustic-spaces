@@ -4636,18 +4636,19 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert walk.edit_request == ("listeners", "visitor")
     assert walk.result() == int(QDialog.DialogCode.Rejected)
     walk.deleteLater()
-    # The roadside's car and truck are left out of its simulations: the pass-by demo,
-    # which puts the one it drives in the scene it writes, shows that it moves it; This
-    # scene does not list them.
+    # The roadside's car and truck are left out of its simulations: its demo, the demo
+    # of its scene with the car taken in by default, shows that it moves it; This scene,
+    # taking in neither, shows nothing moving.
     road = DemoDialog(scene=example_path("roadside"))
     assert road.picker.currentData() == "passby"
     box = road.movement
     assert box.movers == [("sources", "car", True), ("sources", "truck", True)]
-    assert box.used == [False, False]
+    assert box.used == [False, False] and box.run == ["car"]
     assert box.ticked() == ["car"] and not box.table.isHidden()
+    assert not box.table.isRowHidden(0) and box.table.isRowHidden(1)  # the truck: not taken
     assert "a demo that moves it puts it in" in box.table.item(0, box.NAME).toolTip()
-    # Its speed: the walk's by default, in km/h, and the line under the form says how
-    # far, how fast and so how long the car drives.
+    # Its speed: the trajectory's by default, in km/h; the Trajectory column says how
+    # far, how fast and so how long the car drives in the run.
     speed = road.fields["speed"]
     assert isinstance(speed, NumbersField) and speed.edit.text() == ""
     assert speed.edit.placeholderText() == "as in the scene"
@@ -4655,43 +4656,43 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     def unit(name: str) -> str:
         return road.fields[name].findChild(QLabel).text()
 
+    def way(row: int = 0) -> str:
+        return box.table.item(row, box.TRAJECTORY).text()
+
     assert unit("speed") == "km/h" and unit("rpm") == "rpm" and unit("step_m") == "m"
-    assert road.fields["rpm"].edit.placeholderText() == "the vehicle's own"
-    assert road.fields["step_m"].edit.text() == "1" and road.fields["step_m"].value() == 1.0
-    assert road.summary.text().startswith(
-        "The car drives 150.0 m along its trajectory at 50.0 km/h (13.89 m/s, as its "
-        "trajectory in the scene goes): the pass, and the car's sound, last 10.8 s."
-    )
+    assert road.fields["rpm"].edit.placeholderText() == "each vehicle's own"
+    assert road.fields["step_m"].edit.placeholderText() == "each trajectory's own"
+    assert way() == "At 13.89 m/s (50.0 km/h), 150.0 m in 10.8 s, with Doppler"
     assert road.command.text() == "python passby_demo.py all"
     speed.edit.setText("100")
-    assert "at 100.0 km/h (27.78 m/s, --speed)" in road.summary.text()
-    assert "last 5.4 s" in road.summary.text()
+    assert way() == "At 27.78 m/s (100.0 km/h), 150.0 m in 5.4 s, with Doppler"
     assert road.command.text() == "python passby_demo.py all --speed 100.0"
-    # Several speeds, one pass after another in one video; the line says each, a line
-    # each, and what they share once.
+    # Several speeds, one pass after another in one video; the column says each.
     speed.edit.setText("50, 100")
     assert road.command.text() == "python passby_demo.py all --speed 50.0,100.0"
     assert speed.value() == (50.0, 100.0) and road.problem.text() == ""
-    first, second, shared = road.summary.text().split("\n")
-    assert "at 50.0 km/h" in first and "at 100.0 km/h" in second
-    assert shared.startswith("--speed drives it faster or slower") and "slower" not in first
+    assert way() == (
+        "At 13.89 m/s (50.0 km/h), 150.0 m in 10.8 s, with Doppler; "
+        "At 27.78 m/s (100.0 km/h), 150.0 m in 5.4 s, with Doppler"
+    )
     speed.edit.setText("fast")
     assert road.problem.text() == "Cannot run: --speed: a number, not 'fast'"
     speed.edit.setText("")
     assert road.command.text() == "python passby_demo.py all"
-    # The truck instead: its walk, its speed and its engine's tip.
-    vehicle = road.fields["vehicle"]
-    assert isinstance(vehicle, ChoicesField) and vehicle.value() == "car"
-    vehicle.pick("truck")
-    assert road.command.text() == "python passby_demo.py all --vehicle truck"
-    assert box.ticked() == ["truck"]
-    assert road.summary.text().startswith(
-        "The truck drives 150.0 m along its trajectory at 70.0 km/h (19.44 m/s, as its "
-        "trajectory in the scene goes): the pass, and the truck's sound, last 7.7 s."
-    )
-    assert "car 2000 (4 cylinders), truck 1200 (6 cylinders)" in road.fields["rpm"].edit.toolTip()
-    vehicle.pick("car")
-    assert road.command.text() == "python passby_demo.py all"
+    # The truck instead, ticked in the sources: it moves, and the car is left out.
+    sources = road.fields["sources"]
+    rows = {
+        sources.tree.topLevelItem(k).text(0): sources.tree.topLevelItem(k)
+        for k in range(sources.tree.topLevelItemCount())
+    }
+    assert list(rows) == ["traffic", "car", "truck"]
+    rows["truck"].setCheckState(0, Qt.CheckState.Checked)
+    rows["car"].setCheckState(0, Qt.CheckState.Unchecked)
+    assert road.command.text() == "python passby_demo.py all --sources truck"
+    assert box.ticked() == ["truck"] and box.table.isRowHidden(0)
+    assert way(1) == "At 19.44 m/s (70.0 km/h), 150.0 m in 7.7 s, with Doppler"
+    sources.own.click()
+    assert road.command.text() == "python passby_demo.py all" and box.ticked() == ["car"]
     road.picker.setCurrentIndex(road.picker.findData("scene"))
     assert box.note.text().startswith("Nothing in this scene moves.")
     assert box.table.isHidden() and box.table.isRowHidden(0) and box.ticked() == []
@@ -6342,7 +6343,7 @@ def test_a_copy_of_an_example_saved_anywhere_keeps_its_demo(qapp, tmp_path: Path
     copy.write_text(text, encoding="utf-8")
     dialog = DemoDialog(scene=copy)
     assert dialog.picker.currentData() == "passby" and dialog.demo.example == "roadside"
-    assert dialog.fields["source"].value() == copy.resolve()
+    assert dialog.fields["scene"].value() == copy.resolve()
     assert dialog.movement.ticked() == ["car"]
     dialog.deleteLater()
     copy.write_text(text.replace("name: Road across a meadow", "name: My road"), "utf-8")
@@ -6489,7 +6490,8 @@ def test_a_demo_run_away_from_its_script_reads_and_writes_where_the_editor_says(
     theirs = as_run(demo, args)
     assert paths(demo, theirs) == paths(demo, demo.resolved(args))
     assert getattr(theirs, reads_scene(demo).name) == mine / "scene.yaml"
-    assert theirs.work == demo.work_folder(args) == mine / "demo"
+    # The demo of the scene writes beside the scene it reads, the copy's.
+    assert demo.work_folder(theirs) == demo.work_folder(args) == mine / "demo"
 
 
 def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> None:

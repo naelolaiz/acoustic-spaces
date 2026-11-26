@@ -723,6 +723,10 @@ sources:
     spectrum: speech_female
     directivity: cardioid
     vocal_effort: raised    # its sound power from its voice: relaxed, normal, raised, loud
+  - name: car
+    position: [75, 2, 0.05]
+    model: {method: cnossos-eu, category: '1', rpm: 2000, cylinders: 4}  # its sound power
+    trajectory: {to: [[-75, 2, 0.05]], speed_m_s: 13.89, doppler: true}
   - name: delay-speaker
     position: [12.0, 3.0, 2.5]
     level_db: [95, 98, 100, 100, 100, 99, 97, 92]   # or per band (8 or 24 values)
@@ -765,6 +769,19 @@ sources:
   scene](demos.md#a-demo-of-any-scene)). Every effort keeps the spectrum's shape: a
   raised voice leans towards the treble (ANSI S3.5-1997's speech spectra per vocal
   effort), which this leaves out.
+- `model` gives a source's sound power by a method instead of `level_db`. With
+  `method: cnossos-eu` it is a road vehicle of CNOSSOS-EU's `category` (`1` light motor
+  vehicles, `2` medium heavy, `3` heavy, `4a` mopeds, `4b` motorcycles; Directive
+  2002/49/EC, Annex II, Appendix F, Table F-1, as amended in 2021): its rolling and
+  propulsion noise per octave band at the speed of its trajectory, the rolling noise
+  corrected for the scene's air temperature. So it needs a point source with a
+  trajectory at one steady speed (points at a speed, or keyframes timed for one), and
+  no `level_db`, `spectrum` or `vocal_effort`; a demo run at another `--speed` takes
+  the power at that speed. `rpm` and `cylinders` are what [a demo of the
+  scene](demos.md#a-demo-of-any-scene) makes its sound of where it has no `signal` or
+  `channel`: tyre noise and an engine of that many cylinders firing at that speed,
+  each with the spectrum of its part of the power, along its pass. The editor shows the
+  model on the source's page (**Model**), with the sound power it gives.
 - `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
   the sound power and on the impulse responses, so a mix made with `auralize` hears
   them. G stays the room's: it is measured against the same source, fed the same way,

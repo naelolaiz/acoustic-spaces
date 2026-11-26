@@ -127,9 +127,9 @@ def test_every_coefficient_is_table_f1s() -> None:
 )
 def test_the_examples_road_vehicles_are_cnossos_at_their_speed(example: str, vehicle) -> None:
     """The road vehicles of the roadside and the street, the police car's car and the fire
-    engine's truck too: point
-    sources 0.05 m up, left out of the example's simulations, CNOSSOS-EU's levels for
-    their category at the speed of their walk, with Doppler."""
+    engine's truck too: point sources 0.05 m up, left out of the example's simulations,
+    CNOSSOS-EU's levels for their category at the speed of their walk, with Doppler; the
+    roadside's from a model of theirs in the scene, with the engine its demo made."""
     scene = Scene.from_yaml(example_path(example))
     (source,) = [s for s in scene.sources if s.name == vehicle.name]
     assert not source.in_use and not source.extended and source.position[2] == 0.05
@@ -142,6 +142,14 @@ def test_the_examples_road_vehicles_are_cnossos_at_their_speed(example: str, veh
         vehicle.category, source.trajectory.speed_m_s * 3.6, scene.air.temperature_c
     )
     assert source.level_db == pytest.approx(power.total_db, abs=0.05)
+    if example == "roadside":
+        model = source.model
+        assert (model.method, model.category, model.rpm, model.cylinders) == (
+            "cnossos-eu",
+            vehicle.category,
+            vehicle.rpm,
+            vehicle.cylinders,
+        )
 
 
 def test_the_streets_police_car_has_the_measured_siren(tmp_path: Path) -> None:
@@ -326,21 +334,15 @@ def test_the_graphs_time_axis_keeps_its_labels_apart(span_s: float, step_s: floa
     assert step * width / span_s > widest + 10.0
 
 
-@pytest.mark.parametrize("example", ["roadside", "street"])
-def test_a_vehicles_own_options_matter_with_it_alone(example: str) -> None:
-    """The options of some of the vehicles alone (the police car's siren, the road
-    vehicles' engine speed) say they matter only with --vehicle at one of them; those
-    every vehicle has (the speed) and the sources each picks always matter. What a
+def test_a_vehicles_own_options_matter_with_it_alone() -> None:
+    """The options of some of the street's vehicles alone (the police car's siren, the
+    road vehicles' engine speed) say they matter only with --vehicle at one of them;
+    those every vehicle has (the speed) and the sources each picks always matter. What a
     vehicle of several sources plays is --sources, no option of its own."""
     from acoustic_spaces.demos import load
 
-    demo = load(Path(example_path(example)).parent / "passby_demo.py")
+    demo = load(Path(example_path("street")).parent / "passby_demo.py")
     assert demo.option("speed").only is None
-    if example == "roadside":
-        # The HRTFs matter with binaural mixes alone, in every demo.
-        assert all(o.only is None for o in demo.options if o.name != "hrtf")
-        assert "sources" not in {o.name for o in demo.options}  # one source a vehicle
-        return
     # The tram has no engine of a road vehicle.
     road = ("car", "bus", "motorcycle", "police_car", "fire_engine")
     assert demo.option("rpm").only == ("vehicle", road)
@@ -620,32 +622,37 @@ def test_the_demos_give_a_walks_speed_to_a_tenth_of_a_km_h() -> None:
 
 
 def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) -> None:
-    """No car, a car with no walk, one whose walk is off or whose keyframes go at more
-    than one speed (unless --speed gives one), and a speed that is not positive are
-    refused before anything runs; by default the car goes as fast as its walk does."""
+    """The roadside's demo drives the car its scene gives a CNOSSOS-EU model: a car whose
+    trajectory is off, or that --moving leaves standing, keyframes at more than one speed
+    (the scene does not read: no --speed rescues it), a speed that is not positive and a
+    scene with no car to take in are refused before anything runs; by default the car
+    goes as fast as its trajectory does, and its sound is made to the model's power at
+    that speed."""
     from acoustic_spaces.demos import load
 
     folder = _roadside(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
     args = demo.defaults()
-    assert args.speed is None  # as the scene's walk goes: 13.89 m/s
+    assert args.speed is None and args.sources == "car"  # as the scene's trajectory goes
     assert demo.check(args) is None and demo.moving(demo.resolved(args)) == ["car"]
-    assert demo.plays(demo.resolved(args)) == {
-        "car": "a car at 50 km/h, made to CNOSSOS-EU's sound power"
-    }
-    assert demo.summary(demo.resolved(args)).startswith(
-        "The car drives 40.0 m along its trajectory at 50.0 km/h (13.89 m/s, as its "
-        "trajectory in the scene goes): the pass, and the car's sound, last 2.9 s."
+    assert demo.plays(demo.resolved(args))["car"] == (
+        "CNOSSOS-EU light motor vehicles at 50 km/h, made to the method's sound power (tyres "
+        "and an engine of 4 cylinders at 2000 rpm)"
     )
     args.speed = -3.0
     assert demo.check(args) == "--speed is a positive number, not -3.0"
     args.speed = None
+    needs = "CNOSSOS-EU gives a road vehicle's sound power as it drives, at one steady speed"
+    standing = demo.parser().parse_args(["all", "--moving", "none"])
+    assert demo.check(standing) == f"--moving leaves car standing, but {needs}: name it too"
     path = folder / "scene.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     (car,) = [s for s in data["sources"] if s["name"] == "car"]
     car["trajectory"]["enabled"] = False
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
-    assert "the car's trajectory is off in scene.yaml" in demo.check(args)
+    assert demo.check(args) == (
+        f"car's trajectory is off in scene.yaml, but {needs}: turn it on (Moving on its trajectory)"
+    )
     assert demo.moving(demo.resolved(args)) == []
     # Keyframes at one steady speed drive as they are timed: 40 m in 3 s.
     car["trajectory"] = {
@@ -654,29 +661,26 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
     }
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert demo.check(args) is None
-    assert "at 48.0 km/h (13.33 m/s, as its trajectory in the scene goes)" in demo.summary(
-        demo.resolved(args)
-    )
-    # Keyframes at two speeds: CNOSSOS-EU has a car's power at one; --speed gives it.
+    assert "light motor vehicles at 48 km/h" in demo.plays(demo.resolved(args))["car"]
+    # Keyframes at two speeds: CNOSSOS-EU has a car's power at one, and the scene says so.
     car["trajectory"]["keyframes"] = [
         {"time_s": 1.0, "position": [0, 2, 0.05]},
         {"time_s": 3.0, "position": [0, 2, 0.05]},  # it waits
         {"time_s": 5.0, "position": [-20, 2, 0.05]},
     ]
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
-    assert demo.check(args).startswith(
-        "scene.yaml: the car's keyframes go at 0.0 to 72.0 km/h, but CNOSSOS-EU gives a car's "
-        "sound power at one steady speed"
+    refused = (
+        f"scene.yaml: source car: its keyframes go at 0.0 to 72.0 km/h, but {needs}: time them "
+        "for one speed, or give the trajectory points at a speed"
     )
-    assert demo.summary(demo.resolved(args)) is None
-    args.speed = 36.0
-    assert demo.check(args) is None
-    assert "40.0 m along its trajectory at 36.0 km/h (10.00 m/s, --speed)" in demo.summary(
-        demo.resolved(args)
-    )
+    assert demo.check(args) == refused
+    assert demo.check(demo.parser().parse_args(["all", "--speed", "36"])) == refused
     data["sources"] = [s for s in data["sources"] if s["name"] != "car"]
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
-    assert demo.check(args) == "scene.yaml has no source 'car' to drive"
+    assert demo.check(args) == (
+        "no source in use plays anything; take in some of those the scene leaves out "
+        "(--sources truck)"
+    )
 
 
 def test_a_vehicles_sources_left_out_walk_at_the_demos_speed(tmp_path: Path) -> None:
@@ -717,12 +721,11 @@ def test_a_vehicles_sources_left_out_walk_at_the_demos_speed(tmp_path: Path) -> 
 
 
 def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -> None:
-    """The demo's scene keeps a car's steady keyframes as they are, with Doppler and
+    """The roadside's demo keeps a car's steady keyframes as they are, with Doppler and
     CNOSSOS-EU's power at their speed; with --speed it drives through their places (each
-    once) at that speed instead, and a scene written for one speed is written again for
-    another."""
+    once) at that speed instead, at the power the model gives there, and the editor
+    follows the car along the trajectory the run simulates."""
     from acoustic_spaces.demos import load
-    from acoustic_spaces.demos.passby import driving, walk_speed
 
     folder = _roadside(tmp_path)
     path = folder / "scene.yaml"
@@ -733,134 +736,101 @@ def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -
             {"time_s": 1.5, "position": [0, 2, 0.05]},
             {"time_s": 3.0, "position": [-20, 2, 0.05], "orientation": {"yaw": 180}},
         ],
+        "doppler": True,
         "enabled": True,
     }
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     demo = load(folder / "passby_demo.py").at(folder)
-    assert demo.main(["scene"]) == 0
-    written = Scene.from_yaml(run_of(demo) / "scene_demo.yaml")
-    (driven,) = [s for s in written.sources if s.name == "car"]
-    assert driven.in_use and driven.trajectory.doppler and len(driven.trajectory.keyframes) == 2
-    assert walk_speed(driven) == pytest.approx(40.0 / 3.0)
-    power = vehicle_power("1", 48.0, written.air.temperature_c)
-    assert driven.level_db == pytest.approx(power.total_db, abs=0.05)
     args = demo.resolved(demo.defaults())
-    assert demo.is_done(demo.step("scene"), args)
-    # Another speed is another run, with a scene of its own: the one at the walk's speed
-    # stays as it is.
-    args = demo.resolved(demo.parser().parse_args(["all", "--speed", "72"]))
-    assert not demo.is_done(demo.step("scene"), args)
-    assert demo.main(["scene", "--speed", "72"]) == 0
-    fast = run_of(demo, "--speed", "72") / "scene_demo.yaml"
-    (driven,) = [s for s in Scene.from_yaml(fast).sources if s.name == "car"]
-    assert driven.trajectory.keyframes is None and driven.trajectory.speed_m_s == pytest.approx(
-        20.0
-    )
-    assert (
-        driven.trajectory.to == [(0.0, 2.0, 0.05), (-20.0, 2.0, 0.05)] and driven.trajectory.doppler
-    )
-    assert demo.is_done(demo.step("scene"), args)
-    assert demo.is_done(demo.step("scene"), demo.resolved(demo.defaults()))
-    # The editor follows the car along the walk the demo simulates: this one, at --speed.
-    assert demo.trajectories(args).sources == Scene.from_yaml(fast).sources
-    # The same, from Python: a wait drops out of the places.
-    source = Scene.from_yaml(path)
-    (car,) = [s for s in source.sources if s.name == "car"]
-    frames = [
-        *car.trajectory.keyframes[:1],
-        car.trajectory.keyframes[0].model_copy(update={"time_s": 2.0}),
-    ]
-    waiting = car.model_copy(
-        update={"trajectory": car.trajectory.model_copy(update={"keyframes": frames})}
-    )
-    assert driving(waiting, 36.0).trajectory.to == [(0.0, 2.0, 0.05)]
+    scene = demo.trajectories(args)
+    (driven,) = [s for s in scene.sources if s.name == "car"]
+    assert driven.in_use and driven.trajectory.doppler and len(driven.trajectory.keyframes) == 2
+    power = vehicle_power("1", 48.0, scene.air.temperature_c)
+    assert driven.level_db == pytest.approx(power.total_db, abs=0.05)
+    fast = demo.resolved(demo.parser().parse_args(["all", "--speed", "72"]))
+    scene = demo.trajectories(fast)
+    (driven,) = [s for s in scene.sources if s.name == "car"]
+    assert driven.trajectory.keyframes is None
+    assert driven.trajectory.speed_m_s == pytest.approx(20.0) and driven.trajectory.doppler
+    assert driven.trajectory.to == [(0.0, 2.0, 0.05), (-20.0, 2.0, 0.05)]
+    power = vehicle_power("1", 72.0, scene.air.temperature_c)
+    assert driven.level_db == pytest.approx(power.total_db, abs=0.05)
+    # Another speed is another run, with its own sound and mixes.
+    assert demo.run_name(fast) == "passby_speed-72_binaural"
+    assert demo.run_name(args) == "passby_binaural"
 
 
 def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, capsys) -> None:
-    """Every step on the quick roadside: the car's sound, the scene with the car alone at
-    --speed, the passes (the level along each, its maximum near the middle, the pitch
-    falling, one gain for all), the tour and its stills; then each step is done."""
+    """Every step on the quick roadside: the car's sound made to its model's power, the
+    scene with the car taken in, the pass at --speed every --step (the level along it at
+    each listener, its maximum near the middle, the pitch falling, one gain for all), the
+    tour and its stills; then each step is done, and a run at one listener is a run of its
+    own."""
     pytest.importorskip("PIL")
     from acoustic_spaces.demos import load
+    from acoustic_spaces.demos.models import FADE_S
 
     folder = _roadside(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
-    assert demo.main(["all", "--step", "4", "--speed", "72", "--no-mp4"]) == 0
     run = ["--step", "4", "--speed", "72", "--no-mp4"]
+    assert demo.main(["all", *run]) == 0
     work = run_of(demo, *run)
-    assert work == folder / "demo" / "passby_car_speed-72_step-4_binaural"
-    info = pipeline.read_json(work / "car" / "car.json")
-    assert info["category"] == "1" and info["rpm"] == 2000.0
-    assert info["speed_kmh"] == 72.0 and info["duration_s"] == pytest.approx(2.0)
-    x, rate = audio.read(work / "car" / "car.wav")
+    assert work == folder / "demo" / "passby_speed-72_step-4_binaural"
+    # The car's sound: its pass of 2 s, faded in and out, at the feeds' RMS where it sounds.
+    fed = work.parent / "feeds" / "scene_speed-72"
+    made = pipeline.read_json(fed / "feeds.json")["sources"]["car"]
+    assert made["made"] and "four-cylinder engine at 2000 rpm" in made["credit"]
+    x, rate = audio.read(fed / "car.wav")
     assert rate == 16_000 and len(x) == 2 * rate
-    scene = Scene.from_yaml(work / "scene_demo.yaml")
-    assert [s.name for s in scene.sources if s.in_use] == ["car"]
-    (car,) = [s for s in scene.sources if s.name == "car"]
-    assert car.trajectory.speed_m_s == pytest.approx(20.0) and car.level_db == info["level_db"]
-    facts = pipeline.read_json(work / "walk" / "walk.json")
-    assert set(facts["listeners"]) == {"verge", "yard_25m"} and len(facts["times"]) == 11
-    verge = facts["listeners"]["verge"]
+    # Faded in over its first FADE_S (all of its first half): quiet at first.
+    fade = int(FADE_S * rate)
+    assert np.abs(x[: fade // 8]).max() < np.abs(x[fade - fade // 8 : fade]).max() / 4
+    seats = pipeline.read_json(work / "moving" / pipeline.SEATS)
+    passes = seats["movement"]["passes"]
+    assert set(passes) == {"verge", "yard_25m"}
+    verge = passes["verge"]
     assert verge["closest_m"] == pytest.approx(math.hypot(5.5, 1.45), abs=0.01)
-    assert 0.8 < verge["max_s"] < 1.2 and verge["max_a_db"] == max(verge["levels_a_db"])
+    assert 0.8 < verge["max_s"] < 1.4
+    assert verge["max_a_db"] == pytest.approx(max(verge["levels_a_db"]), abs=0.005)
     assert verge["sel_a_db"] > verge["leq_a_db"]  # over 2 s: SEL = Leq + 3 dB
     assert 1.0 < verge["pitch_semitones"] < 12 * math.log2(363.0 / 323.0)
-    seats = pipeline.read_json(work / "walk" / "seats.json")
-    # Each mix is named after what plays and where it is heard.
-    assert seats["seats"]["verge"]["file"] == "car__verge.binaural.wav"
+    assert verge["about"] == "Sound power of car at 72 km/h: " + (
+        f"{vehicle_power('1', 72.0, 20.0).sound_power_a_db:.1f} dB(A) (CNOSSOS-EU)"
+    )
     peaks = [
-        np.abs(audio.read(work / "walk" / s["file"])[0]).max() for s in seats["seats"].values()
+        np.abs(audio.read(work / "moving" / s["file"])[0]).max() for s in seats["seats"].values()
     ]
     assert max(peaks) == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
     assert sorted(p.name for p in (work / "stills").glob("*.png")) == [
         "00_verge.png",
         "01_yard_25m.png",
     ]
-    named = folder / "demo" / work.name
     for product in ("_thumbnail.png", ".wav"):
-        assert named.with_name(work.name + product).exists()
-    chapters = named.with_name(work.name + "_chapters.txt").read_text(encoding="utf-8")
+        assert work.with_name(work.name + product).exists()
+    chapters = work.with_name(work.name + "_chapters.txt").read_text(encoding="utf-8")
     assert chapters.splitlines()[0] == "0:00 verge"
     assert chapters.splitlines()[1].endswith(" yard 25m")
     capsys.readouterr()
     assert demo.main(["all", *run]) == 0
     out = capsys.readouterr().out
-    for step in ("sound", "scene", "walk"):
+    for step in ("feeds", "simulate"):
         assert f"{step}: done already" in out
-    # Another speed is another run, with its own car, scene and passes.
+    assert f"{work / 'moving'}: there already" in out  # the pass is not mixed again
+    # Another speed is another run, with its own sound and mixes.
     args = demo.resolved(demo.parser().parse_args(["all", "--step", "4"]))
-    assert not demo.is_done(demo.step("sound"), args)
-    assert not demo.is_done(demo.step("scene"), args)
-    # --listeners: a run of its own, whose video plays the passes of the run at every
-    # listener (made already, so the walk is done), with that listener alone; its
-    # files take the listener's name, and the run at every listener keeps its own.
-    capsys.readouterr()
+    assert not demo.is_done(demo.step("feeds"), args)
+    assert not demo.is_done(demo.step("render"), args)
+    # --listeners: a run of its own, at that listener alone, in a folder of its own.
     assert demo.main(["all", *run, "--listeners", "yard_25m"]) == 0
-    assert "walk: done already" in capsys.readouterr().out
     yard = run_of(demo, *run, "--listeners", "yard_25m")
-    assert yard.name == "passby_car_yard_25m_speed-72_step-4_binaural"
+    assert yard.name == "passby_yard_25m_speed-72_step-4_binaural"
     chapters = yard.with_name(yard.name + "_chapters.txt").read_text(encoding="utf-8")
     assert chapters.splitlines() == ["0:00 yard 25m"]
+    assert sorted(p.name for p in (yard / "stills").glob("*.png")) == ["00_yard_25m.png"]
     assert sorted(p.name for p in (work / "stills").glob("*.png")) == [
         "00_verge.png",
         "01_yard_25m.png",
     ]
-    assert sorted(p.name for p in (yard / "stills").glob("*.png")) == ["00_yard_25m.png"]
-    assert not (yard / "walk").exists()
-    # A walk at one listener simulates it alone, into its own run's folder.
-    for step in ("sound", "scene", "walk"):
-        assert demo.main([step, *run, "--listeners", "verge"]) == 0
-    alone = run_of(demo, *run, "--listeners", "verge")
-    assert set(pipeline.read_json(alone / "walk" / "walk.json")["listeners"]) == {"verge"}
-    assert set(pipeline.read_json(work / "walk" / "walk.json")["listeners"]) == {
-        "verge",
-        "yard_25m",
-    }
-    # The video of a run in another format than the passes': there are none of it.
-    with pytest.raises(SystemExit, match="walk.json; run first: python passby_demo.py walk"):
-        demo.main(["video", *run, "--listeners", "verge", "--format", "mono"])
-    assert pipeline.label_text("binaural-kemar") == "binaural through the HRTFs of kemar"
-    assert pipeline.label_text(None) == "of an output not kept"
 
 
 def _street(tmp_path: Path) -> Path:
@@ -1201,7 +1171,6 @@ def _passby(example: str):
 @pytest.mark.parametrize(
     ("example", "name", "playing"),
     [
-        ("roadside", "passby_car_binaural", None),
         ("street", "passby_car_binaural", ("car",)),
         ("railway", "passby_regional_binaural", ("train", "train_roof", "train_pantograph")),
         ("airport", "flight_departure_binaural", None),

@@ -60,8 +60,10 @@ from pydantic import (
     Field,
     PositiveFloat,
     PrivateAttr,
+    SerializerFunctionWrapHandler,
     ValidationInfo,
     field_validator,
+    model_serializer,
     model_validator,
 )
 from pydantic_core import PydanticCustomError
@@ -1680,7 +1682,83 @@ def _trajectory_key(data):
 CHANNELS = ("left", "right", "mono")
 
 
+#: How much the legs of a vehicle's keyframes may differ in speed and still be one steady
+#: speed, as a model's sound power takes (a fraction).
+STEADY = 0.01
+
+
+def steady_speed_m_s(position: Sequence[float], trajectory: Trajectory, what: str) -> float:
+    """The one speed ``trajectory``, from ``position``, goes at (m/s): its ``speed_m_s``
+    along points, or along keyframes their length over their time, when every leg goes at
+    that speed within :data:`STEADY` (a ValueError, saying why ``what`` needs it, when
+    they do not, or wait)."""
+    if trajectory.keyframes is None:
+        return float(trajectory.speed_m_s)
+    places = np.array([position, *(k.position for k in trajectory.keyframes)], dtype=float)
+    times = np.array([0.0, *(k.time_s for k in trajectory.keyframes)])
+    lengths = np.linalg.norm(np.diff(places, axis=0), axis=1)
+    speeds = lengths / np.diff(times)
+    slow, fast = float(speeds.min()), float(speeds.max())
+    if slow <= 0.0 or fast > slow * (1.0 + STEADY):
+        raise ValueError(
+            f"its keyframes go at {3.6 * slow:.1f} to {3.6 * fast:.1f} km/h, but {what}: time "
+            "them for one speed, or give the trajectory points at a speed"
+        )
+    return float(lengths.sum() / times[-1])
+
+
+class RoadVehicleModel(_Model):
+    """A road vehicle of CNOSSOS-EU (Directive 2002/49/EC, Annex II, as amended by
+    Commission Delegated Directive (EU) 2021/1226): its sound power per octave band
+    that of its ``category`` at the speed its trajectory goes, on the method's reference
+    road surface, in the scene's air (:func:`acoustic_spaces.demos.road.vehicle_power`);
+    the method puts the source 0.05 m above the road, radiating alike every way. A demo
+    of the scene plays a sound made to that power: tyre noise and the firing of an
+    engine of ``cylinders`` at ``rpm`` (:func:`acoustic_spaces.demos.road.vehicle_sound`)."""
+
+    method: Literal["cnossos-eu"] = Field(
+        description="the method that gives the source's sound power: cnossos-eu, the "
+        "European Union's for road vehicles"
+    )
+    category: Literal["1", "2", "3", "4a", "4b"] = Field(
+        description="CNOSSOS-EU's vehicle category: 1 light (a car), 2 medium heavy (a van, "
+        "a bus with two axles), 3 heavy (a truck or a bus with three axles or more), 4a a "
+        "two-wheeler up to 50 cc, 4b one over 50 cc"
+    )
+    rpm: PositiveFloat = Field(
+        default=2000.0,
+        description="how fast the engine of its made sound turns (revolutions a minute)",
+    )
+    cylinders: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description="the cylinders of its made sound's engine, a four-stroke's, each firing "
+        "once every two turns",
+    )
+
+    #: What the method needs of the source's trajectory, for its messages.
+    needs: ClassVar[str] = (
+        "CNOSSOS-EU gives a road vehicle's sound power as it drives, at one steady speed"
+    )
+
+    def power_db(self, speed_m_s: float, temperature_c: float) -> list[float]:
+        """The sound power per octave band (dB re 1 pW) at ``speed_m_s`` in air at
+        ``temperature_c``."""
+        from acoustic_spaces.demos.road import vehicle_power
+
+        power = vehicle_power(self.category, 3.6 * float(speed_m_s), float(temperature_c))
+        return [round(float(v), 6) for v in power.total_db]
+
+
+#: The models a source's sound power and made sound can come from (``model``).
+SourceModel = RoadVehicleModel
+
+
 class Source(_Model):
+    #: The scene's air temperature (°C), which a model's sound power may take.
+    _air_c: float = PrivateAttr(default=20.0)
+
     name: str
     group: str | None = _group_field()
     enabled: bool | None = _enabled_field()
@@ -1732,6 +1810,15 @@ class Source(_Model):
             "a talker's vocal effort, in place of level_db: its speech, of its spectrum, "
             "54, 60, 66 or 72 dB(A) 1 m in front of it in free field (ISO 9921), which "
             "sets its sound power per band through its directivity; None: level_db"
+        ),
+    )
+    model: SourceModel | None = Field(
+        default=None,
+        description=(
+            "a standard method that gives the source's sound power in place of level_db, "
+            "and a sound made to it that a demo of the scene plays unless signal or channel "
+            "gives another: cnossos-eu (a road vehicle, at the speed of its trajectory, in "
+            "the scene's air)"
         ),
     )
     gain_db: float = Field(
@@ -1868,6 +1955,48 @@ class Source(_Model):
             )
         self.__dict__["level_db"] = self.talking_db(self.vocal_effort)
         return self
+
+    @model_validator(mode="after")
+    def _level_of_its_model(self) -> Source:
+        if self.model is None:
+            return self
+        if "level_db" in self.model_fields_set:
+            raise ValueError("model sets the source's sound power: give it or level_db, not both")
+        if self.vocal_effort is not None or self.spectrum != "flat":
+            raise ValueError("model gives the source's sound power per band: it does not talk")
+        if self.extended:
+            raise ValueError("a model's source is a point, not a line or a surface")
+        if self.trajectory is None:
+            raise ValueError(f"{self.model.needs}: give the source a trajectory")
+        self.__dict__["level_db"] = self.model_level_db()
+        return self
+
+    @model_serializer(mode="wrap")
+    def _without_a_given_level(self, handler: SerializerFunctionWrapHandler):
+        """Its fields, but the sound power where the vocal effort or the model gives it: as
+        it was given, so that what is written reads again."""
+        data = handler(self)
+        if isinstance(data, dict) and (self.vocal_effort is not None or self.model is not None):
+            data.pop("level_db", None)
+        return data
+
+    def model_level_db(self) -> list[float]:
+        """The sound power per octave band its :attr:`model` gives it (dB re 1 pW): at
+        the speed of its trajectory, in the scene's air (20 °C until a scene gives it
+        its own)."""
+        if self.model is None or self.trajectory is None:
+            raise ValueError(f"{self.name!r} has no model with a trajectory")
+        speed = steady_speed_m_s(self.position, self.trajectory, self.model.needs)
+        return self.model.power_db(speed, self._air_c)
+
+    def model_copy(self, *, update=None, deep: bool = False) -> Source:
+        """A copy, with ``update``; a source with a model gets its sound power anew at
+        its trajectory's speed (:meth:`model_level_db`), so that a run that sets another
+        speed sets the power with it."""
+        copy = super().model_copy(update=update, deep=deep)
+        if copy.model is not None and copy.trajectory is not None:
+            copy.__dict__["level_db"] = copy.model_level_db()
+        return copy
 
     def talking_db(self, effort: VocalEffort) -> list[float]:
         """The sound power level per octave band (dB re 1 pW) of this source talking
@@ -3366,6 +3495,15 @@ class Scene(_Model):
         return self
 
     @model_validator(mode="after")
+    def _model_powers(self) -> Scene:
+        """Each source with a model gets its sound power in the scene's air."""
+        for source in self.sources:
+            if source.model is not None and source._air_c != self.air.temperature_c:
+                source._air_c = self.air.temperature_c
+                source.__dict__["level_db"] = source.model_level_db()
+        return self
+
+    @model_validator(mode="after")
     def _check_fitted_walls(self) -> Scene:
         if self.simulation.wave.walls == "fitted" and self.geometry.ground is not None:
             raise ValueError(FITTED_WALLS_OUTDOORS)
@@ -3453,9 +3591,6 @@ class Scene(_Model):
         (:meth:`Material.to_data`)."""
         data = self.model_dump(mode="json", exclude_none=True)
         data["materials"] = {name: m.to_data() for name, m in self.materials.items()}
-        for source, entry in zip(self.sources, data["sources"], strict=True):
-            if source.vocal_effort is not None:
-                del entry["level_db"]  # the vocal effort gives it
         if self.tour is not None:  # each stop as short as it reads
             data["tour"] = [s.model_dump(mode="json", exclude_defaults=True) for s in self.tour]
         if self.tours is not None:

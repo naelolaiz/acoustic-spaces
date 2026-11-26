@@ -453,6 +453,7 @@ def test_a_still_says_the_sti_of_the_talker_heard_loudest() -> None:
     """A still says the STI of the speech of the playing talker loudest at its listener,
     with its rating (ISO 9921), from the report, or along the movement at that moment;
     with other sources playing, that it is of that speech alone."""
+    pytest.importorskip("PIL")
     from acoustic_spaces.demos import scene_pictures
     from acoustic_spaces.parameters import sti_rating
 
