@@ -316,7 +316,7 @@ class MovementPanel(QWidget):
                 "move the same way, timed, so that they can be edited here"
             )
         )
-        self.convert.clicked.connect(self.convert_walk)
+        self.convert.clicked.connect(self.convert_to_keyframes)
         for button in (self.add, self.remove, self.convert):
             buttons.addWidget(button)
         self.hint = QLabel()
@@ -909,7 +909,7 @@ class MovementPanel(QWidget):
         if self._edit_keyframes(_("remove keyframe"), drop):
             self.table.setCurrentCell(min(row, self.table.rowCount() - 1), X)
 
-    def convert_walk(self) -> None:
+    def convert_to_keyframes(self) -> None:
         """Keyframes for a trajectory along ``to``: each knot of the trajectory as it goes, its
         turns through the corners included, so that it moves the same way; facing forward, it
         faces its first leg from the start, so its own orientation turns that way too."""
@@ -938,12 +938,12 @@ class MovementPanel(QWidget):
     def _moves(self, on: bool) -> None:
         if not self._loading and self.key is not None:
             kind, index = self.key
-            self._run(lambda: self.document.set_walk_enabled(kind, index, on))
+            self._run(lambda: self.document.set_trajectory_enabled(kind, index, on))
 
     def _doppler(self, on: bool) -> None:
         if not self._loading and self.key is not None:
             kind, index = self.key
-            self._run(lambda: self.document.set_walk_doppler(kind, index, on))
+            self._run(lambda: self.document.set_trajectory_doppler(kind, index, on))
 
     # -- the timeline -------------------------------------------------------------------
 

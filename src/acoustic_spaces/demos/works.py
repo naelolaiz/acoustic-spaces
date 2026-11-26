@@ -450,7 +450,13 @@ def demo(script: Path, example: str = "street") -> Demo:
                 steps=("feeds",),
                 unit="/min",
             ),
-            dataclasses.replace(shared["seconds"], steps=("feeds", "video")),
+            dataclasses.replace(
+                shared["seconds"],
+                help="how long each listener is heard (s), the works going on",
+                default=scene_demo.SECONDS,
+                steps=("feeds", "video"),
+                unset="",
+            ),
             Option(
                 "indoors",
                 indoors.help_of(NOUN),

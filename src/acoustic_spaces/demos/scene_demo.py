@@ -314,12 +314,12 @@ def completed(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
-def walking(args: argparse.Namespace, scene: Scene) -> list[str] | None:
+def run_movers(args: argparse.Namespace, scene: Scene) -> list[str] | None:
     """Who moves in this run, as :func:`~acoustic_spaces.walkthrough.with_moving` takes
     it: those ``--moving`` names; without it, when ``--sources`` is given and leaves out
     a source whose trajectory is on, every mover of the scene but that one, which stands where
     it starts, as it plays nothing; None: the scene's own movers (without ``--sources``
-    too, a source the scene keeps silent walking as the scene has it)."""
+    too, a source the scene keeps silent moving as the scene has it)."""
     from acoustic_spaces.walkthrough import movers
 
     names = moving_names(getattr(args, "moving", None))
@@ -334,13 +334,13 @@ def walking(args: argparse.Namespace, scene: Scene) -> list[str] | None:
 def moving_scene(args: argparse.Namespace) -> Scene:
     """The scene as this run plays it: with ``--moving``, those move and every other
     mover stands where it starts (:func:`~acoustic_spaces.walkthrough.with_moving`); a
-    source a given ``--sources`` leaves out stands too (:func:`walking`); every
+    source a given ``--sources`` leaves out stands too (:func:`run_movers`); every
     trajectory that moves at ``--speed`` and simulated every ``--step``, when given
     (:func:`run_trajectories`)."""
     from acoustic_spaces.walkthrough import with_moving
 
     found = scene_of(args)
-    return run_trajectories(args, with_moving(found, walking(args, found)))
+    return run_trajectories(args, with_moving(found, run_movers(args, found)))
 
 
 def run_trajectories(args: argparse.Namespace, scene: Scene) -> Scene:
@@ -381,7 +381,7 @@ def timeline_of(args: argparse.Namespace, moving: list[str]) -> str:
 
 
 def moving_of(args: argparse.Namespace) -> list[str]:
-    """Who moves in this run (:func:`walking`): the sources and listeners in use whose
+    """Who moves in this run (:func:`run_movers`): the sources and listeners in use whose
     trajectories are on, by name, listeners first; none when the scene cannot be read or
     ``--moving`` names what does not move (:func:`problems` says why)."""
     from acoustic_spaces.walkthrough import movers, with_moving
@@ -390,7 +390,7 @@ def moving_of(args: argparse.Namespace) -> list[str]:
     if scene is None:
         return []
     try:
-        scene = with_moving(scene, walking(args, scene))
+        scene = with_moving(scene, run_movers(args, scene))
     except ValueError:
         return []
     return [item.name for _kind, item in movers(scene)]
@@ -423,6 +423,10 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     ``--sources`` picks must play something."""
     if not getattr(args, "scene", None):
         return "give the scene to demo (--scene)"
+    for name in ("seconds", "speed", "step_m"):
+        value = getattr(args, name, None)
+        if value is not None and not float(value) > 0.0:
+            return f"{demo.option(name).option} is a positive number, not {value!r}"
     resolved = demo.resolved(args)
     path = Path(resolved.scene)
     if not path.exists():
@@ -458,7 +462,7 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     from acoustic_spaces.walkthrough import movers, with_moving
 
     try:
-        moving = with_moving(scene, walking(resolved, scene))
+        moving = with_moving(scene, run_movers(resolved, scene))
     except ValueError as exc:
         return f"--moving: {exc}"
     movers = [item for _kind, item in movers(moving)]
@@ -785,7 +789,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
         "movement": {"times": [float(t) for t in times], "levels_a_db": levels},
     }
     pipeline.write_json(folder / pipeline.SEATS, seats)
-    print(f"wrote {folder}: {len(names)} mixes, {places} places along the walks")
+    print(f"wrote {folder}: {len(names)} mixes, {places} places along the trajectories")
 
 
 # --------------------------------------------------------------------------- the video

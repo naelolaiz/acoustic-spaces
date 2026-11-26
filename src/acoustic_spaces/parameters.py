@@ -708,6 +708,28 @@ SPEECH_SPECTRUM_DB: dict[str, tuple[float, ...]] = {
     "female": (-18.7, -6.7, 5.3, -1.9, -9.1, -15.8, -16.7, -18.0),
 }
 _STI_THRESHOLD_DB = np.array([46.0, 27.0, 12.0, 6.5, 7.5, 8.0, 12.0])
+#: A talker's speech level 1 m in front of them in free field (dB(A)), by vocal effort
+#: (ISO 9921:2003, table 1, as IEC 60268-16 takes it).
+VOCAL_EFFORT_DB_A: dict[str, float] = {
+    "relaxed": 54.0,
+    "normal": 60.0,
+    "raised": 66.0,
+    "loud": 72.0,
+}
+#: The ways a talker talks, quietest first.
+VocalEffort = Literal["relaxed", "normal", "raised", "loud"]
+
+
+def talker_power_db(level_a_db: float, talker: Talker, on_axis) -> np.ndarray:
+    """The sound power level per octave band (dB re 1 pW, ``OCTAVE_BANDS_HZ``) of a
+    ``talker`` whose speech is ``level_a_db`` dB(A) 1 m in front of them in free field,
+    with the long-term spectrum of speech there (:data:`SPEECH_SPECTRUM_DB`), through
+    ``on_axis``, the talker's directivity factor ahead in each octave band (the energy
+    there over its mean over the sphere)."""
+    ahead = np.asarray(SPEECH_SPECTRUM_DB[talker], dtype=float) + level_a_db
+    # The table's bands, rounded and two of them assumed, add up to nearly 0 dB(A).
+    ahead += level_a_db - a_weighted(ahead)
+    return ahead - 10.0 * np.log10(np.asarray(on_axis, dtype=float) / (4.0 * math.pi))
 
 
 #: STIPA (IEC 60268-16:2020, annex B): the two modulation frequencies of each band (Hz).
@@ -1439,11 +1461,13 @@ __all__ = [
     "SPEECH_SPECTRUM_DB",
     "STI_MODULATION_HZ",
     "TIME_WEIGHTING_STEP_S",
+    "VOCAL_EFFORT_DB_A",
     "EventLevels",
     "Levels",
     "RoomParameters",
     "SpeechParameters",
     "Talker",
+    "VocalEffort",
     "decay_curve",
     "echo_criterion",
     "event_levels",
@@ -1452,6 +1476,7 @@ __all__ = [
     "modulation_transfer",
     "speech_transmission_index",
     "sti_from_impulse_response",
+    "talker_power_db",
     "time_weighted",
     "useful_to_detrimental",
     "BandDecay",

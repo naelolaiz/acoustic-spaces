@@ -2289,10 +2289,10 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "Nothing in this scene moves. Edit movement… gives a source or a listener a "
-"walk along keyframes."
+"trajectory along keyframes."
 msgstr ""
 "Nulla si muove in questa scena. Modifica movimento… dà a una sorgente o a un "
-"ricevitore un percorso lungo fotogrammi chiave."
+"ricevitore una traiettoria lungo fotogrammi chiave."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2406,7 +2406,7 @@ msgstr "sposta sorgente"
 msgid "move listener"
 msgstr "sposta ricevitore"
 
-#: acoustic_spaces/gui/document.py
+#: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
 msgid "change source"
 msgstr "modifica sorgente"
 
@@ -2703,6 +2703,39 @@ msgstr "parlato maschile"
 msgid "speech_female"
 msgstr "parlato femminile"
 
+#. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
+#: acoustic_spaces/gui/inspector.py
+msgid "(none)"
+msgstr "(nessuno)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "relaxed"
+msgstr "rilassato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "normal"
+msgstr "normale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "raised"
+msgstr "elevato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "loud"
+msgstr "forte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How hard the talker talks (ISO 9921): relaxed, normal, raised or loud is its "
+"speech at 54, 60, 66 or 72 dB(A) 1 m in front of it, which sets its sound "
+"power through its spectrum and directivity; (none) keeps the sound power you "
+"give. For a speech spectrum only"
+msgstr ""
+"Con quanta forza parla il parlatore (ISO 9921): rilassato, normale, elevato "
+"o forte è la sua voce a 54, 60, 66 o 72 dB(A) a 1 m davanti a sé, che ne "
+"fissa la potenza sonora attraverso il suo spettro e la sua direttività; "
+"(nessuno) mantiene la potenza sonora data. Solo per uno spettro vocale"
+
 #: acoustic_spaces/gui/inspector.py
 msgid "omni"
 msgstr "omnidirezionale"
@@ -2868,11 +2901,6 @@ msgstr "più o meno 0,1"
 #: acoustic_spaces/gui/inspector.py
 msgid "twice ISO 12999-2"
 msgstr "il doppio di ISO 12999-2"
-
-#. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
-#: acoustic_spaces/gui/inspector.py
-msgid "(none)"
-msgstr "(nessuno)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "neutral"
@@ -5077,10 +5105,10 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Only a point source moves: a line or a surface stands where it is. Set Shape "
-"to point to give the source a walk"
+"to point to give the source a trajectory"
 msgstr ""
 "Solo una sorgente puntuale si muove: una linea o una superficie resta dov'è. "
-"Imposta Forma su puntuale per dare un percorso alla sorgente"
+"Imposta Forma su puntuale per dare una traiettoria alla sorgente"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -5385,6 +5413,10 @@ msgid "Spectrum"
 msgstr "Spettro"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Vocal effort"
+msgstr "Sforzo vocale"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Gain"
 msgstr "Guadagno"
 
@@ -5450,6 +5482,12 @@ msgstr ""
 #, python-brace-format
 msgid "Directivity index: {values} dB (63 Hz to 8 kHz)"
 msgstr "Indice di direttività: {values} dB (da 63 Hz a 8 kHz)"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the vocal effort"
+msgstr "{tip}. Data dallo sforzo vocale"
 
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py

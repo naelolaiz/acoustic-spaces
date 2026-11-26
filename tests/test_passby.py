@@ -634,8 +634,8 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
         "car": "a car at 50 km/h, made to CNOSSOS-EU's sound power"
     }
     assert demo.summary(demo.resolved(args)).startswith(
-        "The car drives 40.0 m along its walk at 50.0 km/h (13.89 m/s, as its walk in the "
-        "scene goes): the pass, and the car's sound, last 2.9 s."
+        "The car drives 40.0 m along its trajectory at 50.0 km/h (13.89 m/s, as its "
+        "trajectory in the scene goes): the pass, and the car's sound, last 2.9 s."
     )
     args.speed = -3.0
     assert demo.check(args) == "--speed is a positive number, not -3.0"
@@ -645,7 +645,7 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
     (car,) = [s for s in data["sources"] if s["name"] == "car"]
     car["trajectory"]["enabled"] = False
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
-    assert "the car's walk is off in scene.yaml" in demo.check(args)
+    assert "the car's trajectory is off in scene.yaml" in demo.check(args)
     assert demo.moving(demo.resolved(args)) == []
     # Keyframes at one steady speed drive as they are timed: 40 m in 3 s.
     car["trajectory"] = {
@@ -654,7 +654,7 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
     }
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert demo.check(args) is None
-    assert "at 48.0 km/h (13.33 m/s, as its walk in the scene goes)" in demo.summary(
+    assert "at 48.0 km/h (13.33 m/s, as its trajectory in the scene goes)" in demo.summary(
         demo.resolved(args)
     )
     # Keyframes at two speeds: CNOSSOS-EU has a car's power at one; --speed gives it.
@@ -671,7 +671,7 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
     assert demo.summary(demo.resolved(args)) is None
     args.speed = 36.0
     assert demo.check(args) is None
-    assert "40.0 m along its walk at 36.0 km/h (10.00 m/s, --speed)" in demo.summary(
+    assert "40.0 m along its trajectory at 36.0 km/h (10.00 m/s, --speed)" in demo.summary(
         demo.resolved(args)
     )
     data["sources"] = [s for s in data["sources"] if s["name"] != "car"]
@@ -918,7 +918,7 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
         "police_car_siren": "its siren on its roof, two-tone",
     }
     # The demo says the vehicle in words, not as its source's name.
-    assert demo.summary(resolved).startswith("The police car drives 40.0 m along its walk")
+    assert demo.summary(resolved).startswith("The police car drives 40.0 m along its trajectory")
     run = ["all", "--vehicle", "police_car", "--siren", "two_tone", "--step", "4", "--no-mp4"]
     assert demo.main(run) == 0
     work = run_of(demo, *run[1:])

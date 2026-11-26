@@ -144,12 +144,13 @@ The editor works on the same scene files as the command line.
   height and spacing), its directivity (a pattern, a SOFA or CSV file of measured data,
   or an array file, whose elements **Add up the array's elements one by one** sums near
   its listeners), its sound power per band, its **Spectrum** (flat, or male or female
-  speech) and the **Gain**, **Equalizer** and **Delay** of its feed. It shows the
-  directivity index per band, opens the polar patterns, and the selected source shows
-  its balloon in the 3D view. **Plays** says what the source plays in a demo of the
-  scene: **Choose WAV…** picks a dry recording, **Silent** takes it away, and without
-  one it plays its **Channel** (left, right or mono) of the scene's **Recording**.
-  The channel of a file of its own is picked the same way; *(none)* mixes it down.
+  speech), a talker's **Vocal effort** (which then gives the sound power) and the
+  **Gain**, **Equalizer** and **Delay** of its feed. It shows the directivity index per
+  band, opens the polar patterns, and the selected source shows its balloon in the 3D
+  view. **Plays** says what the source plays in a demo of the scene: **Choose WAV…**
+  picks a dry recording, **Silent** takes it away, and without one it plays its
+  **Channel** (left, right or mono) of the scene's **Recording**. The channel of a file
+  of its own is picked the same way; *(none)* mixes it down.
 - A listener's form sets its **Microphone**, what its mono output picks up through,
   aimed where it faces: omni, a first-order pattern, or an XY pair (with its **Angle**
   and **Capsules**), a Blumlein pair or an MS pair (with its **Mid** capsule and its

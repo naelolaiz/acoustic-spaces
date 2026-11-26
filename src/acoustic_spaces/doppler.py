@@ -1,4 +1,4 @@
-"""The Doppler shift of a walk: each early path through a delay that changes as the
+"""The Doppler shift along a trajectory: each early path through a delay that changes as the
 mover goes.
 
 A source moving towards a listener shortens the way its sound has to go while it is
@@ -82,7 +82,7 @@ place to place along the walk:
 
 The late part and the wave solver's bands have no Doppler shift here: the late part
 of each place is crossfaded to the next's by weights that add up to one, which keep
-its power as the places' tails, drawn from one random sequence, are alike (a walking
+its power as the places' tails, drawn from one random sequence, are alike (a moving
 source's sound as it is sent, so that each place's late part follows its early paths
 at the retarded time; a moving listener's as it is heard); and the wave solver's
 bands are not taken (a trajectory with Doppler and the wave solver stops with an error).
@@ -182,7 +182,7 @@ def _key(paths, row: int, planes: np.ndarray) -> tuple:
 def tracks(
     places: list, times: np.ndarray, *, source_moves: bool, planes: np.ndarray, step_s: float
 ) -> list[Track]:
-    """The paths of ``places`` (the early paths at each place of a walk, in order),
+    """The paths of ``places`` (the early paths at each place of a trajectory, in order),
     followed from place to place. ``times`` (N,) are when the mover is at each place;
     with ``source_moves`` its sound is heard a path's delay later, otherwise then.
     ``step_s`` is the most a delay may jump between places and stay the same path's."""
@@ -732,7 +732,7 @@ class _Reading:
             _, rate[left] = heard(s[left], left)
         return s, 1.0 / rate
 
-    def delays(self, t: np.ndarray, walk_last: int) -> tuple[np.ndarray, np.ndarray]:
+    def delays(self, t: np.ndarray, last_place: int) -> tuple[np.ndarray, np.ndarray]:
         """The path's delay at times ``t`` (s), carried on along its slope past the
         path's own ends, and the same delay held at its ends instead (inside the places
         it is heard from the two are the same)."""
@@ -740,14 +740,14 @@ class _Reading:
         held = hermite(track.received[heard], track.delays[heard], t, hold=True)
         delay = held.copy()
         first_k, last_k = track.span
-        if first_k > 0 or last_k < walk_last:
+        if first_k > 0 or last_k < last_place:
             # Past a path's own ends (it appears or goes) its delay carries on along
             # its slope.
             carried = hermite(track.received[heard], track.delays[heard], t, hold=False)
             ends = np.zeros(len(t), dtype=bool)
             if first_k > 0:
                 ends |= t < track.received[first_k]
-            if last_k < walk_last:
+            if last_k < last_place:
                 ends |= t > track.received[last_k]
             delay[ends] = carried[ends]
         return delay, held
@@ -804,7 +804,7 @@ def render(
     followers: Sequence[tuple[int, np.ndarray]] = (),
 ) -> np.ndarray:
     """(length, channels) the early paths of ``responses`` (the responses at the places
-    of a walk, in order, the mover there at ``times``) heard as it goes, the mono
+    of a trajectory, in order, the mover there at ``times``) heard as it goes, the mono
     ``dry`` signal through each path's changing delay and filter (see the module's
     description). ``step_s`` is the most a path's delay may jump from one place to the
     next; ``gusts`` gives the moments of the eddies in turbulence, ``seed`` the moment

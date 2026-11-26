@@ -66,6 +66,45 @@ def test_sources_check_their_levels() -> None:
         _source(delay_ms=-1.0)
 
 
+def test_a_talker_s_vocal_effort_sets_its_sound_power() -> None:
+    """A talker's vocal effort sets its sound power per band so that its speech is the
+    effort's level 1 m in front of it in free field (ISO 9921: 60 dB(A) at normal, 6 dB
+    a step), with the standard's spectrum there, through its directivity ahead; with
+    level_db too, or without a speech spectrum, it is refused, and the scene file keeps
+    the effort, not the level it gives."""
+    from acoustic_spaces.directivity import load_directivity
+    from acoustic_spaces.parameters import VOCAL_EFFORT_DB_A
+
+    voice = {"pattern": ["omni"] * 3 + ["subcardioid"] * 2 + ["cardioid"] * 3}
+    for talker, effort in (("male", "normal"), ("female", "loud")):
+        source = _source(directivity=voice, spectrum=f"speech_{talker}", vocal_effort=effort)
+        ahead = load_directivity(source.directivity).energy([[1.0, 0.0, 0.0]])[0]
+        at_1m = source.power_db() + 10 * np.log10(ahead / (4 * math.pi))
+        assert a_weighted(at_1m) == pytest.approx(VOCAL_EFFORT_DB_A[effort])
+        spectrum = np.array(SPEECH_SPECTRUM_DB[talker])
+        np.testing.assert_allclose(np.diff(at_1m), np.diff(spectrum), atol=1e-5)
+    # The gallery's guide: a man at normal effort through a cardioid, 73.3 dB in all.
+    guide = _source(directivity="cardioid", spectrum="speech_male", vocal_effort="normal")
+    assert guide.sound_power_db == pytest.approx(73.27, abs=0.01)
+    assert guide.talking("raised").sound_power_db == pytest.approx(guide.sound_power_db + 6)
+    assert guide.talking(None) is guide and guide.talking("loud").vocal_effort == "loud"
+    with pytest.raises(ValueError, match="does not talk"):
+        _source().talking("normal")
+    with pytest.raises(ValidationError, match="give it or level_db, not both"):
+        _source(level_db=70.0, spectrum="speech_male", vocal_effort="normal")
+    with pytest.raises(ValidationError, match="give the source a speech spectrum"):
+        _source(vocal_effort="normal")
+    scene = Scene.from_yaml(SHOEBOX)
+    data = scene.to_data()
+    data["sources"][0] |= {"spectrum": "speech_male", "vocal_effort": "raised"}
+    data["sources"][0].pop("level_db", None)
+    talking = Scene.model_validate(data)
+    written = talking.to_data()["sources"][0]
+    assert "level_db" not in written and written["vocal_effort"] == "raised"
+    again = Scene.model_validate(talking.to_data()).sources[0]
+    np.testing.assert_allclose(again.power_db(), talking.sources[0].power_db())
+
+
 def test_speech_spectra_of_iec_60268_16() -> None:
     # Relative to the A-weighted level, so their A-weighted sum is 0 dB.
     for talker, levels in SPEECH_SPECTRUM_DB.items():

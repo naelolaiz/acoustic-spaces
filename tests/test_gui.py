@@ -1850,6 +1850,30 @@ def test_source_spectrum_gain_equalizer_and_delay(window) -> None:
     source = window.document.scene.sources[0]
     assert source.spectrum == "speech_female" and source.talker == "female"
     assert source.gain_db == -3.0 and source.delay_ms == 12.5
+    # A talker's vocal effort gives its sound power; none keeps the power it gave, and a
+    # flat spectrum takes the effort away.
+    assert page.vocal_effort.isEnabled() and page.vocal_effort.currentText() == "(none)"
+    assert page.vocal_effort.toolTip() == page._form.labelForField(page.vocal_effort).toolTip()
+    page.vocal_effort.setCurrentText("raised")
+    page.vocal_effort.activated.emit(page.vocal_effort.currentIndex())
+    talking = window.document.scene.sources[0]
+    assert talking.vocal_effort == "raised" and not page.level.isEnabled()
+    assert page.level.value() == pytest.approx(talking.sound_power_db, abs=0.05)
+    assert "Given by the vocal effort" in page.level.toolTip()
+    page.vocal_effort.setCurrentText("(none)")
+    page.vocal_effort.activated.emit(page.vocal_effort.currentIndex())
+    kept = window.document.scene.sources[0]
+    assert kept.vocal_effort is None and page.level.isEnabled()
+    assert kept.sound_power_db == pytest.approx(talking.sound_power_db, abs=0.05)
+    page.vocal_effort.setCurrentText("loud")
+    page.vocal_effort.activated.emit(page.vocal_effort.currentIndex())
+    page.spectrum.setCurrentText("flat")
+    page.spectrum.activated.emit(page.spectrum.currentIndex())
+    flat = window.document.scene.sources[0]
+    assert flat.spectrum == "flat" and flat.vocal_effort is None
+    assert not page.vocal_effort.isEnabled()
+    page.spectrum.setCurrentText("speech_female")
+    page.spectrum.activated.emit(page.spectrum.currentIndex())
     assert source.eq_db == [0, 0, 0, -3, 0, 0, 0, 0]
     page.eq.setText("loud")
     page.eq.editingFinished.emit()
@@ -7256,7 +7280,7 @@ def test_render_movement_in_the_editor(window, qapp, tmp_path: Path, monkeypatch
     assert read_wav(out)[0].shape[1] == 1
     assert [window.movement.output.itemText(k) for k in range(2)] == ["binaural", "mono"]
     # A walk with Doppler moving alone renders too, each early path through its delay.
-    window.document.set_walk_doppler("listeners", 0, True)
+    window.document.set_trajectory_doppler("listeners", 0, True)
     window.movement.render.click()
     _wait(qapp, lambda: window.job is None)
     assert window.messages.toPlainText().count("mix-position move for 1.0 s") == 3

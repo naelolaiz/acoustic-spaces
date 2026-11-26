@@ -322,6 +322,9 @@ def test_a_run_s_speed_and_step_go_to_the_trajectories_that_move(tmp_path: Path)
     assert scene_demo.moving_scene(_run(scene)[1]).listeners == Scene.from_yaml(scene).listeners
     assert DEMO.option("speed").moot(resolved) is None
     assert DEMO.option("speed").moot(_run(scene, "--moving", "none")[1]) == "nothing moves"
+    for flag in ("--speed", "--step", "--seconds"):
+        args = _run(scene, flag, "0")[0]
+        assert DEMO.at(scene.parent).check(args) == f"{flag} is a positive number, not 0.0"
 
 
 def test_a_silent_walker_walks_unless_sources_leaves_it_out(tmp_path: Path) -> None:
@@ -334,7 +337,7 @@ def test_a_silent_walker_walks_unless_sources_leaves_it_out(tmp_path: Path) -> N
     scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     args, resolved = _run(scene)
     assert "fan" not in resolved.playing
-    assert scene_demo.walking(resolved, scene_demo.scene_of(resolved)) is None
+    assert scene_demo.run_movers(resolved, scene_demo.scene_of(resolved)) is None
     assert scene_demo.moving_of(resolved) == ["fan"]
     fan = next(s for s in scene_demo.moving_scene(resolved).sources if s.name == "fan")
     assert fan.trajectory is not None and fan.trajectory.enabled

@@ -85,6 +85,20 @@ SPECTRA = [
     ("speech_male", N_("speech_male")),
     ("speech_female", N_("speech_female")),
 ]
+#: A talker's vocal efforts, quietest first, after "none" (the sound power as given).
+VOCAL_EFFORTS = [
+    (None, N_("(none)")),
+    ("relaxed", N_("relaxed")),
+    ("normal", N_("normal")),
+    ("raised", N_("raised")),
+    ("loud", N_("loud")),
+]
+VOCAL_EFFORT_TIP = N_(
+    "How hard the talker talks (ISO 9921): relaxed, normal, raised or loud is its speech "
+    "at 54, 60, 66 or 72 dB(A) 1 m in front of it, which sets its sound power through its "
+    "spectrum and directivity; (none) keeps the sound power you give. For a speech "
+    "spectrum only"
+)
 DIRECTIVITIES = [
     ("omni", N_("omni")),
     ("subcardioid", N_("subcardioid")),
@@ -3413,7 +3427,7 @@ class PointPage(Page):
         self._moves_tip, self._edit_tip = self.moves.toolTip(), self.edit_movement.toolTip()
         self._still_tip = _(
             "Only a point source moves: a line or a surface stands where it is. Set Shape "
-            "to point to give the source a walk"
+            "to point to give the source a trajectory"
         )
         self.movement_row = QWidget()
         movement = QHBoxLayout(self.movement_row)
@@ -3549,6 +3563,10 @@ class PointPage(Page):
             )
         )
         self.spectrum.activated.connect(self._spectrum)
+        self.vocal_effort = QComboBox()
+        _fill(self.vocal_effort, VOCAL_EFFORTS)
+        self.vocal_effort.setToolTip(_(VOCAL_EFFORT_TIP))
+        self.vocal_effort.activated.connect(self._vocal_effort)
         self.gain = spin(-100, 60, 1, 1, "dB")
         self.gain.setToolTip(
             _("Gain of the source's feed (dB): on its level and its impulse responses")
@@ -3673,6 +3691,8 @@ class PointPage(Page):
             form.addRow(self.pattern)
             form.addRow(_("Sound power"), self.level)
             form.addRow(_("Spectrum"), self.spectrum)
+            form.addRow(_("Vocal effort"), self.vocal_effort)
+            self._form.labelForField(self.vocal_effort).setToolTip(_(VOCAL_EFFORT_TIP))
             form.addRow(_("Gain"), self.gain)
             form.addRow(_("Equalizer"), self.eq)
             form.addRow(_("Delay"), self.delay)
@@ -3776,12 +3796,15 @@ class PointPage(Page):
             else:
                 text = _("Directivity index: {values} dB (63 Hz to 8 kHz)").format(values=values)
             self.directivity_index.setText(text)
-            per_band = isinstance(item.level_db, list)
-            total = 10.0 * np.log10(np.sum(10.0 ** (np.array(item.level_db) / 10.0)))
-            self.level.setValue(float(total))
-            self.level.setEnabled(not per_band)
+            talking = item.vocal_effort is not None
+            per_band = isinstance(item.level_db, list) and not talking
+            self.level.setValue(item.sound_power_db)
+            self.level.setEnabled(not per_band and not talking)
             tip = _(LEVEL_TIP)
-            if per_band:
+            if talking:
+                # Translators: {tip} is the sound power's tip.
+                tip = _("{tip}. Given by the vocal effort").format(tip=tip)
+            elif per_band:
                 # Translators: {tip} is the sound power's tip.
                 tip = _("{tip}. Given per band in the scene file; this is their sum").format(
                     tip=tip
@@ -3790,6 +3813,8 @@ class PointPage(Page):
             self._form.labelForField(self.level).setToolTip(tip)
             _choose(self.spectrum, item.spectrum)
             self.spectrum.setEnabled(not per_band)
+            _choose(self.vocal_effort, item.vocal_effort)
+            self.vocal_effort.setEnabled(item.spectrum != "flat")
             self.gain.setValue(item.gain_db)
             self.eq.setText("" if item.eq_db is None else numbers_text(item.eq_db))
             self.delay.setValue(item.delay_ms)
@@ -3848,7 +3873,7 @@ class PointPage(Page):
 
     def _moves(self, on: bool) -> None:
         if not self._loading:
-            self.run(lambda: self.document.set_walk_enabled(self.kind, self.key, on))
+            self.run(lambda: self.document.set_trajectory_enabled(self.kind, self.key, on))
 
     def _position(self, axis: int, value: float) -> None:
         # One value at a time (the orientation too): the other boxes show theirs rounded,
@@ -3961,7 +3986,33 @@ class PointPage(Page):
         self._update(level_db=value)
 
     def _spectrum(self, index: int) -> None:
-        self._update(spectrum=self.spectrum.itemData(index))
+        spectrum = self.spectrum.itemData(index)
+        if spectrum == "flat" and self._item().vocal_effort is not None:
+            self._talking(None, spectrum)  # only a talker has a vocal effort
+        else:
+            self._update(spectrum=spectrum)
+
+    def _vocal_effort(self, index: int) -> None:
+        self._talking(self.vocal_effort.itemData(index))
+
+    def _talking(self, effort: str | None, spectrum: str | None = None) -> None:
+        """Give the source a vocal effort, the sound power following from it, or take it
+        away, keeping the sound power it gave (rounded to 0.1 dB); ``spectrum`` too."""
+        item, index = self._item(), self.key
+
+        def change(data: dict) -> None:
+            entry = data[self.kind][index]
+            if spectrum is not None:
+                entry["spectrum"] = spectrum
+            if effort is None:
+                entry.pop("vocal_effort", None)
+                entry["level_db"] = round(item.sound_power_db, 1)
+            else:
+                entry["vocal_effort"] = effort
+                entry.pop("level_db", None)
+
+        if effort != item.vocal_effort or spectrum is not None:
+            self.apply(_("change source"), change)
 
     def _eq(self) -> None:
         try:

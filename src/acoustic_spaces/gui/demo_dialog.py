@@ -2204,7 +2204,7 @@ class DemoDialog(QDialog):
         if not box.any_used and not names:
             note = _(
                 "Nothing in this scene moves. Edit movement… gives a source or a listener a "
-                "walk along keyframes."
+                "trajectory along keyframes."
             )
             box.set_mode(False, [], note)
         elif option is not None:

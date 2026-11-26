@@ -562,7 +562,7 @@ class Document(QObject):
 
         self.edit(text.format(count=count), change)
 
-    def set_walk_enabled(self, kind: str, index: int, enabled: bool) -> None:
+    def set_trajectory_enabled(self, kind: str, index: int, enabled: bool) -> None:
         """Have the source or listener at ``index`` go along its trajectory in a movement
         (``trajectory.enabled``), or keep the trajectory but leave it standing where it starts."""
         item = getattr(self.scene, kind)[index]
@@ -578,7 +578,7 @@ class Document(QObject):
 
         self.edit(_("turn the trajectory on") if enabled else _("turn the trajectory off"), change)
 
-    def set_walk_doppler(self, kind: str, index: int, doppler: bool) -> None:
+    def set_trajectory_doppler(self, kind: str, index: int, doppler: bool) -> None:
         """Have the trajectory of the source or listener at ``index`` take the early sound through
         delays that change as it goes, so its pitch shifts (``trajectory.doppler``), or crossfade
         from place to place."""

@@ -1053,7 +1053,7 @@ class MainWindow(QMainWindow):
         dock.raise_()
         self._draw()
 
-    def edit_walker(self, kind: str, name: str) -> None:
+    def edit_mover(self, kind: str, name: str) -> None:
         """Open the Movement panel on the source or listener of the open scene named
         ``name`` (Edit movement… in the Run demo window), or on the selection when it has
         no such one."""
@@ -1912,7 +1912,7 @@ class MainWindow(QMainWindow):
             request = dialog.edit_request
             dialog.deleteLater()
             if request is not None:
-                self.edit_walker(*request)
+                self.edit_mover(*request)
             return
         demo, step, args = dialog.chosen()
         dialog.deleteLater()

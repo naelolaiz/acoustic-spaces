@@ -84,7 +84,7 @@ from acoustic_spaces.materials.bands import (
 from acoustic_spaces.materials.ground import PRESETS as GROUND_PRESETS
 from acoustic_spaces.materials.ground import band_absorption, surface_impedance
 from acoustic_spaces.materials.libraries import find_material, read_library
-from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB
+from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB, VOCAL_EFFORT_DB_A, VocalEffort
 from acoustic_spaces.recordings import ALIASES as RECORDING_ALIASES
 from acoustic_spaces.recordings import NAMES as RECORDING_NAMES
 
@@ -1720,6 +1720,14 @@ class Source(_Model):
             "weights for"
         ),
     )
+    vocal_effort: VocalEffort | None = Field(
+        default=None,
+        description=(
+            "a talker's vocal effort, in place of level_db: its speech, of its spectrum, "
+            "54, 60, 66 or 72 dB(A) 1 m in front of it in free field (ISO 9921), which "
+            "sets its sound power per band through its directivity; None: level_db"
+        ),
+    )
     gain_db: float = Field(
         default=0.0,
         ge=-100.0,
@@ -1803,8 +1811,45 @@ class Source(_Model):
         return self.enabled is not False
 
     @model_validator(mode="after")
+    def _level_of_its_voice(self) -> Source:
+        if self.vocal_effort is None:
+            return self
+        if "level_db" in self.model_fields_set:
+            raise ValueError("vocal_effort sets a talker's level: give it or level_db, not both")
+        if self.spectrum == "flat":
+            raise ValueError(
+                "vocal_effort is a talker's: give the source a speech spectrum "
+                "(speech_male or speech_female)"
+            )
+        self.__dict__["level_db"] = self.talking_db(self.vocal_effort)
+        return self
+
+    def talking_db(self, effort: VocalEffort) -> list[float]:
+        """The sound power level per octave band (dB re 1 pW) of this source talking
+        at vocal ``effort``: its speech, of its spectrum, at the effort's level 1 m in
+        front of it in free field (:data:`~acoustic_spaces.parameters.VOCAL_EFFORT_DB_A`)
+        through its directivity ahead."""
+        from acoustic_spaces.directivity import load_directivity
+        from acoustic_spaces.parameters import talker_power_db
+
+        ahead = load_directivity(self.directivity).in_bands("octave").energy([[1.0, 0.0, 0.0]])
+        levels = talker_power_db(VOCAL_EFFORT_DB_A[effort], self.talker, ahead[0])
+        return [round(float(v), 6) for v in levels]
+
+    def talking(self, effort: VocalEffort | None) -> Source:
+        """This source talking at vocal ``effort`` (:meth:`talking_db`); as it is when
+        None."""
+        if effort is None:
+            return self
+        if self.spectrum == "flat":
+            raise ValueError(f"{self.name!r} does not talk: its spectrum is flat")
+        talking = self.model_copy(update={"vocal_effort": effort})
+        talking.__dict__["level_db"] = self.talking_db(effort)
+        return talking
+
+    @model_validator(mode="after")
     def _spectrum_of_a_total(self) -> Source:
-        if isinstance(self.level_db, list) and self.spectrum != "flat":
+        if isinstance(self.level_db, list) and self.spectrum != "flat" and not self.vocal_effort:
             raise ValueError("spectrum shapes a level given in all; a level per band has its own")
         if self.line_m is not None and self.surface_m is not None:
             raise ValueError("a source is a line or a surface, not both")
@@ -3294,6 +3339,9 @@ class Scene(_Model):
         (:meth:`Material.to_data`)."""
         data = self.model_dump(mode="json", exclude_none=True)
         data["materials"] = {name: m.to_data() for name, m in self.materials.items()}
+        for source, entry in zip(self.sources, data["sources"], strict=True):
+            if source.vocal_effort is not None:
+                del entry["level_db"]  # the vocal effort gives it
         if self.simulation.early.coherent_max_band_hz is None:
             data["simulation"]["early"]["coherent_max_band_hz"] = None
         # The open sky's material is added when the scene is read: left out, as written.

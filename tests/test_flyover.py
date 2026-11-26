@@ -91,7 +91,7 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
     data["sources"][0]["trajectory"]["to"] = [[20, 0, 160]]
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert demo.check(demo.defaults()).endswith(
-        "the helicopter flies level, its rotors trimmed for it, but its walk goes from "
+        "the helicopter flies level, its rotors trimmed for it, but its trajectory goes from "
         "150.0 to 160.0 m up: give its points one height"
     )
     path.write_text(level, encoding="utf-8")

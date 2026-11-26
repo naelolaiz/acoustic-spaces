@@ -2162,7 +2162,7 @@ def solve(plans: list[Planned]) -> list[dict]:
     source's listeners that the sound goes the same way to share a run (the same profile;
     with weather or ground zones the same direction too). So do several sources' at one
     height over one ground, where the weather and the grounds have no zones (the places
-    of a walk, say): there a run from one source holds for any other alike, the way along
+    of a trajectory, say): there a run from one source holds for any other alike, the way along
     the ground being the same from each. A run marches out to the farthest of its
     listeners; each is reached by a last step of its own, off to the side of the march.
 

@@ -278,10 +278,10 @@ class Viewport(QWidget):
         for (group, colour, index, item), radius, arrow in zip(shown, radii, arrows, strict=True):
             chosen = kind == group and key == index
             scale = 1.6 if chosen else 1.0
-            walk = path_of(item)
-            if walk is not None and len(walk.positions) > 1:  # the way it goes
+            path = path_of(item)
+            if path is not None and len(path.positions) > 1:  # the way it goes
                 plotter.add_mesh(
-                    pv.lines_from_points(walk.positions),
+                    pv.lines_from_points(path.positions),
                     color=SELECTED_COLOUR if chosen else colour,
                     line_width=2.0,
                     opacity=0.8 if item.in_use and item.trajectory.enabled else 0.25,

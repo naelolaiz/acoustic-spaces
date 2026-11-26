@@ -552,21 +552,21 @@ def _trajectory_text(item) -> str:
     trajectory."""
     if getattr(item, "trajectory", None) is None:
         return ""
-    walk = item.trajectory
-    if walk.keyframes is not None:
-        corners = [item.position, *(frame.position for frame in walk.keyframes)]
-        seconds = walk.keyframes[-1].time_s
-        verb = f"moves through {len(walk.keyframes)} keyframe(s)"
+    trajectory = item.trajectory
+    if trajectory.keyframes is not None:
+        corners = [item.position, *(frame.position for frame in trajectory.keyframes)]
+        seconds = trajectory.keyframes[-1].time_s
+        verb = f"moves through {len(trajectory.keyframes)} keyframe(s)"
     else:
-        corners = [item.position, *walk.to]
+        corners = [item.position, *trajectory.to]
         verb = "moves"
     length = sum(math.dist(a, b) for a, b in zip(corners, corners[1:], strict=False))
-    if walk.keyframes is None:
-        seconds = length / walk.speed_m_s
+    if trajectory.keyframes is None:
+        seconds = length / trajectory.speed_m_s
     x, y, z = corners[-1]
     text = f"  {verb} {length:.1f} m to ({x:.2f}, {y:.2f}, {z:.2f}) in {seconds:.1f} s"
-    text += " with Doppler" if walk.doppler else ""
-    return text + ("" if walk.enabled else " (the trajectory is off: it stands still)")
+    text += " with Doppler" if trajectory.doppler else ""
+    return text + ("" if trajectory.enabled else " (the trajectory is off: it stands still)")
 
 
 def _directivity_text(directivity) -> str:
@@ -2460,7 +2460,7 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
         }
         if args.all_movers:
             return _cmd_movement(room, args, settings, signals, fmt)
-        walk = simulate_trajectory(
+        responses = simulate_trajectory(
             room,
             args.mover,
             listener=args.listener,
@@ -2471,7 +2471,7 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
             progress=lambda message: print(message, file=sys.stderr),
         )
         wet = render_trajectory(
-            walk, signals, fmt, crossfade_s=args.crossfade * 1e-3, equal_power=args.equal_power
+            responses, signals, fmt, crossfade_s=args.crossfade * 1e-3, equal_power=args.equal_power
         )
     except (OSError, ValueError, ImportError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -2479,17 +2479,16 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
     if settings.late.method == "statistical":
         late = "each with its own statistical late part"
     else:
-        late = f"the late part traced at {len(walk.late_places)} of them"
+        late = f"the late part traced at {len(responses.late_places)} of them"
     print(
-        f"{walk.name} moves for {walk.duration_s:.1f} s: responses at "
-        f"{len(walk.names)} places, {late}",
+        f"{responses.name} moves for {responses.duration_s:.1f} s: responses at "
+        f"{len(responses.names)} places, {late}",
         file=sys.stderr,
     )
-    if walk.doppler or args.levels:
-        heard = (
-            sorted({s for s, _ in walk.result.responses}) if walk.kind == "listeners" else [None]
-        )
-        passes = [pass_by(walk, source) for source in heard]
+    if responses.doppler or args.levels:
+        pairs = responses.result.responses
+        heard = sorted({s for s, _ in pairs}) if responses.kind == "listeners" else [None]
+        passes = [pass_by(responses, source) for source in heard]
         for passing in passes:
             print(_pass_by_text(passing))
         if args.levels:
@@ -2507,13 +2506,12 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
         # An MP4 takes the sound along when players can play it: in one or two channels.
         with_sound = Path(args.video).suffix.lower() == ".mp4" and wet.shape[1] <= 2
         try:
-            animate_trajectory(
-                room, walk, args.video, fps=args.fps, sound=Path(args.out) if with_sound else None
-            )
+            sound = Path(args.out) if with_sound else None
+            animate_trajectory(room, responses, args.video, fps=args.fps, sound=sound)
         except (ImportError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        seconds = max(walk.duration_s, len(wet) / rate) if with_sound else walk.duration_s
+        seconds = max(responses.duration_s, len(wet) / rate) if with_sound else responses.duration_s
         print(
             f"saved {args.video}: {seconds:.1f} s at {args.fps} frames per second"
             + (", with the sound" if with_sound else "")
