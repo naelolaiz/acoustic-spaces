@@ -240,8 +240,10 @@ def test_no_reflection_in_the_gap_between_two_screens(tmp_path: Path, name: str,
     the two together make no path over both tops (past both, or exactly at them for
     screens of one height), and the fade adds nothing: the level is the edge
     diffraction's, as with ray tracing, which never tests that sequence. The product of
-    the two terms added 0.76 dB at 63 Hz there, a path 2.25 m longer than the one over
-    both tops."""
+    the two terms moved the level by up to 0.76 dB there (0.76 dB lower at 63 Hz and
+    0.53 dB higher at 125 Hz with the screens 1 m apart, 0.37 dB higher at 125 Hz with
+    the second 0.4 m higher), as a path 2.25 m longer than the one over both tops in
+    the first."""
     engine = _Engine(tmp_path, name, (-3.0, 0.0, -1.0), "second_order")
     assert np.abs(engine.level(receiver) - engine.level(receiver, fade=False)).max() < 1e-9
 
@@ -254,6 +256,82 @@ def test_a_product_over_two_edges_is_kept_where_its_path_can_be(tmp_path: Path) 
     engine = _Engine(tmp_path, "ceiling over two screens", (-3.0, 0.0, -3.0), "second_order")
     receiver = (3.0, 0.0, -3.0)
     assert engine.level(receiver)[0] - engine.level(receiver, fade=False)[0] > 10.0
+
+
+def _channel(closing: float) -> list:
+    """Two walls 3 m high and 10 m long on a ground, x = 10 and x = 14 from y = -10 to
+    0, and a closing wall ``closing`` m high between them at y = 0."""
+    a = EXTENT
+
+    def wall(x0, y0, x1, y1, top):
+        return [(x0, y0, 0.0), (x1, y1, 0.0), (x1, y1, top), (x0, y0, top)]
+
+    return [
+        [(-a, -a, 0.0), (a, -a, 0.0), (a, a, 0.0), (-a, a, 0.0)],
+        wall(10.0, -10.0, 10.0, 0.0, 3.0),
+        wall(14.0, -10.0, 14.0, 0.0, 3.0),
+        wall(10.0, 0.0, 14.0, 0.0, closing),
+    ]
+
+
+@pytest.mark.parametrize("mode", ["first_order", "second_order"])
+def test_no_step_where_a_path_over_two_edges_reflects_at_a_third(tmp_path: Path, mode: str) -> None:
+    """Over the walls of a channel, the path over both tops by way of the closing wall
+    reflects off it at the tops' height: with the closing wall as high, exactly at its
+    top. The product of the tops' terms takes the share of the reflection's Fresnel
+    zone that the wall holds, a half at its top, and the level does not step as the
+    closing wall's top moves by 0.2 mm across that point (a gate on whether the path
+    can be stepped by 5 dB at 63 Hz and 9 dB at 250 Hz)."""
+    levels = []
+    for closing in (3.0 - 1e-4, 3.0 + 1e-4):
+        MODELS["channel"] = lambda closing=closing: _channel(closing)
+        engine = _Engine(tmp_path, "channel", (0.0, -8.0, 1.5), mode)
+        levels.append(engine.level((20.0, -4.0, 1.7)))
+    del MODELS["channel"]
+    assert np.abs(levels[1] - levels[0])[:4].max() < 0.01
+
+
+def test_a_path_over_two_edges_takes_the_order_its_reflections_come_in(tmp_path: Path) -> None:
+    """Between two walls 2 m high that end at a facade, the path from one top to the
+    other by way of the ground and the facade, whose planes are perpendicular and whose
+    images commute, meets them in the order the geometry gives, not in the order of the
+    path the image sources tested: the product of the tops' terms takes the weight of
+    the order its points come in."""
+    a = EXTENT
+
+    def wall(x):
+        return [(x, -a, 0.0), (x, 5.0, 0.0), (x, 5.0, 2.0), (x, -a, 2.0)]
+
+    MODELS["walls at a facade"] = lambda: [
+        [(-a, -a, 0.0), (a, -a, 0.0), (a, a, 0.0), (-a, a, 0.0)],
+        wall(0.0),
+        wall(2.0),
+        [(-a, 5.0, 0.0), (a, 5.0, 0.0), (a, 5.0, a), (-a, 5.0, a)],
+    ]
+    engine = _Engine(tmp_path, "walls at a facade", (-1.0, 2.0, 1.0), "second_order")
+    del MODELS["walls at a facade"]
+    model, edges, fade = engine.model, engine.diffraction.edges, engine.fade
+    ground = int(np.flatnonzero(np.isclose(model.plane_normal[:, 2], 1.0))[0])
+    facade = int(np.flatnonzero(np.isclose(np.abs(model.plane_normal[:, 1]), 1.0))[0])
+    level = np.isclose(edges.start[:, 2], 2.0) & np.isclose(edges.end[:, 2], 2.0)
+    tops = [int(np.flatnonzero(level & np.isclose(edges.start[:, 0], x))[0]) for x in (0.0, 2.0)]
+    wavelength = 2.0 * np.pi / engine.diffraction.wavenumber
+    # From the first top 0.5 m from the facade to the second 2 m from it: the path
+    # meets the facade first, then the ground.
+    points = np.array([[(0.0, 4.5, 2.0), (2.0, 3.0, 2.0)]])
+    start = points[:, 0] + engine.diffraction.offset * fade._bisector[[tops[0]]]
+    end = points[:, 1] + engine.diffraction.offset * fade._bisector[[tops[1]]]
+    weights = [
+        fade._joint_path(start, end, np.array([seq]), np.array([tops]), wavelength.reshape(-1))
+        for seq in ([ground, facade], [facade, ground])
+    ]
+    assert np.all(weights[0] == 0.0)
+    assert np.all(weights[1] > 0.5)
+    geometry = {"planes": np.array([[ground, facade]]), "order": np.array([2])}
+    joint = fade._joint_weights(
+        np.array([0]), points, np.array([tops]), np.array([[0, 4]]), geometry
+    )
+    assert np.allclose(joint.reshape(1, -1), weights[1])
 
 
 def test_diffract_adds_the_fade_with_the_plane_sequences(tmp_path: Path) -> None:
@@ -740,6 +818,34 @@ def test_a_path_over_an_edge_is_clear_past_the_ground(shape: str, mode: str) -> 
         for z in (1.70, 1.72)
     ]
     assert np.abs(levels[1] - levels[0])[:4].max() < 0.15
+
+
+def test_image_sources_and_ray_tracing_agree_behind_two_barriers() -> None:
+    """Behind two barriers, with ``second_order``, the image sources test the
+    reflections in the gap between them, which both barriers stop, and the fade's
+    product of the two tops' terms (or of their ends') makes no path there: the level is
+    the one ray tracing finds, within 0.1 dB from 63 to 500 Hz. The product made it
+    2.2 dB higher at 63 Hz."""
+    levels = [
+        10
+        * np.log10(
+            total_energy(
+                early_paths(
+                    _outdoors(
+                        (20.0, -4.0, 1.7),
+                        source=(0.0, -8.0, 1.5),
+                        max_order=2,
+                        diffraction="second_order",
+                        rows="edges",
+                        method=method,
+                        **_BEHIND["two barriers"],
+                    )
+                )
+            )
+        )
+        for method in ("image_sources", "ray_tracing")
+    ]
+    assert np.abs(levels[1] - levels[0])[:4].max() < 0.1
 
 
 def test_a_leg_shorter_than_the_rays_offset_is_clear() -> None:
