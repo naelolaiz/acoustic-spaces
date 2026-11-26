@@ -29,7 +29,7 @@ half-plane, which is exact far from the edge, and the engine against it:
   and the same block absorbing 0.02, against BTM for the rigid one and the Weyl-van der
   Pol field's loss along its top (|F(w)|, by hand);
 - two thin screens in a row, second order;
-- two thin screens 0.5 to 4 m apart, second order: BTM's second order and the engine,
+- two thin screens 0.5 to 4 m apart, second order: BTM to the second order and the engine,
   with ray tracing (the default) and with image sources, against a wave calculation
   that holds every order of diffraction and reflection (``validation/rows.py``'s: a
   two-dimensional run by finite differences on a 2 cm grid, turned into a point
@@ -560,10 +560,17 @@ def close_screen_references() -> None:
         WAVE_STORED.write_text(json.dumps(stored, indent=1) + "\n")
 
 
+def _passes_above(a, b, x: float, top: float) -> bool:
+    """Whether the line from ``a`` to ``b`` passes above ``top`` at ``x``."""
+    t = (x - a[0]) / (b[0] - a[0])
+    return bool(a[2] + t * (b[2] - a[2]) > top)
+
+
 def close_screens(folder: Path) -> list[dict]:
-    """Two thin screens close together (:data:`CLOSE_SCREENS`): BTM's second order and
-    the engine with ``second_order``, by default (the 63 and 125 Hz bands in pressure)
-    with ray tracing and with image sources, against the wave calculation."""
+    """Two thin screens close together (:data:`CLOSE_SCREENS`): BTM to the second order
+    (over both tops, and over one where an end sees past the other screen's top) and the
+    engine with ``second_order``, by default (the 63 and 125 Hz bands in pressure) with
+    ray tracing and with image sources, against the wave calculation."""
     stored = json.loads(WAVE_STORED.read_text())
     out = []
     bands = len(next(iter(stored.values()))["wave_db"])
@@ -579,6 +586,13 @@ def close_screens(folder: Path) -> list[dict]:
         p1, p2 = _double_path(engine(room, "second_order", fade=False)[0])
         centres = (float((p1 - e1.origin) @ e1.direction), float((p2 - e2.origin) @ e2.direction))
         btm = btm_second(e1, e2, source, receiver, centres, False)
+        # Where one end sees past the other screen's top to an edge, BTM's first order
+        # over that edge too: with the second screen 0.4 m lower the listener sees the
+        # first top 2.5 cm above the second.
+        if _passes_above(e1.origin, receiver, gap, rise):
+            btm = btm + btm_first(e1, source, receiver)
+        if _passes_above(source, e2.origin, 0.0, 0.0):
+            btm = btm + btm_first(e2, source, receiver)
         distance = float(np.linalg.norm(receiver - source))
         row = {
             "case": name,
@@ -1386,7 +1400,7 @@ def _print_close_screens(rows: list[dict]) -> None:
     print("|---|" + "---:|" * bands)
     for row in rows:
         print(f"| {row['case']}: wave calculation | {_row(row['wave_db'])} |")
-        print(f"| BTM, second order - waves | {_row(row['btm_minus_wave_db'])} |")
+        print(f"| BTM to second order - waves | {_row(row['btm_minus_wave_db'])} |")
         for method in ("ray_tracing", "image_sources"):
             print(f"| engine, {method} - waves | {_row(row[f'{method}_minus_wave_db'])} |")
 
