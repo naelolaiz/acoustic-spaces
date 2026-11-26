@@ -2350,18 +2350,37 @@ class EdgeDiffraction:
         d1, d2 = edges.direction[e1], edges.direction[e2]
         t1, t2, ok = _shortest(edges.start[e1], d1, edges.start[e2], d2, self.source, listener)
         # A path that touches the line of an edge within the tolerance of an end touches
-        # the end, as a path over one edge does (_combos).
+        # the end, as a path over one edge does (_combos); the share of the path its
+        # edges give takes where it touches the lines.
+        line1, line2 = t1, t2
         t1 = np.where(np.abs(t1) <= tolerance, 0.0, t1)
         t1 = np.where(np.abs(t1 - edges.length[e1]) <= tolerance, edges.length[e1], t1)
         t2 = np.where(np.abs(t2) <= tolerance, 0.0, t2)
         t2 = np.where(np.abs(t2 - edges.length[e2]) <= tolerance, edges.length[e2], t2)
-        ok &= (t1 >= 0.0) & (t1 <= edges.length[e1]) & (t2 >= 0.0) & (t2 <= edges.length[e2])
         p1 = edges.start[e1] + t1[:, None] * d1
         p2 = edges.start[e2] + t2[:, None] * d2
         r0 = np.linalg.norm(p1 - self.source, axis=1)
         r1 = np.linalg.norm(p2 - p1, axis=1)
         r2 = np.linalg.norm(listener - p2, axis=1)
         ok &= (r1 > tolerance) & ((r0 + r1 + r2) / self.speed_of_sound <= max_delay_s)
+        # The path touches each edge on it, or past an end that fades (end_fades) within
+        # the reach of its fade there, as a path over one edge does (_reach): along each
+        # edge the phase of the path curves as that of the paths over the two edges with
+        # the point on the other edge free, the curvature of its length less what the
+        # other edge's takes of it (two parallel tops of a thick barrier, which end
+        # together, have the curvature of one top seen from the source over the other).
+        curvature = _two_edge_curvatures(d1, d2, p1, p2, self.source, listener)
+        near = []
+        for e, t, s in ((e1, t1, curvature[0]), (e2, t2, curvature[1])):
+            sine = np.sqrt(np.clip(s[1], 0.0, 1.0))
+            reach = _curved_reach(s[0], sine, self.k_min)
+            fade, length = self.fades[e], edges.length[e]
+            ok &= ((t >= 0.0) & (t <= length)) | (
+                ((fade[:, 0] > 0.0) & (t < 0.0) & (t >= -reach))
+                | ((fade[:, 1] > 0.0) & (t > length) & (t <= length + reach))
+            )
+            close = ((fade[:, 0] > 0.0) & (t < reach)) | ((fade[:, 1] > 0.0) & (length - t < reach))
+            near.append((close, reach, s[0]))
         # Each edge lies in the open side of the other, where the path touches it.
         _, rho_21, phi_21, in_21 = edges.frame(e1, p2)
         _, rho_12, phi_12, in_12 = edges.frame(e2, p1)
@@ -2435,6 +2454,8 @@ class EdgeDiffraction:
             return None
         e1, e2, d1, d2, p1, p2 = e1[sel], e2[sel], d1[sel], d2[sel], p1[sel], p2[sel]
         at_end = [tuple(a[sel] for a in parts) for parts in at_end]
+        near = [tuple(a[sel] for a in parts) for parts in near]
+        line1, line2 = line1[sel], line2[sel]
         r0, r1, r2 = r0[sel], r1[sel], r2[sel]
         phi_21, rho_21, phi_12, rho_12 = phi_21[sel], rho_21[sel], phi_12[sel], rho_12[sel]
         n1, n2 = edges.wedge[e1], edges.wedge[e2]
@@ -2464,6 +2485,8 @@ class EdgeDiffraction:
             n1, n2, phi_s1, phi_r2 = (a[ways] for a in (n1, n2, phi_s1, phi_r2))
             sin1, sin2, distance = sin1[ways], sin2[ways], distance[ways]
             at_end = [tuple(a[ways] for a in parts) for parts in at_end]
+            near = [tuple(a[ways] for a in parts) for parts in near]
+            line1, line2 = line1[ways], line2[ways]
         along = np.any(side != 0.0, axis=1)
         for phi, n, e in ((phi_21, n1, e1), (phi_12, n2, e2)):
             on = along & np.isclose(n, 2.0)
@@ -2577,30 +2600,54 @@ class EdgeDiffraction:
             * (r1 + r0)[:, None, None]
             / (r1[:, None, None] * (radius1 + r0[:, None, None]))
         )
-        # A path over two edges stops at the ends of its edges: it is there on the edge
-        # and gone past its end. At an end that fades (end_fades) it counts by half,
-        # midway between the two, as a path over one edge does there, and a term on its
-        # boundary by the share of its wave the corner hides from the way on to the next
-        # point, or the rest of it, as for a path over one edge (_single): so the paths
+        # Near an end of an edge that fades (end_fades), each edge gives each of its terms
+        # its share of the path as it gives a path over it alone (along_edge, _single),
+        # along its line with the curvature of the path's phase along it (above): the
+        # Fresnel integral's, weighted by the term's boundary, so that the path counts by
+        # half at the end itself and fades out past it. At the end itself a term on its
+        # boundary counts by the share of its wave the corner hides from the way on to
+        # the next point, or the rest of it, as for a path over one edge: so the paths
         # over the two pieces of a bent edge, at their joint, are one path, not two.
         shares = []
-        for (half, hidden, times, through), n, phi, phi_from, lit in (
-            (at_end[0], n1, phi_21, phi_s1, lit1),
-            (at_end[1], n2, phi_r2, phi_12, lit2),
+        for corner, (close, reach, curve), n, phi, phi_from, lit, e, t, sin, kl in (
+            (at_end[0], near[0], n1, phi_21, phi_s1, lit1, e1, line1, sin1, kl1),
+            (at_end[1], near[1], n2, phi_r2, phi_12, lit2, e2, line2, sin2, kl2),
         ):
-            rows = np.flatnonzero(half)
+            half, hidden, times, through = corner
+            rows = np.flatnonzero(close)
             eps = _term_angles(n[rows], phi[rows], phi_from[rows])
-            on = _on_boundary_terms(n[rows], eps, through[rows])
-            incident = (_TERM_WAVE == 0)[None, :]
-            takes = np.where(incident == lit[rows][:, _TERM_WAVE], 0.0, 1.0)
-            share = times[rows, None] * np.abs(takes - hidden[rows, None])
-            shares.append((rows, np.where(on, share, 0.5)))
-        first = _waves(
-            n1, phi_21, phi_s1, kl1, lit1, factors1, shares[0][0], shares[0][1][:, :, None, None]
-        )
-        second = _waves(
-            n2, phi_r2, phi_12, kl2, lit2, factors2, shares[1][0], shares[1][1][:, :, None, None]
-        )
+            at_corner = np.full((len(rows), 4, 2), np.nan)
+            ends = np.flatnonzero(half[rows])
+            if len(ends):
+                there = rows[ends]
+                on = _on_boundary_terms(n[there], eps[ends], through[there])
+                incident = (_TERM_WAVE == 0)[None, :]
+                takes = np.where(incident == lit[there][:, _TERM_WAVE], 0.0, 1.0)
+                share = times[there, None] * np.abs(takes - hidden[there, None])
+                end = np.where(t[there] <= 0.5 * edges.length[e[there]], 0, 1)
+                at_corner[ends, :, end] = np.where(on, share, np.nan)
+            wavenumber = np.broadcast_to(k, (len(rows), *k.shape[1:]))
+            scale = np.sqrt(wavenumber * curve[rows, None, None] / np.pi)
+            # The terms' boundaries, as arguments of that integral: the BTM integrand's
+            # distance along the edge from its point scales with the edge's own distance
+            # parameter, its phase with the curvature.
+            own = np.sqrt(curve[rows, None, None] * kl[rows] / wavenumber)
+            own /= sin[rows, None, None] ** 2
+            fades = self.fades[e[rows]]
+            share = along_edge(
+                t[rows],
+                edges.length[e[rows]],
+                scale,
+                fades,
+                reach[rows],
+                closed=self.closed[e[rows]],
+                alone=np.repeat((fades > 0.0)[:, None, :], 4, axis=1),
+                boundary=term_boundaries(n[rows], eps, kl[rows]) * own[:, None],
+                at_end=at_corner,
+            )
+            shares.append((rows, share))
+        first = _waves(n1, phi_21, phi_s1, kl1, lit1, factors1, shares[0][0], shares[0][1])
+        second = _waves(n2, phi_r2, phi_12, kl2, lit2, factors2, shares[1][0], shares[1][1])
         # Along a face, the incident wave and its reflection off the face are one wave.
         _merge(first, leave)
         # At grazing incidence they are one wave too, which already holds the face's
@@ -2635,7 +2682,11 @@ class EdgeDiffraction:
             * loss
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
-        counted = (lit1 == (has1 >= 0))[:, :, None] & (lit2 == (has2 >= 0))[:, None, :]
+        # Near an end that fades, a term counts whether the path over the other edge alone
+        # is there or not, as a path over one edge does there (_single).
+        counted = ((lit1 == (has1 >= 0)) | near[0][0][:, None])[:, :, None] & (
+            (lit2 == (has2 >= 0)) | near[1][0][:, None]
+        )[:, None, :]
         # Where the first edge's wave is lit, the path continues the path over the second
         # edge alone, and its waves at the second edge are one with that path's; and
         # likewise where the second edge's wave is lit. Where both are, both paths over
@@ -3195,6 +3246,35 @@ def _phase_curvature(n, phi, phi_source, kl, reflection, angle) -> np.ndarray:
     with np.errstate(divide="ignore", invalid="ignore"):
         bend = (np.angle(values[2] / values[1]) - np.angle(values[1] / values[0])) / step**2
     return np.nan_to_num(bend, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _two_edge_curvatures(d1, d2, p1, p2, source, listener):
+    """For paths from ``source`` over points ``p1`` and ``p2`` (n, 3) on lines along
+    ``d1`` and ``d2`` (n, 3) to ``listener``, where their length is least: for each line
+    (a pair of (n,) arrays) the curvature of that length along it with the point on the
+    other line free (the second derivative less what the other line's takes of it), and
+    the square of the sine of the angle the path meets the line at."""
+    u, v, w = p1 - source, p2 - p1, listener - p2
+    r0, r1, r2 = (np.maximum(np.linalg.norm(x, axis=1), 1e-300) for x in (u, v, w))
+    u1 = np.einsum("ij,ij->i", d1, u) / r0
+    v1 = np.einsum("ij,ij->i", d1, v) / r1
+    v2 = np.einsum("ij,ij->i", d2, v) / r1
+    w2 = np.einsum("ij,ij->i", d2, w) / r2
+    h11 = (1.0 - u1**2) / r0 + (1.0 - v1**2) / r1
+    h22 = (1.0 - v2**2) / r1 + (1.0 - w2**2) / r2
+    h12 = -(np.einsum("ij,ij->i", d1, d2) - v1 * v2) / r1
+    s1 = np.maximum(h11 - h12**2 / np.maximum(h22, 1e-300), 0.0)
+    s2 = np.maximum(h22 - h12**2 / np.maximum(h11, 1e-300), 0.0)
+    return (s1, 1.0 - u1**2), (s2, 1.0 - w2**2)
+
+
+def _curved_reach(curvature, sine, k_min: float) -> np.ndarray:
+    """How far (m) past a fading end of an edge a path whose length curves by
+    ``curvature`` (1/m) along it, meeting it at ``sine``, is followed: as
+    :func:`_fade_reach`, FADE_REACH over the Fresnel integral's argument per metre at
+    ``k_min``, at no smaller angle than _FADE_MIN_SINE."""
+    spread = np.sqrt(np.pi / (k_min * np.maximum(curvature, 1e-300)))
+    return FADE_REACH * spread * sine / np.maximum(sine, _FADE_MIN_SINE)
 
 
 def _shortest(a, d1, b, d2, source, listener, iterations: int = 50):
