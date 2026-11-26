@@ -695,7 +695,7 @@ share-alike clause would bind the renders too.
 
 ## A concert across a lake
 
-![A frame of the lake video: the lake from above with the wind's arrows and the weather zones, the stage on the lawn, the boat and the village across the water, the listener at a bedroom window there; under it a slice from the stage across the lake with the sound's rays bending down to the water, the weather's caption and a spectrogram of the sound](images/lake_demo.png)
+![A frame of the lake video: the lake from above with the wind's arrows and the weather zones, the stage on the lawn, the boat and the village across the water, the listener at a bedroom window there; under it the view from the side, from the stage across the lake to the window, with the sound's rays bending down to the water and off it, and beside it the tour; at the foot a spectrogram of the sound](images/lake_demo.png)
 
 `lakeside_demo.py` plays a song from the stage of the `lakeside_concert` example on a
 summer evening and mixes it in the audience on the lawn, 140 m behind the stage, on a
