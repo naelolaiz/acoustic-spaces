@@ -50,12 +50,29 @@ def _free_strip() -> list:
     return [[(0.0, -a, -1.0), (0.0, a, -1.0), (0.0, a, 0.0), (0.0, -a, 0.0)]]
 
 
+def _two_screens(x0: float, x1: float, top0: float = 0.0, top1: float = 0.0) -> list:
+    """Thin screens in the planes x = ``x0`` and x = ``x1``, their tops at z = ``top0``
+    and ``top1``, and far down."""
+    a = EXTENT
+    return [
+        [(x, -a, -a), (x, a, -a), (x, a, top), (x, -a, top)] for x, top in ((x0, top0), (x1, top1))
+    ]
+
+
+def _ceiling(height: float) -> list:
+    a = EXTENT
+    return [[(-a, -a, height), (-a, a, height), (a, a, height), (a, -a, height)]]
+
+
 MODELS = {
     "screen end": lambda: _ground() + _screen(0.0, EXTENT),
     "gap": lambda: _ground() + _screen(2.0, EXTENT) + _screen(-EXTENT, -2.0),
     "corner": lambda: _ground() + _corner(),
     "strip": lambda: _ground() + _screen(-1.0, 1.0),
     "free strip": _free_strip,
+    "two screens": lambda: _two_screens(0.0, 1.0),
+    "two screens, the second higher": lambda: _two_screens(0.0, 2.0, 0.0, 0.4),
+    "ceiling over two screens": lambda: _ceiling(1.0) + _two_screens(-1.0, 1.0),
 }
 
 
@@ -210,6 +227,33 @@ def test_no_step_at_the_line_of_sight_over_a_free_standing_strip(tmp_path: Path,
     assert abs(plain[0]) > 2.5
     if mode == "second_order":
         assert np.abs(engine.level(above) - np.array(_STRIP_SIGHT)).max() < 0.1
+
+
+@pytest.mark.parametrize(
+    ("name", "receiver"),
+    [("two screens", (4.0, 0.0, -1.5)), ("two screens, the second higher", (5.0, 0.0, -1.5))],
+)
+def test_no_reflection_in_the_gap_between_two_screens(tmp_path: Path, name: str, receiver) -> None:
+    """Over two thin screens in a row the image sources test the reflections off the
+    second screen's front and then the first's back, in the gap between them, and both
+    screens stop that path. Each top's term reaches it with the other leg straight, but
+    the two together make no path over both tops (past both, or exactly at them for
+    screens of one height), and the fade adds nothing: the level is the edge
+    diffraction's, as with ray tracing, which never tests that sequence. The product of
+    the two terms added 0.76 dB at 63 Hz there, a path 2.25 m longer than the one over
+    both tops."""
+    engine = _Engine(tmp_path, name, (-3.0, 0.0, -1.0), "second_order")
+    assert np.abs(engine.level(receiver) - engine.level(receiver, fade=False)).max() < 1e-9
+
+
+def test_a_product_over_two_edges_is_kept_where_its_path_can_be(tmp_path: Path) -> None:
+    """Under a ceiling over two screens the reflection off the ceiling is stopped by both,
+    and the path over both tops by way of the ceiling can be: the fade keeps the product
+    of the two tops' terms, which makes the level 10.6 dB higher at 63 Hz than the edge
+    diffraction's alone."""
+    engine = _Engine(tmp_path, "ceiling over two screens", (-3.0, 0.0, -3.0), "second_order")
+    receiver = (3.0, 0.0, -3.0)
+    assert engine.level(receiver)[0] - engine.level(receiver, fade=False)[0] > 10.0
 
 
 def test_diffract_adds_the_fade_with_the_plane_sequences(tmp_path: Path) -> None:

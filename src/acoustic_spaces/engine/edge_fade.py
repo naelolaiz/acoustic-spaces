@@ -1253,6 +1253,7 @@ class EdgeFade:
             return parts
         flat = {key: np.concatenate([part[key] for part in parts]) for key in ("path", "at")}
         flat["edge"] = np.concatenate([part["edge"] for part in parts])
+        flat["point"] = np.concatenate([part["point"] for part in parts])
         dark = np.concatenate([~part["lit"] for part in parts])
         strength = np.concatenate([_strength(part["pressure"]) for part in parts])
         rows = np.flatnonzero(many[flat["path"]] & dark)
@@ -1275,7 +1276,7 @@ class EdgeFade:
         }
         # The events at which each edge reaches each path on its dark side, the terms, and
         # the strongest of them.
-        reached, terms_of, power = {}, {}, {}
+        reached, terms_of, power, strongest = {}, {}, {}, {}
         for i, path, edge, at, term in zip(
             rows.tolist(),
             flat["path"][rows].tolist(),
@@ -1286,7 +1287,9 @@ class EdgeFade:
         ):
             reached.setdefault(path, {}).setdefault(edge, set()).add(at)
             terms_of.setdefault((path, edge, at), []).append(i)
-            power[(path, edge, at)] = max(power.get((path, edge, at), 0.0), term)
+            if term > power.get((path, edge, at), -1.0):
+                power[(path, edge, at)] = term
+                strongest[(path, edge, at)] = i
 
         def explain(path: int, run: list, edge: int, events: int) -> int:
             """The event of ``edge`` for the stopping events ``run`` of ``path``, -1 if it
@@ -1314,6 +1317,7 @@ class EdgeFade:
                     found.append((-power[(path, edge, at)], edge, at))
             return [(edge, at, -minus) for minus, edge, at in sorted(found)]
 
+        chosen_of, pairs, stops_of = {}, [], {}
         for path in np.flatnonzero(many).tolist():
             events = 2 * int(order[path]) + 1
             run_of = []
@@ -1327,27 +1331,38 @@ class EdgeFade:
                 elif at % 2:
                     split = True
             stops = [at for at, _ in run_of]
-            chosen = []
             if runs == 1:
-                chosen = [(at, edge, stops) for edge, at, _ in ranked(path, stops, events)[:1]]
-            if not chosen:
-                cuts = range(1, len(stops))
-                if runs == 2:
-                    cuts = [next(i for i, (_, r) in enumerate(run_of) if r == 2)]
-                for cut in cuts:
-                    one, two = stops[:cut], stops[cut:]
-                    both = [
-                        (-power_a * power_b, a, b, at_a, at_b)
-                        for a, at_a, power_a in ranked(path, one, events)
-                        for b, at_b, power_b in ranked(path, two, events)
-                        if at_b > at_a and at_b not in one and at_a not in two
-                    ]
-                    if both:
-                        _, a, b, at_a, at_b = min(both)
-                        chosen = [(at_a, a, one), (at_b, b, two)]
-                        break
-            if not chosen:
-                continue
+                best = ranked(path, stops, events)[:1]
+                if best:
+                    chosen_of[path] = [(at, edge, stops) for edge, at, _ in best]
+                    continue
+            stops_of[path] = stops
+            cuts = range(1, len(stops))
+            if runs == 2:
+                cuts = [next(i for i, (_, r) in enumerate(run_of) if r == 2)]
+            for rank, cut in enumerate(cuts):
+                one, two = stops[:cut], stops[cut:]
+                pairs += [
+                    (path, rank, -power_a * power_b, a, b, at_a, at_b, cut)
+                    for a, at_a, power_a in ranked(path, one, events)
+                    for b, at_b, power_b in ranked(path, two, events)
+                    if at_b > at_a and at_b not in one and at_a not in two
+                ]
+        if pairs:
+            # Of the pairs whose path over both edges can be, the first cut's strongest.
+            ends = np.array(
+                [(strongest[(p[0], p[3], p[5])], strongest[(p[0], p[4], p[6])]) for p in pairs]
+            )
+            column = np.array([(p[0], p[5], p[6]) for p in pairs])
+            ok = self._joint(flat, ends[:, 0], ends[:, 1], column, geometry)
+            best = {}
+            for pair, good in zip(pairs, ok.tolist(), strict=True):
+                if good and (pair[0] not in best or pair[1:7] < best[pair[0]][1:7]):
+                    best[pair[0]] = pair
+            for path, (_, _, _, a, b, at_a, at_b, cut) in best.items():
+                stops = stops_of[path]
+                chosen_of[path] = [(at_a, a, stops[:cut]), (at_b, b, stops[cut:])]
+        for path, chosen in chosen_of.items():
             stop[path] = chosen[0][0]
             if len(chosen) == 2:
                 stop2[path] = chosen[1][0]
@@ -1364,6 +1379,65 @@ class EdgeFade:
             out.append(part)
             offset += n
         return out
+
+    def _joint(self, flat, first, second, events, geometry) -> np.ndarray:
+        """Whether the path over two edges that stand in for a missed path, one at each
+        of two events that stop it, can be: the terms ``first`` and ``second`` of
+        ``flat`` (their edges and points), at the events ``events`` (n, 3: the path, the
+        first event and the second; what stops the paths in ``geometry``, see
+        :meth:`_geometry`). From just off the first edge's point, in the middle of its
+        open side, to just off the second's, the way off the planes of the path's
+        reflections between the two events (as the image method places its points)
+        must reflect off a face of each plane, from its front, and be clear between.
+        Each term is found with the other event's leg straight, as if the path were not
+        stopped there; where the two together make no path (off the front of one
+        screen and the back of another between their tops: past both tops, or exactly
+        at them, where the waves bent back and forth between the tops come later and
+        weaker than such a path would), their product stands for nothing."""
+        model, n = self.model, len(first)
+        ok = np.zeros(n, dtype=bool)
+        if n == 0:
+            return ok
+        path, at_a, at_b = events.T
+        offset = self.d.offset
+        start = flat["point"][first] + offset * self._bisector[flat["edge"][first]]
+        end = flat["point"][second] + offset * self._bisector[flat["edge"][second]]
+        # The reflections between the two events: j (from 1) with at_a < 2 j - 1 < at_b.
+        planes = geometry["planes"][path]
+        j = 2 * np.arange(1, planes.shape[1] + 1) - 1
+        between = (j[None] > at_a[:, None]) & (j[None] < at_b[:, None])
+        between &= np.arange(planes.shape[1])[None] < geometry["order"][path][:, None]
+        count = between.sum(axis=1)
+        for m in np.unique(count).tolist():
+            rows = np.flatnonzero(count == m)
+            if m == 0:
+                ok[rows] = _clear(model, start[rows], end[rows])
+                continue
+            seqs = planes[rows][between[rows]].reshape(len(rows), m)
+            chain = [start[rows]]
+            for i in range(m):
+                chain.append(model.mirror(chain[-1], seqs[:, i]))
+            points, possible = _image_points(
+                model, seqs, chain, start[rows], end[rows], self.tolerance
+            )
+            for i in np.flatnonzero(possible).tolist():
+                faces = [
+                    self._reflecting_face(int(seqs[i, r]), points[i, r + 1], chain[r][i])
+                    for r in range(m)
+                ]
+                if min(faces) < 0:
+                    continue
+                legs = np.diff(points[i], axis=0)
+                length = np.linalg.norm(legs, axis=1)
+                _, hit = _first_solid(
+                    model,
+                    points[i, :-1],
+                    legs / np.maximum(length, 1e-300)[:, None],
+                    length * (1.0 - 1e-9),
+                    np.array([-1, *faces]),
+                )
+                ok[rows[i]] = bool(np.all(hit < 0))
+        return ok
 
     def _terms_at(self, table: dict, slots: np.ndarray, passes: bool, max_delay_s) -> list:
         """The terms of the events ``slots`` of ``table`` at every edge they may meet, in
