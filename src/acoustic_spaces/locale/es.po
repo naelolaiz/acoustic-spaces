@@ -45,6 +45,10 @@ msgid "Tour"
 msgstr "Recorrido"
 
 #: acoustic_spaces/demos/__init__.py
+msgid "Atmosphere"
+msgstr "Atmósfera"
+
+#: acoustic_spaces/demos/__init__.py
 msgid "Credit"
 msgstr "Créditos"
 

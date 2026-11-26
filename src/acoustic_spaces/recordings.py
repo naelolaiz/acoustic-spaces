@@ -72,6 +72,8 @@ class Recording:
     download_mb: float = 0.0
     #: A song's tempo, beats a minute (the demos' tours move on its phrases).
     bpm: float | None = None
+    #: When a song's first downbeat falls (s), which its phrases of eight bars run from.
+    downbeat_s: float = 0.0
     #: Speech's talker, ``male`` or ``female``: the speech spectrum a source that says it
     #: takes (IEC 60268-16), which the STI weights for.
     talker: str | None = None

@@ -123,8 +123,14 @@ class Pictures:
         paths: Mapping[tuple[str, str], object] | None = None,
         movement: dict | None = None,
         indoors: dict | None = None,
+        variants: Mapping[str, tuple[str, dict]] | None = None,
     ):
         self.scene, self.report, self.seats, self.stops = scene, report, seats, list(stops)
+        # The mixes of a listener in still air (audience.still): its name, its results.
+        self.where = {key: listener for key, (listener, _) in (variants or {}).items()}
+        #: how many listeners the stops are at (a listener heard twice, as in the
+        #: scene and in still air, is one place)
+        self.places = len({self.where.get(s.key, s.key) for s in self.stops})
         self.paths = dict(paths or {})
         self.moments = np.asarray((movement or {}).get("times", [0.0]), dtype=float)
         self.along = (movement or {}).get("levels_a_db", {})
@@ -135,21 +141,23 @@ class Pictures:
         self.playing = [s for s in self.sources if s["name"] in set(playing)]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
         self.outline = np.asarray(outline, dtype=float).reshape(-1, 2, 2)
-        # A source whose sound does not reach the listener (None) is left out.
-        self.levels = {
-            (e["source"], e["listener"]): e["spl_a_db"]
-            for e in report["responses"]
-            if e.get("spl_a_db") is not None
-        }
-        self.sti = {
-            (e["source"], e["listener"]): (e.get("speech") or {}).get("sti")
-            for e in report["responses"]
-        }
-        bands = report.get("bands_hz", [63, 125, 250, 500, 1000, 2000, 4000, 8000])
-        self.t30 = {
-            (e["source"], e["listener"]): _mid(e.get("parameters", {}).get("t30", []), bands)
-            for e in report["responses"]
-        }
+        # A source whose sound does not reach the listener (None) is left out. A mix in
+        # still air takes its listener's numbers in its own results.
+        self.levels, self.sti, self.t30 = {}, {}, {}
+        own = {e["listener"]: e["listener"] for e in report["responses"]}
+        for results, named in [
+            (report, own),
+            *((given, {listener: key}) for key, (listener, given) in (variants or {}).items()),
+        ]:
+            bands = results.get("bands_hz", [63, 125, 250, 500, 1000, 2000, 4000, 8000])
+            for e in results["responses"]:
+                if e["listener"] not in named:
+                    continue
+                at = (e["source"], named[e["listener"]])
+                if e.get("spl_a_db") is not None:
+                    self.levels[at] = e["spl_a_db"]
+                self.sti[at] = (e.get("speech") or {}).get("sti")
+                self.t30[at] = _mid(e.get("parameters", {}).get("t30", []), bands)
         points = [self.outline.reshape(-1, 2)] if len(self.outline) else []
         points.append(np.array([s["position"][:2] for s in self.sources], dtype=float))
         points.append(np.array([lis["position"][:2] for lis in self.listeners.values()]))
@@ -223,7 +231,9 @@ class Pictures:
     ) -> None:
         """The outline, the sources with their names, the listeners as rings and the
         listener of the moment as a head, with a ray from each playing source; with
-        ``t``, the trajectories dotted and every mover where it is then."""
+        ``t``, the trajectories dotted and every mover where it is then. ``current`` is
+        the mix of the moment: a listener's, or its in still air."""
+        key, current = current, self.where.get(current, current)
         draw = ImageDraw.Draw(img)
         for (xa, ya), (xb, yb) in self.outline:
             draw.line([plan(xa, ya), plan(xb, yb)], fill=LINE, width=2)
@@ -238,7 +248,7 @@ class Pictures:
             rays(
                 img,
                 plan,
-                self.levels_of(current, t),
+                self.levels_of(key, t),
                 [s for s in sources if s["name"] in playing],
                 plan(*listeners[current]["position"]),
                 lambda _n: SOURCE,
@@ -324,7 +334,8 @@ class Pictures:
 
     def nearest(self, listener: str, t: float | None = None) -> tuple[str, float] | None:
         """The playing source nearest the listener, and how far it is (m), at ``t``."""
-        at = self.placed("listeners", self.listeners[listener], t)["position"]
+        at = self.placed("listeners", self.listeners[self.where.get(listener, listener)], t)
+        at = at["position"]
         if not self.playing:
             return None
         placed = [self.placed("sources", s, t) for s in self.playing]
@@ -368,6 +379,11 @@ class Pictures:
             lines.append(shaking_line(shaking, about is not None, rumble))
         if stop.gain_db > 0.5:
             lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
+        if stop.key in self.where:
+            lines.append(("In still air: the scene without its wind and weather", MUTED))
+            lines.append(("Turned up as much as in the scene's weather", MUTED))
+        elif self.where:
+            lines.append(("In the scene's own wind and weather", MUTED))
         if about is not None:
             lines += [(line, MUTED) for line in about.split("\n")]
         if t is not None and self.paths:
@@ -378,10 +394,14 @@ class Pictures:
         return lines
 
     def title(self, listener: str) -> tuple[str, str]:
-        """The listener's name, and where its stop comes in the tour."""
+        """The listener's name, in still air for its mix in still air, and where its stop
+        comes in the tour."""
         names = [stop.key for stop in self.stops]
         k = names.index(listener) + 1 if listener in names else 0
-        return listener.replace("_", " "), f"Listener {k} of {len(names)}"
+        name = self.where.get(listener, listener).replace("_", " ")
+        if listener in self.where:
+            name = f"{name}, in still air"
+        return name, f"Stop {k} of {len(names)}" if self.where else f"Listener {k} of {len(names)}"
 
     # -- the pictures ------------------------------------------------------------------
 
@@ -397,9 +417,7 @@ class Pictures:
             if len(self.playing) == len(self.sources)
             else f"{len(self.playing)} of {counted(len(self.sources), 'source')} playing"
         )
-        heading(
-            draw, f"{name}, simulated", f"{playing}, heard at {counted(len(self.stops), 'place')}"
-        )
+        heading(draw, f"{name}, simulated", f"{playing}, heard at {counted(self.places, 'place')}")
         plan = self.plan(*PLAN_BOX)
         self.draw_scene(img, plan, stop.key, t)
         draw = ImageDraw.Draw(img)
@@ -459,7 +477,7 @@ class Pictures:
         if self.fmt == "binaural":
             thumbnail_badge(draw, 50, y)
             y += 90
-        places = f"{counted(len(self.playing), 'source')}, {counted(len(self.stops), 'place')}"
+        places = f"{counted(len(self.playing), 'source')}, {counted(self.places, 'place')}"
         text(draw, (50, y), places, font("SemiBold", 32), LISTENER)
         text(draw, (50, 655), "made with acoustic-spaces", font("Medium", 24), TEXT)
         return img

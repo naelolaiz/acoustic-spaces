@@ -203,20 +203,22 @@ def test_a_source_left_out_stands_where_it_starts(tmp_path: Path) -> None:
 
 def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypatch) -> None:
     """The tour visits the listeners in the order ``--listeners`` gives them, the
-    scene's without it; each still numbers its stop in the tour."""
+    scene's without it, or stops in the order ``--tour`` gives them (every listener
+    mixed); each still numbers its stop in the tour."""
     scene = _grouped(tmp_path)
     entries = [{"listener": "seat-a"}, {"listener": "seat-b"}]
     monkeypatch.setattr(scene_demo, "responses_of", lambda args, demo=None: entries)
     seats = {"seats": {name: {"rms_db": -20.0} for name in ("seat-a", "seat-b")}}
-    for argv, order in (
-        ((), ["seat-a", "seat-b"]),
-        (("--tour", "seat-b,seat-a"), ["seat-b", "seat-a"]),
+    for argv, mixed, order in (
+        ((), ["seat-a", "seat-b"], ["seat-a", "seat-b"]),
+        (("--listeners", "seat-b,seat-a"), ["seat-b", "seat-a"], ["seat-b", "seat-a"]),
+        (("--tour", "seat-b,seat-a"), ["seat-a", "seat-b"], ["seat-b", "seat-a"]),
     ):
         resolved = _run(scene, *argv)[1]
-        assert scene_demo.listeners_of(resolved, entries) == order
+        assert scene_demo.listeners_of(resolved, entries) == mixed
         stops = scene_demo.tour_of(resolved, seats, 60.0)
         assert [stop.key for stop in stops] == order
-        assert [stop.at for stop in stops] == [0.0, 20.0]
+        assert [stop.at for stop in stops] == [0.0, 20.0]  # --seconds, 20 s, each
     pytest.importorskip("PIL")
     from acoustic_spaces.demos import scene_pictures
     from acoustic_spaces.scene import Scene
@@ -565,3 +567,176 @@ def test_an_example_s_old_flags_and_steps_read_as_their_general_forms() -> None:
     assert parser.parse_args(["all"]).recording is None
     assert demo.step("turn").name == "render" and simulates(demo.step("scene"))
     assert demo.main(["walk", "--talker", "M4"]) == 0 and ran == ["render"]
+
+
+def test_a_tour_reads_its_stops_and_cuts_them_where_the_music_turns() -> None:
+    """``--tour`` reads LISTENER[:still][:LENGTH],...: each stop in the scene's weather
+    or in still air, for phrases (a number), seconds (12s) or to the end; anything else
+    is refused with the form. The stops follow one another from the recording's start:
+    one in phrases ends on a phrase's boundary counted from the first downbeat, one in
+    seconds after as many, one to the end at the end, one that says nothing a phrase
+    (a recording with a tempo), ``--seconds`` or 20 s; stops of one mix in a row are
+    one, a stop with no time left is left out and the last is cut at the end."""
+    stops = scene_demo.tour_text("near:2, far:still:12s,far::end, near")
+    assert [(s.listener, s.atmosphere, s.phrases, s.seconds, s.to_end) for s in stops] == [
+        ("near", "scene", 2.0, None, False),
+        ("far", "still", None, 12.0, False),
+        ("far", "scene", None, None, True),
+        ("near", "scene", None, None, False),
+    ]
+    assert [scene_demo.stop_key(s) for s in stops] == ["near", "far.still", "far", "near"]
+    for bad in ("near:loud", "near:2:3", ":2", "near:0", "near:-1s"):
+        with pytest.raises(ValueError, match="--tour"):
+            scene_demo.tour_text(bad)
+    tempo = (120.0, 0.5)  # a phrase of 8 bars of 4 beats at 120 bpm: 16 s
+    tour = scene_demo.tour_text("near:2,far:still:12s,far:1,near")
+    assert scene_demo.timed_tour(tour, 80.0, tempo) == [
+        ("near", 0.0, 32.5),  # the upbeat and two phrases
+        ("far.still", 32.5, 44.5),
+        ("far", 44.5, 48.5),  # to the end of the phrase it starts in
+        ("near", 48.5, 64.5),  # a phrase
+    ]
+    assert scene_demo.timed_tour(tour, 80.0, tempo, 10.0)[-1] == ("near", 48.5, 58.5)
+    short = scene_demo.tour_text("near:15s,far:0.25")  # ends at the next boundary
+    assert scene_demo.timed_tour(short, 80.0, tempo)[-1] == ("far", 15.0, 16.5)
+    joined = scene_demo.tour_text("near:5s,near:5s,far:end,near")
+    assert scene_demo.timed_tour(joined, 30.0, None) == [("near", 0.0, 10.0), ("far", 10.0, 30.0)]
+    assert scene_demo.timed_tour(scene_demo.tour_text("near"), 12.0, None) == [("near", 0.0, 12.0)]
+    with pytest.raises(ValueError, match="no tempo"):
+        scene_demo.timed_tour(scene_demo.tour_text("near:2"), 80.0, None)
+    # A listener's stop in still air plays at the gain of the same listener in the
+    # scene's own weather, so that the difference the weather makes is heard.
+    seats = {"seats": {"near": {"rms_db": -10.0}, "far": {"rms_db": -30.0}}}
+    seats["seats"]["far.still"] = {"rms_db": -26.0}
+    gains = scene_demo.stops_gains(seats, ["near", "far.still", "far"])
+    assert gains == {"near": 0.0, "far.still": 20.0, "far": 20.0}
+
+
+def _outdoors(folder: Path, seconds: float = 10.0, **more) -> Path:
+    """A small outdoor scene in a wind, quick to simulate: a band 2 m up plays a tone of
+    ``seconds`` to a listener 10 m away and one 40 m away; ``more`` adds to it."""
+    from acoustic_spaces.demos import audio
+
+    folder.mkdir(parents=True, exist_ok=True)
+    data = {
+        "geometry": {"ground": {"extent": [[-20, -20], [60, 20]], "sky": 20}},
+        "materials": {"field": {"impedance": "grass", "scattering": 0.1}},
+        "default_material": "field",
+        "atmosphere": {"wind": {"speed_m_s": 4.0, "direction_deg": 0}},
+        "sources": [{"name": "band", "position": [0, 0, 2], "signal": "tone.wav"}],
+        "listeners": [
+            {"name": "near", "position": [10, 0, 1.5], "orientation": {"yaw": 180}},
+            {"name": "far", "position": [40, 0, 1.5], "orientation": {"yaw": 180}},
+        ],
+        "simulation": {
+            "ir_length_s": 0.3,
+            "seed": 1,
+            "sample_rate": 16_000,
+            "early": {"method": "image_sources", "max_order": 1},
+            "late": {"rays": 200},
+        },
+        "outputs": ["binaural"],
+        **more,
+    }
+    (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    t = np.arange(int(seconds * 16_000)) / 16_000
+    audio.write(folder / "tone.wav", (0.3 * np.sin(2 * np.pi * 300 * t))[:, None], 16_000)
+    return folder / "scene.yaml"
+
+
+def test_a_tour_is_refused_where_it_cannot_play(tmp_path: Path) -> None:
+    """A tour that does not read, stops at a listener not in use, is in phrases where
+    the recording has no tempo, hears a listener in still air where the scene's air is
+    still already or where something moves, or goes on where each listener is heard
+    from the clock's start, is refused, each saying why; ``--atmosphere`` is moot in a
+    scene whose air is still."""
+    walker = {"name": "walker", "position": [5, 5, 1.5], "trajectory": {"to": [[20, 5, 1.5]]}}
+    scene = _outdoors(tmp_path / "field")
+    demo = DEMO.at(scene.parent)
+
+    def check(*argv: str) -> str | None:
+        return demo.check(demo.parser().parse_args(["render", "--scene", scene.name, *argv]))
+
+    assert check("--tour", "near,far:still") is None
+    assert "--tour takes LISTENER[:still][:LENGTH]" in check("--tour", "near:loud")
+    assert "'nobody', which is not in use" in check("--tour", "nobody")
+    assert "no tempo" in check("--tour", "far:2")
+    assert check("--tour", "far:2", "--bpm", "120") is None
+    assert "--downbeat is for a recording of yours" in check("--downbeat", "0.5")
+    assert "positive" in check("--tour", "far:2", "--bpm", "0")
+    assert check("--atmosphere", "still", "--tour", "far:still") is None
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["listeners"].append(walker)
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    assert "a tour plays on a shared timeline" in check("--tour", "near,far")
+    assert "while walker moves" in check("--tour", "far:still", "--timeline", "shared")
+    assert check("--tour", "far:still", "--moving", "none") is None
+    indoors = _any_scene(tmp_path)
+    demo = DEMO.at(indoors.parent)
+    scene = indoors
+    assert "where the scene's air is still already" in check("--tour", "seat-a:still")
+    assert check("--atmosphere", "still") is not None  # moot: still already
+
+
+def test_a_tour_hears_a_listener_in_the_weather_and_in_still_air(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A scene's own tour: its stops in turn, a listener heard in the scene's wind and,
+    from a second simulation of the scene in still air (``scenes/<name>_still-air.yaml``
+    in the work folder), in still air; each still names its stop and the air, the
+    heading counts each listener once; the stop in still air plays at the gain of the
+    same listener in the wind, so that the tour's audio keeps the difference between
+    the two mixes as simulated."""
+    pytest.importorskip("PIL")
+    from acoustic_spaces.cli import main as cli
+
+    tour = [
+        {"listener": "near", "seconds": 2.0},
+        {"listener": "far", "atmosphere": "still", "seconds": 3.0},
+        {"listener": "far", "to_end": True},
+    ]
+    scene = _outdoors(tmp_path / "field", tour=tour)
+    monkeypatch.chdir(scene.parent)
+    assert cli(["demo", "scene.yaml", "--no-mp4"]) == 0
+    work = scene.parent / "demo"
+    still = Scene.from_yaml(work / "scenes" / "scene_still-air.yaml")
+    assert still.still and still.atmosphere is None
+    assert [s.atmosphere for s in still.tour] == ["scene"] * 3
+    seats = pipeline.read_json(work / "scene_binaural" / "seats" / "seats.json")
+    assert list(seats["seats"]) == ["near", "far", "far.still"]
+    assert seats["seats"]["far.still"]["atmosphere"] == "still"
+    stills = sorted(p.name for p in (work / "scene_binaural" / "stills").glob("*.png"))
+    assert stills == ["00_near.png", "01_far.still.png", "02_far.png"]
+    heard, rate = audio.read(work / "scene_binaural.wav")
+    folder = work / "scene_binaural" / "seats"
+
+    def level(x: np.ndarray, a: float, b: float) -> float:
+        return float(audio.db(np.sqrt(np.mean(x[int(a * rate) : int(b * rate)] ** 2))))
+
+    windy, calm = (audio.read(folder / seats["seats"][k]["file"])[0] for k in ("far", "far.still"))
+    # Clear of the crossfades (1 s, centred on the cuts) and of the last 2.5 s, faded out.
+    simulated = level(calm, 3.0, 4.0) - level(windy, 5.6, 7.0)
+    assert abs(simulated) > 1.0  # the wind changes what is heard 40 m away
+    assert level(heard, 3.0, 4.0) - level(heard, 5.6, 7.0) == pytest.approx(simulated, abs=0.1)
+
+
+def test_a_scene_s_tour_names_its_listeners_and_one_length_a_stop(tmp_path: Path) -> None:
+    """A scene's ``tour``: each stop at a listener of the scene, in its weather or in
+    still air (not where its air is still already), for one length at most; written back
+    as short as it reads."""
+    from pydantic import ValidationError
+
+    from acoustic_spaces.scene import TourStop
+
+    with pytest.raises(ValidationError, match="one length .*not phrases and seconds"):
+        TourStop(listener="near", phrases=2, seconds=3)
+    with pytest.raises(ValidationError, match="not seconds and to_end"):
+        TourStop(listener="near", seconds=3, to_end=True)
+    tour = [{"listener": "near", "phrases": 2}, {"listener": "far", "atmosphere": "still"}]
+    scene = Scene.from_yaml(_outdoors(tmp_path / "field", tour=tour))
+    assert scene.to_data()["tour"] == tour
+    data = scene.to_data()
+    with pytest.raises(ValidationError, match="tour: no listener 'nobody'"):
+        Scene.model_validate({**data, "tour": [{"listener": "nobody"}]})
+    with pytest.raises(ValidationError, match="'far' in still air, where the scene's air"):
+        Scene.model_validate({**data, "atmosphere": None})

@@ -166,6 +166,7 @@ LABELS = {
     "--vocal-effort": N_("Vocal effort"),
     "--seconds": N_("Time per listener"),
     "--tour": N_("Tour"),
+    "--atmosphere": N_("Atmosphere"),
     "--credit": N_("Credit"),
     "--work": N_("Work folder"),
     "--input": N_("What the sources play"),

@@ -1905,7 +1905,7 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
 
 
 def test_a_demo_of_any_scene_plays_the_listeners_named(tmp_path: Path, monkeypatch, capsys) -> None:
-    """``--listeners`` (or ``--tour``, its earlier name): the demo of any scene mixes
+    """``--listeners``: the demo of any scene mixes
     those listeners alone and its video visits them in that order, from a simulation of
     every listener, so that another choice needs no new one; a listener the scene has
     not is refused with those it has."""
@@ -1924,7 +1924,7 @@ def test_a_demo_of_any_scene_plays_the_listeners_named(tmp_path: Path, monkeypat
     assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-b"}
     assert sorted(p.name for p in (work / "stills").glob("*.png")) == ["00_seat-b.png"]
     capsys.readouterr()
-    assert cli([*run, "--tour", "seat-b,seat-a"]) == 0
+    assert cli([*run, "--listeners", "seat-b,seat-a"]) == 0
     assert "simulate: done already" in capsys.readouterr().out
     both = demo / "scene_seat-b+seat-a_seconds-0p8_binaural"
     assert set(pipeline.read_json(both / "seats" / "seats.json")["seats"]) == {"seat-a", "seat-b"}

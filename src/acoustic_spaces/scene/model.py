@@ -3128,6 +3128,40 @@ class Coverage(_Model):
         return value
 
 
+#: The atmospheres a demo of a scene is heard in (:class:`TourStop`): the scene's own,
+#: or still air, the scene without its atmosphere.
+ATMOSPHERES = ("scene", "still")
+
+
+class TourStop(_Model):
+    """A stop of the tour a demo of the scene plays (``tour``): a listener heard for a
+    while as the recording runs on, in the scene's own weather or in still air."""
+
+    listener: str = Field(description="the listener heard")
+    atmosphere: Literal["scene", "still"] = Field(
+        default="scene",
+        description="the scene's own, or still air: the scene without its atmosphere "
+        "(outdoors, where wind or temperature bend the sound)",
+    )
+    phrases: PositiveFloat | None = Field(
+        default=None,
+        description="how long, in phrases of 8 bars of the recording's tempo",
+    )
+    seconds: PositiveFloat | None = Field(default=None, description="how long, s")
+    to_end: bool = Field(default=False, description="whether it lasts to the recording's end")
+
+    @model_validator(mode="after")
+    def _one_length(self) -> TourStop:
+        given = [k for k in ("phrases", "seconds") if getattr(self, k) is not None]
+        if self.to_end:
+            given.append("to_end")
+        if len(given) > 1:
+            raise ValueError(
+                f"a stop gives one length (phrases, seconds or to_end), not {' and '.join(given)}"
+            )
+        return self
+
+
 class Scene(_Model):
     name: str = "untitled"
     geometry: Geometry
@@ -3169,6 +3203,15 @@ class Scene(_Model):
         description=(
             "outdoors: the weather classes and the periods of the day the levels over a "
             "long term are rated over (L_den); the scene is run once in each class"
+        ),
+    )
+    tour: list[TourStop] | None = Field(
+        default=None,
+        description=(
+            "the stops a demo of the scene plays in turn as its recording runs on, where "
+            "nothing moves: each a listener, for a number of phrases, seconds or to the "
+            "end, in the scene's weather or in still air (default: every listener in use "
+            "in turn)"
         ),
     )
 
@@ -3245,6 +3288,13 @@ class Scene(_Model):
             raise ValueError(f"source and listener names must be unique: {', '.join(duplicates)}")
         if self.long_term is not None and self.geometry.ground is None:
             raise ValueError("long_term is for outdoor scenes (geometry.ground)")
+        for stop in self.tour or []:
+            if stop.listener not in {lis.name for lis in self.listeners}:
+                raise ValueError(f"tour: no listener {stop.listener!r} in the scene")
+            if stop.atmosphere == "still" and self.still:
+                raise ValueError(
+                    f"tour: {stop.listener!r} in still air, where the scene's air is still already"
+                )
         removed = self.simulation.insertion_loss_of
         problem = None if removed is None else insertion_loss_problem(self.geometry, removed)
         if problem is not None:
@@ -3342,6 +3392,8 @@ class Scene(_Model):
         for source, entry in zip(self.sources, data["sources"], strict=True):
             if source.vocal_effort is not None:
                 del entry["level_db"]  # the vocal effort gives it
+        if self.tour is not None:  # each stop as short as it reads
+            data["tour"] = [s.model_dump(mode="json", exclude_defaults=True) for s in self.tour]
         if self.simulation.early.coherent_max_band_hz is None:
             data["simulation"]["early"]["coherent_max_band_hz"] = None
         # The open sky's material is added when the scene is read: left out, as written.
