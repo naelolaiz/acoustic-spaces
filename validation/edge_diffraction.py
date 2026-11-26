@@ -46,9 +46,10 @@ half-plane, which is exact far from the edge, and the engine against it:
   it, first order: the listener rises through the top's shadow boundary beside the
   bend and walks past it deep in the shadow, against BTM over both tops, each ending at
   the bend;
-- the corners of a solid block, where three right-angled edges meet, first order: the
-  listener walks past where the paths over its edges reach their ends, against BTM over
-  each edge from end to end;
+- the corners of solid prisms, where three edges meet (a block's, corners of 135 and 45
+  degrees in plan, a thick barrier's end, buildings on a hard ground): the listener
+  walks past where the paths over the edges reach their ends, against BTM over each
+  edge from end to end;
 - the level as the source rises through the plane of the barrier's top, where the path
   over the far corner alone appears, and as the listener does on the other side;
 - the source and the listener in sight of each other just over a block's top, 10 and
@@ -68,8 +69,8 @@ The engine's levels are a simulation's with the scene's settings and the diffrac
 mode each check names (``early_paths`` where named): the specular paths, the edge
 diffraction and the terms that make paths fade at edges. Every comparison is of the
 energy in each octave band, averaged over the engine's eight frequencies in the band
-(BTM's at a shadow boundary, past a screen's corners of other angles and at the line
-of sight over a free strip over 96), relative to the direct sound in free field over
+(BTM's at a shadow boundary, past a screen's corners of other angles, past the corners
+of prisms and at the line of sight over a free strip over 96), relative to the direct sound in free field over
 the same distance. Where a check says so, the engine's levels are given twice: with its
 paths and the terms of their coefficients added in energy, and in the 63 and 125 Hz
 bands in pressure, as the engine adds them there by default
@@ -1131,103 +1132,304 @@ def bent_screen(folder: Path) -> list[dict]:
     return rows
 
 
-#: The solid block of :func:`block_corner` (m): x, y and z from and to, open underneath
-#: and reaching far down, so that only the edges of its top and of its upright corners
-#: diffract within the time compared.
-BLOCK = np.array([(0.0, 2.0), (-10.0, 0.0), (-EXTENT, 0.0)])
+class Prism:
+    """A rigid convex prism: a convex polygon ``plan`` (x, y) from z = ``z0`` up to ``z1``,
+    open underneath unless ``bottom``, in free field; or, with ``ground``, standing on a
+    rigid ground at z = 0 (BTM then takes the prism doubled about the ground, from -z1 to
+    z1, with the source and its image)."""
+
+    def __init__(self, plan, z0: float = -EXTENT, z1: float = 0.0, bottom=False, ground=False):
+        plan = np.asarray(plan, dtype=float)
+        x, y = plan[:, 0], plan[:, 1]
+        if np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y) < 0.0:
+            plan = plan[::-1]  # counter-clockwise seen from above
+        self.plan, self.z0, self.z1, self.bottom, self.ground = plan, z0, z1, bottom, ground
+
+    def _sides(self):
+        return [(self.plan[i], self.plan[(i + 1) % len(self.plan)]) for i in range(len(self.plan))]
+
+    def polygons(self, z0: float, z1: float, bottom: bool) -> list:
+        """The faces: the top, the bottom where there is one, and the sides."""
+        out = [[(x, y, z1) for x, y in self.plan]]
+        if bottom:
+            out.append([(x, y, z0) for x, y in self.plan[::-1]])
+        for a, b in self._sides():
+            out.append([(a[0], a[1], z0), (b[0], b[1], z0), (b[0], b[1], z1), (a[0], a[1], z1)])
+        return out
+
+    def planes(self, z0: float, z1: float, bottom: bool) -> list:
+        """(outward normal, offset) of each face, in the order of :meth:`polygons`."""
+        out = [(np.array([0.0, 0.0, 1.0]), z1)]
+        if bottom:
+            out.append((np.array([0.0, 0.0, -1.0]), -z0))
+        for a, b in self._sides():
+            d = (b - a) / np.linalg.norm(b - a)
+            normal = np.array([d[1], -d[0], 0.0])
+            out.append((normal, float(normal[:2] @ a)))
+        return out
+
+    def edges(self, z0: float, z1: float, bottom: bool) -> list[tuple[Edge, float]]:
+        """Each edge as a wedge with its length: those of the top (and of the bottom),
+        right-angled, and the upright ones, open over 360 degrees less the plan's angle."""
+        out = []
+        for a, b in self._sides():
+            length = float(np.linalg.norm(b - a))
+            d = np.array([(b - a)[0], (b - a)[1], 0.0]) / length
+            inward = np.array([-d[1], d[0], 0.0])
+            out.append((Edge([a[0], a[1], z1], d, inward, [0.0, 0.0, 1.0], 1.5), length))
+            if bottom:
+                out.append((Edge([b[0], b[1], z0], -d, inward, [0.0, 0.0, -1.0], 1.5), length))
+        for i, here in enumerate(self.plan):
+            before, after = self.plan[i - 1], self.plan[(i + 1) % len(self.plan)]
+            d_out = (after - here) / np.linalg.norm(after - here)
+            d_in = (before - here) / np.linalg.norm(before - here)
+            interior = float(np.arccos(np.clip(d_out @ d_in, -1.0, 1.0)))
+            normal = np.array([d_out[1], -d_out[0], 0.0])
+            along = [d_out[0], d_out[1], 0.0]
+            edge = Edge(
+                [here[0], here[1], z0], [0.0, 0.0, 1.0], along, normal, 2.0 - interior / np.pi
+            )
+            out.append((edge, z1 - z0))
+        return out
+
+    def _through(self, a, b, z0: float, z1: float, bottom: bool) -> bool:
+        """Whether the open segment from ``a`` to ``b`` passes through the prism."""
+        d, low, high = b - a, 0.0, 1.0
+        planes = self.planes(z0, z1, bottom)
+        if not bottom:
+            planes = planes + [(np.array([0.0, 0.0, -1.0]), -z0)]
+        for normal, offset in planes:
+            across, room = normal @ d, offset - normal @ a
+            if abs(across) < 1e-15:
+                if room < 0.0:
+                    return False
+                continue
+            t = room / across
+            low, high = (low, min(high, t)) if across > 0.0 else (max(low, t), high)
+        return low < high - 1e-12
+
+    def geometric(self, source, receiver, z0: float, z1: float, bottom: bool, k) -> np.ndarray:
+        """The direct sound unless the prism hides it, and the reflections off its faces
+        (a convex body has no others)."""
+        pressure = np.zeros(len(k), dtype=complex)
+        if not self._through(source, receiver, z0, z1, bottom):
+            distance = float(np.linalg.norm(receiver - source))
+            pressure += np.exp(-1j * k * distance) / distance
+        for (normal, offset), polygon in zip(
+            self.planes(z0, z1, bottom), self.polygons(z0, z1, bottom), strict=True
+        ):
+            if normal @ source - offset <= 0.0 or normal @ receiver - offset <= 0.0:
+                continue
+            image = source - 2.0 * (normal @ source - offset) * normal
+            hit = image + (offset - normal @ image) / (normal @ (receiver - image)) * (
+                receiver - image
+            )
+            corners = np.array(polygon)
+            sides = np.roll(corners, -1, axis=0) - corners
+            if all(
+                np.cross(e, hit - c) @ normal >= -1e-12 for e, c in zip(sides, corners, strict=True)
+            ):
+                distance = float(np.linalg.norm(receiver - image))
+                pressure += np.exp(-1j * k * distance) / distance
+        return pressure
+
+    def btm(self, source, receiver, k=K) -> np.ndarray:
+        """The pressure at ``receiver``: the geometric paths and BTM first order over each
+        edge from end to end (the sound diffracted from one edge to another left out),
+        relative to the direct sound in free field over the same distance, in dB."""
+        source, receiver = np.asarray(source, dtype=float), np.asarray(receiver, dtype=float)
+        if self.ground:  # the prism doubled about the ground, the source and its image
+            shapes = [(-self.z1, self.z1, True)]
+            sources = [source, source * np.array([1.0, 1.0, -1.0])]
+        else:
+            shapes, sources = [(self.z0, self.z1, self.bottom)], [source]
+        pressure = np.zeros(len(k), dtype=complex)
+        for z0, z1, bottom in shapes:
+            for s in sources:
+                pressure = pressure + self.geometric(s, receiver, z0, z1, bottom, k)
+                for edge, length in self.edges(z0, z1, bottom):
+                    limit = np.pi / edge.nu
+                    if edge.frame(s)[1] > limit or edge.frame(receiver)[1] > limit:
+                        continue  # one of them is behind the edge's faces
+                    pressure = pressure + btm_first(edge, s, receiver, k, ends=(0.0, length))
+        return band_level(pressure, float(np.linalg.norm(receiver - source)))
+
+    def seen(self, point) -> tuple:
+        """Which of the edges BTM takes see ``point``."""
+        shapes = [(-self.z1, self.z1, True)] if self.ground else [(self.z0, self.z1, self.bottom)]
+        return tuple(
+            bool(edge.frame(np.asarray(point, dtype=float))[1] <= np.pi / edge.nu)
+            for shape in shapes
+            for edge, _ in self.edges(*shape)
+        )
+
+    def room(self, folder: Path, source, receiver) -> Room:
+        """The engine's room: the prism's faces, with a rigid ground where it stands on one."""
+        polygons = self.polygons(self.z0, self.z1, self.bottom)
+        if self.ground:
+            e = EXTENT
+            polygons = polygons + [[(-e, -e, 0.0), (e, -e, 0.0), (e, e, 0.0), (-e, e, 0.0)]]
+        lines, faces = [], []
+        for polygon in polygons:
+            base = len(lines)
+            lines += [f"v {x} {y} {z}" for x, y, z in polygon]
+            faces.append("f " + " ".join(str(base + i + 1) for i in range(len(polygon))))
+        obj = folder / "prism.obj"
+        obj.write_text("\n".join(lines + ["g surfaces"] + faces) + "\n")
+        scene = {
+            "geometry": {"file": str(obj)},
+            "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+            "default_material": "hard",
+            "sources": [{"name": "s", "position": list(map(float, source))}],
+            "listeners": [{"name": "l", "position": list(map(float, receiver))}],
+        }
+        return Room.from_scene(Scene.model_validate(scene))
 
 
-def _block_quads() -> list:
-    (x0, x1), (y0, y1), (z0, z1) = BLOCK
+def _walk(start, end, step: float, offset=(0.00317, 0.00513, 0.00731)) -> np.ndarray:
+    """Points from ``start`` to ``end`` about ``step`` apart, all moved by ``offset`` so
+    that none lies exactly on a boundary."""
+    start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
+    count = int(round(np.linalg.norm(end - start) / step))
+    return start + np.outer(np.arange(count + 1) / count, end - start) + np.asarray(offset)
+
+
+#: The solid block of :func:`prism_corners` in plan (m), its top at z = 0, open underneath
+#: and reaching far down.
+BLOCK_PLAN = [(0.0, -10.0), (2.0, -10.0), (2.0, 0.0), (0.0, 0.0)]
+
+
+def _corner_walks() -> list[tuple]:
+    """The walks of :func:`prism_corners`: name, prism, source, listener points, mode."""
+    block, beside = Prism(BLOCK_PLAN), (0.0, 0.00317, 0.0)
+    house = [(0.0, -10.0), (6.0, -10.0), (6.0, 0.0), (0.0, 0.0)]
     return [
-        [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)],
-        [(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)],
-        [(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)],
-        [(x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)],
-        [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)],
+        (
+            "a block, 0.3 m over its top",
+            block,
+            (1, 3, 1),
+            _walk((4, -8, 0.3), (4, 2, 0.3), 0.05, beside),
+            "direct",
+        ),
+        (
+            "a block, 1.8 m over its top",
+            block,
+            (1, 3, 1),
+            _walk((4, -8, 1.8), (4, 2, 1.8), 0.05, beside),
+            "direct",
+        ),
+        (
+            "a block, both 1 m under its top",
+            block,
+            (1, 3, -1),
+            _walk((4, -8, -1), (4, 2, -1), 0.05),
+            "direct",
+        ),
+        (
+            "a block, both just under its top",
+            block,
+            (1, 3, -0.3),
+            _walk((4, -8, -0.2), (4, 2, -0.2), 0.05),
+            "direct",
+        ),
+        (
+            "a block, diagonally past its corner",
+            block,
+            (1, 3, 1),
+            _walk((2.5, -7, 0.5), (7, 3, 0.5), 0.05),
+            "direct",
+        ),
+        (
+            "corners of 135 degrees",
+            Prism([(0, -10), (2, -10), (2, -1), (1, 0), (0, 0)]),
+            (1, 3, 1),
+            _walk((4, -8, 0.3), (4, 2, 0.3), 0.05),
+            "direct",
+        ),
+        (
+            "a corner of 45 degrees, over the top",
+            Prism([(0, 0), (6, 0), (0, 6)]),
+            (2, 1, 1),
+            _walk((8, -4, 0.4), (8, 4, 0.4), 0.05),
+            "direct",
+        ),
+        (
+            "a corner of 45 degrees, under the top",
+            Prism([(0, 0), (6, 0), (0, 6)]),
+            (3, -3, -1),
+            _walk((9, -2, -1), (5, 5, -1), 0.05),
+            "direct",
+        ),
+        (
+            "round a 0.5 m thick barrier's end",
+            Prism([(0, -30), (0.5, -30), (0.5, 0), (0, 0)]),
+            (-5, -5, -1.5),
+            _walk((-6, 2, -1), (6, 2, -1), 0.05),
+            "direct",
+        ),
+        (
+            "a 3 m building on a hard ground, 1.5 m up",
+            Prism(house, z0=0.0, z1=3.0, ground=True),
+            (3, 5, 1.0),
+            _walk((10, -9, 1.5), (10, 3, 1.5), 0.05),
+            "first_order",
+        ),
+        (
+            "the same, 3.5 m up over the roof",
+            Prism(house, z0=0.0, z1=3.0, ground=True),
+            (3, 5, 4.0),
+            _walk((10, -9, 3.5), (10, 3, 3.5), 0.05),
+            "first_order",
+        ),
+        (
+            "a 9 m building, above its roof",
+            Prism([(-30, 6), (10, 6), (10, 16), (-30, 16)], z0=0.0, z1=9.0, ground=True),
+            (-55, 0, 4.05),
+            _walk((-5, -4, 10), (15, -4, 10), 0.1),
+            "first_order",
+        ),
+        (
+            "along a 7 m house's front, 7.5 m away",
+            Prism([(-66, 20), (-54, 20), (-54, 28), (-66, 28)], z0=0.0, z1=7.0, ground=True),
+            (0.00317, 7.5, 1.4),
+            _walk((-150, 0, 0.2), (30, 0, 0.2), 1.0),
+            "first_order",
+        ),
     ]
 
 
-def _block_edges() -> list[tuple[Edge, float]]:
-    """The block's edges but those of its open bottom, each a right-angled wedge with
-    its length."""
+def prism_corners(folder: Path) -> list[dict]:
+    """The corners of solid prisms, where three edges meet (a block's, corners of 135
+    and 45 degrees in plan, a thick barrier's end, buildings on a hard ground): the
+    listener walks past where the paths over the edges reach their ends. The engine
+    (every band in pressure; ``direct`` in free field, ``first_order`` on the ground)
+    against BTM over each edge from end to end and the geometric paths, the sound
+    diffracted from one edge to another left out, averaged over 96 frequencies in each
+    band. The steps leave out those where an edge comes into or goes out of sight of the
+    listener, where first-order BTM steps itself."""
+    k = 2.0 * np.pi * band_frequencies(96)[0].ravel() / C
     out = []
-    for axis in range(3):
-        a, b = (i for i in range(3) if i != axis)
-        for va, sa in ((BLOCK[a, 0], -1), (BLOCK[a, 1], 1)):
-            for vb, sb in ((BLOCK[b, 0], -1), (BLOCK[b, 1], 1)):
-                if (a == 2 and sa < 0) or (b == 2 and sb < 0):
-                    continue
-                origin = np.zeros(3)
-                origin[axis], origin[a], origin[b] = BLOCK[axis, 0], va, vb
-                direction, along, normal = np.zeros(3), np.zeros(3), np.zeros(3)
-                direction[axis], along[b], normal[a] = 1.0, -sb, sa
-                edge = Edge(origin, direction, along, normal, 1.5)
-                out.append((edge, float(BLOCK[axis, 1] - BLOCK[axis, 0])))
-    return out
-
-
-def _block_geometric(source, receiver) -> np.ndarray:
-    """The direct sound unless the block hides it, and the reflections off its faces."""
-    pressure = np.zeros(len(K), complex)
-    d = receiver - source
-    with np.errstate(divide="ignore", invalid="ignore"):
-        a, b = (BLOCK[:, 0] - source) / d, (BLOCK[:, 1] - source) / d
-    inside = np.where(d == 0.0, (source >= BLOCK[:, 0]) & (source <= BLOCK[:, 1]), True)
-    low = np.max(np.where(d == 0.0, 0.0, np.minimum(a, b)), initial=0.0)
-    high = np.min(np.where(d == 0.0, 1.0, np.maximum(a, b)), initial=1.0)
-    if not (inside.all() and low < high):
-        distance = float(np.linalg.norm(d))
-        pressure += np.exp(-1j * K * distance) / distance
-    for axis, side in ((0, 0), (0, 1), (1, 0), (1, 1), (2, 1)):
-        plane, sign = BLOCK[axis, side], 1.0 if side else -1.0
-        if (source[axis] - plane) * sign <= 0.0 or (receiver[axis] - plane) * sign <= 0.0:
-            continue
-        image = source.copy()
-        image[axis] = 2.0 * plane - source[axis]
-        hit = image + (plane - image[axis]) / (receiver[axis] - image[axis]) * (receiver - image)
-        others = [i for i in range(3) if i != axis]
-        if all(BLOCK[i, 0] <= hit[i] <= BLOCK[i, 1] for i in others):
-            distance = float(np.linalg.norm(receiver - image))
-            pressure += np.exp(-1j * K * distance) / distance
-    return pressure
-
-
-def block_corner(folder: Path, step: float = 0.05) -> list[dict]:
-    """The corners of a solid block, where three right-angled edges meet: the listener
-    walks along y past the block's side, ``step`` at a time, at two heights above its
-    top, past where the paths over its edges reach their ends. The engine (``direct``,
-    every band in pressure) against BTM over each of the block's edges from end to end
-    and the geometric paths; the sound diffracted from one edge to another is left out."""
-    source = np.array([1.0, 3.0, 1.0])
-    edges = _block_edges()
-    ys = np.arange(-8.0, 2.0 + 1e-9, step) + 0.00317  # none exactly on a boundary
-    out = []
-    for height in (0.3, 1.8):
-        found, exact = [], []
-        for y in ys:
-            receiver = np.array([4.0, y, height])
-            room = _room(folder, "block", _block_quads(), source, receiver)
-            found.append(engine(room, "direct", coherent=8)[1])
-            pressure = _block_geometric(source, receiver)
-            for edge, length in edges:
-                if edge.frame(source)[1] > 1.5 * np.pi or edge.frame(receiver)[1] > 1.5 * np.pi:
-                    continue  # one of them is behind the edge's faces
-                pressure = pressure + btm_first(edge, source, receiver, ends=(0.0, length))
-            exact.append(band_level(pressure, float(np.linalg.norm(receiver - source))))
-        found, exact = np.array(found), np.array(exact)
+    for name, prism, source, walk, mode in _corner_walks():
+        source = np.asarray(source, dtype=float)
+        found = np.array([engine(prism.room(folder, source, r), mode, coherent=8)[1] for r in walk])
+        exact = np.array([prism.btm(source, r, k) for r in walk])
+        seen = [prism.seen(r) for r in walk]
+        steady = np.array([a == b for a, b in zip(seen[:-1], seen[1:], strict=True)])
+        steps = np.abs(np.diff(found, axis=0))[steady]
         difference = np.abs(found - exact)
-        steps = np.abs(np.diff(found, axis=0))
         out.append(
             {
-                "height": height,
+                "walk": name,
+                "mode": mode,
                 "source": source.tolist(),
-                "line": [[4.0, float(ys[0]), height], [4.0, float(ys[-1]), height]],
-                "largest_difference_db": difference.max(axis=0).tolist(),
-                "largest_difference_at_y": ys[difference.argmax(axis=0)].tolist(),
+                "line": [walk[0].tolist(), walk[-1].tolist()],
+                "points": len(walk),
                 "largest_step_db": steps.max(axis=0).tolist(),
-                "largest_step_at_y": ys[1:][steps.argmax(axis=0)].tolist(),
-                "exact_largest_step_db": np.abs(np.diff(exact, axis=0)).max(axis=0).tolist(),
+                "exact_largest_step_db": np.abs(np.diff(exact, axis=0))[steady]
+                .max(axis=0)
+                .tolist(),
+                "largest_difference_db": difference.max(axis=0).tolist(),
+                "largest_difference_at": walk[difference.argmax(axis=0)].tolist(),
             }
         )
     return out
@@ -1371,11 +1573,12 @@ def main() -> None:
                 print(f"| largest step, BTM | {_row(line['exact_largest_step_db'])} |")
                 print(f"| largest difference | {_row(line['largest_difference_db'])} |")
 
-        results["block_corner"] = block = block_corner(folder)
-        print(f"\n| a block's corners, direct (dB) | {header} |\n{rule}")
-        for row in block:
-            steps = _row(row["largest_step_db"])
-            print(f"| {row['height']} m up: largest step, engine | {steps} |")
+        results["prism_corners"] = corners = prism_corners(folder)
+        print(f"\n| the corners of solid prisms (dB) | {header} |\n{rule}")
+        for row in corners:
+            print(
+                f"| {row['walk']} ({row['mode']}): largest step | {_row(row['largest_step_db'])} |"
+            )
             print(f"| largest step, BTM | {_row(row['exact_largest_step_db'])} |")
             print(f"| largest difference | {_row(row['largest_difference_db'])} |")
 
