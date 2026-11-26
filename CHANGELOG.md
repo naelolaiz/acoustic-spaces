@@ -91,6 +91,10 @@
   each at the level its signal plays at there, so the church's second verse is the
   choir alone and its third has the organ on its quiet stops; a long credit takes two
   lines instead of being cut.
+- Changed: the Run demo window puts the options in sections (Recording, Sources,
+  Listeners, Trajectories, Video, Output), and leaves out of view an option that changes
+  nothing for the scene while at its default. Fixed: **Timeline**, **Pieces** and the
+  vibration scripts' options showed their flags as labels.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

@@ -27,7 +27,7 @@ msgstr "idioma: {language} ({source})"
 msgid "Scene"
 msgstr "Escena"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Recording"
 msgstr "Gravació"
 
@@ -242,6 +242,42 @@ msgstr "Com sonen les fonts"
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py
 msgid "Order of the parts"
 msgstr "Ordre de les parts"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Timeline"
+msgstr "Línia de temps"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Pieces"
+msgstr "Peces"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "Moving"
+msgstr "En moviment"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Trains a day"
+msgstr "Trens al dia"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tram passes"
+msgstr "Passos del tramvia"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "House"
+msgstr "Casa"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Floor"
+msgstr "Planta"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Terreny"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Vibration peak"
+msgstr "Pic de la vibració"
 
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
@@ -2120,10 +2156,6 @@ msgstr ""
 "Les fonts i els receptors amb recorregut. Els marcats el segueixen mentre "
 "sona la peça, tots amb un mateix rellotge; els altres es queden on comencen"
 
-#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
-msgid "Moving"
-msgstr "En moviment"
-
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick to move it along its trajectory in this run"
 msgstr "Marqueu-ho perquè segueixi el seu recorregut en aquesta execució"
@@ -2183,6 +2215,40 @@ msgid "Tick what Moving ticks in the scene again"
 msgstr "Torna a marcar el que marca En moviment a l'escena"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"What the scene's sources play: a free recording or one of yours, and its "
+"pieces"
+msgstr ""
+"Què toquen les fonts de l'escena: un enregistrament lliure o un de vostre, i "
+"les seves peces"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The sources that play, what each plays and how they play: together or in turn"
+msgstr ""
+"Les fonts que sonen, què toca cadascuna i com sonen: alhora o per torns"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Where the run listens: the listeners in the order of the tour, and how long "
+"each"
+msgstr ""
+"On escolta l'execució: els receptors en l'ordre del recorregut, i quant de "
+"temps cadascun"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Video"
+msgstr "Vídeo"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/movement.py
+msgid "Output"
+msgstr "Sortida"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What the run mixes to: the format, and the HRTFs of a binaural mix"
+msgstr "A què mescla l'execució: el format, i les HRTF d'una mescla binaural"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "All together, in each part"
 msgstr "Totes juntes, en cada part"
 
@@ -2193,6 +2259,27 @@ msgstr "Cadascun pujat fins al més fort"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "As simulated, one gain for all"
 msgstr "Com s'ha simulat, un sol guany per a tots"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start where something moves, else shared"
+msgstr ""
+"Des de l'inici de cada receptor quan alguna cosa es mou; si no, compartida"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Shared: the tour goes on as the piece plays"
+msgstr "Compartida: el recorregut avança mentre sona la peça"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start"
+msgstr "Des de l'inici de cada receptor"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The scene's own weather"
+msgstr "El temps de l'escena"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Still air"
+msgstr "Aire en calma"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "every one"
@@ -2246,10 +2333,6 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Demostració"
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid "Video"
-msgstr "Vídeo"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -4838,10 +4921,6 @@ msgstr ""
 "fines. No amb el model de dos paràmetres"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Ground"
-msgstr "Terreny"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Model"
 msgstr "Model"
 
@@ -6849,10 +6928,6 @@ msgstr ""
 "quan no en té cap de binaural. La binaural, per a auriculars, va primer: una "
 "font que passa va d'una orella a l'altra, cosa que el mono, un sol canal, no "
 "pot mostrar"
-
-#: acoustic_spaces/gui/movement.py
-msgid "Output"
-msgstr "Sortida"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Render movement…"

@@ -1163,13 +1163,15 @@ class SourcesField(QWidget):
         return [source.name for source in self.sources if source.name in on]
 
     def value(self) -> str | None:
-        """``--sources``: None while the demo's own pick is ticked (or the tree is not
-        there), else the ticked ones, a group wholly ticked by its name, comma separated
-        (empty for none)."""
+        """``--sources``: its default while the demo's own pick is ticked (or the tree is
+        not there): None, or what a preset picks (the church's ``Choir,Organ pipes``);
+        else the ticked ones, a group wholly ticked by its name, comma separated (empty
+        for none)."""
+        own = self.option.default
         if not self.sources:
-            return None if self.picked is None else ",".join(self.picked)
+            return own if self.picked is None else ",".join(self.picked)
         if self.ticked() == self.own_pick:
-            return None
+            return own
         return ",".join(self._names())
 
     def set_value(self, value) -> None:
@@ -1598,6 +1600,17 @@ class TrajectoriesBox(QGroupBox):
         row.addWidget(self.reset)
         row.addStretch(1)
         layout.addLayout(row)
+        #: The run's options of how the trajectories go (--speed), under the table.
+        self.rows = QWidget()
+        layout.addWidget(self.rows)
+
+    def set_rows(self, rows: QWidget) -> None:
+        """Put ``rows`` (a form of the run's options for the trajectories) under the
+        table, in place of the last."""
+        self.layout().replaceWidget(self.rows, rows)
+        self.rows.setParent(None)  # off the window at once, not when Qt deletes it
+        self.rows.deleteLater()
+        self.rows = rows
 
     @property
     def own(self) -> list[str]:
@@ -1685,9 +1698,61 @@ def binaural(args: argparse.Namespace) -> bool:
     return "binaural" in values_of(getattr(args, "format", "binaural"))
 
 
-#: The options the Video box asks for: how the sources and the listeners split into
-#: parts, and their order.
-VIDEO_OPTIONS = ("sources_play", "series", "levels")
+#: The window's sections, in its order: each its title and its tip. The Trajectories
+#: box (:class:`TrajectoriesBox`) and the Video box come in their places.
+SECTIONS = {
+    "recording": (
+        N_("Recording"),
+        N_("What the scene's sources play: a free recording or one of yours, and its pieces"),
+    ),
+    "sources": (
+        N_("Sources"),
+        N_("The sources that play, what each plays and how they play: together or in turn"),
+    ),
+    "listeners": (
+        N_("Listeners"),
+        N_("Where the run listens: the listeners in the order of the tour, and how long each"),
+    ),
+    "trajectories": (N_("Trajectories"), ""),
+    "video": (N_("Video"), ""),
+    "output": (
+        N_("Output"),
+        N_("What the run mixes to: the format, and the HRTFs of a binaural mix"),
+    ),
+}
+#: The section of each option by its flag; an option of none (an example's script's)
+#: goes in the form under the demo's description, an advanced one under Advanced.
+SECTION_OF = {
+    **dict.fromkeys(
+        ("--recording", "--piece", "--stem", "--song", "--music", "--movements"), "recording"
+    ),
+    **dict.fromkeys(
+        (
+            "--sources",
+            "--sources-play",
+            "--input",
+            "--vocal-effort",
+            "--voice",
+            "--talker",
+            "--vehicle",
+            "--rpm",
+            "--siren",
+            "--horn",
+            "--train",
+            "--track",
+            "--broadband",
+            "--blows",
+        ),
+        "sources",
+    ),
+    **dict.fromkeys(
+        ("--listeners", "--seconds", "--timeline", "--tour", "--last-stop", "--indoors"),
+        "listeners",
+    ),
+    **dict.fromkeys(("--speed", "--step", "--height", "--at"), "trajectories"),
+    **dict.fromkeys(("--series", "--levels", "--atmosphere"), "video"),
+    **dict.fromkeys(("--format", "--hrtf"), "output"),
+}
 #: How many parts the Video box lists; it counts the others.
 PARTS_LISTED = 12
 #: Where a sentence of a demo's summary ends: at a full stop and a space.
@@ -1703,6 +1768,16 @@ CHOICE_WORDS = {
     "levels": {
         "matched": N_("Each turned up to the loudest"),
         "as-simulated": N_("As simulated, one gain for all"),
+    },
+    # Its --timeline (scene_demo.TIMELINES) and --atmosphere.
+    "timeline": {
+        "auto": N_("From each listener's start where something moves, else shared"),
+        "shared": N_("Shared: the tour goes on as the piece plays"),
+        "per-listener": N_("From each listener's start"),
+    },
+    "atmosphere": {
+        "scene": N_("The scene's own weather"),
+        "still": N_("Still air"),
     },
 }
 
@@ -1943,6 +2018,12 @@ class DemoDialog(QDialog):
         self.about.setWordWrap(True)
         layout.addWidget(self.about)
 
+        #: The sections of the run's options, by key (:data:`SECTIONS`), and the form
+        #: each holds now.
+        self.sections: dict[str, QGroupBox] = {}
+        self._section_forms: dict[str, QWidget] = {}
+        for key in ("recording", "sources", "listeners"):
+            layout.addWidget(self._section(key))
         self.movement = TrajectoriesBox(movers_of(scene if demos is None else None))
         #: Whether the Trajectories box shows: for a scene's demos, not for a script.
         self._moves = demos is None and scene is not None
@@ -1975,6 +2056,8 @@ class DemoDialog(QDialog):
         self.parts.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         video.addWidget(self.parts)
         layout.addWidget(self.video)
+        self.sections["trajectories"], self.sections["video"] = self.movement, self.video
+        layout.addWidget(self._section("output"))
 
         # What fine-tunes a run, the files and folders it reads and writes and the
         # command line: shown on asking.
@@ -2066,6 +2149,31 @@ class DemoDialog(QDialog):
         self._chose_demo()
         self._fit(reading_width(self))
 
+    def _section(self, key: str) -> QGroupBox:
+        """The group box of the section ``key`` (:data:`SECTIONS`), its form empty."""
+        title, tip = SECTIONS[key]
+        box = QGroupBox(_(title))
+        box.setToolTip(_(tip))
+        box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        inner = QVBoxLayout(box)
+        form = QWidget()
+        inner.addWidget(form)
+        self.sections[key], self._section_forms[key] = box, form
+        return box
+
+    def row_shown(self, name: str) -> bool:
+        """Whether the option ``name``'s row shows in its form (whatever shows the
+        form)."""
+        return self._rows[name].isRowVisible(self.fields[name])
+
+    def section_of(self, name: str) -> QWidget | None:
+        """The section the option ``name`` is in (a group box), the Advanced area, or
+        the form under the demo's description (None)."""
+        widget = self.fields[name]
+        if self.advanced.isAncestorOf(widget):
+            return self.advanced
+        return next((box for box in self.sections.values() if box.isAncestorOf(widget)), None)
+
     def _fit(self, width: int) -> None:
         """As large as the form asks at ``width`` (or wider when it needs more), the
         buttons below, as far as the screen leaves room."""
@@ -2155,7 +2263,10 @@ class DemoDialog(QDialog):
 
         form, more, video = QWidget(), QWidget(), QWidget()
         rows, more_rows, video_rows = QFormLayout(form), QFormLayout(more), QFormLayout(video)
-        for layout in (rows, more_rows, video_rows):
+        forms = {key: QWidget() for key in SECTIONS if key != "video"}
+        section_rows = {key: QFormLayout(w) for key, w in forms.items()}
+        section_rows["video"] = video_rows
+        for layout in (rows, more_rows, *section_rows.values()):
             layout.setContentsMargins(0, 0, 0, 0)
         self.fields = {}
         self._rows: dict[str, QFormLayout] = {}
@@ -2188,11 +2299,26 @@ class DemoDialog(QDialog):
             label = QLabel(_(option.label))
             label.setBuddy(widget)
             label.setToolTip(f"{tip} ({option.option})")
-            if option.name in VIDEO_OPTIONS:
-                form_rows = video_rows
+            section = SECTION_OF.get(option.option)
+            if section == "trajectories" and not (self._moves and not demo.stepless):
+                section = None  # no box of what moves: under the description
+            if option.advanced or option is reads:
+                form_rows = more_rows
+            elif section is not None:
+                form_rows = section_rows[section]
             else:
-                form_rows = more_rows if option.advanced or option is reads else rows
-            if isinstance(widget, SeriesField):  # its own labels
+                form_rows = rows
+            # Its own labels, or a list as its section is named (the sources' tree in
+            # Sources): the whole row, the tip on the field.
+            named = (
+                form_rows is not more_rows
+                and section is not None
+                and option.label == SECTIONS[section][0]
+                and isinstance(widget, (SourcesField, ListenersField))
+            )
+            if named:
+                widget.setToolTip(label.toolTip())
+            if isinstance(widget, SeriesField) or named:
                 form_rows.addRow(widget)
             else:
                 form_rows.addRow(label, widget)
@@ -2205,14 +2331,26 @@ class DemoDialog(QDialog):
         self._layout.replaceWidget(self.options, form)
         self._advanced_layout.replaceWidget(self.advanced_options, more)
         self._video_layout.replaceWidget(self.video_options, video)
-        for old in (self.options, self.advanced_options, self.video_options):
+        olds = [self.options, self.advanced_options, self.video_options]
+        for key, new in forms.items():
+            if key == "trajectories":
+                self.movement.set_rows(new)
+                continue
+            box = self.sections[key]
+            box.layout().replaceWidget(self._section_forms[key], new)
+            olds.append(self._section_forms[key])
+            self._section_forms[key] = new
+        for old in olds:
             old.setParent(None)  # off the window at once, not when Qt deletes it
             old.deleteLater()
+        # Their sizes as they hold the new forms, measured before the window shows.
+        for box in self.sections.values():
+            box.updateGeometry()
         self.options, self.advanced_options, self.video_options = form, more, video
         self.video.setVisible(not demo.stepless)
         if self.isVisible():
             # Shown now, not when Qt next gets round to it, so that _fit measures them.
-            for widget in (form, more, video):
+            for widget in (form, more, video, *forms.values()):
                 widget.show()
         self._refresh()
         if self.isVisible():  # another demo: as tall as its form, as wide as the window
@@ -2316,8 +2454,10 @@ class DemoDialog(QDialog):
         # An option that matters only with another's values (the police car's --siren
         # with --vehicle police_car) shows only then.
         values, moved = vars(args), False
+        idle = demo.idle(args)  # what changes nothing here, at its default: out of view
         for name, form_rows in self._rows.items():
-            widget, shown = self.fields[name], demo.option(name).applies(values)
+            widget = self.fields[name]
+            shown = demo.option(name).applies(values) and name not in idle
             if isinstance(widget, ListenersField):  # none to tick where the scene cannot tell
                 shown = shown and bool(widget.names)
             elif isinstance(widget, SourcesField):
@@ -2329,6 +2469,17 @@ class DemoDialog(QDialog):
                 shown = widget.shown()
             if form_rows.isRowVisible(widget) != shown:
                 form_rows.setRowVisible(widget, shown)
+                moved = True
+        # A section shows where a row of it does.
+        for key in ("recording", "sources", "listeners", "output"):
+            box = self.sections[key]
+            shown = any(
+                rows.isRowVisible(self.fields[name])
+                for name, rows in self._rows.items()
+                if box.isAncestorOf(self.fields[name])
+            )
+            if box.isHidden() == shown:
+                box.setVisible(shown)
                 moved = True
         if moved and self.isVisible():
             self._fit(self.width())

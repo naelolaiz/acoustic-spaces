@@ -39,7 +39,7 @@ The editor works on the same scene files as the command line.
   it is left out of simulations, maps and checks, and is saved as `enabled: false` (the
   form's **Use in simulations** does the same). The eye beside it hides it in the 3D
   view and the plan, or shows it again, without changing the scene. What a scene leaves
-  out starts hidden (the stadium's helicopter, band and singer's microphone), and an
+  out starts hidden (the stadium's helicopter and singer's microphone), and an
   eye follows its tick when that changes, by a click, undo or redo; shown again by its
   eye, an item left out is drawn faded. See
   [Groups, and sources left out](scenes.md#groups-and-sources-left-out).

@@ -23,6 +23,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QDialog,
+    QGroupBox,
     QLabel,
     QMenu,
     QMessageBox,
@@ -368,16 +369,10 @@ def test_using_and_hiding_sources_and_listeners(qapp) -> None:
 
 def test_items_left_out_start_hidden(qapp) -> None:
     """A scene opens with the sources and listeners it leaves out of simulations hidden
-    in the 3D view and the plan: the stadium's helicopter, band and singer's
-    microphone."""
+    in the 3D view and the plan: the stadium's helicopter and singer's microphone (its
+    band plays on the stage)."""
     document = Document.open(example_path("stadium_concert"))
-    assert document.hidden == {
-        ("sources", "helicopter"),
-        ("sources", "drum_kit"),
-        ("sources", "singer_voice"),
-        ("sources", "guitar_amp"),
-        ("listeners", "singer_mic"),
-    }
+    assert document.hidden == {("sources", "helicopter"), ("listeners", "singer_mic")}
 
 
 def test_model_scene_puts_points_inside(qapp) -> None:
@@ -4359,6 +4354,21 @@ def _waiting_demo(tmp_path: Path, seconds: float):
     return demo, demo.resolved(args)
 
 
+def test_every_option_of_every_demo_is_labelled_in_words(qapp) -> None:
+    """The Run demo window labels each option of every example's demos, This scene and
+    the examples' scripts in words (LABELS), never by its flag."""
+    from acoustic_spaces.demos import LABELS
+    from acoustic_spaces.gui.demo_dialog import demos_for
+
+    flags = {
+        option.option
+        for example in list_examples()
+        for demo, _args in demos_for(example_path(example.name))
+        for option in demo.options
+    }
+    assert sorted(flags - LABELS.keys()) == []
+
+
 def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> None:
     """The Run demo window offers the demos of the open scene: This scene, and the demo
     of the example the scene belongs to, on which it starts. It builds its form from the
@@ -4415,22 +4425,38 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert dialog.command.text() == "python stadium_demo.py all"
     assert str(demo.folder) in dialog.folder.text()
     assert dialog.chosen()[1] == ALL
-    # The form shows what changes what the demo plays, labelled in words with the flag
-    # in the tip; Advanced, shut until asked, the step, the files and folders, what
-    # fine-tunes the run and the command.
-    labels = {
-        dialog.options.layout().labelForField(w).text(): name
+    # The form shows what changes what the demo plays in its sections, labelled in words
+    # with the flag in the tip (a list as its section is named, the sources' tree in
+    # Sources, the whole row); Advanced, shut until asked, the step, the files and
+    # folders, what fine-tunes the run and the command.
+    sections = {
+        name: box.title()
         for name, w in dialog.fields.items()
-        if isinstance(w, QWidget) and dialog.options.isAncestorOf(w)
+        if isinstance(w, QWidget) and isinstance(box := dialog.section_of(name), QGroupBox)
+    }
+    assert sections == {
+        "song": "Recording",
+        "music": "Recording",
+        "stems": "Recording",
+        "sources": "Sources",
+        "sources_play": "Sources",
+        "listeners": "Listeners",
+        "series": "Video",
+        "format": "Output",
+        "hrtf": "Output",
+    }
+    labels = {
+        name: label.text()
+        for name in sections
+        if (label := dialog._rows[name].labelForField(dialog.fields[name])) is not None
     }
     assert labels == {
-        "Song": "song",
-        "Your own song": "music",
-        "Stems": "stems",
-        "Format": "format",
-        "HRTFs": "hrtf",
-        "Listeners": "listeners",
-        "Sources": "sources",
+        "song": "Song",
+        "music": "Your own song",
+        "stems": "Stems",
+        "sources_play": "Sources play",
+        "format": "Format",
+        "hrtf": "HRTFs",
     }
     # Every row shows: the concert's sources ticked play together or in turn, and its
     # listeners can each be a part of their own, in the Video box; the files the sources
@@ -4438,15 +4464,11 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert isinstance(dialog.fields["sources"], SourcesField)
     assert isinstance(dialog.fields["series"], SeriesField)
     assert isinstance(dialog.fields["inputs"], SourceInputs)
-    for name in labels.values():
-        assert dialog.options.layout().isRowVisible(dialog.fields[name]), name
-    video = dialog.video_options.layout()
-    for name in ("sources_play", "series"):
-        assert dialog.video.isAncestorOf(dialog.fields[name]) and video.isRowVisible(
-            dialog.fields[name]
-        ), name
+    for name in sections:
+        assert dialog.row_shown(name), name
     assert dialog.parts.text() == "This run makes one video, stadium_spicy_funk_cake_binaural.mp4."
-    assert "(--song)" in dialog.options.layout().labelForField(dialog.fields["song"]).toolTip()
+    assert "(--song)" in dialog._rows["song"].labelForField(dialog.fields["song"]).toolTip()
+    assert "(--sources)" in dialog.fields["sources"].toolTip()
     for name in ("work", "results", "source", "scene", "tour", "bpm", "again"):
         assert dialog.advanced.isAncestorOf(dialog.fields[name]), name
     assert dialog.advanced.isAncestorOf(dialog.step) and dialog.advanced.isAncestorOf(
@@ -4457,7 +4479,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert not dialog.advanced.isHidden()
     dialog.picker.setCurrentIndex(dialog.picker.findData("crossing"))  # stays open
     assert not dialog.advanced.isHidden() and dialog.advanced.isAncestorOf(dialog.fields["work"])
-    assert dialog.options.isAncestorOf(dialog.fields["height"])
+    assert dialog.section_of("height") is dialog.movement
     # An example's script is one step that moves nothing: the feedback of the singer's
     # microphone, its rays above, the scene and the WAV file it writes under Advanced.
     dialog.picker.setCurrentIndex(dialog.picker.findData("feedback"))
@@ -4491,11 +4513,11 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert "--hrtf: no " in dialog.problem.text() and not ok.isEnabled()  # me.sofa is not there
     # A format that takes no HRTFs hides them, and its run leaves them out.
     dialog.fields["format"].pick("ambisonics")
-    assert not dialog.options.layout().isRowVisible(dialog.fields["hrtf"])
+    assert not dialog.row_shown("hrtf")
     assert dialog.problem.text() == "" and "--hrtf" not in dialog.command.text()
     assert dialog.chosen()[2].hrtf is None and dialog.fields["hrtf"].value() == Path("me.sofa")
     dialog.fields["format"].pick(("binaural", "ambisonics"))  # a part of each
-    assert dialog.options.layout().isRowVisible(dialog.fields["hrtf"])
+    assert dialog.row_shown("hrtf")
     assert dialog.chosen()[2].format == ("binaural", "ambisonics")
     assert "--hrtf: no " in dialog.problem.text() and not ok.isEnabled()
     dialog.fields["format"].pick("binaural")
@@ -4757,9 +4779,12 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
     dialog = DemoDialog(scene=example_path("stadium_concert"))
     ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
     field = dialog.fields["listeners"]
-    assert isinstance(field, ListenersField) and dialog.options.isAncestorOf(field)
-    label = dialog.options.layout().labelForField(field)
-    assert label.text() == "Listeners" and "(--listeners)" in label.toolTip()
+    # In the Listeners section, the whole row, the flag in the list's tip.
+    assert isinstance(field, ListenersField) and dialog.section_of("listeners").title() == (
+        "Listeners"
+    )
+    assert dialog._rows["listeners"].labelForField(field) is None
+    assert "(--listeners)" in field.toolTip()
     assert field.names[:3] == ["singer", "guitarist", "drummer"] and len(field.names) == 12
     assert field.ticked() == field.names
     assert dialog.command.text() == "python stadium_demo.py all"
@@ -4790,6 +4815,13 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
     places = ["nave-front", "nave-middle", "nave-back", "side-aisle", "front-pews"]
     assert church.fields["listeners"].names == [*places, "conductor", "in-the-choir"]
     assert church.fields["listeners"].ticked() == church.fields["listeners"].names
+    # Its sources: the church demo's own pick, the choir and the organ's pipes, which the
+    # scene leaves out, each playing its stem; the run can go as the window opens.
+    assert church.picker.currentData() == "church"
+    sources = church.fields["sources"]
+    assert sources.value() == "Choir,Organ pipes" and church.problem.text() == ""
+    assert sources.plays["singer_f1"].endswith("its singer_f1 stem")
+    assert church.command.text() == "python church_demo.py all"
     church.deleteLater()
     walk = DemoDialog(scene=example_path("gallery"))
     names = ["in sight", "round the corner", "visitor", "standing"]
@@ -4938,9 +4970,9 @@ def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
     dialog = DemoDialog(scene=example_path("stadium_concert"))
     ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
     sources = dialog.fields["sources"]
-    assert isinstance(sources, SourcesField) and dialog.options.isAncestorOf(sources)
-    label = dialog.options.layout().labelForField(sources)
-    assert label.text() == "Sources" and "(--sources)" in label.toolTip()
+    assert isinstance(sources, SourcesField) and dialog.section_of("sources").title() == ("Sources")
+    assert dialog._rows["sources"].labelForField(sources) is None
+    assert "(--sources)" in sources.toolTip()
     tree = sources.tree
     groups = [tree.topLevelItem(k) for k in range(tree.topLevelItemCount())]
     assert [group.text(0) for group in groups] == ["PA", "Monitors", "Band"]
@@ -4980,7 +5012,7 @@ def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
     # Together, or each top group in turn in a part of its own, which the order of the
     # parts then lists.
     play = dialog.fields["sources_play"]
-    assert dialog.video.isAncestorOf(play) and dialog._rows["sources_play"].isRowVisible(play)
+    assert dialog.sections["sources"].isAncestorOf(play) and dialog.row_shown("sources_play")
     assert play.currentData() == "together" and play.currentText() == "All together, in each part"
     play.setCurrentIndex(play.findData("in-turn"))
     assert play.currentText() == "Each in a part of its own"

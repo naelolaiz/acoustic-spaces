@@ -216,6 +216,15 @@ LABELS = {
     "--sources": N_("Sources"),
     "--sources-play": N_("Sources play"),
     "--series": N_("Order of the parts"),
+    "--timeline": N_("Timeline"),
+    "--piece": N_("Pieces"),
+    "--moving": N_("Moving"),
+    "--trains-per-day": N_("Trains a day"),
+    "--tram-events": N_("Tram passes"),
+    "--building": N_("House"),
+    "--floor": N_("Floor"),
+    "--ground": N_("Ground"),
+    "--peak": N_("Vibration peak"),
 }
 #: The options the editor keeps under Advanced besides the files and folders a demo
 #: writes, the example's scenes it reads and the flags, by flag: what fine-tunes a run
@@ -1084,6 +1093,24 @@ class Demo:
             if option.name == dim:
                 return option.option.lstrip("-")
         return dim
+
+    def idle(self, args: argparse.Namespace) -> set[str]:
+        """The options (by name) that change nothing in a run with ``args`` and stand at
+        their defaults (:attr:`Option.moot`): what the editor leaves out of view, as a
+        song's stems beside a free recording; none where the arguments cannot be read."""
+        out: set[str] = set()
+        try:
+            single = self._single(args)
+            for option in self.options:
+                if option.moot is None:
+                    continue
+                if getattr(args, option.name, None) not in (None, option.default):
+                    continue
+                if option.moot(single) is not None:
+                    out.add(option.name)
+        except Exception:  # what is wrong, the check says
+            return set()
+        return out
 
     def _single(self, args: argparse.Namespace) -> argparse.Namespace:
         """The arguments of the first part of a run with ``args``, as the demo's hooks

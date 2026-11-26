@@ -27,7 +27,7 @@ msgstr "lingua: {language} ({source})"
 msgid "Scene"
 msgstr "Scena"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Recording"
 msgstr "Registrazione"
 
@@ -242,6 +242,42 @@ msgstr "Come suonano le sorgenti"
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py
 msgid "Order of the parts"
 msgstr "Ordine delle parti"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Timeline"
+msgstr "Linea temporale"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Pieces"
+msgstr "Brani"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "Moving"
+msgstr "In movimento"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Trains a day"
+msgstr "Treni al giorno"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tram passes"
+msgstr "Passaggi del tram"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "House"
+msgstr "Casa"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Floor"
+msgstr "Piano"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Terreno"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Vibration peak"
+msgstr "Picco della vibrazione"
 
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
@@ -2131,10 +2167,6 @@ msgstr ""
 "mentre suona il brano, tutti con un unico orologio; gli altri restano dove "
 "iniziano"
 
-#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
-msgid "Moving"
-msgstr "In movimento"
-
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick to move it along its trajectory in this run"
 msgstr "Spuntare perché segua la sua traiettoria in questa esecuzione"
@@ -2194,6 +2226,42 @@ msgid "Tick what Moving ticks in the scene again"
 msgstr "Spunta di nuovo ciò che In movimento spunta nella scena"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"What the scene's sources play: a free recording or one of yours, and its "
+"pieces"
+msgstr ""
+"Che cosa suonano le sorgenti della scena: una registrazione libera o una "
+"tua, e i suoi brani"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The sources that play, what each plays and how they play: together or in turn"
+msgstr ""
+"Le sorgenti che suonano, che cosa suona ciascuna e come suonano: insieme o a "
+"turno"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Where the run listens: the listeners in the order of the tour, and how long "
+"each"
+msgstr ""
+"Dove ascolta l'esecuzione: i ricevitori nell'ordine del percorso, e per "
+"quanto ciascuno"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Video"
+msgstr "Video"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/movement.py
+msgid "Output"
+msgstr "Uscita"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What the run mixes to: the format, and the HRTFs of a binaural mix"
+msgstr ""
+"In che cosa mixa l'esecuzione: il formato, e le HRTF di un mix binaurale"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "All together, in each part"
 msgstr "Tutte insieme, in ogni parte"
 
@@ -2204,6 +2272,28 @@ msgstr "Ognuno alzato fino al più forte"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "As simulated, one gain for all"
 msgstr "Come simulato, un solo guadagno per tutti"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start where something moves, else shared"
+msgstr ""
+"Dall'inizio di ciascun ricevitore dove qualcosa si muove, altrimenti "
+"condivisa"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Shared: the tour goes on as the piece plays"
+msgstr "Condivisa: il percorso prosegue mentre suona il brano"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start"
+msgstr "Dall'inizio di ciascun ricevitore"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The scene's own weather"
+msgstr "Il tempo della scena"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Still air"
+msgstr "Aria ferma"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "every one"
@@ -2257,10 +2347,6 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Dimostrazione"
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid "Video"
-msgstr "Video"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -4858,10 +4944,6 @@ msgstr ""
 "strati sottili. Non con il modello a due parametri"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Ground"
-msgstr "Terreno"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Model"
 msgstr "Modello"
 
@@ -6885,10 +6967,6 @@ msgstr ""
 "sferica quando non ne ha una binaurale. La binaurale, per cuffie, viene "
 "prima: una sorgente che passa va da un orecchio all'altro, cosa che il mono, "
 "un solo canale, non può mostrare"
-
-#: acoustic_spaces/gui/movement.py
-msgid "Output"
-msgstr "Uscita"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Render movement…"

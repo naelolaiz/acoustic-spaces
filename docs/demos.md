@@ -156,21 +156,28 @@ as it is.
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This scene*
 (below), and for an example's scene, or a copy of one, the example's own demos and its
 scripts that are no demos. The window shows the options that change what the demo plays,
-at the command line's defaults, each in one place. A choice, and **Format**, is a list
-to pick from, which **Several…** turns into a list to tick, dragged into the order its
-parts play; a number takes several comma separated. The sources are a tree of the
-scene's groups to tick (a table where the demo takes no `--sources`), which says what
-each plays and takes a WAV of yours for it (**Choose WAV…**, or a double click). The
-**Movement** box shows what the run moves along its trajectory (*This scene*: ticks to
-change it), and **Edit movement…** changes a trajectory. The **Video** box says what the
-run makes, the video's name and, a line each, what sets its parts apart, in order; it
-holds how the sources play, whether a tour visits the listeners in each part or each is
-a part of its own, and, for parts of two kinds or more, **Order of the parts**, whose
-rows are dragged to set `--series`. **Advanced** holds the step, the paths and the
-command line, to repeat the run in a terminal. A line above **Run** says what the run
-downloads and how much. The demo reads the scene's file, so the editor asks to save a
-scene with no file or with changes first. However it closes, the window keeps the
-options changed in it for the next time, each demo its own: a pick from a list, a
+at the command line's defaults, each in one place, in sections: **Recording** (what the
+sources play, and its pieces), **Sources**, **Listeners** (in the tour's order, the
+timeline, how long each stop lasts), **Trajectories**, **Video** and **Output** (the
+format and the HRTFs); a section shows where the demo has an option of it, and an option
+that changes nothing for the scene stays out of view while at its default (a song's
+stems where none plays, **Pieces** for a recording of one piece, **Speed** where nothing
+moves). A choice, and **Format**, is a list to pick from, which **Several…** turns into
+a list to tick, dragged into the order its parts play; a number takes several comma
+separated. The sources are a tree of the scene's groups to tick (a table where the demo
+takes no `--sources`), which says what each plays and takes a WAV of yours for it
+(**Choose WAV…**, or a double click), with how they play: together, or each in a part of
+its own. The **Trajectories** box shows what the run moves along its trajectory (*This
+scene*: ticks to change it), with the speed and the step, and **Edit movement…** changes
+a trajectory. The **Video** box says what the run makes, the video's name and, a line
+each, what sets its parts apart, in order; it holds the levels between the listeners,
+the atmosphere, whether a tour visits the listeners in each part or each is a part of
+its own, and, for parts of two kinds or more, **Order of the parts**, whose rows are
+dragged to set `--series`. **Advanced** holds the step, what fine-tunes the run, the
+paths and the command line, to repeat the run in a terminal. A line above **Run** says
+what the run downloads and how much. The demo reads the scene's file, so the editor asks
+to save a scene with no file or with changes first. However it closes, the window keeps
+the options changed in it for the next time, each demo its own: a pick from a list, a
 number, a tick and a file of yours (the HRTFs, a song with its credit) for any scene,
 and what names something in the scene (the listeners, the files its sources play, what
 moves, the format, a tour) for that scene file, which also keeps the demo picked;

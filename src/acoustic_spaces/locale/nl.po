@@ -27,7 +27,7 @@ msgstr "taal: {language} ({source})"
 msgid "Scene"
 msgstr "Scène"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Recording"
 msgstr "Opname"
 
@@ -242,6 +242,42 @@ msgstr "Hoe de bronnen spelen"
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py
 msgid "Order of the parts"
 msgstr "Volgorde van de delen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Timeline"
+msgstr "Tijdlijn"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Pieces"
+msgstr "Stukken"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "Moving"
+msgstr "In beweging"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Trains a day"
+msgstr "Treinen per dag"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tram passes"
+msgstr "Trampassages"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "House"
+msgstr "Huis"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Floor"
+msgstr "Verdieping"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Grond"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Vibration peak"
+msgstr "Trillingspiek"
 
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
@@ -2121,10 +2157,6 @@ msgstr ""
 "De bronnen en ontvangers met een route. Aangevinkte volgen die terwijl het "
 "stuk speelt, allemaal op één klok; de andere blijven staan waar ze beginnen"
 
-#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
-msgid "Moving"
-msgstr "In beweging"
-
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick to move it along its trajectory in this run"
 msgstr "Vink aan om het in deze run zijn route te laten volgen"
@@ -2184,6 +2216,40 @@ msgid "Tick what Moving ticks in the scene again"
 msgstr "Vink opnieuw aan wat In beweging in de scène aanvinkt"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"What the scene's sources play: a free recording or one of yours, and its "
+"pieces"
+msgstr ""
+"Wat de bronnen van de scène spelen: een vrije opname of een eigen, en de "
+"stukken ervan"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The sources that play, what each plays and how they play: together or in turn"
+msgstr ""
+"De bronnen die spelen, wat elk speelt en hoe ze spelen: samen of om de beurt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Where the run listens: the listeners in the order of the tour, and how long "
+"each"
+msgstr ""
+"Waar de run luistert: de ontvangers in de volgorde van de rondgang, en hoe "
+"lang elk"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Video"
+msgstr "Video"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/movement.py
+msgid "Output"
+msgstr "Uitvoer"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What the run mixes to: the format, and the HRTFs of a binaural mix"
+msgstr "Waarnaar de run mixt: het formaat en de HRTF's van een binaurale mix"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "All together, in each part"
 msgstr "Allemaal samen, in elk deel"
 
@@ -2194,6 +2260,26 @@ msgstr "Elk opgehaald tot de luidste"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "As simulated, one gain for all"
 msgstr "Zoals gesimuleerd, één versterking voor alle"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start where something moves, else shared"
+msgstr "Vanaf de start van elke ontvanger waar iets beweegt, anders gedeeld"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Shared: the tour goes on as the piece plays"
+msgstr "Gedeeld: de rondgang gaat door terwijl het stuk speelt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start"
+msgstr "Vanaf de start van elke ontvanger"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The scene's own weather"
+msgstr "Het weer van de scène"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Still air"
+msgstr "Stille lucht"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "every one"
@@ -2247,10 +2333,6 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Demo"
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid "Video"
-msgstr "Video"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -4849,10 +4931,6 @@ msgstr ""
 "met het tweeparametermodel"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Ground"
-msgstr "Grond"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Model"
 msgstr "Model"
 
@@ -6865,10 +6943,6 @@ msgstr ""
 "geen binaurale heeft. Binauraal, voor hoofdtelefoons, komt eerst: een bron "
 "die voorbijkomt gaat van het ene oor naar het andere, wat mono, één kanaal, "
 "niet kan laten horen"
-
-#: acoustic_spaces/gui/movement.py
-msgid "Output"
-msgstr "Uitvoer"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Render movement…"

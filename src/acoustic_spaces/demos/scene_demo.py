@@ -607,6 +607,18 @@ def free_of(scene: Scene) -> recordings.Recording | None:
     return recordings.named(scene.recording) if isinstance(scene.recording, str) else None
 
 
+def piece_moot(args: argparse.Namespace) -> str | None:
+    """Why ``--piece`` changes nothing in a run with ``args``: its recording is of one
+    piece; None for one of several, or where the scene cannot be read."""
+    scene = _run(args)
+    if scene is None:
+        return None
+    free = free_of(scene)
+    if free is None or not free.pieces:
+        return "--piece is for a recording of several pieces, and this one is of one"
+    return None
+
+
 def piece_given(args: argparse.Namespace) -> str | None:
     """The piece ``--piece`` names for a run of one (a part of a run of several), or
     None."""
@@ -2314,6 +2326,7 @@ DEMO = Demo(
             unset="each the tour plays",
             each=lambda args: pieces_of(args),
             one_level=True,
+            moot=lambda args: piece_moot(args),
         ),
         Option(
             "zips",
