@@ -615,10 +615,11 @@ def close_screens(folder: Path) -> list[dict]:
 
 
 #: A thin ceiling 1 m over two thin screens 2 m apart (tops at z = 0, x = -1 and 1),
-#: the source and the listener 3 m before and past them, 3 m below the tops, against the
-#: wave calculation: the path over both tops reflects off the ceiling at x = 0, and the
-#: ceiling runs from ``start`` to ``end`` in the wave calculation's grid (each a cell
-#: boundary there, 1 cm past the place the engine has: see :func:`ceiling_references`).
+#: the source 2 m before the first and the listener 2 m past the second (x = -3 and 3),
+#: 3 m below the tops, against the wave calculation: the path over both tops reflects
+#: off the ceiling at x = 0, and the ceiling runs from ``start`` to ``end`` in the wave
+#: calculation's grid (each a cell boundary there, 1 cm past the place the engine has:
+#: see :func:`ceiling_references`).
 CEILING = (
     ("whole", -math.inf, math.inf),
     ("ending 1.01 m past the reflection", -math.inf, 1.02),

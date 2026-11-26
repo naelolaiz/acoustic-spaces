@@ -1170,8 +1170,8 @@ is none in the gap. Taken whole, that product put image sources up to 3.2 dB fro
 tracing here (0.5 m apart, at 125 Hz).
 
 Where such a path can be, the product stays: under a thin ceiling 1 m above the tops of
-two screens 2 m apart (the source and the listener 3 m before and past them, 3 m below
-the tops) the reflection off the ceiling is stopped by both screens, and the product of
+two screens 2 m apart (the source 2 m before the first and the listener 2 m past the
+second, 3 m below the tops) the reflection off the ceiling is stopped by both screens, and the product of
 the tops' terms stands for the path over both by way of the ceiling. `--ceiling` checks
 it against the same wave calculation (`validation/ceiling_wave.json`), with the ceiling
 whole, ending near the point where that path reflects, or a strip round that point; ray

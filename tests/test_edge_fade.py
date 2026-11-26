@@ -72,6 +72,8 @@ MODELS = {
     "free strip": _free_strip,
     "two screens": lambda: _two_screens(0.0, 1.0),
     "two screens, the second higher": lambda: _two_screens(0.0, 2.0, 0.0, 0.4),
+    "two screens close, the second 1 m higher": lambda: _two_screens(0.0, 0.5, 0.0, 1.0),
+    "two screens close, the second 1 m lower": lambda: _two_screens(0.0, 0.5, 0.0, -1.0),
     "ceiling over two screens": lambda: _ceiling(1.0) + _two_screens(-1.0, 1.0),
 }
 
@@ -230,21 +232,31 @@ def test_no_step_at_the_line_of_sight_over_a_free_standing_strip(tmp_path: Path,
 
 
 @pytest.mark.parametrize(
-    ("name", "receiver"),
-    [("two screens", (4.0, 0.0, -1.5)), ("two screens, the second higher", (5.0, 0.0, -1.5))],
+    ("name", "source", "receiver"),
+    [
+        ("two screens", (-3.0, 0.0, -1.0), (4.0, 0.0, -1.5)),
+        ("two screens, the second higher", (-3.0, 0.0, -1.0), (5.0, 0.0, -1.5)),
+        ("two screens close, the second 1 m higher", (-1.0, 0.0, -0.5), (1.5, 0.0, -0.5)),
+        ("two screens close, the second 1 m lower", (-3.0, 0.0, -0.5), (1.5, 0.0, -2.5)),
+    ],
 )
-def test_no_reflection_in_the_gap_between_two_screens(tmp_path: Path, name: str, receiver) -> None:
+def test_no_reflection_in_the_gap_between_two_screens(
+    tmp_path: Path, name: str, source, receiver
+) -> None:
     """Over two thin screens in a row the image sources test the reflections off the
     second screen's front and then the first's back, in the gap between them, and both
     screens stop that path. Each top's term reaches it with the other leg straight, but
-    the two together make no path over both tops (past both, or exactly at them for
-    screens of one height), and the fade adds nothing: the level is the edge
-    diffraction's, as with ray tracing, which never tests that sequence. The product of
-    the two terms moved the level by up to 0.76 dB there (0.76 dB lower at 63 Hz and
-    0.53 dB higher at 125 Hz with the screens 1 m apart, 0.37 dB higher at 125 Hz with
-    the second 0.4 m higher), as a path 2.25 m longer than the one over both tops in
-    the first."""
-    engine = _Engine(tmp_path, name, (-3.0, 0.0, -1.0), "second_order")
+    the two together make no path over both tops: with screens of one height its
+    reflections lie at the tops, and with one higher, the reflection off the lower one's
+    plane lies past its top, where only the tail of its own face's zone reaches. The
+    fade adds nothing: the level is the edge diffraction's, as with ray tracing, which
+    never tests that sequence. The product of the two terms moved the level by up to
+    0.76 dB there (0.76 dB lower at 63 Hz and 0.53 dB higher at 125 Hz with the screens
+    1 m apart, 0.37 dB higher at 125 Hz with the second 0.4 m higher), as a path 2.25 m
+    longer than the one over both tops in the first; and by 0.47 and 0.54 dB at 125 Hz
+    with the screens 0.5 m apart and 1 m apart in height, where the tail of the lower
+    screen's face counted."""
+    engine = _Engine(tmp_path, name, source, "second_order")
     assert np.abs(engine.level(receiver) - engine.level(receiver, fade=False)).max() < 1e-9
 
 
@@ -290,6 +302,91 @@ def test_no_step_where_a_path_over_two_edges_reflects_at_a_third(tmp_path: Path,
         levels.append(engine.level((20.0, -4.0, 1.7)))
     del MODELS["channel"]
     assert np.abs(levels[1] - levels[0])[:4].max() < 0.01
+
+
+def _top_and_plane(engine: _Engine, x: float) -> tuple[int, int]:
+    """The edge along the top, at z = 0, of the screen in the plane x = ``x``, and that
+    plane."""
+    model, edges = engine.model, engine.diffraction.edges
+    level = np.isclose(edges.start[:, 2], 0.0) & np.isclose(edges.end[:, 2], 0.0)
+    top = int(np.flatnonzero(level & np.isclose(edges.start[:, 0], x))[0])
+    upright = np.isclose(np.abs(model.plane_normal[:, 0]), 1.0)
+    plane = int(np.flatnonzero(upright & np.isclose(np.abs(model.plane_offset), abs(x)))[0])
+    return top, plane
+
+
+def test_a_reflection_by_its_own_edge_gives_back_none_where_they_meet(tmp_path: Path) -> None:
+    """A reflection off a screen's plane beside its top, on a path over the top that
+    comes back to it, gives back none where it meets the top, from either side, though
+    the zones of the long waves near the source lie off centre (a half-plane through
+    the reflection gives back 0.92 of the whole plane at 63 Hz here): it rises from none
+    on the screen, the share of the strip as wide on either side of the reflection as
+    the top is from it, and is none past the top, where only the tail of the screen's
+    zone reaches. Taking off the half-plane past the top on the screen side gave back
+    0.85 there at 63 Hz from that side, and none from the other: a step."""
+    engine = _Engine(tmp_path, "two screens", (-3.0, 0.0, -1.0), "second_order")
+    top, plane = _top_and_plane(engine, 0.0)
+    wavelength = (2.0 * np.pi / engine.diffraction.wavenumber).reshape(-1)
+    own = np.array([top, top])
+
+    def share(gap: float, edges=own) -> np.ndarray:
+        at = np.array([0.0, 0.0, -gap])
+        before, after = (
+            at + 0.3 * np.array([-1.0, 0.0, 3.0]),
+            at + 3.0 * np.array([-1.0, 0.0, -3.0]),
+        )
+        return engine.fade._zone_share(plane, at, before, after, edges, wavelength)
+
+    assert share(1e-6, np.zeros(0, dtype=np.int64))[0] > 0.9
+    for gap in (-1e-6, 1e-6):
+        assert np.abs(share(gap)).max() < 1e-4
+    assert np.abs(share(1e-3)).max() < 0.01
+    assert np.abs(share(-0.3)).max() < 1e-6
+    assert 0.05 < share(0.3)[0] < share(3.0)[0]
+
+
+def test_a_path_that_leaves_an_edge_off_its_own_face_carries_nothing(tmp_path: Path) -> None:
+    """Under a ceiling over a block 1 m wide, the path from one top edge of the block
+    to the other by way of the block's top and the ceiling leaves the first off the
+    plane of its own face, just past it: the waves an edge bends hold its faces'
+    reflections, so the product of the two edges' terms carries none of it, in either
+    order. With the focus of the reflection's zones on its plane the zones' shares gave
+    it up to 1.7 of it."""
+    a = 20.0
+
+    def block(x0, x1, z0, z1):
+        return [
+            [(x0, -a, z1), (x1, -a, z1), (x1, a, z1), (x0, a, z1)],
+            [(x0, -a, z0), (x0, a, z0), (x1, a, z0), (x1, -a, z0)],
+            [(x0, -a, z0), (x0, -a, z1), (x0, a, z1), (x0, a, z0)],
+            [(x1, -a, z0), (x1, a, z0), (x1, a, z1), (x1, -a, z1)],
+            [(x0, -a, z0), (x1, -a, z0), (x1, -a, z1), (x0, -a, z1)],
+            [(x0, a, z0), (x0, a, z1), (x1, a, z1), (x1, a, z0)],
+        ]
+
+    MODELS["block under a ceiling"] = lambda: (
+        block(0.0, 1.0, -0.8, 0.0)
+        + [[(-60.0, -60.0, 1.5), (-60.0, 60.0, 1.5), (60.0, 60.0, 1.5), (60.0, -60.0, 1.5)]]
+    )
+    engine = _Engine(tmp_path, "block under a ceiling", (-3.0, 0.0, 0.5), "second_order")
+    del MODELS["block under a ceiling"]
+    model, edges, fade = engine.model, engine.diffraction.edges, engine.fade
+    level = np.isclose(edges.start[:, 2], 0.0) & np.isclose(edges.end[:, 2], 0.0)
+    level &= np.abs(edges.end[:, 1] - edges.start[:, 1]) > 10.0
+    tops = [int(np.flatnonzero(level & np.isclose(edges.start[:, 0], x))[0]) for x in (1.0, 0.0)]
+    flat = np.isclose(np.abs(model.plane_normal[:, 2]), 1.0)
+    top = int(np.flatnonzero(flat & np.isclose(model.plane_offset, 0.0))[0])
+    ceiling = int(np.flatnonzero(flat & np.isclose(np.abs(model.plane_offset), 1.5))[0])
+    wavelength = (2.0 * np.pi / engine.diffraction.wavenumber).reshape(-1)
+    offset = engine.diffraction.offset * fade._bisector
+    start = np.array([[1.0, 0.0, 0.0]]) + offset[tops[0]]
+    end = np.array([[0.0, 0.0, 0.0]]) + offset[tops[1]]
+    for seq in ([top, ceiling], [ceiling, top]):
+        weight = fade._joint_path(start, end, np.array([seq]), np.array([tops]), wavelength)
+        assert np.all(weight == 0.0)
+    # Off the ceiling alone, the path over the two edges is kept.
+    weight = fade._joint_path(start, end, np.array([[ceiling]]), np.array([tops]), wavelength)
+    assert weight.min() > 0.0
 
 
 def test_a_path_over_two_edges_takes_the_order_its_reflections_come_in(tmp_path: Path) -> None:
