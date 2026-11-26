@@ -5293,9 +5293,9 @@ them, simulated every 20 m at each listener, their level following their thrust:
 
 | listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| departure_4km | 87.1 (87.2) | 95.9 (96.0) | 50.2 (43.1) | 64.4 (60.7) |
-| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 41.8 (54.4) | 56.4 (68.8) |
-| approach_2000m | 52.0 (54.8) | 67.3 (68.6) | 90.5 (91.5) | 96.8 (98.8) |
+| departure_4km | 87.1 (87.2) | 95.9 (96.2) | 50.2 (43.1) | 64.4 (60.7) |
+| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 41.8 (54.4) | 56.4 (68.9) |
+| approach_2000m | 52.0 (54.8) | 67.3 (68.7) | 90.5 (91.5) | 96.9 (98.8) |
 
 (dB(A); Doc 29's in brackets.) Where the arrival is heard rolling, the walk starts or ends
 less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down
