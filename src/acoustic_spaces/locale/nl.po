@@ -140,6 +140,10 @@ msgid "Last stop's phrases"
 msgstr "Frasen van de laatste stop"
 
 #: acoustic_spaces/demos/__init__.py
+msgid "Last stop"
+msgstr "Laatste stop"
+
+#: acoustic_spaces/demos/__init__.py
 msgid "Downloads folder"
 msgstr "Downloadmap"
 

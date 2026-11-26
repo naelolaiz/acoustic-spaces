@@ -231,14 +231,15 @@ it as its licence asks unless `--credit` says otherwise. A source's own `signal`
 over the recording, and its `channel` then picks a channel of that file; a source with
 neither stays silent. The examples with a stage, a sound system or a talker name a free
 recording and give their loudspeakers or talker a channel, so their demo plays out of
-the box: concert_stage, stadium_concert, lakeside_concert (its stage; ticked, its PA
-group as lakeside_demo.py feeds it), open_air_stage and studio a song; town_hall_pa,
+the box: concert_stage, stadium_concert, lakeside_concert (its sound system),
+open_air_stage and studio a song; town_hall_pa,
 lecture_hall, leaky_classroom, shoebox, bim_office, material_libraries and gallery the
 male talk. A stereo mix has none of the parts that the monitors or a band on the stage
 play, so they stay silent; the stadium demo plays its song's stems through them.
 `--recording ace_f1` plays another free recording in a run, in place of the scene's
-own; a source with a speech spectrum that plays it takes its talker's, a woman's or a
-man's, so that the levels and the STI weight for that speech.
+own, or `--recording song.flac` a file of yours; a source with a speech spectrum that
+plays a talker takes its talker's, a woman's or a man's, so that the levels and the STI
+weight for that speech.
 
 **Talkers.** A source with a speech spectrum is a talker. `--vocal-effort raised`
 (`--voice`) has every talker in use talk so in a run: relaxed, normal, raised or loud,
@@ -306,7 +307,7 @@ acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
 `--tour front:2,back:still:12s,front:end` hears front for two phrases, back in still
 air for 12 s, then front to the recording's end. A stop lasts phrases of 8 bars of 4
 beats (a number), seconds (`12s`) or to the end (`end`), and one that gives no length
-`--seconds`. Phrases go by the tempo of the free recording that plays (a song in the
+`--seconds`; `--last-stop` gives the last stop another length. Phrases go by the tempo of the free recording that plays (a song in the
 table above), or `--bpm` and `--downbeat` (when its first downbeat falls, s) for a
 recording of yours, counted from the first downbeat: a stop in phrases ends on a
 phrase's boundary, so the cuts fall where the music turns. With `--listeners`, the
@@ -682,74 +683,73 @@ share-alike clause would bind the renders too.
 `lakeside_demo.py` plays a song from the stage of the `lakeside_concert` example on a
 summer evening and mixes it in the audience on the lawn, 140 m behind the stage, on a
 boat in the middle of the lake and in the village across it, 550 m away, in a garden and
-at a bedroom window. Every place is mixed twice: in the evening's weather and in still
-air. The video tours them, and at the bedroom window plays the song in the evening's
-weather, then in still air, then in the evening's again, so the difference the weather
-makes is heard.
+at a bedroom window. It is the [demo of the lake's scene](#a-demo-of-any-scene)
+(`acoustic-spaces demo scene.yaml`, This scene in the editor), the scene's own
+[tour](scenes.md#tour-of-a-demo) and all: each place for phrases of 8 bars, and at the
+bedroom window the song in the evening's weather, then in still air (a second
+simulation of the scene without its atmosphere), then in the evening's again, so the
+difference the weather makes is heard.
 
 ```sh
 acoustic-spaces examples --copy . lakeside_concert && cd lakeside_concert
-python lakeside_demo.py music    # the song (WAV, 56 MB), a signal for each loudspeaker
-python lakeside_demo.py scenes   # scene_demo.yaml, and scene_still.yaml in still air
-acoustic-spaces simulate scene_demo.yaml --out results_demo/binaural --output binaural    # ~20 s
-acoustic-spaces simulate scene_still.yaml --out results_still/binaural --output binaural  # ~13 s
-python lakeside_demo.py render   # demo/lakeside_spicy_funk_cake_binaural/seats: every listener in both weathers
-python lakeside_demo.py video    # demo/lakeside_spicy_funk_cake_binaural.mp4, its sound, stills and thumbnail
+python lakeside_demo.py all        # every step, into demo/ beside the scene
+python lakeside_demo.py recording  # the song (WAV, 56 MB)
+python lakeside_demo.py render     # every place, in the evening's weather and in still air
+python lakeside_demo.py video      # demo/scene_binaural.mp4, its sound, stills and thumbnail
 ```
 
-Options: `--song great_british_summer` or `potassium` for `music` (below), `--music
-song.wav --bpm 120` for a song of your own in their place (a stereo file, WAV or
-anything ffmpeg decodes, and its tempo, which the tour's phrases of 8 bars go by;
-nothing is downloaded, and the video credits the file by its name unless `--credit` says
-what to show), `--tour bedroom_window:still:1,audience::2` (listener:weather:phrases of
-8 bars), `--listeners audience,bedroom_window` (those places alone, in that order, in both
-weathers), `--sources subs` (the loudspeakers `main_left`, `main_right` and `subs`, or
-`PA` for the three),
-`--last-phrases` (how long the last stop lasts, 0 to the end of the song; 2 by default),
-`--format` for another output the simulation wrote (the tour [decodes it to two
-ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `all` runs every
-step in turn, leaving out what is there already (the music, the scenes, the simulations).
+Its options are the demo of any scene's: `--recording great_british_summer` or
+`potassium` (below), or `--recording song.wav --bpm 120` for a song of your own (a stereo
+file, WAV or anything ffmpeg decodes, and its tempo, which the tour's phrases go by;
+nothing is downloaded); `--tour bedroom_window:still:1,audience::2`, `--listeners
+audience,bedroom_window` (those places alone, in that order, each with its stops of the
+tour, and back to the first at the end), `--sources subs` (the loudspeakers `main_left`,
+`main_right` and `subs`, or `PA` for the three), `--last-stop` (how long the last stop
+lasts: phrases, seconds or `end`; 2 phrases by default), `--format` for another output
+(the tour [decodes it to two ears](#running-a-demo)), `--no-mp4` for the audio and stills
+only. The script's own command lines still work: `--song` and `--music` are
+`--recording`, its `--tour` (listener:weather:phrases, the weather `evening` or `still`,
+one phrase by default) and `--last-phrases` (0 to the end) read as the demo's, `--from`
+is `--scene`, and its steps `music` (the recording and the feeds) and `scenes` (the
+simulation) run as the ones that took them over.
 
-- **The sound system.** `scenes` plays, in place of the example's single source (120 dB
-  sound power), the example's PA group, left out of its own simulations until ticked: a
-  system as a lawn concert hangs it: two line arrays of eight boxes
-  (`lake_array.yaml`, a generic box's pattern in `box.csv`, both made with the stadium
-  example's `make_model.py`), 6.5 m up either side of the stage, 124 dB each, aimed down
-  the lawn and, box by box, from 5° down at the last rows, where the lawn meets the water,
-  to 36° at the front rows, each added up box by box (`near_field`), playing the song's
-  left and right channels; and a block of four cardioid subwoofers (`sub_array.yaml`,
-  130 dB) on the ground at the stage front, 2 m nearer the audience and delayed 6 ms so
-  that both arrive together there, playing both channels, rolled off above 125 Hz. The
-  system is tuned at the audience as a system engineer tunes it (`eq_db`: the arrays' low
-  mids up, their top octave up for the air): at 30 m, in the evening's weather, every
-  octave from 500 Hz to 4 kHz is within 1 dB of 1 kHz, 250 Hz 1.3 dB down, 8 kHz 1.9 dB
-  down and 63 and 125 Hz 1.8 to 1.9 dB up. `scenes` also takes
-  in the example's listener 140 m behind the stage, upwind (`behind_stage`, left out as
-  the system is), and lets the responses run 3.5 s past the latest direct sound, the far
-  shore's, 1.6 s late (5.2 s in all).
+- **The sound system** is the scene's PA group: a system as a lawn concert hangs it, two
+  line arrays of eight boxes (`lake_array.yaml`, a generic box's pattern in `box.csv`,
+  both made with the stadium example's `make_model.py`), 6.5 m up either side of the
+  stage, 124 dB each, aimed down the lawn and, box by box, from 5° down at the last rows,
+  where the lawn meets the water, to 36° at the front rows, each added up box by box
+  (`near_field`), playing the song's left and right channels; and a block of four
+  cardioid subwoofers (`sub_array.yaml`, 130 dB) on the ground at the stage front, 2 m
+  nearer the audience and delayed 6 ms so that both arrive together there, playing both
+  channels, rolled off above 125 Hz. The system is tuned at the audience as a system
+  engineer tunes it (`eq_db`: the arrays' low mids up, their top octave up for the air):
+  at 30 m, in the evening's weather, every octave from 500 Hz to 4 kHz is within 1 dB
+  of 1 kHz, 250 Hz 1.3 dB down, 8 kHz 1.9 dB down and 63 and 125 Hz 1.8 to 1.9 dB up.
+  The scene's single source in the middle of the stage (120 dB sound power) is
+  left out until ticked. The scene hears the place 140 m behind the stage, upwind
+  (`behind_stage`), and lets the responses run 3.5 s past the latest direct sound, the
+  far shore's, 1.6 s late (5.2 s in all).
 - **The weather** is the example's: a breeze from the park out over the lake, 2.5 m/s
   10 m up, and two weather zones, the lake's (air 17 °C at the water, a degree warmer
   every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
   houses). The breeze and the cool air bend the sound down to the water, which gives it
-  back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
-- **What it gives.** At the bedroom window the evening's weather makes the song 5.3
-  dB(A) louder than still air would, in the garden 5.0 dB; behind the stage, upwind, it
-  is 0.7 dB quieter, and on the boat 0.9 dB quieter (the example's `simulation.seed`,
-  1; with rays of their own, two other runs gave up to 6.0 dB at the window and 0.5 dB
-  behind the stage). These figures are from before the 1 and 2 kHz bands over the open
-  ground came from the parabolic equation, and from before the lawn and the water
-  scattered nothing, and have not been run again since. For the line arrays the first
-  change lowers those two bands in the evening's weather by up to 2.7 dB at the window
-  and 3.5 dB in the garden and raises them by up to 1.6 dB on the boat, and leaves the
-  other bands, the place behind the stage and still air as they were; the second moves
-  what the weather adds by 0.3 dB(A) at most at these four places (every source at its
-  sound power, one run each).
-  The far shore gains most: what the weather bends down comes in off the water as well
-  as straight, and at the window the house's wall gives back each of those again.
+  back almost whole. Still air is the same scene with no atmosphere
+  (`scenes/scene_still-air.yaml` in the work folder).
+- **What it gives** (every loudspeaker at its sound power, the example's
+  `simulation.seed`, 1, in both airs): at the bedroom window the evening's weather makes
+  the song 3.1 dB(A) louder than still air would, in the garden 2.2 dB; on the boat it is
+  1.6 dB quieter, and behind the stage, upwind, 1.4 dB louder. The far shore gains most:
+  what the weather bends down comes in off the water as well as straight (eight early
+  paths at the window in place of four), and at the window the house's wall gives back
+  each of those again. Elsewhere the bending moves where the direct sound and its
+  reflection off the lawn or the water cancel: behind the stage it brings the
+  reflection from 0.41 ms after the direct sound to about 0.1 ms, which leaves the bands
+  up to 1 kHz up to 5 dB quieter and those of 4 and 8 kHz 5 to 6 dB louder; on the boat
+  it takes it from 0.17 to 0.75 ms. The example has no turbulence, which would smear
+  those dips out.
 - **How loud.** From the audience to the far shore the sound drops by more than 20 dB(A),
-  too much to hear the far places in a video, so each stop is turned up to the
-  audience's loudness and its caption says how much quieter the place really is, in
-  dB(A). The loudness is K-weighted, as meters weigh it, not A-weighted: the far places
+  too much to hear the far places in a video, so each stop is turned up to the loudness
+  of the loudest, the audience's, and its still says by how much. The loudness is K-weighted, as meters weigh it, not A-weighted: the far places
   and the back of the stage keep little but bass (the array boxes radiate every way below
   250 Hz and the water gives the low end back whole), which the A weighting all but
   leaves out, so matching dB(A) would put their bass far above the audience's. The window
@@ -758,14 +758,9 @@ step in turn, leaving out what is there already (the music, the scenes, the simu
 - **The cuts.** Each place's mix is shifted earlier by the time the loudest sound takes
   to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.66 s
   at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
-- **The pictures** draw the lake from above with the wind's arrows, the weather zones and
-  their weather, the arrays and the subwoofers with cones the way they aim, and the
-  current listener with L and R at its ears; and, under it, a slice along the line from
-  the stage across the lake, heights drawn five times larger, with the arrays hung from
-  the roof and the wedge from their top box's aim to their bottom one's, the subwoofers
-  on the ground, and rays from the arrays bent by the scene's own profiles of the speed of sound (traced
-  by the script for the picture; the simulation traces its own) and masts with the wind's
-  profile; in still air the rays go straight.
+- **The pictures** are the demo of any scene's: the lake from above with the
+  loudspeakers, the places and the listener of the moment, and beside it what is heard
+  there, in still air or in the scene's own weather.
 
 **Limits.** The arrays are a generic box's pattern, not a product's measured one; there
 is no crowd, no wind noise and no other sound of the evening. The
@@ -774,8 +769,8 @@ with the gusts as it does across a real lake. The song is a finished studio mix,
 as it is. Binaural is through the spherical head model unless `--hrtf` names a SOFA
 file.
 
-**Recordings and licences.** `music` writes the credit to `demo/music/<song>/song.json`, and
-the video shows it.
+**Recordings and licences.** The free songs are kept with the other free recordings
+([a demo of any scene](#a-demo-of-any-scene)), and the stills credit the one that plays.
 
 - `spicy_funk_cake` (the default): "Spicy Funk Cake" by the Rhythmussportgruppe, the
   recording of the [stadium demo](#a-concert-in-the-stadium), **CC BY 4.0**; its reference

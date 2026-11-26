@@ -27,6 +27,12 @@
   or to its end, in the scene's weather or in still air); in the demo of any scene,
   `--tour` (no longer another name for `--listeners`), `--atmosphere still`, `--bpm`
   and `--downbeat`.
+- Changed: the lakeside's `lakeside_demo.py` is the demo of its scene, which now plays
+  the stage's sound system and hears the place behind the stage (the stage's single
+  source left out), its tour in the scene; its options and steps before 4.4.0 still
+  work but `--scene`, `--still`, `--results` and `--still-results` (the scenes and
+  results go to the work folder). `--recording` takes a file of yours, and
+  `--last-stop` sets how long a tour's last stop lasts.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

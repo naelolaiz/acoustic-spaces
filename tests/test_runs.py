@@ -77,23 +77,28 @@ def test_every_demo_names_its_runs_after_their_settings() -> None:
     assert name(no_mp4=True, again=False) == "flight_departure_binaural"  # never named
     many = ",".join(f"listener_number_{k}" for k in range(9))
     assert name(listeners=many).startswith("flight_departure_9-listeners-")
-    # Every demo at its defaults: a name of its own in its work folder.
+    # Every demo at its defaults: a name of its own in its work folder; a preset of the
+    # demo of any scene names its runs as that demo does, after the scene.
+    from acoustic_spaces.demos import scene_demo
+
     for demo in list_demos():
         if demo.name == "scene":
             continue
         resolved = demo.resolved(demo.defaults())
+        own = "scene" if demo.simulations is scene_demo.simulations else demo.name
         assert run_folder(resolved).parent == demo.work_folder(resolved)
-        assert run_folder(resolved).name.startswith(demo.name + "_")
+        assert run_folder(resolved).name.startswith(own + "_")
         assert product(resolved, ".mp4").parent == demo.work_folder(resolved)
 
 
 def test_a_song_of_your_own_names_the_run_in_place_of_the_preset(tmp_path: Path) -> None:
-    """--music plays in place of --song: the run is named after the song played."""
+    """A recording of yours plays in place of the scene's: the run is named after it."""
     lakeside = _demo("lakeside", "lakeside_concert")
     args = lakeside.defaults()
-    assert lakeside.run_name(lakeside.resolved(args)) == "lakeside_spicy_funk_cake_binaural"
-    mine = argparse.Namespace(**vars(args) | {"music": tmp_path / "my song.wav", "bpm": 120.0})
-    assert lakeside.run_name(lakeside.resolved(mine)) == "lakeside_my-song_bpm-120_binaural"
+    assert lakeside.run_name(lakeside.resolved(args)) == "scene_binaural"
+    song = tmp_path / "my song.wav"
+    mine = argparse.Namespace(**vars(args) | {"recording": song, "bpm": 120.0})
+    assert lakeside.run_name(lakeside.resolved(mine)) == "scene_my-song_bpm-120_binaural"
 
 
 def test_a_run_plays_the_slow_work_of_the_run_up_to_it() -> None:

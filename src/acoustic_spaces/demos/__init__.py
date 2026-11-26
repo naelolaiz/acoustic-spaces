@@ -190,6 +190,7 @@ LABELS = {
     "--still": N_("Scene in still air"),
     "--still-results": N_("Results in still air"),
     "--last-phrases": N_("Last stop's phrases"),
+    "--last-stop": N_("Last stop"),
     "--zips": N_("Downloads folder"),
     "--movements": N_("Movements"),
     "--rpm": N_("Engine speed"),
@@ -225,6 +226,7 @@ ADVANCED = frozenset(
         "--bpm",
         "--downbeat",
         "--last-phrases",
+        "--last-stop",
         "--step",
         "--stand",
         "--turn",
@@ -399,6 +401,10 @@ class Option:
     #: run of one of everything would hear it; a run where it changes nothing in any
     #: part is refused (:meth:`Demo.check`). None: it always changes something.
     moot: Callable[[argparse.Namespace], str | None] | None = None
+    #: For a choice: whether it also takes a file of yours in place of one of its
+    #: choices (``--recording song.flac``), counted from the demo's folder as a file
+    #: option is.
+    or_file: bool = False
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -411,6 +417,8 @@ class Option:
             raise ValueError(f"{self.name}: a files option lists the names it takes as choices")
         if self.several and self.kind not in ("choice", "int", "float", "text"):
             raise ValueError(f"{self.name}: only a choice, a number or a text takes several")
+        if self.or_file and self.kind != "choice":
+            raise ValueError(f"{self.name}: only a choice takes a file in place of one")
 
     @property
     def option(self) -> str:
@@ -465,7 +473,7 @@ class Option:
                 )
             except ValueError:
                 raise argparse.ArgumentTypeError(f"not a number: {item!r}") from None
-            if self.choices and value not in self.choices:
+            if self.choices and value not in self.choices and not self.or_file:
                 raise argparse.ArgumentTypeError(
                     f"invalid choice: {item!r} (choose from {', '.join(self.choices)})"
                 )
@@ -544,12 +552,13 @@ class Option:
         elif self.varies:
             kwargs["type"] = self.parse
             if self.choices:
-                kwargs["metavar"] = "{" + ",".join(self.choices) + "}[,...]"
+                files = "|FILE" if self.or_file else ""
+                kwargs["metavar"] = "{" + ",".join(self.choices) + "}" + files + "[,...]"
         elif self.kind == "int":
             kwargs["type"] = int
         elif self.kind == "float":
             kwargs["type"] = float
-        if self.choices and not self.varies:
+        if self.choices and not self.varies and not self.or_file:
             kwargs["choices"] = list(self.choices)
         own = (self.option, *self.aliases)
         for flag, form in self.renamed:
@@ -914,6 +923,17 @@ class Demo:
         if option.kind == "file" and not path.exists() and beside.exists():
             return beside
         return path
+
+    def steps_named(self, name: str) -> list[str]:
+        """The steps a command line that names ``name`` runs, in order: the step of that
+        name, or every step that took over one of that name (:attr:`Step.aliases`): the
+        lakeside's ``music``, ``recording`` and ``feeds``."""
+        if any(step.name == name for step in self.steps):
+            return [name]
+        found = [step.name for step in self.steps if name in step.aliases]
+        if not found:
+            raise KeyError(f"{self.name}: no step {name!r}")
+        return found
 
     def step(self, name: str) -> Step:
         """The step called ``name``, or that took over a step of that name
@@ -1367,7 +1387,7 @@ class Demo:
             return "+".join(
                 f"{name_part(name)}-{name_part(Path(file).stem)}" for name, file in value.items()
             )
-        if option.kind in PATH_KINDS:
+        if option.kind in PATH_KINDS or isinstance(value, Path):  # a file of yours
             return name_part(Path(value).stem)
         if option.kind in ("int", "float") and isinstance(value, (int, float)):
             return name_part(f"{value:g}")
@@ -1489,7 +1509,7 @@ class Demo:
     def parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(description=self.description)
         choices = [s.name for s in self.steps] + ["all"]
-        choices += [alias for s in self.steps for alias in s.aliases]
+        choices += list(dict.fromkeys(alias for s in self.steps for alias in s.aliases))
         parser.add_argument(
             "step",
             choices=choices,
@@ -1517,6 +1537,13 @@ class Demo:
                     name: Path(f) if Path(f).is_absolute() else self.folder / f
                     for name, f in value.items()
                 }
+            elif option.or_file and value is not None:
+                files = [
+                    v if v in option.choices or Path(v).is_absolute() else self.folder / v
+                    for v in values_of(value)
+                ]
+                files = [v if v in option.choices else Path(v) for v in files]
+                values[option.name] = files[0] if len(files) == 1 else tuple(files)
         return argparse.Namespace(**values)
 
     def resolved(self, args: argparse.Namespace) -> argparse.Namespace:
@@ -1576,8 +1603,14 @@ class Demo:
                     if isinstance(each, bool) or not isinstance(each, (int, float)):
                         return f"{option.option}: a number, not {each!r}"
                 if option.kind == "choice" and option.choices and each is not None:
-                    if each not in option.choices:
-                        return f"{option.option} {each}: not one of {', '.join(option.choices)}"
+                    if each in option.choices:
+                        continue
+                    listed = ", ".join(option.choices)
+                    if not option.or_file:
+                        return f"{option.option} {each}: not one of {listed}"
+                    file = Path(each) if Path(each).is_absolute() else self.folder / each
+                    if not file.is_file():
+                        return f"{option.option} {each}: no such file, nor one of {listed}"
         hrtf = getattr(args, "hrtf", None)
         if hrtf and "binaural" not in values_of(getattr(args, "format", "binaural")):
             return "--hrtf is for binaural mixes"
@@ -1792,7 +1825,7 @@ class Demo:
         problem = demo.check(args)
         if problem:
             parser.error(problem)
-        names = demo.all_steps() if args.step == "all" else [demo.step(args.step).name]
+        names = demo.all_steps() if args.step == "all" else demo.steps_named(args.step)
         demo.run(names, args, skip_done=args.step == "all")
         return 0
 

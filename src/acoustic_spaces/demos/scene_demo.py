@@ -19,17 +19,19 @@ the same feeds and simulation; ``--sources-play in-turn`` plays each name it giv
 without it, each top group of those that play, a source of no group by its name) in a
 part of its own, one after another in one video, and ``--series`` orders the parts.
 Every listener in use is heard in turn, in the scene's order (or only those
-``--listeners`` names, in its order), for ``--seconds`` each while the piece runs on,
-with one gain for all the stops and a crossfade between them, binaural through the HRTFs
+``--listeners`` names, in its order), for ``--seconds`` each while the piece runs on, or
+as the scene's tour (or ``--tour``) has them, each stop for phrases of the recording,
+seconds or to its end, outdoors in the scene's weather or in still air, with one gain
+for all the stops and a crossfade between them, binaural through the HRTFs
 of the scene's binaural output (or ``--hrtf``, or a spherical head model when neither
 names any). The stills show the scene from above with the listener of the moment, the
 level there, how long the sound takes to arrive and T30 at mid frequencies, where a
 talker plays (a source with a speech spectrum) the STI of its speech there, and say how
 the sound was made. The simulation keeps every listener in use, so another choice of
-``--listeners`` needs no new one. ``--recording`` plays another free recording in place
-of the scene's, and ``--vocal-effort`` has every talker talk relaxed, normal, raised or
-loud (ISO 9921); a run that changes a talker's sound power or speech spectrum so
-simulates the scene as it plays it (:func:`run_scene_file`).
+``--listeners`` needs no new one. ``--recording`` plays another free recording, or a
+file of yours, in place of the scene's, and ``--vocal-effort`` has every talker talk
+relaxed, normal, raised or loud (ISO 9921); a run that changes a talker's sound power
+or speech spectrum so simulates the scene as it plays it (:func:`run_scene_file`).
 
 Sources and listeners whose trajectory is on move along it while the piece plays, all on one
 clock from its start (:func:`acoustic_spaces.walkthrough.simulate_movement`): every
@@ -54,6 +56,7 @@ pitch shifts as it passes, the late sound crossfaded from place to place
     acoustic-spaces demo scene.yaml --sources PA     # the sources of the group PA alone
     acoustic-spaces demo scene.yaml --sources PA,band --sources-play in-turn
     acoustic-spaces demo scene.yaml --recording ace_f1 --vocal-effort raised
+    acoustic-spaces demo scene.yaml --recording song.flac --bpm 120 --tour front:2,back:end
 
 The editor runs it from **Simulation > Run demo…** as *This scene*, with a tick for each
 trajectory in its Movement table, for each listener in its Listeners list and for each source
@@ -370,7 +373,7 @@ def changed(args: argparse.Namespace, scene: Scene) -> Scene:
     effort = getattr(args, "vocal_effort", None)
     if name is None and effort is None:
         return scene
-    free = recordings.named(name) if name is not None else None
+    free = recordings.named(name) if isinstance(name, str) else None  # else a file of yours
     inputs = getattr(args, "inputs", None) or {}
     sources = []
     for source in scene.sources:
@@ -384,8 +387,8 @@ def changed(args: argparse.Namespace, scene: Scene) -> Scene:
             source = source.talking(effort)
         sources.append(source)
     update: dict = {"sources": sources}
-    if free is not None:
-        update["recording"] = free.name
+    if name is not None:
+        update["recording"] = free.name if free is not None else Path(name)
     return scene.model_copy(update=update)
 
 
@@ -696,6 +699,12 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
             return f"{demo.option(name).option} is a positive number, not {value!r}"
     if getattr(args, "downbeat", None) is not None and getattr(args, "bpm", None) is None:
         return "--downbeat is for a recording of yours, with its tempo (--bpm)"
+    last = getattr(args, "last_stop", None)
+    if last:
+        try:
+            length_of_stop(last)
+        except ValueError as exc:
+            return f"--last-stop: {exc}: give phrases (2), seconds (12s) or end"
     resolved = demo.resolved(args)
     path = Path(resolved.scene)
     if not path.exists():
@@ -708,6 +717,9 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
         scene = changed(resolved, scene)
     except ValueError as exc:
         return str(exc)
+    free = free_of(scene)
+    if getattr(args, "bpm", None) is not None and free is not None and free.bpm is not None:
+        return f"--bpm is for a recording of yours: {free.name} has its own, {free.bpm:g} bpm"
     signals = {k: v for k, v in signals_of(resolved, scene).items() if v is not None}
     if not signals:
         return (
@@ -721,7 +733,6 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
             f"--sources picks only sources that play nothing ({', '.join(chosen)}); "
             f"those that play: {', '.join(signals)}"
         )
-    free = free_of(scene)
     downloaded = recordings.file_of(free) if free is not None else None
     for name, (signal, _channel) in signals.items():
         if signal == downloaded:  # the recording step downloads it
@@ -1187,6 +1198,25 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
 # --------------------------------------------------------------------------- the video
 
 
+def length_of_stop(text: str) -> dict:
+    """A stop's length as ``--tour`` and ``--last-stop`` give it: phrases (a number),
+    seconds (a number and s, 12s) or to the recording's end (end), as the fields of a
+    :class:`~acoustic_spaces.scene.TourStop`, the others cleared. ValueError for one
+    that does not read, or is not positive."""
+    text = text.strip()
+    if text == "end":
+        return {"phrases": None, "seconds": None, "to_end": True}
+    try:
+        value = float(text[:-1] if text.endswith("s") else text)
+    except ValueError:
+        raise ValueError(f"not a length: {text!r}") from None
+    if not value > 0.0:
+        raise ValueError(f"a length is positive, not {text!r}")
+    if text.endswith("s"):
+        return {"phrases": None, "seconds": value, "to_end": False}
+    return {"phrases": value, "seconds": None, "to_end": False}
+
+
 def tour_text(text: str) -> list[TourStop]:
     """``--tour``'s stops: LISTENER[:still][:LENGTH],... in turn, each in the scene's
     atmosphere or in still air, for LENGTH phrases of 8 bars (a number), seconds (a
@@ -1203,12 +1233,7 @@ def tour_text(text: str) -> list[TourStop]:
         if rest and rest[0]:
             length = rest.pop(0)
             try:
-                if length == "end":
-                    given["to_end"] = True
-                elif length.endswith("s"):
-                    given["seconds"] = float(length[:-1])
-                else:
-                    given["phrases"] = float(length)
+                given |= length_of_stop(length)
             except ValueError:
                 rest.append(length)
         if not name or rest:
@@ -1238,11 +1263,20 @@ def tour_given(args: argparse.Namespace, scene: Scene) -> list[TourStop] | None:
     if names is not None and given:
         stops = [stop for stop in stops if stop.listener in names]
     elif names is not None:
+        # A tour that ends back where it began ends at the first listener named.
+        end = stops[-1]
+        closing = len(stops) > 1 and end.listener == stops[0].listener
+        body = stops[:-1] if closing else stops
         stops = [
             stop
             for name in names
-            for stop in [s for s in stops if s.listener == name] or [TourStop(listener=name)]
+            for stop in [s for s in body if s.listener == name] or [TourStop(listener=name)]
         ]
+        if closing:
+            stops.append(end.model_copy(update={"listener": names[0]}))
+    last = getattr(args, "last_stop", None)
+    if last and stops:
+        stops[-1] = stops[-1].model_copy(update=length_of_stop(last))
     if scene.still:
         stops = [stop.model_copy(update={"atmosphere": "scene"}) for stop in stops]
     return stops
@@ -1611,14 +1645,15 @@ DEMO = Demo(
         ),
         Option(
             "recording",
-            "the free recording the sources with a channel play in this run, in place of "
-            "the scene's own (Recording on the scene's page): a song, or a talker of the "
-            "ACE corpus, downloaded the first time; a source with a speech spectrum that "
-            "plays it takes its talker's, a woman's or a man's (default: the scene's "
-            "recording)",
+            "what the sources with a channel play in this run, in place of the scene's "
+            "own recording (Recording on the scene's page): a free one, a song or a talker "
+            "of the ACE corpus, downloaded the first time, or a file of yours (WAV, or "
+            "anything ffmpeg decodes); a source with a speech spectrum that plays a talker "
+            "takes its talker's, a woman's or a man's (default: the scene's recording)",
             None,
             "choice",
             choices=recordings.NAMES,
+            or_file=True,
             steps=("recording", "feeds", "simulate", "render", "video"),
             unset="the scene's",
             named="plays",
@@ -1669,6 +1704,14 @@ DEMO = Demo(
             None,
             steps=("render", "video"),
             unset="the scene's",
+        ),
+        Option(
+            "last_stop",
+            "how long the tour's last stop lasts, in place of what the tour says: phrases "
+            "of 8 bars of 4 beats (2), seconds (12s) or to the recording's end (end)",
+            None,
+            steps=("video",),
+            unset="as the tour says",
         ),
         Option(
             "atmosphere",
