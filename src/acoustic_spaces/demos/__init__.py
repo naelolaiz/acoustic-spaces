@@ -191,6 +191,7 @@ LABELS = {
     "--still-results": N_("Results in still air"),
     "--last-phrases": N_("Last stop's phrases"),
     "--last-stop": N_("Last stop"),
+    "--levels": N_("Levels between listeners"),
     "--hide": N_("Leave out"),
     "--zips": N_("Downloads folder"),
     "--movements": N_("Movements"),
@@ -1024,14 +1025,22 @@ class Demo:
     # -- sources and series -------------------------------------------------------------
 
     def source_list(self, args: argparse.Namespace) -> list[Source]:
-        """The sources a run with ``args`` (resolved) can play (:attr:`sources`); none
-        when the demo gives no choice of them, or cannot tell yet (no scene)."""
+        """The sources a run with ``args`` (resolved) can play (:attr:`sources`), those a
+        default ``--sources`` names on and the others off where it has one (a preset's
+        own pick); none when the demo gives no choice of them, or cannot tell yet (no
+        scene)."""
         if self.sources is None:
             return []
         try:
-            return list(self.sources(args))
+            sources = list(self.sources(args))
         except (Exception, SystemExit):  # the steps say what keeps them from the scene
             return []
+        # A default --sources (a preset's) is the demo's own pick.
+        option = next((o for o in self.options if o.kind == "sources"), None)
+        pick = given_names(option.default) if option is not None else None
+        if pick is None:
+            return sources
+        return [replace(s, on=any(source_matches(s, name) for name in pick)) for s in sources]
 
     def own_pick(self, args: argparse.Namespace) -> list[str]:
         """The sources a run with ``args`` (resolved) plays when ``--sources`` names none:

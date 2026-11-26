@@ -191,15 +191,17 @@ def test_the_helicopters_rotors_are_found_once_for_every_length(model: str, monk
 
 
 def _stadium(tmp_path: Path) -> Path:
-    """The stadium_concert example, quick: two listeners, 16 kHz, responses 0.3 s long
-    after the sound arrives, few rays, in a folder named apart from the example's (see
-    :func:`_flyover`)."""
+    """The stadium_concert example, quick: two listeners and no tour, 16 kHz, responses
+    0.3 s long after the sound arrives, few rays, in a folder named apart from the
+    example's (see :func:`_flyover`)."""
     folder = tmp_path / "stadium_copy"
     shutil.copytree(Path(example_path("stadium_concert")).parent, folder)
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     data["listeners"] = [
         lis for lis in data["listeners"] if lis["name"] in ("mix_position", "singer")
     ]
+    for tour in ("tour", "tours"):  # they visit the listeners left out
+        data.pop(tour, None)
     data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.3})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 300}
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")

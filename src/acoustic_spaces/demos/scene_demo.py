@@ -174,6 +174,11 @@ STILL = "still"
 TIMELINES = ("auto", "shared", "per-listener")
 #: The vocal efforts a run can give every talker (``--vocal-effort``, ISO 9921).
 VOCAL_EFFORTS = tuple(VOCAL_EFFORT_DB_A)
+#: How loud the stops of the video play (``--levels``): each turned up to the loudness
+#: of the loudest (:func:`~acoustic_spaces.demos.pipeline.gains_of`), or all at the one
+#: gain of the mixes, the differences in level between the listeners the simulation's.
+MATCHED, AS_SIMULATED = "matched", "as-simulated"
+LEVELS = (MATCHED, AS_SIMULATED)
 #: The folder of the scenes as the runs that change them play them
 #: (:func:`run_scene_file`), in the work folder.
 SCENES = "scenes"
@@ -1879,8 +1884,17 @@ def tour_of(
             timed = quiet_cuts(timed, stops, seats, run_folder(args) / "seats")
         timed = ringing_out(timed, seats, length_s, run_folder(args) / "seats")
         gains = stops_gains(seats, keys) if tour is not None else pipeline.gains_of(seats, keys)
+        gains = levelled(args, gains)
         return [pipeline.TourStop(key, a, a, b, gains[key]) for key, a, b in timed]
-    return stops_from_start(names, seats, pipeline.gains_of(seats, names), seconds)
+    return stops_from_start(names, seats, levelled(args, pipeline.gains_of(seats, names)), seconds)
+
+
+def levelled(args: argparse.Namespace, gains: dict[str, float]) -> dict[str, float]:
+    """The gains (dB) the stops play at, as ``--levels`` has them: ``gains``, each turned
+    up to the loudness of the loudest, or none, at ``as-simulated``."""
+    if getattr(args, "levels", MATCHED) == AS_SIMULATED:
+        return dict.fromkeys(gains, 0.0)
+    return gains
 
 
 def quiet_cuts(
@@ -2280,6 +2294,18 @@ DEMO = Demo(
             unset="as the tour says",
         ),
         Option(
+            "levels",
+            "how loud each listener's stop plays in the video: matched, turned up to the "
+            "loudness of the loudest (K-weighted, as ITU-R BS.1770-4 measures it), by 40 "
+            "dB at most and by as much as its still says, so the far places are heard; "
+            "as-simulated, every stop at the one gain of the mixes, so the differences in "
+            "level between the listeners are the simulation's",
+            MATCHED,
+            "choice",
+            choices=LEVELS,
+            steps=("video",),
+        ),
+        Option(
             "atmosphere",
             "the atmosphere the run hears the scene in: scene, its own (wind, temperature "
             "profiles, weather zones), or still, still air, where sound goes straight; the "
@@ -2481,7 +2507,8 @@ def preset(
     each old flag and what a value of it is in that option's,
     :attr:`~acoustic_spaces.demos.Option.renamed`) and its steps run as the ones that
     took them over (``steps``, by step: the old names), so that the command lines written
-    for the script keep working."""
+    for the script keep working; its runs are named after it (``church_binaural``), by
+    what differs from its own defaults."""
     defaults, renamed, steps = defaults or {}, renamed or {}, steps or {}
     unknown = sorted(
         ({*defaults, *renamed} - {o.name for o in DEMO.options})
@@ -2512,6 +2539,9 @@ def preset(
             for s in DEMO.steps
         ],
         options=[option(o) for o in DEMO.options],
+        # Its runs are named after it, by what differs from its own defaults, so that
+        # a run of it and one of this demo, whose defaults differ, never share a name.
+        stem_of=None,
         program=None,
         leading=None,
         module=None,

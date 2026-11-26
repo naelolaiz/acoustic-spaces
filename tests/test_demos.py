@@ -2068,6 +2068,11 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     assert drawing.shown_at(0.3) == "talker, radio -> seat-a"
     assert drawing.shown_at(1.2) == "talker, radio -> seat-b @ 1.20 s"
     assert drawing.shown(1) == "talker, radio -> seat-b"  # a still: no moment
+    # Two still sources of one group are named by it once, with how many of it play.
+    for source in drawing.playing:
+        source["group"] = "Pair"
+    assert drawing.shown(1) == "Pair (2) -> seat-b"
+    assert drawing.shown_at(1.2) == "Pair (2) -> seat-b @ 1.20 s"
     # Again: there already; with every walker standing, the still mixes instead.
     capsys.readouterr()
     assert cli(["demo", "scene.yaml", "render", "--seconds", "0.8"]) == 0

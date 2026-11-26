@@ -85,8 +85,9 @@ DEMO = preset(
     title=N_("A choir and an organ in the church"),
     description=__doc__,
     script=Path(__file__),
-    # The script's choir and organ, and the length of its responses.
-    defaults={"sources": "Choir,Organ pipes", "ir_length": 9.0},
+    # The script's choir and organ, the length of its responses, and its one gain for
+    # every place.
+    defaults={"sources": "Choir,Organ pipes", "ir_length": 9.0, "levels": "as-simulated"},
     renamed={"scene": (("--from", str),), "tour": (("--tour", _tour),)},
     steps={"recording": ("music", "scene"), "feeds": ("music",)},
 )

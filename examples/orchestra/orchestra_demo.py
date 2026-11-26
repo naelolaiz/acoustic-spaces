@@ -78,8 +78,9 @@ DEMO = preset(
     title=N_("Beethoven's 8th in the concert hall"),
     description=__doc__,
     script=Path(__file__),
-    # The script read the zips downloaded before from the example's folder.
-    defaults={"zips": Path(".")},
+    # The script read the zips downloaded before from the example's folder, and kept one
+    # gain for every seat.
+    defaults={"zips": Path("."), "levels": "as-simulated"},
     renamed={"piece": (("--movements", _movement),), "tour": (("--tour", _tour),)},
     steps={"recording": ("tracks",)},
 )

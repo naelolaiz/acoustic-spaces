@@ -204,7 +204,8 @@ def test_a_source_left_out_stands_where_it_starts(tmp_path: Path) -> None:
 def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypatch) -> None:
     """The tour visits the listeners in the order ``--listeners`` gives them, the
     scene's without it, or stops in the order ``--tour`` gives them (every listener
-    mixed); each still numbers its stop in the tour."""
+    mixed), each turned up to the loudness of the loudest or, ``--levels
+    as-simulated``, none; each still numbers its stop in the tour."""
     scene = _grouped(tmp_path)
     entries = [{"listener": "seat-a"}, {"listener": "seat-b"}]
     monkeypatch.setattr(scene_demo, "responses_of", lambda args, demo=None: entries)
@@ -219,6 +220,14 @@ def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypat
         stops = scene_demo.tour_of(resolved, seats, 60.0)
         assert [stop.key for stop in stops] == order
         assert [stop.at for stop in stops] == [0.0, 20.0]  # --seconds, 20 s, each
+    # --levels: each stop turned up to the loudness of the loudest, or none turned up.
+    louder = {"seats": {"seat-a": {"rms_db": -20.0}, "seat-b": {"rms_db": -26.0}}}
+    for argv, gains in (((), [0.0, 6.0]), (("--levels", "as-simulated"), [0.0, 0.0])):
+        resolved = _run(scene, *argv)[1]
+        assert [stop.gain_db for stop in scene_demo.tour_of(resolved, louder, 60.0)] == gains
+    assert _run(scene, "--levels", "as-simulated")[1].run_folder.name.endswith(
+        "_levels-as-simulated_binaural"
+    )
     pytest.importorskip("PIL")
     from acoustic_spaces.demos import scene_pictures
     from acoustic_spaces.scene import Scene

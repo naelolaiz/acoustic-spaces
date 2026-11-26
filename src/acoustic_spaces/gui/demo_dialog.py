@@ -1687,7 +1687,7 @@ def binaural(args: argparse.Namespace) -> bool:
 
 #: The options the Video box asks for: how the sources and the listeners split into
 #: parts, and their order.
-VIDEO_OPTIONS = ("sources_play", "series")
+VIDEO_OPTIONS = ("sources_play", "series", "levels")
 #: How many parts the Video box lists; it counts the others.
 PARTS_LISTED = 12
 #: Where a sentence of a demo's summary ends: at a full stop and a space.
@@ -1698,7 +1698,12 @@ CHOICE_WORDS = {
     "sources_play": {
         TOGETHER: N_("All together, in each part"),
         IN_TURN: N_("Each in a part of its own"),
-    }
+    },
+    # The demo of any scene's --levels (scene_demo.LEVELS).
+    "levels": {
+        "matched": N_("Each turned up to the loudest"),
+        "as-simulated": N_("As simulated, one gain for all"),
+    },
 }
 
 

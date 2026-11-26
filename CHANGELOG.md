@@ -79,6 +79,11 @@
   joined at one level. A last stop that runs to the recording's end runs on as the
   room's reverberation dies away, until 60 dB down. A tour that names a listener the
   scene lacks says so.
+- Added: the demo of any scene's `--levels` (**Levels between listeners** in Run demo):
+  `matched`, the default, turns each listener's stop up to the loudness of the loudest,
+  `as-simulated` plays every stop at the one gain of the mixes, as the church's, the
+  orchestra's and the gallery's scripts do. An example's script names its runs after
+  itself, by what differs from its own defaults (`church_binaural`).
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

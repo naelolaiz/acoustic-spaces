@@ -511,7 +511,7 @@ def test_church_demo_is_a_preset_of_its_scene(tmp_path: Path) -> None:
         )
     )
     assert demo.DEMO.check(args) is None
-    assert args.run_folder.name == "scene_Choir+Organ-pipes_binaural"
+    assert args.run_folder.name == "church_binaural"  # its own pick, its own defaults
     singers = [name for name in demo_music().SOURCE_NAMES if name.startswith("singer_")]
     assert list(args.playing) == demo_music().SOURCE_NAMES
     plays = scene_demo.plays(args)
@@ -548,11 +548,11 @@ def test_church_demo_is_a_preset_of_its_scene(tmp_path: Path) -> None:
     }
     # A pick of the choir and the organ, by group or by name, and in turn.
     choir = demo.DEMO.resolved(argparse.Namespace(**vars(args) | {"sources": "Choir"}))
-    assert choir.run_folder.name == "scene_Choir_binaural" and list(choir.playing) == singers
+    assert choir.run_folder.name == "church_Choir_binaural" and list(choir.playing) == singers
     turns = argparse.Namespace(**vars(args) | {"sources_play": "in-turn"})
     assert [part.run_folder.name for part in demo.DEMO.each(turns)] == [
-        "scene_Choir_binaural",
-        "scene_Organ-pipes_binaural",
+        "church_Choir_binaural",
+        "church_Organ-pipes_binaural",
     ]
     wav = tmp_path / "take.wav"
     wav.write_bytes(b"")
@@ -1107,7 +1107,7 @@ def test_orchestra_demo_is_a_preset_of_its_scene(tmp_path: Path) -> None:
 
     every = run()
     assert demo.DEMO.check(every) is None
-    assert demo.DEMO.resolved(every).run_folder.name == "scene_binaural"
+    assert demo.DEMO.resolved(every).run_folder.name == "orchestra_binaural"
     tour = [
         ("I", ["stalls-middle", "stalls-front", "conductor"]),
         ("II", ["stalls-rear", "stalls-middle"]),
@@ -1115,7 +1115,7 @@ def test_orchestra_demo_is_a_preset_of_its_scene(tmp_path: Path) -> None:
     ]
     assert toured(every) == tour
     assert [part.run_folder.name for part in demo.DEMO.each(every)] == [
-        f"scene_piece-{piece}_binaural" for piece in ("I", "II", "IV")
+        f"orchestra_piece-{piece}_binaural" for piece in ("I", "II", "IV")
     ]
     (first,) = [part for part in demo.DEMO.each(every) if part.piece == "IV"]
     title = recordings.named("beethoven_8").title
@@ -1436,7 +1436,10 @@ def test_the_lakeside_demo_is_a_preset_of_the_demo_of_its_scene(tmp_path: Path) 
     assert [demo.step(name).name for name in ("render", "video")] == ["render", "video"]
     general = scene_demo.DEMO.at(folder)
     same = general.resolved(general.parser().parse_args(["all", "--scene", "scene.yaml"]))
-    assert run_folder(resolved) == run_folder(same) == folder / "demo" / "scene_binaural"
+    # Its runs are named after it, the scene's demo's after the scene: their defaults
+    # differ (--last-stop), so neither finds the other's mixes as its own.
+    assert run_folder(resolved) == folder / "demo" / "lakeside_binaural"
+    assert run_folder(same) == folder / "demo" / "scene_binaural"
     script = _script("lakeside_concert", "lakeside_demo").DEMO  # in the example's folder
     assert script.command("all", parser.parse_args(["all"])) == "python lakeside_demo.py all"
     assert script.command("all", parser.parse_args(["all", "--song", "potassium"])).endswith(
@@ -1462,7 +1465,7 @@ def test_the_lakeside_demo_plays_a_song_of_your_own(tmp_path: Path, monkeypatch)
     demo, args, resolved = _lake(folder, "--music", "mine.wav", "--bpm", "100")
     assert demo.check(args) is None
     assert resolved.recording == folder / "mine.wav"
-    assert run_folder(resolved).name == "scene_mine_bpm-100_binaural"
+    assert run_folder(resolved).name == "lakeside_mine_bpm-100_binaural"
     assert scene_demo.plays(resolved)["subs"] == "mine.wav, mixed down to mono"
     scene = scene_demo.scene_of(resolved)
     assert scene_demo.tempo_of(resolved, scene) == (100.0, 0.0)
@@ -1508,10 +1511,10 @@ def test_the_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path) -> None
     assert every.playing == ("main_left", "main_right", "subs")
     assert run_folder(_lake(folder, "--sources", "PA")[2]) == run_folder(every)
     subs = _lake(folder, "--sources", "subs")[2]
-    assert subs.playing == ("subs",) and run_folder(subs).name == "scene_subs_binaural"
+    assert subs.playing == ("subs",) and run_folder(subs).name == "lakeside_subs_binaural"
     stage = _lake(folder, "--sources", "stage")
     assert stage[0].check(stage[1]) is None and stage[2].playing == ("stage",)
-    assert run_folder(stage[2]).name == "scene_stage_binaural"
+    assert run_folder(stage[2]).name == "lakeside_stage_binaural"
     taken = Scene.from_yaml(scene_demo.run_scene_file(stage[2]))
     assert [s.name for s in taken.sources if s.in_use] == ["stage", *every.playing]
     tower = _lake(folder, "--sources", "tower")
@@ -1567,8 +1570,9 @@ def test_the_gallery_walk_is_a_preset_of_the_demo_of_its_scene() -> None:
     assert args.listeners == "visitor,standing" and walk.check(args) is None
     general = DEMO.at(EXAMPLES / "gallery").parser()
     same = general.parse_args(["all", "--scene", "scene.yaml", "--listeners", "visitor,standing"])
-    assert run_folder(walk.resolved(args)) == run_folder(
-        DEMO.at(EXAMPLES / "gallery").resolved(same)
+    assert run_folder(walk.resolved(args)).name == "walk_visitor+standing_binaural"
+    assert run_folder(DEMO.at(EXAMPLES / "gallery").resolved(same)).name == (
+        "scene_visitor+standing_binaural"
     )
     assert walk.command("all", args) == "python walk_demo.py all"
     assert walk.command("all", parser.parse_args(["all", "--talker", "F1"])).endswith(

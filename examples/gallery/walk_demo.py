@@ -54,7 +54,8 @@ DEMO = preset(
     title=N_("A walk through the gallery"),
     description=__doc__,
     script=Path(__file__),
-    defaults={"listeners": f"visitor,{STANDING}"},
+    # The script's walk and look round, at one gain.
+    defaults={"listeners": f"visitor,{STANDING}", "levels": "as-simulated"},
     renamed={
         "scene": (("--from", str),),
         "recording": (("--talker", lambda code: f"ace_{code.lower()}"),),

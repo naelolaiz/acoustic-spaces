@@ -60,7 +60,9 @@ Its video and the files that go with it lie beside that folder under the same na
 sound, `_thumbnail.png`, `_chapters.txt`), as `demo/flight_departure_binaural.mp4` and
 `demo/flight_arrival_binaural.mp4`, so that a run with other settings writes over
 nothing of another's and a run with the same settings finds what it made. The name
-gives, in order: the demo (for the demo of any scene, the scene file's name); what
+gives, in order: the demo (for the demo of any scene, the scene file's name; for an
+example's script that is a preset of it, the script's demo, as `church`, each option
+counted from the script's defaults); what
 plays, where the demo gives a choice of it (`arrival`, a song, the files `--input`
 gives, as `guide-talk`); the listeners `--listeners` names, joined by `+` (by their
 number and a digest when that takes more than 48 characters); each other option that
@@ -326,7 +328,9 @@ acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
   loudest, by 40 dB at most and by as much as the still says, the only step that is not
   the simulation's: K-weighted, with the channels' powers added up as ITU-R BS.1770-4
   adds them (the side surrounds of a loudspeaker layout 1.5 dB up, the LFE left out), an
-  Ambisonics mix measured on its W channel alone. The stills show the scene from above,
+  Ambisonics mix measured on its W channel alone. `--levels as-simulated` plays every
+  stop at the one gain of the mixes instead, so the differences in level between the
+  listeners are heard as simulated (`matched`, the default, turns them up). The stills show the scene from above,
   drawn from its own model, with its sources (those that play in colour, with a ray to
   the listener), the listeners and the one of the moment as a head, and beside it the
   A-weighted level there of the sources that play, as simulated, when their sound
@@ -450,7 +454,7 @@ python orchestra_demo.py all        # every step, into demo/ beside the scene
 python orchestra_demo.py recording  # the 61 tracks of each movement (2.0 GB), kept for every scene
 python orchestra_demo.py simulate   # the hall with the orchestra and its four seats
 python orchestra_demo.py render     # each movement at the seats its tour visits
-python orchestra_demo.py video      # demo/scene_binaural.mp4: the movements in turn
+python orchestra_demo.py video      # demo/orchestra_binaural.mp4: the movements in turn
 ```
 
 Its options are the demo of any scene's: `--piece IV,I` (the movements played, in that
@@ -468,7 +472,7 @@ wrote (the tour [decodes it to two ears](#running-a-demo)), `--no-mp4` for the a
 and stills only. The simulation keeps every player and seat, so another pick of them
 needs no new one. The script's own command lines still work: `--movements 4,1` reads
 as `--piece IV,I`, its `--tour 1:conductor,2:stalls-rear` as `I/conductor,II/stalls-rear`,
-and its `tracks` step runs as `recording`. `demo/scene_binaural_chapters.txt` lists the
+and its `tracks` step runs as `recording`. `demo/orchestra_binaural_chapters.txt` lists the
 movements and the stops' times for a video description.
 
 - **The cuts.** Within a movement the seats of its tour take even shares of it, each cut
@@ -482,7 +486,8 @@ movements and the stops' times for a video description.
 - **One level for all.** The stops of a movement keep one gain, and the movements are
   joined at one level, the loudest peak of them at -1 dBFS, as the cards say: the
   hall's differences are heard as the simulation gives them, from the podium, 2 m from
-  the first violins, to the back row, and the movements keep their dynamics. Every
+  the first violins, to the back row, and the movements keep their dynamics
+  (`--levels matched` turns each seat up to the loudness of the loudest instead). Every
   source has the same power and plays its track as recorded, so the balance between
   the instruments is the recording's own.
 - **The pictures** are the demo of any scene's: the hall from above with the seat of the
@@ -534,7 +539,7 @@ python church_demo.py all        # every step, into demo/ beside the scene
 python church_demo.py recording  # 19 takes, their annotations, 27 organ samples (127 MB), built
 python church_demo.py simulate   # the church with its choir, organ and places, 9 s responses
 python church_demo.py render     # the whole piece at each listener
-python church_demo.py video      # demo/scene_Choir+Organ-pipes_binaural.mp4, its sound, stills
+python church_demo.py video      # demo/church_binaural.mp4, its sound, stills and thumbnail
 ```
 
 Its options are the demo of any scene's: `--tour nave-back:12s,conductor:end` (a tour of
@@ -571,7 +576,8 @@ and the feeds) and `scene` (the recording) run as the ones that took them over.
   plays its stem as it is, so the balance between the singers and the organ is the
   scene's.
 - **One gain for all listeners.** The six mixes share one gain, so the level differences
-  between places are the simulation's.
+  between places are the simulation's (`--levels matched` turns each place up to the
+  loudness of the loudest instead).
 - **The cuts** are the scene's tour: each place for a number of seconds, the last to the
   end, so they fall where the music breathes (the rest in the middle of the tune, the
   gaps between verses), with a 1 s crossfade. Time is the performers': a listener far
@@ -784,7 +790,7 @@ acoustic-spaces examples --copy . lakeside_concert && cd lakeside_concert
 python lakeside_demo.py all        # every step, into demo/ beside the scene
 python lakeside_demo.py recording  # the song (WAV, 56 MB)
 python lakeside_demo.py render     # every place, in the evening's weather and in still air
-python lakeside_demo.py video      # demo/scene_binaural.mp4, its sound, stills and thumbnail
+python lakeside_demo.py video      # demo/lakeside_binaural.mp4, its sound, stills and thumbnail
 ```
 
 Its options are the demo of any scene's: `--recording great_british_summer` or
@@ -930,7 +936,9 @@ hears).
   heard most plainly.
 - **The voice** is the scene's guide: male speech (IEC 60268-16's long-term spectrum)
   at normal vocal effort, 60 dB(A) 1 m in front (ISO 9921), cardioid. One gain plays the
-  whole video, so the voice is as much quieter round the corner as the simulation says.
+  whole video, so the voice is as much quieter round the corner as the simulation says
+  (`--levels matched` turns the quieter of the two up to the loudness of the other
+  instead).
 
 **Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
 College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work

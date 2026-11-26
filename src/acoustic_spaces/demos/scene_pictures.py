@@ -698,13 +698,28 @@ class Pictures:
         """What the still of stop ``k`` shows, for the video's messages: the sources that
         play, then the stop's listener, each mover at ``t`` of its trajectory
         (:func:`~acoustic_spaces.walkthrough.moment_name`), as ``stage, car @ 3.40 s ->
-        seat``."""
+        seat``; the sources of a group that play more than one, standing still, by
+        the group once and how many of it play (``Choir (19)``), as the plan labels a
+        crowded group."""
+
+        def walks(kind: str, name: str) -> bool:
+            return t is not None and (kind, name) in self.paths
 
         def named(kind: str, name: str) -> str:
-            walks = t is not None and (kind, name) in self.paths
-            return moment_name(name, t) if walks else name
+            return moment_name(name, t) if walks(kind, name) else name
 
-        sources = ", ".join(named("sources", s["name"]) for s in self.playing)
+        groups: dict[str, int] = {}
+        for source in self.playing:
+            if source.get("group") and not walks("sources", source["name"]):
+                groups[source["group"]] = groups.get(source["group"], 0) + 1
+        words: list[str] = []
+        for source in self.playing:
+            group = source.get("group")
+            if groups.get(group or "", 0) < 2 or walks("sources", source["name"]):
+                words.append(named("sources", source["name"]))
+            elif f"{group} ({groups[group]})" not in words:
+                words.append(f"{group} ({groups[group]})")
+        sources = ", ".join(words)
         listener = named("listeners", self.stops[k].key)
         return f"{sources} -> {listener}" if sources else listener
 

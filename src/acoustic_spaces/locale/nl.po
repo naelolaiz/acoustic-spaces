@@ -144,6 +144,10 @@ msgid "Last stop"
 msgstr "Laatste stop"
 
 #: acoustic_spaces/demos/__init__.py
+msgid "Levels between listeners"
+msgstr "Niveaus tussen ontvangers"
+
+#: acoustic_spaces/demos/__init__.py
 msgid "Leave out"
 msgstr "Weglaten"
 
@@ -2182,6 +2186,14 @@ msgstr "Vink opnieuw aan wat In beweging in de scène aanvinkt"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "All together, in each part"
 msgstr "Allemaal samen, in elk deel"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Each turned up to the loudest"
+msgstr "Elk opgehaald tot de luidste"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "As simulated, one gain for all"
+msgstr "Zoals gesimuleerd, één versterking voor alle"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "every one"
