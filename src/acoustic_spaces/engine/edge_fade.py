@@ -1558,7 +1558,20 @@ class EdgeFade:
                 into = np.cos(angle) * edges.along[e] + np.sin(angle) * edges.normal[e]
                 far = 4.0 * reach + edges.length[e]
                 a, b = edges.start[e], edges.end[e]
-                strips.append(local(np.stack([a, b, b - far * into, a - far * into]))[:, :2])
+                strip = np.stack([a, b, b - far * into, a - far * into])
+                strips.append(local(strip)[:, :2])
+                # Where the edge ends on a side that the face goes on past as an image
+                # (a wall's foot on open ground), the edge goes on as its image too.
+                for p, q, _, r in beyond:
+                    line, out = q - p, r - p
+                    out = out / np.linalg.norm(out)
+                    for end in (a, b):
+                        t = (end - p) @ line / (line @ line)
+                        gap = np.linalg.norm(end - p - t * line)
+                        if gap <= self.tolerance and -1e-9 <= t <= 1.0 + 1e-9:
+                            image = strip - 2.0 * ((strip - p) @ out)[:, None] * out
+                            strips.append(local(image)[:, :2])
+                            break
                 if edges.wedge[e] >= 2.0 - 1e-9:
                     break  # a free edge: one face, both sides in one plane
         past = share(np.array(strips)) if strips else 0.0
