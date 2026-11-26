@@ -283,6 +283,10 @@ def hidden(args: argparse.Namespace) -> list[str]:
     return [] if parts == ["none"] else parts
 
 
+#: What the stills can leave out (``--hide``): the view from the side, the wind and the
+#: weather zones, the ground's materials with what stands on it, from above, and the
+#: audience (:func:`~acoustic_spaces.demos.audiences.audiences`).
+HIDDEN = ("side", "wind", "ground", "audience")
 #: Why a scene has no audience for its stills to draw (:func:`has_audience`).
 NO_AUDIENCE = (
     "the scene has no audience or seats (a material of the database's audiences or "
@@ -292,17 +296,10 @@ NO_AUDIENCE = (
 
 def has_audience(scene: Scene) -> bool:
     """Whether a material of ``scene`` is an audience or seats, which its stills draw
-    (:func:`~acoustic_spaces.demos.scene_pictures.audience_of`)."""
-    from acoustic_spaces.demos.scene_pictures import audience_of
+    (:func:`~acoustic_spaces.demos.audiences.audience_of`)."""
+    from acoustic_spaces.demos.audiences import audience_of
 
     return any(audience_of(material) is not None for material in scene.materials.values())
-
-
-def scene_pictures_hidden() -> tuple[str, ...]:
-    """What the stills can leave out (``--hide``)."""
-    from acoustic_spaces.demos.scene_pictures import HIDDEN
-
-    return HIDDEN
 
 
 def _current(scene: str | Path | None) -> Scene | None:
@@ -1871,9 +1868,9 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
             length_of_stop(last)
         except ValueError as exc:
             return f"--last-stop: {exc}: give phrases (2), seconds (12s) or end"
-    unknown = [part for part in hidden(args) if part not in scene_pictures_hidden()]
+    unknown = [part for part in hidden(args) if part not in HIDDEN]
     if unknown:
-        given = ", ".join(scene_pictures_hidden())
+        given = ", ".join(HIDDEN)
         return f"--hide {unknown[0]}: give none, or one or more of {given}"
     found = _current(getattr(args, "scene", None))
     if found is not None:

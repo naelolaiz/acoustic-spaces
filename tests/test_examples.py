@@ -918,10 +918,10 @@ def test_the_stills_draw_the_audience() -> None:
     standing on the pitch, seated in three stands and the stand behind the stage as
     empty seats, as many people as each material's preset puts on a square metre, with
     how much each takes up at 1 kHz; the concert hall's seated in its chairs."""
-    from acoustic_spaces.demos import scene_pictures
+    from acoustic_spaces.demos import audiences
     from acoustic_spaces.materials.database import builtin_database
 
-    found = scene_pictures.audiences(Room.from_yaml(example_path("stadium_concert")))
+    found = audiences.audiences(Room.from_yaml(example_path("stadium_concert")))
     kinds: dict[str, list] = {}
     for area in found:
         kinds.setdefault(area.kind, []).append(area)
@@ -937,21 +937,21 @@ def test_the_stills_draw_the_audience() -> None:
     assert kinds["seats"][0].absorbs == pytest.approx(0.2) and kinds["seats"][0].people == 0
     # Each dot stands for DOT_SPACING_M squared over the people on a square metre.
     dots = standing.dots(seed=0)
-    assert len(dots) == pytest.approx(90.5 * 68 * 2 / scene_pictures.DOT_SPACING_M**2, rel=0.05)
-    assert scene_pictures._inside(dots, standing.triangles).all()
-    assert scene_pictures.audience_lines(found) == [
+    assert len(dots) == pytest.approx(90.5 * 68 * 2 / audiences.DOT_SPACING_M**2, rel=0.05)
+    assert audiences._inside(dots, standing.triangles).all()
+    assert audiences.audience_lines(found) == [
         "Audience: 12,300 standing, 29,000 seated, empty seats",
         "Absorbing at 1 kHz: standing 99%, seated 95%, empty seats 20%",
     ]
     # In a room: the concert hall's audience in chairs 0.85 by 0.63 m.
-    hall = scene_pictures.audiences(Room.from_yaml(example_path("concert_hall")))
+    hall = audiences.audiences(Room.from_yaml(example_path("concert_hall")))
     assert [(area.kind, round(area.per_m2, 2)) for area in hall] == [("seated", 1.87)]
     entry = builtin_database().get
-    assert scene_pictures.per_m2_of(entry("orchestra_1.5_m2")) == pytest.approx(1 / 1.5)
-    assert scene_pictures.per_m2_of(entry("audience_0.72_m2")) == 0.72
-    assert scene_pictures.per_m2_of(entry("audience_wooden_chairs_1_m2")) == 1.0
-    assert scene_pictures.per_m2_of(entry("chairs_wooden")) == 2.0  # its category's
-    assert scene_pictures.audience_lines([]) == []
+    assert audiences.per_m2_of(entry("orchestra_1.5_m2")) == pytest.approx(1 / 1.5)
+    assert audiences.per_m2_of(entry("audience_0.72_m2")) == 0.72
+    assert audiences.per_m2_of(entry("audience_wooden_chairs_1_m2")) == 1.0
+    assert audiences.per_m2_of(entry("chairs_wooden")) == 2.0  # its category's
+    assert audiences.audience_lines([]) == []
 
 
 def test_the_crossings_stills_frame_the_stadium(tmp_path: Path) -> None:
