@@ -3072,6 +3072,10 @@ msgid "speech"
 msgstr "spraak"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "a multitrack recording"
+msgstr "een meersporenopname"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The source's sound power level in all bands together (dB re 1 pW); Spectrum "
 "spreads it over the bands"

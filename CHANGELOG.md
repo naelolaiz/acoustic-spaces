@@ -77,7 +77,8 @@
   `piece` in a scene's tour), and the stops that give no length share the piece out,
   each cut at its quietest moment within 10 s. The parts of one recording's pieces are
   joined at one level. A last stop that runs to the recording's end runs on as the
-  room's reverberation dies away. A tour that names a listener the scene lacks says so.
+  room's reverberation dies away, until 60 dB down. A tour that names a listener the
+  scene lacks says so.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

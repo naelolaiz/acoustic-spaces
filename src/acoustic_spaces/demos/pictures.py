@@ -149,6 +149,9 @@ class Plan:
         self.left, self.top, self.s = left, top, scale
         self.x0, self.y0, self.x1, self.y1 = box
         self.rotated = rotated
+        #: The panel the plan is drawn in (left, top, right, bottom), where labels may go
+        #: beyond the scene's own box; None where it is not given.
+        self.area: tuple[float, float, float, float] | None = None
 
     def __call__(self, x: float, y: float, z: float = 0.0) -> tuple[float, float]:
         if self.rotated:

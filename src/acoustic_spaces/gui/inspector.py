@@ -238,7 +238,11 @@ CHANNELS = [
 #: The Channel list's entry for a mix of stems, which only the scene file sets.
 MIX = "mix"
 #: What each kind of free recording is, for the scene's Recording list.
-RECORDING_KINDS = {"song": N_("a song in stereo"), "speech": N_("speech")}
+RECORDING_KINDS = {
+    "song": N_("a song in stereo"),
+    "speech": N_("speech"),
+    "multitrack": N_("a multitrack recording"),
+}
 LEVEL_TIP = N_(
     "The source's sound power level in all bands together (dB re 1 pW); Spectrum spreads "
     "it over the bands"
@@ -3287,7 +3291,8 @@ def recording_text(item: recordings.Recording) -> str:
     """How the scene's Recording list shows a free recording: what it is, its licence and
     what it costs to download, or that it is downloaded."""
     title, kind = _(item.title), _(RECORDING_KINDS[item.kind])
-    if recordings.file_of(item).exists():
+    size = recordings.to_download_mb(item)
+    if not size:
         # Translators: {title} is a recording's title, {kind} what it is ("a song in
         # stereo") and {licence} its licence (CC BY 4.0).
         return _("{title}: {kind}, {licence}, downloaded").format(
@@ -3296,7 +3301,7 @@ def recording_text(item: recordings.Recording) -> str:
     # Translators: {title} is a recording's title, {kind} what it is ("a song in
     # stereo"), {licence} its licence (CC BY 4.0) and {size} the MB it downloads.
     return _("{title}: {kind}, {licence}, {size} MB to download").format(
-        title=title, kind=kind, licence=item.licence, size=number(item.download_mb, "g")
+        title=title, kind=kind, licence=item.licence, size=number(size, "g")
     )
 
 

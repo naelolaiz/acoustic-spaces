@@ -372,8 +372,10 @@ is in one (`--tour I/conductor,IV/stalls-rear`, `piece` in the scene's tour) and
 plays the stops of its piece; where none gives a length, the stops share the piece out
 evenly, each cut moved to the quietest moment within 10 s of where the share puts it
 (the lowest half-second RMS of the first stop's mix), as the recording has its tours
-cut. A last stop that runs to the recording's end runs on to the end of its mix, so
-that the room's reverberation dies away as simulated. Outdoors, where wind or a
+cut. A last stop that runs to the recording's end runs on while its mix rings, until
+it falls 60 dB below its loudest half second, so that the room's reverberation dies
+away as simulated (a recording that rings out of its own, as the church's, ends as it
+does). Outdoors, where wind or a
 temperature profile bends the sound, a stop in still air (`still`) hears its listener
 in a second simulation of the scene without its atmosphere (wind, temperature
 profiles, weather zones, turbulence) and its `long_term` classes, written to `scenes/`
@@ -475,7 +477,8 @@ movements and the stops' times for a video description.
   1 s crossfade. Every seat's mix is shifted earlier by the time the orchestra's sound
   takes to reach it (the peak of the energy of its responses), so the music runs on
   across a cut. At a movement's end its last seat runs on as the hall's reverberation
-  dies away (the responses run 3.5 s), then the next movement's title card follows.
+  dies away, until it is 60 dB down (the responses run 3.5 s), then the next movement's
+  title card follows.
 - **One level for all.** The stops of a movement keep one gain, and the movements are
   joined at one level, the loudest peak of them at -1 dBFS, as the cards say: the
   hall's differences are heard as the simulation gives them, from the podium, 2 m from

@@ -620,6 +620,9 @@ class Step:
     #: became a preset of the demo of any scene (``walk`` and ``turn``, for ``render``):
     #: a command line that names one runs it.
     aliases: tuple[str, ...] = ()
+    #: Whether :attr:`run` takes the demo that runs it as ``demo``, whose commands its
+    #: messages and captions give (a preset's own, not the demo it is a preset of).
+    with_demo: bool = False
 
 
 def input_option(steps: tuple[str, ...] = ("render",)) -> Option:
@@ -1841,6 +1844,8 @@ class Demo:
                 continue
             if simulates(step):
                 self.simulate(args, only_missing=skip_done)
+            elif step.with_demo:
+                step.run(args, demo=self)  # type: ignore[call-arg]
             else:
                 step.run(args)
         if not self.stepless and run_folder(args).is_dir():

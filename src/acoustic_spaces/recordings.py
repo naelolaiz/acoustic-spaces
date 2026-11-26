@@ -474,6 +474,19 @@ def stems_folder(item: Recording | str, folder: str | Path | None = None) -> Pat
     return base / item.name
 
 
+def to_download_mb(item: Recording | str, folder: str | Path | None = None) -> float:
+    """The MB the recording still downloads: none once its master (each piece's, for one
+    of several) is in ``folder`` or in :func:`data_folder`, its stems apart."""
+    item = named(item) if isinstance(item, str) else item
+    if item.pieces:
+        return sum(
+            piece.download_mb
+            for piece in item.pieces
+            if not file_of(item, folder, piece.name).exists()
+        )
+    return 0.0 if file_of(item, folder).exists() else float(item.download_mb)
+
+
 def stem_file(
     item: Recording | str, stem: str, folder: str | Path | None = None, piece: str | None = None
 ) -> Path:
@@ -669,4 +682,5 @@ __all__ = [
     "stem_file",
     "stems_folder",
     "stems_there",
+    "to_download_mb",
 ]

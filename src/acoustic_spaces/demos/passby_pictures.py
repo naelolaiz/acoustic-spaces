@@ -77,6 +77,9 @@ class Pictures(scene_pictures.Pictures):
     ``stops`` the tour and ``path`` the vehicle's knots
     (:class:`~acoustic_spaces.walkthrough.Knots`)."""
 
+    #: The vehicle's name under it first, clear of the listeners beside its way.
+    source_sides = ("below", "above", "right", "left", *scene_pictures.CORNERS)
+
     def __init__(
         self,
         scene: dict,
@@ -137,10 +140,6 @@ class Pictures(scene_pictures.Pictures):
             xs, ys = zip(*points, strict=True)
             text(draw, (min(xs) + 8, min(ys) + 6), name.replace("_", " "), label, FAINT)
         super().draw_scene(img, plan, current, t)
-
-    def label_source(self, draw, at: tuple[float, float], r: float, name: str, f) -> None:
-        """The vehicle's name under it, clear of the listeners beside its way."""
-        text(draw, (at[0], at[1] + r + 3), name, f, MUTED, "ma")
 
     # -- what is heard -----------------------------------------------------------------
 

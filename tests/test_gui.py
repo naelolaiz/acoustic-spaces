@@ -1977,6 +1977,26 @@ def test_a_scene_names_the_recording_its_sources_play(
     assert scene_page.recording.itemText(3) == (
         '"Potassium", Software-Entwicklungskit: a song in stereo, CC0 1.0, downloaded'
     )
+    # A multitrack recording says so; one of several pieces gives the MB its pieces not
+    # yet there download, and is downloaded once each piece's master is.
+    choir = scene_page.recording.findData("dona_nobis_pacem")
+    assert scene_page.recording.itemText(choir).endswith(
+        ": a multitrack recording, CC BY 4.0, 127 MB to download"
+    )
+    symphony = recordings.named("beethoven_8")
+    assert scene_page.recording.itemText(names.index("beethoven_8")).endswith(
+        "CC BY 4.0, 1990 MB to download"
+    )
+    for piece, left in (("I", "1348 MB to download"), ("II", "743 MB to download")):
+        recordings.file_of(symphony, piece=piece).parent.mkdir(parents=True, exist_ok=True)
+        recordings.file_of(symphony, piece=piece).write_bytes(b"")
+        window.select("sources", 0)
+        window.select("scene")
+        assert scene_page.recording.itemText(names.index("beethoven_8")).endswith(left)
+    recordings.file_of(symphony, piece="IV").write_bytes(b"")
+    window.select("sources", 0)
+    window.select("scene")
+    assert scene_page.recording.itemText(names.index("beethoven_8")).endswith("downloaded")
     scene_page.recording.setCurrentIndex(3)
     scene_page.recording.activated.emit(3)
     assert window.document.scene.recording == "potassium"
@@ -4764,15 +4784,12 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
     assert dialog.command.text().startswith("acoustic-spaces demo scene.yaml all --listeners ")
     assert "singer" not in dialog.command.text().split("--listeners ")[1]
     dialog.deleteLater()
+    # The church: the scene's listeners in use and those its tour visits, in the scene's
+    # order, all ticked.
     church = DemoDialog(scene=example_path("church"))
-    assert church.fields["listeners"].names == [
-        "nave-back",
-        "side-aisle",
-        "front-pews",
-        "conductor",
-        "in-the-choir",
-        "nave-middle",
-    ]
+    places = ["nave-front", "nave-middle", "nave-back", "side-aisle", "front-pews"]
+    assert church.fields["listeners"].names == [*places, "conductor", "in-the-choir"]
+    assert church.fields["listeners"].ticked() == church.fields["listeners"].names
     church.deleteLater()
     walk = DemoDialog(scene=example_path("gallery"))
     names = ["in sight", "round the corner", "visitor", "standing"]

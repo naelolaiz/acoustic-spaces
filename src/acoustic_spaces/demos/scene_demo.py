@@ -153,6 +153,9 @@ Played = tuple[Path, str | dict[str, float] | None]
 CHANNEL_WORDS = {"left": "left channel", "right": "right channel", "mono": "mixed down to mono"}
 CROSSFADE_S = 1.0
 FADE_OUT_S = 3.0
+#: How far a mix falls below its loudest before a tour that runs on as the room rings
+#: out ends (dB): the decay a reverberation time counts.
+RING_DB = 60.0
 #: The folder of the mixes when something moves (the still ones go to ``seats``).
 MOVING = "moving"
 #: How long a stop lasts without ``--seconds`` on a shared timeline, or from a
@@ -1225,6 +1228,7 @@ def stems_heard(
     scene: Scene,
     rate: int,
     read_in: dict[Path, tuple[np.ndarray, dict[bool, float]]],
+    demo: Demo | None = None,
 ) -> dict[str, np.ndarray]:
     """The stems of the recording the run plays (:func:`stems_of`), each mixed down to
     mono at ``rate``, lined up with the recording and as long as it: a free song's
@@ -1236,7 +1240,7 @@ def stems_heard(
     if missing and free is not None:
         raise SystemExit(
             f"error: the stems of {free.title} are not downloaded yet; run first: "
-            f"{DEMO.command('recording', args)}"
+            f"{(demo or DEMO).command('recording', args)}"
         )
     if missing:
         raise SystemExit(f"error: --stem {missing[0]}: no {files[missing[0]]}")
@@ -1259,7 +1263,7 @@ def channel_of(x: np.ndarray, channel: str | dict[str, float] | None) -> np.ndar
     return mono(x)
 
 
-def feeds(args: argparse.Namespace) -> None:
+def feeds(args: argparse.Namespace, demo: Demo | None = None) -> None:
     """One WAV per source that plays: its file (its signal, what ``--input`` gives it, or
     the scene's recording), at the scene's sample rate, the channel the source names or
     mixed down to mono. A file mixed down is brought to one gated RMS (FEED_RMS); its
@@ -1293,13 +1297,13 @@ def feeds(args: argparse.Namespace) -> None:
             if free is not None and signal == recordings.file_of(free, piece=piece):
                 raise SystemExit(
                     f"error: {name} plays {free.title}, not downloaded yet; run first: "
-                    f"{DEMO.command('recording', args)}"
+                    f"{(demo or DEMO).command('recording', args)}"
                 )
             raise SystemExit(f"error: {name} plays {signal}, which is not there")
         mix = stems_played(played)
         if mix:
             if stems is None:
-                stems = stems_heard(args, scene, rate, read_in)
+                stems = stems_heard(args, scene, rate, read_in, demo)
             if multitrack and isinstance(channel, str):  # at the level it plays at
                 y = stems[channel]
             else:
@@ -1873,7 +1877,7 @@ def tour_of(
         pipeline.missing_mixes(seats, keys, (demo or DEMO).command("render", args))
         if share and free is not None and free.cut == "quiet":
             timed = quiet_cuts(timed, stops, seats, run_folder(args) / "seats")
-        timed = ringing_out(timed, seats, length_s)
+        timed = ringing_out(timed, seats, length_s, run_folder(args) / "seats")
         gains = stops_gains(seats, keys) if tour is not None else pipeline.gains_of(seats, keys)
         return [pipeline.TourStop(key, a, a, b, gains[key]) for key, a, b in timed]
     return stops_from_start(names, seats, pipeline.gains_of(seats, names), seconds)
@@ -1899,15 +1903,22 @@ def quiet_cuts(
 
 
 def ringing_out(
-    timed: list[tuple[str, float, float]], seats: dict, length_s: float
+    timed: list[tuple[str, float, float]], seats: dict, length_s: float, folder: Path
 ) -> list[tuple[str, float, float]]:
     """``timed`` with its last stop, where it runs to the recording's end
-    (``length_s``), running on to the end of its mix, so that the room's reverberation
-    after the music dies away as simulated."""
+    (``length_s``), running on while its mix (in ``folder``) rings, until it falls
+    :data:`RING_DB` below its loudest half second (:func:`envelope`) or ends, so that the
+    room's reverberation after the music dies away as simulated, and no silence
+    follows a recording that rings out of its own."""
     if not timed or timed[-1][2] < length_s - 1e-6:
         return timed
     key, a, b = timed[-1]
-    return [*timed[:-1], (key, a, max(b, float(seats["seats"][key]["length_s"])))]
+    rate = seats["rate"]
+    env = envelope(read(pipeline.mix_path(folder, seats, key))[0], rate)
+    loud = np.flatnonzero(env > float(env.max()) * 10.0 ** (-RING_DB / 20.0))
+    rings = (int(loud[-1]) * 0.1 + 0.5) if loud.size else 0.0  # the end of its last window
+    end = min(rings, float(seats["seats"][key]["length_s"]))
+    return [*timed[:-1], (key, a, max(b, end))]
 
 
 def stops_gains(seats: dict, keys: list[str]) -> dict[str, float]:
@@ -2150,10 +2161,16 @@ DEMO = Demo(
             feeds,
             "one WAV per source that plays: its file, its channel or mono, at one gated RMS",
             feeds_done,
+            with_demo=True,
         ),
         SIMULATE,
-        Step("render", render, "every listener, with one gain for all"),
-        Step("video", video, "the run's video, its audio and the stills, named after the run"),
+        Step("render", render, "every listener, with one gain for all", with_demo=True),
+        Step(
+            "video",
+            video,
+            "the run's video, its audio and the stills, named after the run",
+            with_demo=True,
+        ),
     ],
     options=[
         Option(

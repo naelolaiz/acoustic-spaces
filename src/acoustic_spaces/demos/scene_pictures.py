@@ -108,6 +108,116 @@ def nice_length(metres: float) -> float:
     return min((1.0, 2.0, 5.0, 10.0), key=lambda m: abs(m * power - target)) * power
 
 
+#: Where a label may go beside its mark, as :func:`laid_out` tries them: a source's on
+#: its right first, a listener's under its ring, then the corners.
+CORNERS = ("below right", "above right", "below left", "above left")
+SOURCE_SIDES = ("right", "left", "below", "above", *CORNERS)
+LISTENER_SIDES = ("below", "above", "right", "left", *CORNERS)
+
+Box = tuple[float, float, float, float]
+
+
+def label_at(draw, mark: Box, words: str, f, side: str) -> tuple[tuple[float, float], str, Box]:
+    """Where the label ``words`` goes on ``side`` of a mark taking the box ``mark``
+    (left, top, right, bottom): the point and the anchor to write it at, and the box it
+    takes."""
+    x0, y0, x1, y1 = mark
+    x, y = (x0 + x1) / 2, (y0 + y1) / 2
+    w, h, gap = draw.textlength(words, font=f), f.size + 2, 4
+    if side == "right":
+        return (x1 + gap, y), "lm", (x1 + gap, y - h / 2, x1 + gap + w, y + h / 2)
+    if side == "left":
+        return (x0 - gap, y), "rm", (x0 - gap - w, y - h / 2, x0 - gap, y + h / 2)
+    if side == "below":
+        return (x, y1 + gap), "ma", (x - w / 2, y1 + gap, x + w / 2, y1 + gap + h)
+    if side == "above":
+        return (x, y0 - gap), "md", (x - w / 2, y0 - gap - h, x + w / 2, y0 - gap)
+    vertical, horizontal = side.split()
+    top = y1 + gap if vertical == "below" else y0 - gap - h
+    if horizontal == "right":
+        return (x1 + gap, top), "la", (x1 + gap, top, x1 + gap + w, top + h)
+    return (x0 - gap, top), "ra", (x0 - gap - w, top, x0 - gap, top + h)
+
+
+def _overlap(a: Sequence[float], b: Sequence[float]) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def laid_out(
+    draw,
+    labels: Sequence[tuple[Box, str, Sequence[str]]],
+    f,
+    taken: Sequence[Box] = (),
+    area: Box | None = None,
+) -> list[tuple[tuple[float, float], str, str]]:
+    """Each of ``labels`` (the box its mark takes, its words and the sides it may take,
+    in the order tried) on the side where it runs into the fewest of the labels laid
+    out before it and what is ``taken`` (the marks' boxes), the first of those tried on
+    a tie, inside ``area`` where it fits there; in the font ``f``. Each as the point,
+    the anchor and the words."""
+    boxes: list[Sequence[float]] = list(taken)
+    out = []
+    for mark, words, sides in labels:
+        best: tuple[int, int] | None = None
+        chosen: tuple[tuple[float, float], str, Box] | None = None
+        for side in sides:
+            xy, anchor, box = label_at(draw, mark, words, f, side)
+            inside = area is None or (
+                area[0] <= box[0] and box[2] <= area[2] and area[1] <= box[1] and box[3] <= area[3]
+            )
+            score = (int(not inside), sum(_overlap(box, b) for b in boxes))
+            if best is None or score < best:
+                best, chosen = score, (xy, anchor, box)
+            if score == (0, 0):
+                break
+        if chosen is None:
+            continue
+        boxes.append(chosen[2])
+        out.append((chosen[0], chosen[1], words))
+    return out
+
+
+def source_labels(
+    draw, marks: Sequence[tuple[tuple[float, float], float, str, str | None]], f
+) -> list[tuple[Box, str]]:
+    """What labels the sources on the plan and the box of what each labels, from
+    ``marks`` (each source's mark: where, its radius, its name and its group): each its
+    name beside its mark, but where the names of a group's sources would run into each
+    other in the font ``f`` (sources close together, as a choir's or an orchestra's
+    section), the group once, by the last part of its path and how many it has, beside
+    the box round all of them."""
+    height = f.size + 2
+
+    def right_of(at: tuple[float, float], r: float, words: str) -> Box:
+        left = at[0] + r + 4
+        return (left, at[1] - height / 2, left + draw.textlength(words, font=f), at[1] + height / 2)
+
+    groups: dict[str, list] = {}
+    for mark in marks:
+        if mark[3]:
+            groups.setdefault(mark[3], []).append(mark)
+    crowded = []
+    for group, members in groups.items():
+        boxes = [right_of(at, r, name) for at, r, name, _ in members]
+        if any(_overlap(a, b) for k, a in enumerate(boxes) for b in boxes[k + 1 :]):
+            crowded.append(group)
+    out = [
+        ((at[0] - r, at[1] - r, at[0] + r, at[1] + r), name)
+        for at, r, name, group in marks
+        if group not in crowded
+    ]
+    for group in crowded:
+        members = groups[group]
+        box = (
+            min(at[0] - r for at, r, _, _ in members),
+            min(at[1] - r for at, r, _, _ in members),
+            max(at[0] + r for at, r, _, _ in members),
+            max(at[1] + r for at, r, _, _ in members),
+        )
+        out.append((box, f"{group.rsplit('/', 1)[-1]} ({len(members)})"))
+    return out
+
+
 class Pictures:
     """One still per stop of the tour (:meth:`still`) and a :meth:`thumbnail`.
 
@@ -212,13 +322,19 @@ class Pictures:
 
     # -- the scene from above ---------------------------------------------------------
 
+    #: Where a source's label may go beside its mark, in the order tried
+    #: (:func:`laid_out`).
+    source_sides: tuple[str, ...] = SOURCE_SIDES
+
     def plan(self, left: float, top: float, width: float, height: float) -> Plan:
         """The plan that fits the scene into the box, centred in it."""
         x0, y0, x1, y1 = self.box
         scale = min(width / (x1 - x0), height / (y1 - y0))
         plan = Plan(left, top, scale, self.box)
         w, h = plan.size
-        return Plan(left + (width - w) / 2, top + (height - h) / 2, scale, self.box)
+        out = Plan(left + (width - w) / 2, top + (height - h) / 2, scale, self.box)
+        out.area = (left, top, left + width, top + height)  # where its labels may go
+        return out
 
     def marker(self, plan: Plan) -> float:
         """A head's radius on the picture: a head's width in the scene's scale, kept
@@ -304,25 +420,30 @@ class Pictures:
                 lambda _n: SOURCE,
             )
             draw = ImageDraw.Draw(img)
+        marks = []
         for source, given in zip(sources, self.sources, strict=True):
             x, y = plan(*source["position"])
             colour = SOURCE if given in self.playing else MUTED
             rs = max(4.0, r * 0.55)
             draw.ellipse([x - rs, y - rs, x + rs, y + rs], fill=colour, outline=colour)
-            self.label_source(draw, (x, y), rs, source["name"], label)
+            marks.append(((x, y), rs, source["name"], given.get("group")))
+        # The listeners' names first, the places the tour goes, then the sources'.
+        labels: list[tuple[Box, str, Sequence[str]]] = []
+        taken: list[Box] = [(x - rs, y - rs, x + rs, y + rs) for (x, y), rs, _, _ in marks]
         for name, lis in listeners.items():
-            if lis.get("enabled", True) is False or name == current:
+            if lis.get("enabled", True) is False:
+                continue
+            x, y = plan(*lis["position"])
+            taken.append((x - r * 1.2, y - r * 1.2, x + r * 1.2, y + r * 1.2))
+            if name == current:
                 continue
             forward, _left = axes(plan, lis)
-            ring(draw, plan(*lis["position"]), forward, r * 0.8, r * 1.2, r * 0.6)
-            text(
-                draw,
-                (plan(*lis["position"])[0], plan(*lis["position"])[1] + r + 4),
-                name,
-                label,
-                MUTED,
-                "ma",
-            )
+            ring(draw, (x, y), forward, r * 0.8, r * 1.2, r * 0.6)
+            labels.append(((x - r, y - r, x + r, y + r), name, LISTENER_SIDES))
+        for box, words in source_labels(draw, marks, label):
+            labels.append((box, words, self.source_sides))
+        for xy, anchor, words in laid_out(draw, labels, label, taken, plan.area):
+            text(draw, xy, words, label, MUTED, anchor)
         if current is not None and current in listeners:
             lis = listeners[current]
             forward, left = axes(plan, lis)
@@ -331,10 +452,6 @@ class Pictures:
         metres = nice_length(self.box[2] - self.box[0])
         unit = f"{metres:g} m"
         scale_bar(draw, plan.left + 12, plan.top + plan.size[1] - 14, metres * plan.s, unit)
-
-    def label_source(self, draw, at: tuple[float, float], r: float, name: str, f) -> None:
-        """A source's name beside its mark of radius ``r`` at ``at``, on its right."""
-        text(draw, (at[0] + r + 4, at[1]), name, f, MUTED, "lm")
 
     # -- words ---------------------------------------------------------------------------
 
@@ -619,11 +736,17 @@ class Pictures:
 
 __all__ = [
     "HIDDEN",
+    "CORNERS",
+    "LISTENER_SIDES",
     "MID_BANDS",
     "PLAN_BOX",
     "Pictures",
+    "SOURCE_SIDES",
     "counted",
+    "label_at",
+    "laid_out",
     "nice_length",
+    "source_labels",
     "wrapped",
     "wrapped_line",
 ]

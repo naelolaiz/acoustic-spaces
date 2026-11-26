@@ -621,8 +621,9 @@ def test_a_tour_of_a_movement_cuts_at_its_quiet_moments_and_rings_out(tmp_path: 
     that give no length take even shares of the piece, each cut moved to the quietest
     moment within 10 s of where the share puts it (half the shortest stop at most), by
     the loudness of the first stop's mix, so that it falls between phrases; the last
-    stop, which runs to the piece's end, runs on to the end of its mix, so that the
-    hall's reverberation dies away as simulated."""
+    stop, which runs to the piece's end, runs on while its mix rings, until it is 60 dB
+    below its loudest, so that the hall's reverberation dies away as simulated, and
+    not at all after a recording that rings out of its own."""
     stops = scene_demo.tour_text("near,far")
     assert scene_demo.timed_tour(stops, 60.0, None, share=True) == [
         ("near", 0.0, 30.0),
@@ -635,10 +636,12 @@ def test_a_tour_of_a_movement_cuts_at_its_quiet_moments_and_rings_out(tmp_path: 
     t = np.arange(30 * rate) / rate
     x = np.where((t > 13.0) & (t < 14.0), 0.01, 0.5) * np.sin(2 * np.pi * 220 * t)
     seats = {"rate": rate, "format": "binaural", "seats": {}}
-    for key, seconds in (("near", 30.0), ("far", 32.5)):  # far: the hall rings 2.5 s on
-        n = round(seconds * rate)
-        audio.write(tmp_path / f"{key}.binaural.wav", np.stack([x, x], 1)[:n], rate)
-        seats["seats"][key] = {"length_s": seconds}
+    # far: the hall rings on, 60 dB down 1 s after the music ends, its mix 2.5 s longer.
+    t_ring = np.arange(round(2.5 * rate)) / rate
+    ring = 0.5 * 10.0 ** (-3.0 * t_ring) * np.sin(2 * np.pi * 220 * (30.0 + t_ring))
+    for key, x_of in (("near", x), ("far", np.concatenate([x, ring]))):
+        audio.write(tmp_path / f"{key}.binaural.wav", np.stack([x_of, x_of], 1), rate)
+        seats["seats"][key] = {"length_s": len(x_of) / rate}
     timed = scene_demo.timed_tour(stops, 30.0, None, share=True)
     cut = scene_demo.quiet_cuts(timed, stops, seats, tmp_path)
     assert [key for key, _, _ in cut] == ["near", "far"]
@@ -653,9 +656,17 @@ def test_a_tour_of_a_movement_cuts_at_its_quiet_moments_and_rings_out(tmp_path: 
     given = scene_demo.tour_text("near:15s,far")
     kept = scene_demo.timed_tour(given, 30.0, None, share=True)
     assert scene_demo.quiet_cuts(kept, given, seats, tmp_path) == kept
-    assert scene_demo.ringing_out(cut, seats, 30.0)[-1] == ("far", cut[1][1], 32.5)
+    rung = scene_demo.ringing_out(cut, seats, 30.0, tmp_path)[-1]
+    assert rung[:2] == ("far", cut[1][1]) and rung[2] == pytest.approx(31.0, abs=0.35)
     early = [("near", 0.0, 12.0), ("far", 12.0, 20.0)]  # ends before the piece does
-    assert scene_demo.ringing_out(early, seats, 30.0) == early
+    assert scene_demo.ringing_out(early, seats, 30.0, tmp_path) == early
+    # A mix that has rung out by the recording's end (its music over at 27 s, silence
+    # padded to the end, as the church's): no silence after it.
+    quiet = np.concatenate([np.where(t < 27.0, x, 0.0), np.zeros(round(2.5 * rate))])
+    audio.write(tmp_path / "rung.binaural.wav", np.stack([quiet, quiet], 1), rate)
+    seats["seats"]["rung"] = {"length_s": len(quiet) / rate}
+    ended = [("far", 0.0, 15.0), ("rung", 15.0, 30.0)]
+    assert scene_demo.ringing_out(ended, seats, 30.0, tmp_path) == ended
 
 
 def _outdoors(folder: Path, seconds: float = 10.0, **more) -> Path:
