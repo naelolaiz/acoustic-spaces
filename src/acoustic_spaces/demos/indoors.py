@@ -182,7 +182,7 @@ def with_fronts(room, points: dict[str, tuple[float, float, float]]):
                     f"{math.dist(own, place):.2f} m from it; move it there or rename it"
                 )
             place = own
-        extra.append(lis.model_copy(update={"name": name, "position": place, "walk": None}))
+        extra.append(lis.model_copy(update={"name": name, "position": place, "trajectory": None}))
     # The points' own problems; the scene's others are the scene's to tell.
     theirs = tuple(f"listener {lis.name!r} " for lis in extra)
     alone = Room.from_scene(scene.model_copy(update={"listeners": extra}), reuse=room)
@@ -409,10 +409,10 @@ def ground_vdb(
     wheels: Wheels, path, where, times, line: vibration.Line | None = None
 ) -> np.ndarray:
     """(N,) the ground's vibration at ``where`` (a position, or the house a listener
-    stands in front of, :class:`Facing`) at each of ``times`` (s into the walk) as
-    ``wheels`` go along ``path`` (the walk's :class:`~acoustic_spaces.walkthrough.Knots`,
+    stands in front of, :class:`Facing`) at each of ``times`` (s into the trajectory) as
+    ``wheels`` go along ``path`` (the trajectory's :class:`~acoustic_spaces.walkthrough.Knots`,
     of the vehicle's front): the curve at the distance in plan of each wheel that is on
-    the walk then (its front's place ``behind_m`` earlier, between the walk's start and
+    the trajectory then (its front's place ``behind_m`` earlier, between the trajectory's start and
     end) from the position, or from the room's wall, with the ``line``'s
     adjustments (none by default) and the wheel's offset, the greatest of them; -inf
     when none is. Nearer than 10 ft the curve holds, farther than 300 ft it falls on as

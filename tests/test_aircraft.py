@@ -36,10 +36,10 @@ def test_the_examples_walks_are_doc_29s_flights() -> None:
     scene = Scene.from_yaml(path)
     for plane in (aircraft.DEPARTURE, aircraft.ARRIVAL):
         source = next(s for s in scene.sources if s.name == plane.name)
-        assert source.in_use == plane.departing and source.walk.doppler
+        assert source.in_use == plane.departing and source.trajectory.doppler
         flown = plane.flight_of(scene)
-        times = [0.0, *(k.time_s for k in source.walk.keyframes)]
-        places = np.array([source.position, *(k.position for k in source.walk.keyframes)])
+        times = [0.0, *(k.time_s for k in source.trajectory.keyframes)]
+        places = np.array([source.position, *(k.position for k in source.trajectory.keyframes)])
         assert times[-1] == pytest.approx(flown.duration_s, abs=1e-3)
         on = np.stack(
             [np.interp(times, flown.times, np.asarray(flown.positions)[:, k]) for k in range(3)],
@@ -83,7 +83,7 @@ def test_the_flights_go_as_doc_29_flies_them() -> None:
     assert int(np.argmax(down.powers)) > landed
     assert np.all(np.diff(down.speeds) <= 0.0)
     words = aircraft.ARRIVAL.how_it_goes(_args(path.parent), scene)
-    assert words.startswith("The landing jet flies 5583 m along its walk's ground track in ")
+    assert words.startswith("The landing jet flies 5583 m along its trajectory's ground track in ")
     assert "slowing from 252.8 to 50 km/h and coming down from 225 to 1 m up" in words
     assert "as Doc 29 flies JETW's Descend procedure in the scene's air" in words
 
@@ -99,7 +99,7 @@ def _airport(tmp_path: Path) -> Path:
     for each in data["sources"]:
         if each["name"] == "arrival":
             each["position"] = [-110.0, 0.0, 21.0]
-            each["walk"] = {"to": [[290.0, 0.0, 1.0], [890.0, 0.0, 1.0]], "doppler": True}
+            each["trajectory"] = {"to": [[290.0, 0.0, 1.0], [890.0, 0.0, 1.0]], "doppler": True}
     data["listeners"] = [{"name": "beside", "position": [300.0, 120.0, 1.2]}]
     data["simulation"].update({"sample_rate": RATE, "ir_length_s": 0.2, "seed": 1})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 200, "batches": 1}
@@ -129,7 +129,7 @@ def test_the_flight_demo_lands_the_jet_as_loud_as_its_levels_say(tmp_path) -> No
     args = demo.resolved(demo.parser().parse_args(run))
     assert demo.check(args) is None
     assert demo.moving(args) == ["arrival"]
-    assert demo.summary(args).startswith("The landing jet flies 1000 m along its walk's ground")
+    assert demo.summary(args).startswith("The landing jet flies 1000 m along its trajectory's")
     assert demo.main(run) == 0
     work = demo.run_folder(demo.parser().parse_args(run))
     info = pipeline.read_json(work / "arrival" / "aircraft.json")
@@ -146,7 +146,7 @@ def test_the_flight_demo_lands_the_jet_as_loud_as_its_levels_say(tmp_path) -> No
     scene = Scene.from_yaml(work / "scene_demo.yaml")
     (source,) = [s for s in scene.sources if s.in_use]
     assert source.name == "arrival" and source.level_db == info["level_db"]
-    assert source.walk.keyframes and source.walk.doppler
+    assert source.trajectory.keyframes and source.trajectory.doppler
     assert source.directivity.file == work / "scene_demo_arrival.csv"
     facts = pipeline.read_json(work / "walk" / "walk.json")
     fastest, slowest = (round(info[k], 1) for k in ("fastest_kmh", "slowest_kmh"))
@@ -192,7 +192,7 @@ def test_the_flight_demo_says_what_keeps_a_jet_from_flying(tmp_path) -> None:
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     for each in data["sources"]:
         if each["name"] == "arrival":
-            each["walk"]["to"] = [[290.0, 0.0, 10.0]]
+            each["trajectory"]["to"] = [[290.0, 0.0, 10.0]]
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     demo = load(folder / "flight_demo.py").at(folder)
     args = demo.resolved(demo.parser().parse_args(["all", "--vehicle", "arrival"]))
@@ -200,7 +200,7 @@ def test_the_flight_demo_says_what_keeps_a_jet_from_flying(tmp_path) -> None:
     for x in (0.0, 6e-7):
         for each in data["sources"]:
             if each["name"] == "departure":
-                each["walk"] = {"to": [[x, 0.0, 20.0]], "doppler": True}
+                each["trajectory"] = {"to": [[x, 0.0, 20.0]], "doppler": True}
         (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
         args = demo.resolved(demo.parser().parse_args(["all", "--vehicle", "departure"]))
         assert "two places apart in plan" in demo.check(args)
@@ -242,7 +242,7 @@ def test_a_walk_rising_straight_up_first_flies_as_without_that_place(tmp_path) -
             if each["name"] in walks:
                 start, to = walks[each["name"]]
                 each["position"] = start
-                each["walk"] = {"to": to if vertical else to[1:], "doppler": True}
+                each["trajectory"] = {"to": to if vertical else to[1:], "doppler": True}
         path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
         scene = Scene.from_yaml(path)
         for plane in (aircraft.DEPARTURE, aircraft.ARRIVAL):

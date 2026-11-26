@@ -52,14 +52,14 @@ sources:
   # amended in 2021); its sound comes from 0.05 m above the road, where the method
   # places it. Its horn, a pair of disc horns (360 and 430 Hz, 110 dB(A) 2 m in front
   # of them, as Hella's S77, their tone discs ringing near 3 kHz), 0.5 m up, goes along
-  # its walk facing the way it drives, with the directivity of siren.csv, in two short
+  # its trajectory facing the way it drives, with the directivity of siren.csv, in two short
   # blasts every 3 s, its sound power their average (passby_demo.py --sources
   # car,car_horn sounds it).
   - name: car
     enabled: false
     position: [-55, -2, 0.05]
     level_db: [98.3, 91.2, 89.4, 90.7, 95.6, 92.3, 84.6, 76.1]
-    walk:
+    trajectory:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
       doppler: true
@@ -68,7 +68,7 @@ sources:
     position: [-55, -2, 0.5]
     level_db: [56.1, 55.7, 68.8, 79.9, 91.5, 104.0, 107.6, 102.7]
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[70, -2, 0.5]]
       speed_m_s: 13.89
       face_forward: true
@@ -79,7 +79,7 @@ sources:
     enabled: false
     position: [70, 2, 0.05]
     level_db: [106.1, 99.2, 99.3, 100.2, 101.3, 96.9, 90.1, 84.2]
-    walk:
+    trajectory:
       to: [[-55, 2, 0.05]]
       speed_m_s: 13.89
       doppler: true
@@ -89,14 +89,14 @@ sources:
     enabled: false
     position: [-55, -2, 0.05]
     level_db: [99.0, 100.2, 93.3, 91.1, 91.9, 91.1, 88.9, 85.2]
-    walk:
+    trajectory:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
       doppler: true
   # A police car with its siren on, in the lane on the houses' side, the other way, at
   # 50 km/h: the car itself, a passenger car, its tyres and engine heard from 0.05 m
   # above the road with CNOSSOS-EU's sound power (as the car's); and its siren, wailing:
-  # a 100 W electronic siren on its roof, 1.5 m up, along the same walk, facing the way
+  # a 100 W electronic siren on its roof, 1.5 m up, along the same trajectory, facing the way
   # it drives, at the level and with the directivity the National Bureau of Standards
   # measured (siren.csv; passby_demo.py --siren picks the pattern, --sources
   # police_car_siren plays the siren alone). The car is some 32 dB(A) under the siren, but under the
@@ -105,7 +105,7 @@ sources:
     enabled: false
     position: [70, 2, 0.05]
     level_db: [98.3, 91.2, 89.4, 90.7, 95.6, 92.3, 84.6, 76.1]
-    walk:
+    trajectory:
       to: [[-55, 2, 0.05]]
       speed_m_s: 13.89
       doppler: true
@@ -114,7 +114,7 @@ sources:
     position: [70, 2, 1.5]
     level_db: [76.1, 76.1, 81.4, 123.3, 128.6, 120.5, 120.0, 118.8]
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[-55, 2, 1.5]]
       speed_m_s: 13.89
       face_forward: true
@@ -124,14 +124,14 @@ sources:
   # bus's), 0.05 m above the road; its siren, the two tones of DIN 14610, on its cab's
   # roof, 3.0 m up, as loud as the Swiss rule lets them be on a vehicle (115 dB(A) 7 m
   # in front of it); and its air horn, 1.2 m up, in blasts, as loud as the rule for
-  # horns lets one be on its bench (118 dB(A) 2 m away). The three go along one walk;
+  # horns lets one be on its bench (118 dB(A) 2 m away). The three go along one trajectory;
   # the siren and the horn face the way it drives, with the directivity of siren.csv
   # (passby_demo.py --sources picks which play).
   - name: fire_engine
     enabled: false
     position: [-55, -2, 0.05]
     level_db: [106.1, 99.2, 99.3, 100.2, 101.3, 96.9, 90.1, 84.2]
-    walk:
+    trajectory:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
       doppler: true
@@ -140,7 +140,7 @@ sources:
     position: [-55, -2, 3.0]
     level_db: [84.0, 84.4, 93.0, 136.1, 121.6, 125.2, 122.3, 121.2]
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[70, -2, 3.0]]
       speed_m_s: 13.89
       face_forward: true
@@ -150,7 +150,7 @@ sources:
     position: [-55, -2, 1.2]
     level_db: [89.9, 124.1, 121.4, 119.2, 117.7, 114.3, 111.1, 110.3]
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[70, -2, 1.2]]
       speed_m_s: 13.89
       face_forward: true
@@ -166,7 +166,7 @@ sources:
     position: [-55, 0, 0.05]
     level_db: [101.5, 101.4, 99.4, 104.0, 107.2, 98.5, 91.7, 83.3]
     directivity: {file: tram.csv}
-    walk:
+    trajectory:
       to: [[70, 0, 0.05]]
       speed_m_s: 13.89
       face_forward: true
@@ -176,7 +176,7 @@ sources:
     position: [-55, 0, 4.05]
     level_db: [94.5, 95.4, 91.9, 89.5, 89.3, 87.1, 83.3, 84.4]
     directivity: {file: tram.csv}
-    walk:
+    trajectory:
       to: [[70, 0, 4.05]]
       speed_m_s: 13.89
       face_forward: true

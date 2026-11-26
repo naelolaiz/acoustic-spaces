@@ -7,8 +7,8 @@
 - Leaks (PyVista): the open edges of a model that is not closed, and the rays of the
   leak finder that escape through its gaps.
 - Animation (PyVista): sound particles spreading from a source and reflecting around
-  the room, in a window with a time slider or saved as a GIF or MP4 video; a walker
-  going along its walk, as a video to go with its sound.
+  the room, in a window with a time slider or saved as a GIF or MP4 video; a mover
+  going along its trajectory, as a video to go with its sound.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
   arrival directions as the listener faces; the decays of a simulated and a measured
   response band by band; polar patterns of a source directivity; the wind, temperature
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from acoustic_spaces.engine.particles import Particles
     from acoustic_spaces.parameters import BandDecay
     from acoustic_spaces.scene.model import Atmosphere
-    from acoustic_spaces.walkthrough import Movement, WalkResponses
+    from acoustic_spaces.walkthrough import Movement, TrajectoryResponses
 
 #: ColorBrewer Set3: light colours, so the saturated source and listener markers stand out.
 MATERIAL_COLOURS = (
@@ -1073,22 +1073,22 @@ def check_video(path: str | Path) -> None:
             raise ImportError(_MP4_NEEDS)
 
 
-def animate_walk(
+def animate_trajectory(
     room: Room,
-    walk: WalkResponses,
+    responses: TrajectoryResponses,
     path: str | Path,
     *,
     fps: int = 25,
     window_size: tuple[int, int] = (1024, 640),
     sound: str | Path | None = None,
 ) -> None:
-    """Save a walk (from :func:`acoustic_spaces.walkthrough.simulate_walk`) as an
-    animated GIF or an MP4 video: the room, the path and the walker going along it, in
-    time with the sound of :func:`~acoustic_spaces.walkthrough.render_walk`. ``room`` is
+    """Save a trajectory (from :func:`acoustic_spaces.walkthrough.simulate_trajectory`) as an
+    animated GIF or an MP4 video: the room, the path and the mover going along it, in
+    time with the sound of :func:`~acoustic_spaces.walkthrough.render_trajectory`. ``room`` is
     the scene's room. ``sound``, a WAV file of that sound in one or two channels, becomes
     an MP4's sound track, and the video then lasts as long as the sound (a GIF has none)."""
     check_video(path)
-    duration = walk.duration_s
+    duration = responses.duration_s
     mp4 = Path(path).suffix.lower() == ".mp4"
     if sound is not None and mp4:
         from acoustic_spaces.audio import read_wav
@@ -1100,24 +1100,24 @@ def animate_walk(
     pv = _pyvista()
     plotter = pv.Plotter(off_screen=True, window_size=list(window_size))
     plot_room(room, plotter, opacity=0.12)
-    points = walk.points
+    points = responses.points
     plotter.add_mesh(pv.lines_from_points(points.positions), color="white", line_width=3)
     size = max(0.2, 0.02 * float(np.ptp(room.mesh.vertices, axis=0).max()))
     marker = pv.Sphere(radius=size, center=(0.0, 0.0, 0.0))
     shape = marker.points.copy()
     marker.points = shape + points.positions[0]
-    colour = SOURCE_COLOUR if walk.kind == "sources" else LISTENER_COLOUR
+    colour = SOURCE_COLOUR if responses.kind == "sources" else LISTENER_COLOUR
     plotter.add_mesh(marker, color=colour)
     yaws = points.yaws
-    if yaws is None and walk.result is not None:
+    if yaws is None and responses.result is not None:
         # It keeps the orientation it has in the scene.
-        scene = walk.result.room.scene
-        walkers = scene.listeners if walk.kind == "listeners" else scene.sources
-        first = next(w for w in walkers if w.name == walk.names[0])
+        scene = responses.result.room.scene
+        movers = scene.listeners if responses.kind == "listeners" else scene.sources
+        first = next(w for w in movers if w.name == responses.names[0])
         yaws = np.full(len(points.times), first.orientation.yaw)
     arrow = None
     if yaws is not None:
-        # An arrow the way the walker faces, just above it so that the path does not
+        # An arrow the way the mover faces, just above it so that the path does not
         # hide it, and its yaw in the text.
         arrow = pv.Arrow(
             start=(0.0, 0.0, 0.0),
@@ -1139,7 +1139,7 @@ def animate_walk(
         t = frame / fps
         where = [np.interp(t, points.times, points.positions[:, k]) for k in range(3)]
         marker.points = shape + where
-        text = f"{walk.name}: {t:.1f} s"
+        text = f"{responses.name}: {t:.1f} s"
         if arrow is not None:
             yaw = float(np.interp(t, points.times, yaws))
             c, s = math.cos(yaw), math.sin(yaw)
@@ -1152,6 +1152,11 @@ def animate_walk(
         clock.SetText(0, text)
 
     _record(plotter, path, fps, frames, show, sound if mp4 else None)
+
+
+#: Its name before 4.4.0, when a trajectory was called a walk; kept for scripts written
+#: then.
+animate_walk = animate_trajectory
 
 
 def animate_movement(

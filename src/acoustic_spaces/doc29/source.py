@@ -1,5 +1,5 @@
 """An aircraft of Doc 29 as a source of a scene: the sound power and the directivity that
-give its NPD curves' levels in the engine, and its flight as a walk's keyframes.
+give its NPD curves' levels in the engine, and its flight as a trajectory's keyframes.
 
 Doc 29 gives an aircraft's sound as levels at receivers: its NPD curves (the maximum
 level and the sound exposure level at distances from 200 to 25,000 ft, at each power,
@@ -71,7 +71,7 @@ LEG_SPEED_STEP_M_S = 5.0
 #: How long the aircraft takes to turn to a segment's heading and climb (s).
 TURN_S = 1.0
 #: A segment shorter than this (m) is passed over: where the track's nodes and the
-#: profile's points nearly meet (the walk's own keyframes as a track), the flight path
+#: profile's points nearly meet (the trajectory's own keyframes as a track), the flight path
 #: has segments a few micrometres long, flown in microseconds.
 SHORTEST_M = 1e-3
 
@@ -218,7 +218,7 @@ def below_offset_db(installation: str) -> float:
 
 @dataclass(frozen=True)
 class Flight:
-    """A flight as a walk's keyframes: when (s from its start) the aircraft is where
+    """A flight as a trajectory's keyframes: when (s from its start) the aircraft is where
     (x, y, z in m), how it faces there (yaw, pitch and roll in degrees, as a scene's
     orientation), and its speed (m/s) and power there. It flies at one speed along each
     leg, from one keyframe to the next, and its power changes along the leg as Doc 29's
@@ -249,7 +249,7 @@ class Flight:
         return out
 
     def keyframes(self, digits: int = 4) -> list[dict]:
-        """The keyframes after the first, as a scene's walk takes them (the first is the
+        """The keyframes after the first, as a scene's trajectory takes them (the first is the
         source's own position and orientation), rounded to ``digits``."""
         return [
             {

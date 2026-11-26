@@ -3,7 +3,7 @@ its left and to its right, its pitch falling as it passes (Doppler); and a video
 follows.
 
 The helicopter is the example's own (the source `helicopter`): an Airbus Helicopters
-AS350 B3 at its maximum mass, flying level along its walk at 63 m/s over the ground
+AS350 B3 at its maximum mass, flying level along its trajectory at 63 m/s over the ground
 (--speed, in km/h), facing the way it flies. Its sound is its two rotors' from
 acoustic_spaces.rotorcraft, trimmed for level flight at its airspeed (its speed over the
 ground and the light wind against it): each harmonic of each rotor's blade passing

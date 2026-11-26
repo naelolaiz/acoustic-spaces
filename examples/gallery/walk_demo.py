@@ -37,14 +37,14 @@ The walk is the example's visitor's: it sets off 3 m in front of the guide and f
 way it goes, so the guide is behind it down the long arm; at the end it turns into the
 short arm, where the guide is out of sight and the voice reaches it bent round the
 corner (the scene simulates first-order diffraction). The demo hears the visitor only;
-the gallery's two other listeners stand where they are and are left out. Edit the walk
-in the editor's Movement panel and the demo walks it as edited; with the visitor's walk
-turned off (Moves) there is no walk to play, and the demo says so. Then the turn: the visitor stands
-4 m in front of the guide, where the scene's listener standing is (left out of its own
-simulations; --stand moves it), faces them and turns left a quarter at a time,
-holding each (--turn): the voice moves to the right ear, behind, to the left ear and
-back in front. The turn goes through the engine's head tracker,
-scripted: the place's response in Ambisonics of order 7, the sound field turned against
+the gallery's two other listeners stand where they are and are left out. Edit the
+visitor's trajectory in the editor's Movement panel and the demo walks it as edited;
+with it turned off (Moving) there is no walk to play, and the demo says so. Then the
+turn: the visitor stands 4 m in front of the guide, where the scene's listener
+standing is (left out of its own simulations; --stand moves it), faces them and turns
+left a quarter at a time, holding each (--turn): the voice moves to the right ear,
+behind, to the left ear and back in front. The turn goes through the engine's head
+tracker, scripted: the place's response in Ambisonics of order 7, the sound field turned against
 the head every 256 samples and decoded to the ears (acoustic_spaces.headtracking).
 Through a spherical head or a measured one it comes within half a decibel, in each
 ear and octave, of rendering the ears again at every angle.
@@ -412,9 +412,9 @@ def visitor_of(scene):
 
 
 def walk_points_of(room):
-    from acoustic_spaces.walkthrough import walk_points
+    from acoustic_spaces.walkthrough import trajectory_points
 
-    return walk_points(visitor_of(room.scene))
+    return trajectory_points(visitor_of(room.scene))
 
 
 def pace_of(visitor) -> str:
@@ -422,8 +422,8 @@ def pace_of(visitor) -> str:
     the average along keyframes (their length over their time)."""
     from acoustic_spaces.walkthrough import knots
 
-    if visitor.walk.keyframes is None:
-        return f"at {visitor.walk.speed_m_s:g} m/s"
+    if visitor.trajectory.keyframes is None:
+        return f"at {visitor.trajectory.speed_m_s:g} m/s"
     path = knots(visitor)
     length = float(np.linalg.norm(np.diff(path.positions, axis=0), axis=1).sum())
     return f"at {length / path.duration_s:.1f} m/s on average"
@@ -488,7 +488,7 @@ def walk(args) -> None:
     binaural-<name> through ``--hrtf``) and walk.json (the places, the level and STI at
     each, the part of the talk), in the run's folder."""
     from acoustic_spaces.spatial import Binaural
-    from acoustic_spaces.walkthrough import render_walk, simulate_walk
+    from acoustic_spaces.walkthrough import render_trajectory, simulate_trajectory
 
     if "walk" not in order_of(args):
         print(f"walk: --listeners leaves out the {VISITOR}: no walk to play")
@@ -498,10 +498,12 @@ def walk(args) -> None:
     say_again(args, room, x, rate, times)
     start, stop = segments(args, room)["walk"]
     print("simulating the walk (the late part takes the longest)")
-    walked = simulate_walk(room, VISITOR, progress=print)
+    walked = simulate_trajectory(room, VISITOR, progress=print)
     rate_out = walked.result.settings.sample_rate
     ears = Binaural(hrtf_of(args, rate_out))
-    wet = render_walk(walked, {"guide": (x[int(start * rate) : int(stop * rate)], rate)}, ears)
+    wet = render_trajectory(
+        walked, {"guide": (x[int(start * rate) : int(stop * rate)], rate)}, ears
+    )
     out = run_folder(args) / "walk"
     write(out / f"walk.{label_of(args)}.wav", wet, rate_out)
     pipeline.write_json(
@@ -756,7 +758,7 @@ def moving(args) -> list[str]:
         visitor = visitor_of(Scene.from_yaml(args.source))
     except (Exception, SystemExit):
         return []
-    return [VISITOR] if visitor.walk is not None and visitor.walk.enabled else []
+    return [VISITOR] if visitor.trajectory is not None and visitor.trajectory.enabled else []
 
 
 def sources(args) -> list[Source]:
@@ -781,15 +783,15 @@ def problems(demo, args) -> str | None:
     visitor = next((lis for lis in scene.listeners if lis.name == VISITOR), None)
     if visitor is None:
         return f"{source.name} has no listener {VISITOR!r} to walk"
-    if visitor.walk is None:
+    if visitor.trajectory is None:
         return (
-            f"the {VISITOR} has no walk in {source.name}: give it one (walk:, or the "
+            f"the {VISITOR} has no trajectory in {source.name}: give it one (trajectory:, or the "
             "editor's Movement panel)"
         )
-    if not visitor.walk.enabled:
+    if not visitor.trajectory.enabled:
         return (
-            f"the {VISITOR}'s walk is off in {source.name}: turn it on (Moves in the "
-            "editor, or walk: enabled: true)"
+            f"the {VISITOR}'s trajectory is off in {source.name}: turn it on (Moving in the "
+            "editor, or trajectory: enabled: true)"
         )
     return None
 

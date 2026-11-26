@@ -388,10 +388,14 @@ def test_a_scene_names_its_recording_and_each_source_a_channel(tmp_path: Path) -
             Scene.model_validate(data)
     # A name without a suffix that is no file is a free one mistyped; a file with a
     # suffix may come later, and one without is taken when it is there.
-    for wrong, close in (("spicy_funk", "spicy_funk_cake"), ("Speech_Male", "speech_male")):
+    for wrong, close in (("spicy_funk", "spicy_funk_cake"), ("ACE_M4", "ace_m4")):
         data["recording"] = wrong
-        with pytest.raises(ValidationError, match=f"no free recording.*speech_male.*{close}"):
+        with pytest.raises(ValidationError, match=f"no free recording.*ace_m4.*{close}"):
             Scene.model_validate(data, context={"base_dir": tmp_path})
+    # The ACE talkers' names before 4.4.0 are still read, as their names now.
+    for old, new in (("speech_male", "ace_m4"), ("speech_female", "ace_f2")):
+        data["recording"] = old
+        assert Scene.model_validate(data).recording == new
     (tmp_path / "take").write_bytes(b"")
     data["recording"] = "take"
     assert (

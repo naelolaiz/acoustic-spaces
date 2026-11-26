@@ -557,7 +557,7 @@ def simulate(
     ``{name: {other: weight}}``, the others being listeners (for a listener) or sources
     (for a source) that keep their own. Only those are traced by the stochastic ray
     tracer, by far the costliest stage; the statistical method gives everyone their own.
-    Walks use it (:func:`acoustic_spaces.walkthrough.simulate_walk`): the late field
+    Trajectories use it (:func:`acoustic_spaces.walkthrough.simulate_trajectory`): the late field
     changes slowly from place to place, the early sound does not. The traced late parts
     are kept once, and a response makes its mix of them when it reads its late part
     (:class:`~acoustic_spaces.engine.response.Deferred`); only a line's or a surface's is
@@ -567,8 +567,8 @@ def simulate(
     or temperature gradients) may serve one another: those at one height over one
     ground, the sound going the same way to their listeners, where the weather and the
     grounds have no zones (:func:`~acoustic_spaces.engine.refracted.solve`), each
-    listener getting what its own source's run would give it. Walks give it the places
-    of a walking source, which would otherwise each run the equation anew.
+    listener getting what its own source's run would give it. Trajectories give it the places
+    of a moving source, which would otherwise each run the equation anew.
     """
     room = _as_room(room)
     # Sources or listeners named are simulated even when left out.

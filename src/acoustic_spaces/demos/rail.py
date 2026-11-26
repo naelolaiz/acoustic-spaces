@@ -830,7 +830,7 @@ class TrainVehicle(Vehicle):
     vehicle's name (one of ``trains``, :data:`TRAINS`), on ``track`` (the option
     ``--track`` when there are ``tracks`` to choose). With a ``horn``, the source of its
     name with ``_horn``, at its front TRAIN_HORN_HEIGHT_M above the rail top along the
-    same walk (:data:`~acoustic_spaces.demos.horn.TRAIN_HORN`, with the measured siren's
+    same trajectory (:data:`~acoustic_spaces.demos.horn.TRAIN_HORN`, with the measured siren's
     directivity, facing the way it goes), off unless ``--sources`` picks it; ``--horn
     chord`` sounds its notes together (:data:`~acoustic_spaces.demos.horn.TRAIN_CHORD`).
     It plays every height its train has points at, unless ``--sources`` picks some."""
@@ -991,8 +991,8 @@ class TrainVehicle(Vehicle):
         return getattr(args, self.name, None) or self.trains[0]
 
     def own_speed_kmh(self, args: argparse.Namespace) -> float | None:
-        """The train's own speed (:data:`TRAINS`), whatever its walk's, when there are
-        trains to choose; one alone (the tram) goes as its walk goes."""
+        """The train's own speed (:data:`TRAINS`), whatever its trajectory's, when there are
+        trains to choose; one alone (the tram) goes as its trajectory goes."""
         return TRAINS[self.train_of(args)].speed_kmh if self.own_speed else None
 
     def track_of(self, args: argparse.Namespace) -> str:
@@ -1123,7 +1123,7 @@ class TrainVehicle(Vehicle):
             )
             named = pipeline.named_from(table, args.source.parent)
             source["directivity"] = {"file": named}
-            source.setdefault("walk", {})["face_forward"] = True
+            source.setdefault("trajectory", {})["face_forward"] = True
             return
         table = args.scene.with_name(f"{args.scene.stem}_{self.name}.csv")
         comment = (
@@ -1133,7 +1133,7 @@ class TrainVehicle(Vehicle):
         write_directivity_csv(table, directivity(), comment)
         named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
-        source.setdefault("walk", {})["face_forward"] = True
+        source.setdefault("trajectory", {})["face_forward"] = True
 
     def sound_files(self, args: argparse.Namespace) -> tuple[str, ...]:
         return tuple(f"{part}.wav" for part in self.parts(args))
@@ -1359,15 +1359,15 @@ class TrainVehicle(Vehicle):
     def texts(self) -> dict[str, str]:
         noun, name = self.noun, self.name
         return {
-            "speed": f"how fast the {noun} runs along its walk (km/h; m/s times 3.6), which "
-            "sets how long its pass and its sound last (the walk's length, and the "
+            "speed": f"how fast the {noun} runs along its trajectory (km/h; m/s times 3.6), which "
+            "sets how long its pass and its sound last (the trajectory's length, and the "
             f"{noun}'s, over the speed) and its sound power; by default "
             + (
-                f"the {noun}'s own, whatever its walk's: "
+                f"the {noun}'s own, whatever its trajectory's: "
                 + ", ".join(f"{key} {TRAINS[key].speed_kmh:g}" for key in self.trains)
                 + " km/h"
                 if self.own_speed
-                else "as its walk in the scene goes"
+                else "as its trajectory in the scene goes"
             ),
             "input": f"a WAV file a source of the {noun} plays instead of its made sound, "
             f"as {name}=WAV for its wheels and bogies (or {name}_roof=WAV, "

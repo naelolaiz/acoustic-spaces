@@ -763,12 +763,12 @@ sources:
   mixed down; without a channel it is mixed down to mono.
 - The scene's `recording` is the file a source with a `channel` and no `signal` plays: a
   file relative to the scene's folder, or the name of one of the free recordings
-  (`spicy_funk_cake`, `great_british_summer`, `potassium`, `speech_male`,
-  `speech_female`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which the
-  demo downloads the first time and keeps for every scene. A name without a suffix must
-  be a free recording's or a file that is there, so a mistyped free name is refused.
-  Left and right are the recording's, so the loudspeaker on the audience's left plays
-  `left`. A source with neither a signal nor a channel is silent in the demo. The
+  (`spicy_funk_cake`, `great_british_summer`, `potassium`, and the ACE corpus's talkers
+  `ace_f1` to `ace_m9`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which
+  the demo downloads the first time and keeps for every scene. A name without a suffix
+  must be a free recording's or a file that is there, so a mistyped free name is
+  refused. Left and right are the recording's, so the loudspeaker on the audience's left
+  plays `left`. A source with neither a signal nor a channel is silent in the demo. The
   simulation reads neither.
 - `simulate` reports the sound pressure level per octave band and A-weighted (`spl_db`
   and `spl_a_db` in `parameters.json`), the editor's results show it per band, and
@@ -839,8 +839,8 @@ listeners:
 
 - `group` sorts the scene tree of the editor; groups nest with `/`, and a source and
   a listener may share a group's name. It changes no result.
-- `enabled: false` leaves a source or listener out of `simulate`, `map`, `walk` (the
-  sources that do not walk) and the scene's checks, as if it were not there, but keeps
+- `enabled: false` leaves a source or listener out of `simulate`, `map`, `walkthrough`
+  (the sources that do not move) and the scene's checks, as if it were not there, but keeps
   it in the scene; the others get the same responses as in a run of all, since seeds
   follow the scene's order. Named on the command line (`--source`), it is simulated all
   the same, and checked. `inspect` marks it "left out". With every source, or every listener, left
@@ -853,65 +853,75 @@ listeners:
   hidden, and an eye follows its tick when that changes; shown by their eye, they are
   drawn faded.
 
-## Walks
+## Trajectories
 
-A listener or a point source can walk through the room, for
+A listener or a point source can move through the scene along a trajectory, for
 [walkthroughs](spatial-audio.md#walkthroughs):
 
 ```yaml
 listeners:
   - name: visitor
-    position: [17.0, 4.0, 1.6]   # where the walk starts
-    walk:
+    position: [17.0, 4.0, 1.6]   # where the trajectory starts
+    trajectory:
       to: [[4.0, 4.0, 1.6], [4.0, 16.0, 1.6]]   # the corners it goes through
-      speed_m_s: 1.2       # walking pace (default 1.2 m/s)
+      speed_m_s: 1.2       # its speed (default 1.2 m/s, a walking pace)
       face_forward: true   # turn to face the way it goes (default); false keeps its yaw
       turn_deg_s: 90       # how fast it turns through a corner (default 90 degrees/s)
       doppler: false       # pitch shifts as it goes: cars, trains (default false)
+      step_m: 0.25         # how far apart it is simulated along (default 0.25 m)
+      start_s: 0.0         # when it sets off (s); it stands at its position until then
 ```
 
-- A walk goes in straight lines from the position through each point of `to`, at an
-  even pace, and stops at the last one. Facing forward sets the yaw along each leg and
-  keeps the pitch and roll; on a leg straight up or down the yaw stays as it was. At a
-  corner the walker turns the shorter way round at `turn_deg_s`, half of the turn
-  before the corner and half after it (no further than half-way along either leg), so
-  a sound to one side moves round the head instead of jumping.
-- `doppler: true` plays the early sound through delays that change as the walker goes,
-  so that its pitch shifts: for vehicles and aircraft, which go faster than anyone
-  walks (see [Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)).
-  It needs a speed below the speed of sound and no wave solver.
-- Everything else (`simulate`, `map`, the editor) sees the walker standing where its
-  walk starts; `inspect` lists how far each walk goes and for how long. Lines and
-  surfaces do not walk.
+- A trajectory goes in straight lines from the position through each point of `to`, at
+  an even pace, and stops at the last one. Facing forward sets the yaw along each leg
+  and keeps the pitch and roll; on a leg straight up or down the yaw stays as it was.
+  At a corner it turns the shorter way round at `turn_deg_s`, half of the turn before
+  the corner and half after it (no further than half-way along either leg), so a sound
+  to one side moves round the head instead of jumping.
+- `doppler: true` plays the early sound through delays that change as the source or
+  listener goes, so that its pitch shifts: for vehicles and aircraft (see [Moving
+  sources and Doppler](spatial-audio.md#moving-sources-and-doppler)). It needs a speed
+  below the speed of sound and no wave solver.
+- `step_m` is how far apart along the trajectory its responses are simulated: finer
+  is smoother and costs more (see [Walkthroughs](spatial-audio.md#walkthroughs)); a
+  run's `--step` sets one for every trajectory. `start_s` is when it sets off on the
+  run's clock, of either kind: it stands at its position until then, and its keyframes'
+  times count from then.
+- Everything else (`simulate`, `map`, the editor) sees it standing where its trajectory
+  starts; `inspect` lists how far each trajectory goes and for how long. Lines and
+  surfaces do not move.
+- Scenes written before 4.4.0 call the trajectory `walk`; that name is still read, and
+  the editor saves it as `trajectory`.
 
-A walk may instead be timed, through `keyframes`:
+A trajectory may instead be timed, through `keyframes`:
 
 ```yaml
 sources:
   - name: speaker
     position: [2.0, 3.0, 1.7]        # where it is at 0 s
     orientation: {yaw: 0}            # and how it faces then
-    walk:
+    trajectory:
       keyframes:
         - {time_s: 4.0, position: [6.0, 3.0, 1.7]}                        # 1 m/s, facing as before
         - {time_s: 6.0, position: [6.0, 3.0, 1.7], orientation: {yaw: 90}} # turns on the spot
         - {time_s: 10.0, position: [6.0, 7.0, 1.7]}                       # on, facing +y
-      enabled: true                  # false keeps the walk but leaves it standing (default true)
+      enabled: true                  # false keeps the trajectory but leaves it standing (default true)
 ```
 
-- Each keyframe says where the walker is at `time_s` (seconds from the start, in
-  order, each later than the last) and, if given, how it faces there. Between two
-  keyframes it moves and turns evenly, so each leg's speed is its distance over its
+- Each keyframe says where the source or listener is at `time_s` (seconds from the
+  start, in order, each later than the last) and, if given, how it faces there. Between
+  two keyframes it moves and turns evenly, so each leg's speed is its distance over its
   time: it can wait, turn on the spot, or go at any pace. A keyframe without an
-  `orientation` keeps the facing of the one before (at first, the walker's own); the
-  keyframes say how it faces, so `face_forward` and `turn_deg_s` do not apply. A turn
-  goes the shorter way round.
-- `enabled: false` keeps a walk, of either kind, but leaves its walker standing still:
-  `walkthrough --all` and the editor's movement leave it out, and `walkthrough` picks
-  the one walk that is enabled. Giving it by name (`--walker`) is refused.
-- Several listeners and sources may each have a walk; `walkthrough --all` plays them
-  all together on one clock (see [Walkthroughs](spatial-audio.md#walkthroughs)). The
-  editor's Movement panel edits keyframes in a table and along a timeline (see
+  `orientation` keeps the facing of the one before (at first, its own); the keyframes
+  say how it faces, so `face_forward` and `turn_deg_s` do not apply. A turn goes the
+  shorter way round.
+- `enabled: false` keeps a trajectory, of either kind, but leaves its source or
+  listener standing still: `walkthrough --all` and the editor's movement leave it out,
+  and `walkthrough` picks the one trajectory that is enabled. Giving it by name
+  (`--mover`) is refused.
+- Several listeners and sources may each have a trajectory; `walkthrough --all` plays
+  them all together on one clock (see [Walkthroughs](spatial-audio.md#walkthroughs)).
+  The editor's Movement panel edits keyframes in a table and along a timeline (see
   [Graphical editor](editor.md)).
 
 ## Air, response length and seed

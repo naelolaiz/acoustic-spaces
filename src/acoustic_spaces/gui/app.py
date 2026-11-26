@@ -536,7 +536,7 @@ class MainWindow(QMainWindow):
             tip=_(
                 "While a run, coverage map, export or demo goes on, ring the sources and "
                 "listeners its latest step works on in the 3D view and the plan, and draw "
-                "the walkers where the place along a walk it simulates has them"
+                "the movers where the place along a trajectory it simulates has them"
             ),
         )
         self.follow_action.setCheckable(True)
@@ -1005,10 +1005,10 @@ class MainWindow(QMainWindow):
 
     def _run_reveals(self, run: RunView) -> set[tuple[str, str]]:
         """The hidden sources and listeners (eye off, as those left out of simulations
-        start) that ``run`` works on: what it names, and at a place its walkers."""
+        start) that ``run`` works on: what it names, and at a place its movers."""
         involved = set(run.names)
         if run.time is not None:
-            involved |= set(run.walks)
+            involved |= set(run.trajectories)
         return self.document.hidden & involved
 
     def _show_run(self) -> None:
@@ -1029,13 +1029,13 @@ class MainWindow(QMainWindow):
                 "warning",
             )
 
-    def _walks_of(self, job: SimulationJob):
-        """What gives the scene whose walks ``job`` simulates its walkers along: a demo's
-        own (:attr:`~acoustic_spaces.demos.Demo.walks`), else the scene it runs on."""
+    def _trajectories_of(self, job: SimulationJob):
+        """What gives the scene whose trajectories ``job`` simulates its movers along: a demo's
+        own (:attr:`~acoustic_spaces.demos.Demo.trajectories`), else the scene it runs on."""
         if isinstance(job, DemoJob):
             demo = job.demo
-            if demo.walks is not None:
-                return lambda: demo.walks(_part_running(job))
+            if demo.trajectories is not None:
+                return lambda: demo.trajectories(_part_running(job))
             scene = self.document.scene
             return lambda: scene
         room = job.room
@@ -1107,7 +1107,7 @@ class MainWindow(QMainWindow):
         if row == 0:
             text = _("Moved {name} to ({point})")
             position = item.position
-        elif item.walk is not None and item.walk.keyframes is None:
+        elif item.trajectory is not None and item.trajectory.keyframes is None:
             text = _("Moved point {n} of {name} to ({point})")
         else:
             text = _("Moved keyframe {n} of {name} to ({point})")
@@ -1126,7 +1126,7 @@ class MainWindow(QMainWindow):
         scene = self.document.scene
         if not movers(scene):
             self.log(
-                _("Nothing moves: add a keyframe to a source or listener in use, and tick Moves."),
+                _("Nothing moves: add a keyframe to a source or listener in use, and tick Moving."),
                 "warning",
             )
             self.docks["movement"].raise_()
@@ -2014,7 +2014,7 @@ class MainWindow(QMainWindow):
         self.job = job
         self._job_scene = self.document.scene
         self._job_document = self.document
-        self._focus = RunFocus(self.document.scene, self._walks_of(job))
+        self._focus = RunFocus(self.document.scene, self._trajectories_of(job))
         job.progress.connect(self._progress)
         # Bound methods, so Qt queues the worker's signals to this window's thread.
         job.failed.connect(self._failed)

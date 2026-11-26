@@ -8,18 +8,18 @@ each with its :class:`Vehicle`.
 
 A road vehicle is the example's source of its name (``car``, ``truck``, ``bus``,
 ``motorcycle``): a point source 0.05 m above the road, where CNOSSOS-EU places a
-vehicle's sound, with a walk along the road with Doppler, left out of the example's own
-simulations (``enabled: false``), which keep the traffic as a still line source. Its walk
+vehicle's sound, with a trajectory along the road with Doppler, left out of the example's own
+simulations (``enabled: false``), which keep the traffic as a still line source. Its trajectory
 goes through points at a speed (``to``, ``speed_m_s``) or through keyframes at one
 steady speed, as CNOSSOS-EU gives a vehicle's sound at a steady speed. The demo writes
 ``scene_demo.yaml`` in the run's folder (named after the run's settings,
-:meth:`~acoustic_spaces.demos.Demo.run_name`): the vehicle in use, along its walk at the walk's
-own speed or at ``--speed`` (through the keyframes' places, for keyframes), with
+:meth:`~acoustic_spaces.demos.Demo.run_name`): the vehicle in use, along its trajectory at
+its own speed or at ``--speed`` (through the keyframes' places, for keyframes), with
 CNOSSOS-EU's sound power of its category at that speed and the scene's air temperature
 (:mod:`acoustic_spaces.demos.road`), and every other source left out, so that the
 vehicle is heard alone. It plays a sound made to that power (``car/car.wav`` in the run's
 folder for the car: tyre noise and an engine at ``--rpm``), or the dry recording ``--input
-car=WAV`` gives. The police car is two sources along one walk, the car's sound and its
+car=WAV`` gives. The police car is two sources along one trajectory, the car's sound and its
 siren on its roof, with the level and the directivity of a measured one
 (:mod:`acoustic_spaces.demos.siren`); the fire engine three, the vehicle, its siren and
 its air horn (:mod:`acoustic_spaces.demos.horn`); a helicopter plays the sound its rotors send each
@@ -28,10 +28,10 @@ those ``--sources`` picks (:meth:`Vehicle.sources`: by default the police car an
 the street's car without its horn, a train at every height without its horn).
 
 Each listener in use (or each ``--listeners`` names) is simulated with the vehicle every
-``--step`` along its walk
-(:func:`acoustic_spaces.walkthrough.simulate_walk`) and hears it through those places,
+``--step`` along its trajectory
+(:func:`acoustic_spaces.walkthrough.simulate_trajectory`) and hears it through those places,
 each early path through its own delay as it changes and the late sound crossfaded from
-place to place (:func:`~acoustic_spaces.walkthrough.render_walk`); the level along the
+place to place (:func:`~acoustic_spaces.walkthrough.render_trajectory`); the level along the
 way, its maximum and the sound exposure level come from the same simulation
 (:func:`~acoustic_spaces.walkthrough.pass_by`). The video plays one pass at each
 listener in turn, the vehicle moving on the plan and the level heard over time drawn
@@ -85,7 +85,7 @@ SPEED_KMH = 50.0
 #: How far the legs of a vehicle's keyframes may differ in speed and still be one steady
 #: speed (a share of the slowest): 1 % is 0.2 dB of CNOSSOS-EU's rolling noise at most.
 STEADY = 0.01
-#: How far apart the places of the walk are simulated (m): through places 1 m apart a
+#: How far apart the places of the trajectory are simulated (m): through places 1 m apart a
 #: car's sound at 1 kHz follows the exact field's waveform to within -58 dB, -94 dB a
 #: quarter of a metre apart (validation/doppler.py).
 STEP_M = 1.0
@@ -104,8 +104,8 @@ WALK = "walk.json"
 
 @dataclasses.dataclass(frozen=True)
 class Trail:
-    """What goes along a source's walk with it: the source itself ``lead_s`` behind
-    where its walk has it (its sound and its levels that much later), and the sounds
+    """What goes along a source's trajectory with it: the source itself ``lead_s`` behind
+    where its trajectory has it (its sound and its levels that much later), and the sounds
     ``behind`` it, each (lag_s, signal, offset_db) ``lag_s`` behind the source, its
     signal scaled as the source's is, its sound power per octave band ``offset_db`` over
     the source's (a train's bogies and cars, behind its front)."""
@@ -115,7 +115,7 @@ class Trail:
 
     @property
     def length_s(self) -> float:
-        """How far behind the walk the last of it goes (s)."""
+        """How far behind the trajectory the last of it goes (s)."""
         return self.lead_s + max((lag for lag, _, _ in self.behind), default=0.0)
 
 
@@ -123,7 +123,7 @@ def trailed(passing, trail: Trail, extra_s: float):
     """``passing`` (a :class:`~acoustic_spaces.walkthrough.PassBy` of a source alone)
     with what goes along with it (``trail``): each copy's level that much later, its
     energy band by band ``offset_db`` over the source's, all added, the times going on
-    ``extra_s`` past the walk's last place, in its steps."""
+    ``extra_s`` past the trajectory's last place, in its steps."""
     from acoustic_spaces.parameters import a_weighted
     from acoustic_spaces.walkthrough import PassBy
 
@@ -166,7 +166,7 @@ class Vehicle:
     fleet_noun = "vehicle"
     #: Whether it goes at a speed of its own without --speed (:meth:`own_speed_kmh`).
     own_speed = False
-    #: Whether its own numbers time its walk, at no one speed (an aircraft's flight
+    #: Whether its own numbers time its trajectory, at no one speed (an aircraft's flight
     #: profile, :mod:`acoustic_spaces.demos.aircraft`): it goes as they say, its
     #: keyframes written into the demo's scene (:meth:`edit`), and --speed does not
     #: apply.
@@ -196,19 +196,19 @@ class Vehicle:
         return None
 
     def own_speed_kmh(self, args: argparse.Namespace) -> float | None:
-        """The speed it goes at without ``--speed`` (km/h), or None to go as its walk in
+        """The speed it goes at without ``--speed`` (km/h), or None to go as its trajectory in
         the scene goes (a train goes at its own)."""
         return None
 
     def problem(self, source) -> str | None:
-        """What else keeps ``source`` (its scene source, with a walk that is on) from
+        """What else keeps ``source`` (its scene source, with a trajectory that is on) from
         going past: nothing, unless the vehicle needs more."""
         return None
 
     def mean_speed_m_s(self, args: argparse.Namespace, scene) -> float:
-        """The speed it goes at along its walk in ``scene`` (m/s), the example's: its
-        walk's (:func:`walk_speed`), unless it is :attr:`timed`, whose own numbers give
-        the walk of the demo's scene, its length over its time."""
+        """The speed it goes at along its trajectory in ``scene`` (m/s), the example's: its
+        trajectory's (:func:`walk_speed`), unless it is :attr:`timed`, whose own numbers give
+        the trajectory of the demo's scene, its length over its time."""
         return walk_speed(car_of(scene, self), self)
 
     def how_it_goes(self, args: argparse.Namespace, scene) -> str | None:
@@ -227,7 +227,7 @@ class Vehicle:
         raise NotImplementedError
 
     def sources(self, args: argparse.Namespace) -> list[Source]:
-        """The example's sources it can play with ``args``, all along one walk, its own
+        """The example's sources it can play with ``args``, all along one trajectory, its own
         first, each on when a run plays it unless ``--sources`` says: its own alone,
         unless it carries more (the police car's siren, :func:`picked_parts`)."""
         return [Source(self.name)]
@@ -239,7 +239,7 @@ class Vehicle:
 
     def every_part(self) -> tuple[str, ...]:
         """Every source of the example it can play, its own first: each goes along its
-        walk."""
+        trajectory."""
         return (self.name,)
 
     def idle(self, parts: Sequence[str]) -> tuple[str, ...]:
@@ -280,7 +280,7 @@ class Vehicle:
         return resampled(mono(x), r, rate)
 
     def trail(self, args: argparse.Namespace, part: str, played: np.ndarray, rate: int) -> Trail:
-        """What goes along the walk of its source ``part`` with it, which plays
+        """What goes along the trajectory of its source ``part`` with it, which plays
         ``played`` at ``rate`` (:class:`Trail`): nothing, unless the vehicle is a train
         (:mod:`acoustic_spaces.demos.rail`)."""
         return Trail()
@@ -520,9 +520,9 @@ def road_texts(noun: str, name: str, sound: str) -> dict[str, str]:
     """The help of a road vehicle's pass-by demo, for ``noun`` (the vehicle in a word)
     whose source is ``name`` and whose made sound is ``sound``."""
     return {
-        "speed": f"how fast the {noun} drives along its walk (km/h; m/s times 3.6), which "
-        f"sets how long its pass and its sound last (the walk's length over the speed) and "
-        "its sound power; by default as its walk in the scene goes: its speed along "
+        "speed": f"how fast the {noun} drives along its trajectory (km/h; m/s times 3.6), which "
+        f"sets how long its pass and its sound last (the trajectory's length over the speed) and "
+        "its sound power; by default as its trajectory in the scene goes: its speed along "
         "points, or the one steady speed of its keyframes (whose places it goes "
         "through at --speed when given)",
         "input": f"a WAV file the {noun} plays instead of its made sound, as {name}=WAV: a "
@@ -553,14 +553,14 @@ ROAD_VEHICLES = (THE_CAR, TRUCK, BUS, MOTORCYCLE)
 
 
 def walk_speed(car, vehicle: Vehicle = THE_CAR) -> float:
-    """The speed the walk of ``car`` (a scene source) goes at (m/s): its ``speed_m_s``
+    """The speed the trajectory of ``car`` (a scene source) goes at (m/s): its ``speed_m_s``
     along points, or along keyframes the one steady speed they keep (for a
     :attr:`~Vehicle.timed` vehicle, their length over their time); a ValueError says
     when keyframes go at different speeds or wait."""
     from acoustic_spaces.walkthrough import knots
 
-    if car.walk.keyframes is None:
-        return float(car.walk.speed_m_s)
+    if car.trajectory.keyframes is None:
+        return float(car.trajectory.speed_m_s)
     path = knots(car)
     if vehicle.timed:
         return path.length_m / path.duration_s
@@ -569,7 +569,7 @@ def walk_speed(car, vehicle: Vehicle = THE_CAR) -> float:
     if slow <= 0.0 or fast > slow * (1.0 + STEADY):
         raise ValueError(
             f"the {vehicle.noun}'s keyframes go at {3.6 * slow:.1f} to {3.6 * fast:.1f} km/h, "
-            f"but {vehicle.steady}: time them for one speed (or give its walk points at a "
+            f"but {vehicle.steady}: time them for one speed (or give its trajectory points at a "
             f"speed), or {vehicle.go} it through their places at one speed with --speed"
         )
     return path.length_m / path.duration_s
@@ -577,13 +577,13 @@ def walk_speed(car, vehicle: Vehicle = THE_CAR) -> float:
 
 def kmh(speed: float) -> str:
     """A speed (km/h) as the demos' words and stills give it: to a tenth, without a
-    trailing zero, so a walk of 13.89 m/s (50.004 km/h) reads 50."""
+    trailing zero, so a trajectory of 13.89 m/s (50.004 km/h) reads 50."""
     return f"{round(float(speed), 1):g}"
 
 
 def forced_speed(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float | None:
-    """The speed a run gives the vehicle instead of its walk's (km/h): ``--speed``, or
-    its own (:meth:`Vehicle.own_speed_kmh`, a train's); None to go as its walk goes."""
+    """The speed a run gives the vehicle instead of its trajectory's (km/h): ``--speed``, or
+    its own (:meth:`Vehicle.own_speed_kmh`, a train's); None to go as its trajectory goes."""
     if getattr(args, "speed", None) is not None:
         return float(args.speed)
     return vehicle.own_speed_kmh(args)
@@ -591,7 +591,7 @@ def forced_speed(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float 
 
 def speed_of(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float:
     """The speed the vehicle goes at (km/h): ``--speed``, checked positive and finite,
-    or without it its own (a train's) or the speed of its walk in the example's scene
+    or without it its own (a train's) or the speed of its trajectory in the example's scene
     (:func:`walk_speed`; a :attr:`~Vehicle.timed` vehicle's own mean speed)."""
     if getattr(args, "speed", None) is not None:
         speed = float(args.speed)
@@ -621,7 +621,7 @@ def car_of(scene, vehicle: Vehicle = THE_CAR):
 
 def car_problem(scene, name: str, vehicle: Vehicle = THE_CAR) -> str | None:
     """What keeps the vehicle of ``scene`` (read from the file ``name``) from going
-    past: none, a line or a surface, no walk, a walk that is off, or what the vehicle
+    past: none, a line or a surface, no trajectory, a trajectory that is off, or what the vehicle
     itself needs (:meth:`Vehicle.problem`)."""
     noun = vehicle.name
     car = next((s for s in scene.sources if s.name == noun), None)
@@ -629,15 +629,15 @@ def car_problem(scene, name: str, vehicle: Vehicle = THE_CAR) -> str | None:
         return f"{name} has no source {noun!r} to {vehicle.go}"
     if car.extended:
         return f"the {noun} of {name} is a line or a surface: only a point source {vehicle.goes}"
-    if car.walk is None:
+    if car.trajectory is None:
         return (
-            f"the {noun} has no walk in {name}: give it one along {vehicle.way} (walk: to:, "
-            "or the editor's Movement panel)"
+            f"the {noun} has no trajectory in {name}: give it one along {vehicle.way} "
+            "(trajectory: to:, or the editor's Movement panel)"
         )
-    if not car.walk.enabled:
+    if not car.trajectory.enabled:
         return (
-            f"the {noun}'s walk is off in {name}: turn it on (Moves in the editor, or walk: "
-            "enabled: true)"
+            f"the {noun}'s trajectory is off in {name}: turn it on (Moving in the editor, or "
+            "trajectory: enabled: true)"
         )
     problem = vehicle.problem(car)
     if problem:
@@ -652,7 +652,7 @@ def car_problem(scene, name: str, vehicle: Vehicle = THE_CAR) -> str | None:
 def part_problem(scene, car, part: str, vehicle: Vehicle) -> str | None:
     """What keeps the source ``part`` of ``scene`` from going along with ``car`` (the
     vehicle's own source): none, unless it is missing, a line or a surface, without a
-    walk that is on, or its walk goes elsewhere (in plan) or at other times."""
+    trajectory that is on, or its trajectory goes elsewhere (in plan) or at other times."""
     from acoustic_spaces.walkthrough import knots
 
     source = next((s for s in scene.sources if s.name == part), None)
@@ -661,15 +661,15 @@ def part_problem(scene, car, part: str, vehicle: Vehicle) -> str | None:
         return f"no source {part!r}, which goes along with the {noun}"
     if source.extended:
         return f"the {part} is a line or a surface: only a point source goes along"
-    if source.walk is None or not source.walk.enabled:
-        return f"the {part} has no walk that is on: give it the {noun}'s"
+    if source.trajectory is None or not source.trajectory.enabled:
+        return f"the {part} has no trajectory that is on: give it the {noun}'s"
     own, along = knots(car), knots(source)
     if len(own.times) != len(along.times) or not (
         np.allclose(own.times, along.times, atol=1e-6)
         and np.allclose(own.positions[:, :2], along.positions[:, :2], atol=1e-6)
     ):
         return (
-            f"the {part}'s walk must go where the {noun}'s does (in plan) and when: "
+            f"the {part}'s trajectory must go where the {noun}'s does (in plan) and when: "
             f"give it the {noun}'s points or keyframes, at its own height"
         )
     return None
@@ -677,31 +677,26 @@ def part_problem(scene, car, part: str, vehicle: Vehicle) -> str | None:
 
 def places_of(car) -> list[tuple[float, ...]]:
     """The places the keyframes of ``car`` go through after its position, each once:
-    the points of a walk through them."""
-    places: list[tuple[float, ...]] = []
-    last = tuple(car.position)
-    for frame in car.walk.keyframes:
-        if tuple(frame.position) != last:
-            places.append(tuple(frame.position))
-            last = tuple(frame.position)
-    return places
+    the points of a trajectory through them (:func:`~acoustic_spaces.walkthrough.at_speed`)."""
+    from acoustic_spaces.walkthrough import at_speed
+
+    return list(at_speed(car, 1.0).trajectory.to)
 
 
 def driving(car, speed_kmh: float | None):
-    """``car`` (a scene source) in use, with Doppler, along its walk as it is (None) or
-    at ``speed_kmh``: a walk through points at that speed, through the keyframes' places
-    for keyframes."""
-    update: dict = {"doppler": True}
+    """``car`` (a scene source) in use, with Doppler, along its trajectory as it is (None) or
+    at ``speed_kmh`` (:func:`~acoustic_spaces.walkthrough.at_speed`): a trajectory through
+    points at that speed, through the keyframes' places for keyframes."""
+    from acoustic_spaces.walkthrough import at_speed
+
     if speed_kmh is not None:
-        update["speed_m_s"] = speed_kmh / 3.6
-        if car.walk.keyframes is not None:
-            update |= {"to": places_of(car), "keyframes": None}
-    walk = car.walk.model_copy(update=update)
-    return car.model_copy(update={"walk": walk, "enabled": True})
+        car = at_speed(car, speed_kmh / 3.6)
+    trajectory = car.trajectory.model_copy(update={"doppler": True})
+    return car.model_copy(update={"trajectory": trajectory, "enabled": True})
 
 
 def pass_s(car, speed_kmh: float | None = None) -> float:
-    """How long the vehicle takes along its walk, as it is or at ``speed_kmh`` (s)."""
+    """How long the vehicle takes along its trajectory, as it is or at ``speed_kmh`` (s)."""
     from acoustic_spaces.walkthrough import knots
 
     return float(knots(driving(car, speed_kmh)).duration_s)
@@ -852,11 +847,11 @@ def faded(x: np.ndarray, rate: int, fade_s: float = FADE_S) -> np.ndarray:
 
 def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> None:
     """``--scene`` (scene_demo.yaml) from ``--from`` (scene.yaml): the vehicle's sources
-    it plays (:meth:`Vehicle.parts`) in use, along their walk with Doppler, at its own
+    it plays (:meth:`Vehicle.parts`) in use, along their trajectory with Doppler, at its own
     speed or at ``--speed`` (:func:`driving`), and their sound power at that speed
     (:meth:`Vehicle.edit`), every other source left out; those of the vehicle's it
-    leaves out (:meth:`Vehicle.every_part`) still walk at that speed, so that its
-    sources go along one walk."""
+    leaves out (:meth:`Vehicle.every_part`) still move at that speed, so that its
+    sources go along one trajectory."""
     info = car_info(args, vehicle)
     args.scene.parent.mkdir(parents=True, exist_ok=True)  # the run's folder
     data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
@@ -868,15 +863,15 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         source["enabled"] = name in parts
         if name in parts:
             vehicle.edit(source, info, args)
-        if name in every and source.get("walk"):
-            walk = source["walk"]
+        if name in every and source.get("trajectory"):
+            trajectory = source["trajectory"]
             if forced_speed(args, vehicle) is not None:
-                walk["speed_m_s"] = round(info["speed_kmh"] / 3.6, 6)
-                if walk.get("keyframes"):
-                    walk["to"] = [list(place) for place in places_of(own[name])]
-                    walk.pop("keyframes")
+                trajectory["speed_m_s"] = round(info["speed_kmh"] / 3.6, 6)
+                if trajectory.get("keyframes"):
+                    trajectory["to"] = [list(place) for place in places_of(own[name])]
+                    trajectory.pop("keyframes")
             if name in parts:
-                walk["doppler"] = True
+                trajectory["doppler"] = True
     pipeline.write_scene(args.scene, data, vehicle.texts()["header"], args.source.parent)
     speed = f"{kmh(info['speed_kmh'])} km/h" + (" on average" if vehicle.timed else "")
     print(
@@ -905,7 +900,7 @@ def scene_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
     others = set(vehicle.every_part()) - set(powers)
     return all(
         sources[name].in_use
-        and sources[name].walk.doppler
+        and sources[name].trajectory.doppler
         and abs(made[name] - speed) < 1e-4 * made[name]
         and np.allclose(np.asarray(sources[name].level_db, dtype=float), power, atol=0.05)
         for name, power in powers.items()
@@ -921,8 +916,8 @@ def room_of(demo: Demo, args: argparse.Namespace):
 
 
 def walked_scene(args: argparse.Namespace):
-    """The scene the walk step simulates the vehicle along its walk in (``--scene``, the
-    vehicle at --speed), for the editor to follow (:attr:`Demo.walks`)."""
+    """The scene the walk step simulates the vehicle along its trajectory in (``--scene``, the
+    vehicle at --speed), for the editor to follow (:attr:`Demo.trajectories`)."""
     from acoustic_spaces.scene import Scene
 
     return Scene.from_yaml(args.scene)
@@ -933,7 +928,7 @@ def walked_scene(args: argparse.Namespace):
 
 def pitch_change(points, listener, speed_m_s: float | None, c: float) -> float:
     """How far the pitch of the vehicle's direct sound falls at ``listener`` (a position)
-    from where its walk starts to where it ends (semitones): heard at c / (c - v_r), v_r
+    from where its trajectory starts to where it ends (semitones): heard at c / (c - v_r), v_r
     the vehicle's speed towards the listener, along its first leg and its last, at
     ``speed_m_s`` or, None, at each leg's own speed (its length over its time)."""
     positions = np.asarray(points.positions, dtype=float)
@@ -1041,7 +1036,7 @@ def pass_level(walked, loud: np.ndarray | None, trail: Trail, extra_s: float):
 
 
 def heard_together(passes: Sequence):
-    """The level along a walk of sources going along it together, from each one's
+    """The level along a trajectory of sources going along it together, from each one's
     :func:`~acoustic_spaces.walkthrough.pass_by`: their energies added band by band at
     the times the first's places are heard, each other's read there between its own
     places (linearly in energy; a few milliseconds apart, as their direct sounds
@@ -1066,7 +1061,7 @@ def heard_together(passes: Sequence):
 
 def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> None:
     """Each listener in use (those ``--listeners`` names, in its order): the vehicle
-    simulated every ``--step`` along its walk, its
+    simulated every ``--step`` along its trajectory, its
     sound played through those places with Doppler, and the level along the way; one
     gain for every listener (the loudest peak at -1 dBFS), into ``walk/`` in the run's
     folder: a WAV per listener, seats.json and walk.json. A vehicle of several sources
@@ -1083,7 +1078,12 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     from acoustic_spaces.demos import indoors
     from acoustic_spaces.demos.scene_demo import format_of
     from acoustic_spaces.render import power_gains
-    from acoustic_spaces.walkthrough import knots, render_walk, simulate_walk, walk_points
+    from acoustic_spaces.walkthrough import (
+        knots,
+        render_trajectory,
+        simulate_trajectory,
+        trajectory_points,
+    )
 
     noun = vehicle.name
     room = room_of(demo, args)
@@ -1098,7 +1098,7 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
                 f"error: the {part} is left out of {args.scene.name}; run: "
                 f"{demo.command('scene', args)}"
             )
-        if not sources[part].walk.doppler:
+        if not sources[part].trajectory.doppler:
             raise SystemExit(
                 f"error: the {part} in {args.scene.name} has no Doppler; run: "
                 f"{demo.command('scene', args)}"
@@ -1131,7 +1131,7 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         fed[part] = x
         gain = gains[part]
         sent[part] = x.scaled(gain) if not isinstance(x, np.ndarray) else (x * gain, rate)
-        # What follows the source along its walk (a train's bogies and cars) plays as it
+        # What follows the source along its trajectory (a train's bogies and cars) plays as it
         # does, its signal scaled as the source's.
         trail = vehicle.trail(args, part, x, rate)
         behind = tuple((lag, y * gain, off) for lag, y, off in trail.behind)
@@ -1145,10 +1145,10 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     fmt = format_of(args, room.scene)
     c = room.speed_of_sound()
     wheels = vehicle.wheels(args)
-    # The vibration is worked out until the last wheels leave the walk's end.
+    # The vibration is worked out until the last wheels leave the trajectory's end.
     shaking = indoors.grid(duration + wheels.length_s) if wheels is not None else None
     mixes, heard, shakers = {}, {}, {}
-    points = walk_points(car, float(args.step_m))
+    points = trajectory_points(car, float(args.step_m))
     for name in names:
         played, passes, heard_parts = [], [], []
         facing = inside.get(name)
@@ -1156,14 +1156,14 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         for part in aired if here is None or here.airborne else ():
             # Begun with the names, as the simulation's messages are: the editor rings them.
             print(f"{part} -> {name}: simulating it every {args.step_m:g} m along its walk")
-            walked = simulate_walk(
+            walked = simulate_trajectory(
                 rooms[part], part, listener=name, step_m=float(args.step_m), progress=print
             )
             trail = trails[part]
             more = f" and {len(trail.behind)} more behind it" if trail.behind else ""
             places = len(walked.names)
             print(f"{part} -> {name}: playing it{more} through {places} places with Doppler")
-            wet = render_walk(
+            wet = render_trajectory(
                 walked,
                 {part: sent[part]},
                 fmt,
@@ -1177,10 +1177,10 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             if here is not None and name in fronts:
                 assert facing is not None
                 print(
-                    f"simulating the {part} every {args.step_m:g} m along its walk, heard "
+                    f"simulating the {part} every {args.step_m:g} m along its trajectory, heard "
                     f"{indoors.FRONT_M:g} m in front of the wall of the {facing.name} at {name}"
                 )
-                at_front = simulate_walk(
+                at_front = simulate_trajectory(
                     rooms[part],
                     part,
                     listener=indoors.front_name(name),
@@ -1327,8 +1327,8 @@ def passes_of(
 ) -> Path | None:
     """The folder of the passes a run plays, or None when they are not there: its own
     (:func:`walk_folder`) when they are made for it (:func:`walked`); else, with
-    ``demo``, those of the run with the same settings up to the walk
-    (:meth:`Demo.upstream`: another ``--tour`` or ``--at`` walks the same), and with
+    ``demo``, those of the run with the same settings up to the trajectory
+    (:meth:`Demo.upstream`: another ``--tour`` or ``--at`` moves the same way), and with
     ``--listeners``, those of that run at every listener (:meth:`Demo.sibling`), when
     they are made for that run and have a pass at each listener this one plays: the
     passes of a listener do not hang on which others are simulated with it, and the
@@ -1496,7 +1496,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
 
 def moving(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> list[str]:
     """Who the demo plays moving: the vehicle's sources it plays, when the example gives
-    them a walk that is on."""
+    them a trajectory that is on."""
     try:
         problem = car_problem(source_scene(args), args.source.name, vehicle)
         return [] if problem else list(vehicle.parts(args))
@@ -1506,7 +1506,7 @@ def moving(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> list[str]:
 
 def problems(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> str | None:
     """The vehicle must go: ``--sources`` picks one of its sources at least, the
-    example's scene gives it a walk that is on, at one steady speed unless ``--speed``
+    example's scene gives it a trajectory that is on, at one steady speed unless ``--speed``
     gives one, and the speed, the step and the vehicle's own numbers are positive. (A
     name ``--sources`` gives that is none of the vehicle's the demo refuses itself.)"""
     from acoustic_spaces.scene import Scene
@@ -1556,10 +1556,10 @@ def summary(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> str | None:
     elif own is not None:
         whose = f"the {noun}'s own"
     else:
-        whose = "as its walk in the scene goes"
+        whose = "as its trajectory in the scene goes"
     edit = f"the {way}" if own is not None else f"the {way}, and its speed"
     return (
-        f"The {noun} {vehicle.goes} {path.length_m:.1f} m along its walk at "
+        f"The {noun} {vehicle.goes} {path.length_m:.1f} m along its trajectory at "
         f"{3.6 * speed:.1f} km/h ({speed:.2f} m/s, {whose}): the pass, and the {noun}'s "
         f"sound, last {path.duration_s:.1f} s. --speed {vehicle.goes} it faster or slower "
         f"along the same {way}; Edit movement… changes {edit}."
@@ -1602,7 +1602,7 @@ def sources_help(vehicles: Sequence[Vehicle]) -> str:
     return (
         f"which of the {noun}'s sources play, by name, comma separated (default: every one "
         f"but those marked off): {'; '.join(offered)}{each}. The {noun} is simulated along "
-        "its walk with these alone, so another pick makes its sound, its scene and its "
+        "its trajectory with these alone, so another pick makes its sound, its scene and its "
         "walk again"
     )
 
@@ -1694,7 +1694,7 @@ def demo(
             "vehicle",
             "what goes past: "
             + "; ".join(f"{v.name}, {v.title}" for v in vehicles)
-            + " (each the example's source of its name, with its walk)",
+            + " (each the example's source of its name, with its trajectory)",
             first.name,
             "choice",
             tuple(by_name),
@@ -1702,7 +1702,7 @@ def demo(
             named="plays",
         )
     ]
-    # A vehicle whose own numbers time its walk (an aircraft) goes at no --speed.
+    # A vehicle whose own numbers time its trajectory (an aircraft) goes at no --speed.
     speed = (
         []
         if all(v.timed for v in vehicles)
@@ -1736,7 +1736,7 @@ def demo(
             *picks,
             Option(
                 "step_m",
-                f"how far apart the {noun} is simulated along its walk (m)",
+                f"how far apart the {noun} is simulated along its trajectory (m)",
                 first.step_m,
                 "float",
                 steps=("walk",),
@@ -1772,7 +1772,7 @@ def demo(
         problems=lambda shown, args: problems(shown, args, pick(args)),
         plays=lambda args: plays(args, pick(args)),
         moving=lambda args: moving(args, pick(args)),
-        walks=walked_scene,
+        trajectories=walked_scene,
         summary=lambda args: summary(args, pick(args)),
         # The scene step keeps the example's listeners as they are.
         listeners=lambda args: listeners_in(args.source),
@@ -1799,7 +1799,7 @@ def demo(
         Step(
             "walk",
             lambda args: walk(made, args, pick(args)),
-            f"simulate the {noun} along its walk at every listener and play it with Doppler",
+            f"simulate the {noun} along its trajectory at every listener and play it with Doppler",
             lambda args: walk_done(args, pick(args), made),
         ),
         Step(

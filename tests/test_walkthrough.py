@@ -20,11 +20,13 @@ from acoustic_spaces.walkthrough import (
     LATE_STEP_M,
     STEP_DEG,
     STEP_M,
-    WalkPoints,
-    WalkResponses,
+    TrajectoryPoints,
+    TrajectoryResponses,
+    at_speed,
     crossfade_weights,
     facing_name,
     facing_of,
+    head_turners,
     knots,
     late_mixing,
     moment_name,
@@ -33,11 +35,13 @@ from acoustic_spaces.walkthrough import (
     place_name,
     place_of,
     render_movement,
-    render_walk,
+    render_trajectory,
     save_movement,
     simulate_movement,
-    simulate_walk,
-    walk_points,
+    simulate_trajectory,
+    step_of,
+    trajectory_points,
+    turns_on_the_spot,
     with_moving,
 )
 
@@ -65,13 +69,13 @@ def _scene(*, sources, listeners, simulation=None) -> Scene:
 
 
 def _walker(walk, *, position=(1.0, 1.0, 1.5), **extra) -> dict:
-    return {"name": "w", "position": list(position), "walk": walk, **extra}
+    return {"name": "w", "position": list(position), "trajectory": walk, **extra}
 
 
 def test_walk_points_follow_the_path_facing_forward() -> None:
     walk = {"to": [[3.0, 1.0, 1.5], [3.0, 2.0, 1.5]], "speed_m_s": 1.5}
     scene = _scene(sources=[{"name": "s", "position": [6, 4, 1.5]}], listeners=[_walker(walk)])
-    points = walk_points(scene.listeners[0], 0.25)
+    points = trajectory_points(scene.listeners[0], 0.25)
     assert len(points.times) == 13
     assert points.times[-1] == pytest.approx(3.0 / 1.5)
     np.testing.assert_allclose(np.diff(points.times), 0.25 / 1.5)
@@ -83,11 +87,13 @@ def test_walk_points_follow_the_path_facing_forward() -> None:
     np.testing.assert_allclose(points.yaws[6:11], [0.0, 22.5, 45.0, 67.5, 90.0])
     np.testing.assert_allclose(points.yaws[10:], 90.0)
     still = scene.listeners[0].model_copy(
-        update={"walk": scene.listeners[0].walk.model_copy(update={"face_forward": False})}
+        update={
+            "trajectory": scene.listeners[0].trajectory.model_copy(update={"face_forward": False})
+        }
     )
-    assert walk_points(still).yaws is None
+    assert trajectory_points(still).yaws is None
     # A step that does not divide the path: a little shorter, the same distance apart.
-    uneven = walk_points(scene.listeners[0], 0.7)
+    uneven = trajectory_points(scene.listeners[0], 0.7)
     assert len(uneven.times) == 6
     np.testing.assert_allclose(np.diff(uneven.times), 3.0 / 5 / 1.5)
 
@@ -97,13 +103,26 @@ def test_a_walker_turns_the_shorter_way_round_at_its_pace() -> None:
     walk = {"to": [[2.0, 2.0, 1.5], [1.0, 1.0, 1.5]], "speed_m_s": 1.0, "turn_deg_s": 180}
     sources = [{"name": "s", "position": [6, 4, 1.5]}]
     scene = _scene(sources=sources, listeners=[_walker(walk, position=(3.0, 1.0, 1.5))])
-    points = walk_points(scene.listeners[0], 0.25)
+    points = trajectory_points(scene.listeners[0], 0.25)
     assert len(points.times) == 13  # the corner is place 6
     np.testing.assert_allclose(points.yaws[[0, 6, 12]], [135.0, 180.0, -135.0])
     assert np.all(np.abs(np.diff(np.unwrap(np.radians(points.yaws)))) <= np.radians(45.0))
     # The turn takes half a second, a quarter of the way along each leg either side.
     turning = np.flatnonzero(~np.isclose(np.abs(points.yaws), 135.0))
     assert points.times[turning[-1]] - points.times[turning[0]] < 0.5
+
+
+def test_a_scene_written_before_4_4_names_a_trajectory_walk() -> None:
+    """Scenes written before 4.4.0 call a trajectory ``walk``: it is read as one, and
+    written back as ``trajectory``; given both ways it is refused."""
+    old = {"name": "w", "position": [1.0, 1.0, 1.5], "walk": {"to": [[3.0, 1.0, 1.5]]}}
+    scene = _scene(sources=[{"name": "s", "position": [6, 4, 1.5]}], listeners=[old])
+    assert scene.listeners[0].trajectory.to == [(3.0, 1.0, 1.5)]
+    data = scene.to_data()["listeners"][0]
+    assert "walk" not in data and data["trajectory"]["to"] == [[3.0, 1.0, 1.5]]
+    both = {**old, "trajectory": {"to": [[4.0, 1.0, 1.5]]}}
+    with pytest.raises(ValidationError, match="give a trajectory once"):
+        _scene(sources=[{"name": "s", "position": [6, 4, 1.5]}], listeners=[both])
 
 
 def test_a_walk_needs_somewhere_to_go_and_a_point_source() -> None:
@@ -116,13 +135,99 @@ def test_a_walk_needs_somewhere_to_go_and_a_point_source() -> None:
         "name": "line",
         "position": [2, 2, 1.5],
         "line_m": 2.0,
-        "walk": {"to": [[3, 3, 1.5]]},
+        "trajectory": {"to": [[3, 3, 1.5]]},
     }
-    with pytest.raises(ValidationError, match="only a point source walks"):
+    with pytest.raises(ValidationError, match="only a point source moves along a trajectory"):
         _scene(sources=[line], listeners=[{"name": "l", "position": [6, 4, 1.2]}])
     nowhere = _scene(sources=sources, listeners=[_walker({"to": [[1.0, 1.0, 1.5]] * 2})])
-    with pytest.raises(ValueError, match="the walk of 'w' goes nowhere"):
-        walk_points(nowhere.listeners[0])
+    with pytest.raises(ValueError, match="the trajectory of 'w' goes nowhere"):
+        trajectory_points(nowhere.listeners[0])
+
+
+def test_a_trajectory_sets_off_at_its_start_time_with_its_own_step() -> None:
+    """``start_s`` keeps the mover at its position until then, its places as much later
+    on the run's clock; ``step_m`` sets how far apart its places are, unless a run gives
+    another."""
+    walk = {"to": [[3.0, 1.0, 1.5]], "speed_m_s": 1.0, "start_s": 2.0, "step_m": 0.5}
+    scene = _scene(sources=[{"name": "s", "position": [6, 4, 1.5]}], listeners=[_walker(walk)])
+    item = scene.listeners[0]
+    path = knots(item)
+    np.testing.assert_allclose(path.times, [0.0, 2.0, 4.0])
+    np.testing.assert_allclose(path.at(1.0)[0], [1.0, 1.0, 1.5])  # standing until 2 s
+    np.testing.assert_allclose(path.at(3.0)[0], [2.0, 1.0, 1.5])
+    np.testing.assert_allclose(trajectory_points(item).times, [2.0, 2.5, 3.0, 3.5, 4.0])
+    assert len(trajectory_points(item, 0.25).times) == 9
+    assert step_of(item) == 0.5 and step_of(item, 0.25) == 0.25
+    with pytest.raises(ValueError, match="step_m must be positive"):
+        step_of(item, 0.0)
+    plain = item.model_copy(
+        update={"trajectory": item.trajectory.model_copy(update={"step_m": None})}
+    )
+    assert step_of(plain) == STEP_M
+    movement = simulate_movement(Room.from_scene(scene))
+    np.testing.assert_allclose(movement.times, [0.0, 2.0, 2.5, 3.0, 3.5, 4.0])
+    assert movement.places == 5  # one place while it waits, where it sets off
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        _scene(sources=[], listeners=[_walker({**walk, "start_s": -1.0})])
+
+
+def test_a_run_s_speed_goes_through_the_points_or_the_keyframes_places() -> None:
+    """:func:`at_speed`: a trajectory through points at that speed; one through keyframes
+    through their places in turn at that speed, facing the way it goes; one that never
+    leaves its position as it is."""
+    sources = [{"name": "s", "position": [6, 4, 1.5]}]
+    along = _scene(sources=sources, listeners=[_walker({"to": [[3.0, 1.0, 1.5]]})]).listeners[0]
+    fast = at_speed(along, 2.0)
+    assert fast.trajectory.speed_m_s == 2.0 and knots(fast).duration_s == pytest.approx(1.0)
+    frames = [
+        {"time_s": 1.0, "position": [2.0, 1.0, 1.5]},
+        {"time_s": 5.0, "position": [2.0, 1.0, 1.5], "orientation": {"yaw": 90.0}},
+        {"time_s": 6.0, "position": [3.0, 1.0, 1.5]},
+    ]
+    timed = _scene(sources=sources, listeners=[_walker({"keyframes": frames})]).listeners[0]
+    even = at_speed(timed, 0.5)
+    assert even.trajectory.keyframes is None
+    assert even.trajectory.to == [(2.0, 1.0, 1.5), (3.0, 1.0, 1.5)]
+    assert knots(even).duration_s == pytest.approx(4.0)
+    turn = [{"time_s": 2.0, "position": [1.0, 1.0, 1.5], "orientation": {"yaw": 90.0}}]
+    still = _scene(sources=sources, listeners=[_walker({"keyframes": turn})]).listeners[0]
+    assert at_speed(still, 1.0) is still
+    with pytest.raises(ValueError, match="positive number of m/s"):
+        at_speed(along, 0.0)
+
+
+def test_a_listener_turning_on_the_spot_is_heard_through_the_head_tracker() -> None:
+    """Binaurally, a listener who turns on the spot is simulated once, facing ahead,
+    and its field turned against the head as it faces at each moment: as the head
+    tracker plays that place's response in Ambisonics of order 7 turned the same way,
+    rather than a place every 20 degrees."""
+    from acoustic_spaces.headtracking import HeadTrackedBinaural
+    from acoustic_spaces.spatial import Ambisonics, Binaural
+    from acoustic_spaces.walkthrough import HEAD_ORDER
+
+    turn = [{"time_s": 1.0, "position": [2.0, 2.0, 1.5], "orientation": {"yaw": 90.0}}]
+    listener = _walker({"keyframes": turn}, position=(2.0, 2.0, 1.5))
+    scene = _scene(sources=[{"name": "s", "position": [5.0, 3.0, 1.5]}], listeners=[listener])
+    assert turns_on_the_spot(scene.listeners[0]) and head_turners(scene) == ["w"]
+    assert head_turners(scene, Binaural()) == ["w"] and head_turners(scene, Mono()) == []
+    room = Room.from_scene(scene)
+    assert simulate_movement(room).places == 6  # 0 to 90 degrees, every 18
+    movement = simulate_movement(room, head_tracked=["w"])
+    assert movement.places == 1 and list(movement.turning) == ["w"]
+    result = movement.result
+    rate = int(result.settings.sample_rate)
+    signal = np.random.default_rng(1).standard_normal(int(1.5 * rate))
+    heard = render_movement(movement, {"s": signal}, Binaural(), equal_power=True)["w"]
+    response = result[movement.key("s", "w", 0)]
+    ir = response.spatial_impulse_response(Ambisonics(HEAD_ORDER), rate, result.settings.seed)
+    path = knots(scene.listeners[0])
+    tracker = HeadTrackedBinaural(ir, rate)
+    expected = tracker.run(signal, head=lambda t: tuple(path.at(t)[1]))[: len(heard)]
+    np.testing.assert_allclose(heard[: len(expected)], expected, atol=1e-4 * np.abs(expected).max())
+    with pytest.raises(ValueError, match="heard binaurally"):
+        render_movement(movement, {"s": signal}, Mono())
+    with pytest.raises(ValueError, match="a listener that moves, not 's'"):
+        simulate_movement(room, head_tracked=["s"])
 
 
 def test_keyframes_move_and_turn_evenly_between_them() -> None:
@@ -157,40 +262,44 @@ def test_keyframes_move_and_turn_evenly_between_them() -> None:
     np.testing.assert_allclose(path.at(9.0)[1], [-170.0, 0.0, 0.0])
     positions, angles = path.at([0.0, 5.0])
     assert positions.shape == (2, 3) and angles.shape == (2, 3)
-    points = walk_points(item, 0.5, 20.0)  # 80 degrees on the spot: 4 steps of 20
+    points = trajectory_points(item, 0.5, 20.0)  # 80 degrees on the spot: 4 steps of 20
     expected = [0.0, 0.5, 1.0, 1.5, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0, 4.5, 5.0]
     np.testing.assert_allclose(points.times, expected)
     assert points.angles.shape == (13, 3)
     np.testing.assert_allclose(points.yaws, points.angles[:, 0])
     np.testing.assert_allclose(points.yaws[4:9], [90.0, 110.0, 130.0, 150.0, 170.0])
-    assert walk_points(item).times.size == len(walk_points(item, STEP_M, STEP_DEG).times)
-    from acoustic_spaces.scene import Keyframe, Walk
+    assert trajectory_points(item).times.size == len(
+        trajectory_points(item, STEP_M, STEP_DEG).times
+    )
+    from acoustic_spaces.scene import Keyframe, Trajectory
 
     waiting = [
         Keyframe(time_s=4.0, position=(1, 1, 1.5)),
         Keyframe(time_s=5.0, position=(1, 2, 1.5)),
     ]
-    paused = item.model_copy(update={"walk": Walk(keyframes=waiting)})
-    np.testing.assert_allclose(walk_points(paused, 0.5).times, [0.0, 4.0, 4.5, 5.0])  # none waiting
+    paused = item.model_copy(update={"trajectory": Trajectory(keyframes=waiting)})
+    np.testing.assert_allclose(
+        trajectory_points(paused, 0.5).times, [0.0, 4.0, 4.5, 5.0]
+    )  # none waiting
     # The schema: one kind of path, keyframes in order of time, after the start.
     with pytest.raises(ValidationError, match="not both"):
-        Walk(to=[(1.0, 1.0, 1.0)], keyframes=[Keyframe(time_s=1.0, position=(1.0, 1.0, 1.0))])
+        Trajectory(to=[(1.0, 1.0, 1.0)], keyframes=[Keyframe(time_s=1.0, position=(1.0, 1.0, 1.0))])
     with pytest.raises(ValidationError, match="in order of time"):
-        Walk(keyframes=[Keyframe(time_s=2.0, position=(1.0, 1.0, 1.0))] * 2)
+        Trajectory(keyframes=[Keyframe(time_s=2.0, position=(1.0, 1.0, 1.0))] * 2)
     with pytest.raises(ValidationError, match="greater than 0"):
         Keyframe(time_s=0.0, position=(1.0, 1.0, 1.0))
     with pytest.raises(ValidationError, match="at least 1"):
-        Walk(keyframes=[])
-    assert Walk(keyframes=[Keyframe(time_s=1.0, position=(1.0, 1.0, 1.0))]).enabled
+        Trajectory(keyframes=[])
+    assert Trajectory(keyframes=[Keyframe(time_s=1.0, position=(1.0, 1.0, 1.0))]).enabled
     # A walk along keyframes is simulated place by place as one along to is.
     room = Room.from_scene(scene)
-    walked = simulate_walk(room, step_m=0.5, late_step_m=2.0)
+    walked = simulate_trajectory(room, step_m=0.5, late_step_m=2.0)
     assert walked.names[5] == "w #5 @ 2.25 s" and len(walked.names) == 13
     turned = walked.result.room.scene.listeners[6]
     assert (turned.orientation.yaw, turned.position) == (130.0, (3.0, 1.0, 1.5))
     # The places on the spot take the late part of the one traced there.
     assert walked.late_places == (0, 4, 12)
-    out = render_walk(walked, {"s": np.ones(100)})
+    out = render_trajectory(walked, {"s": np.ones(100)})
     assert np.isfinite(out).all() and np.abs(out).max() > 0
 
 
@@ -200,9 +309,11 @@ def test_a_run_picks_which_walks_move() -> None:
     scene = Room.from_yaml(GALLERY).scene
     assert with_moving(scene, None) is scene
     still = with_moving(scene, [])
-    assert movers(still) == [] and still.listeners[2].walk.to == scene.listeners[2].walk.to
+    assert (
+        movers(still) == [] and still.listeners[2].trajectory.to == scene.listeners[2].trajectory.to
+    )
     assert [item.name for _, item in movers(with_moving(still, ["visitor"]))] == ["visitor"]
-    with pytest.raises(ValueError, match="'in sight' has no walk to move along"):
+    with pytest.raises(ValueError, match="'in sight' has no trajectory to move along"):
         with_moving(scene, ["in sight"])
 
 
@@ -216,7 +327,7 @@ def test_several_movers_on_one_clock() -> None:
         {
             "name": "s",
             "position": [7.0, 5.0, 1.5],
-            "walk": {"to": [[7.0, 2.0, 1.5]], "speed_m_s": 1.0},
+            "trajectory": {"to": [[7.0, 2.0, 1.5]], "speed_m_s": 1.0},
         },
         {"name": "still", "position": [1.0, 5.0, 1.0], "level_db": 100.0},
     ]
@@ -230,7 +341,7 @@ def test_several_movers_on_one_clock() -> None:
         {
             "name": "off",
             "position": [6.0, 4.0, 1.2],
-            "walk": {"to": [[6.0, 1.0, 1.2]], "enabled": False},
+            "trajectory": {"to": [[6.0, 1.0, 1.2]], "enabled": False},
         },
     ]
     room = Room.from_scene(_scene(sources=sources, listeners=listeners))
@@ -289,10 +400,10 @@ def test_several_movers_on_one_clock() -> None:
     stills = Room.from_scene(_scene(sources=sources[1:], listeners=listeners[1:]))
     with pytest.raises(ValueError, match="nothing moves"):
         simulate_movement(stills)
-    fast = {**sources[0], "walk": {**sources[0]["walk"], "doppler": True}}
-    with pytest.raises(ValueError, match="'s' walks with Doppler, which moves alone: leave w"):
+    fast = {**sources[0], "trajectory": {**sources[0]["trajectory"], "doppler": True}}
+    with pytest.raises(ValueError, match="'s' moves with Doppler, which moves alone: leave w"):
         simulate_movement(Room.from_scene(_scene(sources=[fast, sources[1]], listeners=listeners)))
-    leaves = r"the walk of 'w' leaves the room at \(8\.\d\d, 1\.00, 1\.50\) m, \d+\.\d\d s in"
+    leaves = r"the trajectory of 'w' leaves the room at \(8\.\d\d, 1\.00, 1\.50\) m, \d+\.\d\d s in"
     with pytest.raises(ValueError, match=leaves):
         gone = [_walker({"to": [[9.0, 1.0, 1.5]]}), *listeners[1:]]
         simulate_movement(Room.from_scene(_scene(sources=sources, listeners=gone)))
@@ -350,32 +461,34 @@ def test_a_mover_is_one_copy_per_distinct_place(monkeypatch: pytest.MonkeyPatch)
 def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
     """A walk with Doppler moving alone plays in a movement as in a walk of its own: at
     each listener, the same places, each early path through its changing delay and the
-    late part crossfaded, so render_movement gives what render_walk does; a listener
+    late part crossfaded, so render_movement gives what render_trajectory does; a listener
     that the walk does not reach hears it too, from the same simulation."""
     from acoustic_spaces.spatial import Binaural
 
     car = {
         "name": "car",
         "position": [1.0, 4.0, 1.0],
-        "walk": {"to": [[7.0, 4.0, 1.0]], "speed_m_s": 20.0, "doppler": True},
+        "trajectory": {"to": [[7.0, 4.0, 1.0]], "speed_m_s": 20.0, "doppler": True},
     }
     seat = {"name": "seat", "position": [4.0, 1.0, 1.2], "orientation": {"yaw": 90.0}}
     room = Room.from_scene(_scene(sources=[car], listeners=[seat]))
     movement = simulate_movement(room, step_m=0.5)
     assert movement.doppler
-    walked = simulate_walk(room, "car", step_m=0.5)
+    walked = simulate_trajectory(room, "car", step_m=0.5)
     np.testing.assert_allclose(movement.times, walked.points.times)
     signal = np.random.default_rng(4).standard_normal(int(0.3 * room.scene.simulation.sample_rate))
     for fmt in (Mono(), Binaural()):
         moved = render_movement(movement, {"car": signal}, fmt)["seat"]
-        np.testing.assert_allclose(moved, render_walk(walked, {"car": signal}, fmt), atol=1e-12)
+        np.testing.assert_allclose(
+            moved, render_trajectory(walked, {"car": signal}, fmt), atol=1e-12
+        )
     # Facing +y, the seat hears the car start on its left (x < 4) and end on its right.
     ears = render_movement(movement, {"car": signal}, Binaural())["seat"]
     third = len(signal) // 3
     start, end = (ears[:third] ** 2).sum(axis=0), (ears[2 * third : 3 * third] ** 2).sum(axis=0)
     assert start[0] > 1.5 * start[1] and end[1] > 1.2 * end[0]
     # Faster than sound, or with the wave solver, as a walk of its own.
-    supersonic = {**car, "walk": {**car["walk"], "speed_m_s": 400.0}}
+    supersonic = {**car, "trajectory": {**car["trajectory"], "speed_m_s": 400.0}}
     with pytest.raises(ValueError, match="as fast as sound"):
         simulate_movement(Room.from_scene(_scene(sources=[supersonic], listeners=[seat])))
 
@@ -389,7 +502,7 @@ def test_doppler_through_a_microphone_whose_pattern_changes_with_frequency() -> 
     car = {
         "name": "car",
         "position": [1.0, 4.0, 1.0],
-        "walk": {"to": [[7.0, 4.0, 1.0]], "speed_m_s": 20.0, "doppler": True},
+        "trajectory": {"to": [[7.0, 4.0, 1.0]], "speed_m_s": 20.0, "doppler": True},
     }
     seat = {"name": "seat", "position": [4.0, 1.0, 1.2], "orientation": {"yaw": 90.0}}
     room = Room.from_scene(_scene(sources=[car], listeners=[seat]))
@@ -416,10 +529,10 @@ def test_pass_by_of_a_place_a_band_gets_no_sound_in() -> None:
     car = {
         "name": "car",
         "position": [1.0, 2.0, 1.0],
-        "walk": {"to": [[7.0, 2.0, 1.0]], "speed_m_s": 10.0, "doppler": True},
+        "trajectory": {"to": [[7.0, 2.0, 1.0]], "speed_m_s": 10.0, "doppler": True},
     }
     scene = _scene(sources=[car], listeners=[{"name": "l", "position": [4.0, 3.0, 1.5]}])
-    walk = simulate_walk(Room.from_scene(scene), step_m=1.0, late_step_m=None)
+    walk = simulate_trajectory(Room.from_scene(scene), step_m=1.0, late_step_m=None)
     before = pass_by(walk)
     k = 1
     key = (walk.names[k], "l")
@@ -617,7 +730,7 @@ def test_a_walking_listener() -> None:
     walk = {"to": [[5.0, 1.0, 1.5], [5.0, 4.0, 1.5]], "speed_m_s": 2.0}
     sources = [{"name": "s", "position": [7.0, 5.0, 1.5]}, {"name": "t", "position": [1, 5, 1]}]
     room = Room.from_scene(_scene(sources=sources, listeners=[_walker(walk)]))
-    walked = simulate_walk(room, step_m=0.5, late_step_m=2.0)
+    walked = simulate_trajectory(room, step_m=0.5, late_step_m=2.0)
     assert walked.name == "w" and walked.kind == "listeners"
     assert len(walked.names) == 15 and walked.duration_s == pytest.approx(3.5)
     assert walked.late_places == (0, 3, 7, 10, 14)
@@ -627,12 +740,14 @@ def test_a_walking_listener() -> None:
         assert name == f"w #{k} @ {walked.points.times[k]:.2f} s"
         distance = np.linalg.norm(walked.points.positions[k] - [7.0, 5.0, 1.5])
         assert walked.result["s", name].direct_delay_s == pytest.approx(distance / c)
-    every = simulate_walk(room, step_m=0.5, late_step_m=None)
+    every = simulate_trajectory(room, step_m=0.5, late_step_m=None)
     assert every.late_places == tuple(range(15))
     # The statistical method gives every place its own late part.
     statistical = room.scene.simulation.model_copy(deep=True)
     statistical.late.method = "statistical"
-    assert simulate_walk(room, step_m=0.5, settings=statistical).late_places == tuple(range(15))
+    assert simulate_trajectory(room, step_m=0.5, settings=statistical).late_places == tuple(
+        range(15)
+    )
 
 
 def test_walks_and_movements_are_heard_through_a_listeners_microphone() -> None:
@@ -644,12 +759,12 @@ def test_walks_and_movements_are_heard_through_a_listeners_microphone() -> None:
     for pattern in (None, "cardioid"):
         walker = _walker(walk, **({"pattern": pattern} if pattern else {}))
         room = Room.from_scene(_scene(sources=sources, listeners=[walker]))
-        walked = simulate_walk(room, step_m=1.0)
-        heard[pattern] = render_walk(walked, {"s": click})
+        walked = simulate_trajectory(room, step_m=1.0)
+        heard[pattern] = render_trajectory(walked, {"s": click})
     # The walker's places are copies of it, its microphone too.
     assert heard["cardioid"].shape == heard[None].shape == (len(heard[None]), 1)
     np.testing.assert_allclose(
-        heard["cardioid"], render_walk(walked, {"s": click}, first_order("cardioid"))
+        heard["cardioid"], render_trajectory(walked, {"s": click}, first_order("cardioid"))
     )
     assert np.sum(heard["cardioid"] ** 2) < 0.9 * np.sum(heard[None] ** 2)
     # In a movement each listener hears through its own: a pair in two channels.
@@ -672,34 +787,34 @@ def test_places_less_than_10_ms_apart_have_names_of_their_own() -> None:
     walk = {"to": [[3.0, 1.0, 1.5]], "speed_m_s": 30.0}
     sources = [{"name": "s", "position": [7.0, 5.0, 1.5]}]
     room = Room.from_scene(_scene(sources=sources, listeners=[_walker(walk)]))
-    walked = simulate_walk(room, late_step_m=1.0)
+    walked = simulate_trajectory(room, late_step_m=1.0)
     assert len(set(walked.names)) == len(walked.names) == 9
     assert walked.late_places == (0, 4, 8) and len(walked.result) == 9
 
 
 def test_a_walking_source_is_heard_at_a_listener() -> None:
     sources = [
-        {"name": "w", "position": [1.0, 1.0, 1.5], "walk": {"to": [[3.0, 1.0, 1.5]]}},
+        {"name": "w", "position": [1.0, 1.0, 1.5], "trajectory": {"to": [[3.0, 1.0, 1.5]]}},
         {"name": "still", "position": [7.0, 5.0, 1.5], "level_db": 100.0},
     ]
     listeners = [{"name": "l", "position": [4, 4, 1.2]}, {"name": "m", "position": [6, 2, 1.2]}]
     room = Room.from_scene(_scene(sources=sources, listeners=listeners))
     with pytest.raises(ValueError, match="pick a listener: l, m"):
-        simulate_walk(room)
-    walked = simulate_walk(room, listener="m", step_m=1.0)
+        simulate_trajectory(room)
+    walked = simulate_trajectory(room, listener="m", step_m=1.0)
     assert walked.kind == "sources" and len(walked.names) == 3
     assert {key for key in walked.result.responses} == {
         *((name, "m") for name in walked.names),
         ("still", "m"),
     }
-    out = render_walk(walked, {"w": np.ones(100), "still": np.ones(100)})
+    out = render_trajectory(walked, {"w": np.ones(100), "still": np.ones(100)})
     assert out.shape[1] == 1 and np.isfinite(out).all()
     # The walker (94 dB, under its own name at every place) plays 6 dB below "still".
     alone = {"w": np.ones(100), "still": np.zeros(100)}
-    equal = render_walk(walked, alone, equal_power=True)
-    np.testing.assert_allclose(render_walk(walked, alone), 10.0 ** (-6.0 / 20.0) * equal)
+    equal = render_trajectory(walked, alone, equal_power=True)
+    np.testing.assert_allclose(render_trajectory(walked, alone), 10.0 ** (-6.0 / 20.0) * equal)
     with pytest.raises(ValueError, match="no source 'x'"):
-        render_walk(walked, {"x": np.ones(10)})
+        render_trajectory(walked, {"x": np.ones(10)})
 
 
 def test_a_walking_source_is_heard_at_a_listener_named_when_every_one_is_left_out() -> None:
@@ -707,23 +822,23 @@ def test_a_walking_source_is_heard_at_a_listener_named_when_every_one_is_left_ou
     be heard at by default: the error says so and how to name one. One named is heard
     at even when left out, and is checked as one in use (inside the room)."""
     quick = {**QUICK, "early": {"max_order": 1}, "late": {"method": "statistical"}}
-    sources = [{"name": "w", "position": [1.0, 1.0, 1.5], "walk": {"to": [[3.0, 1.0, 1.5]]}}]
+    sources = [{"name": "w", "position": [1.0, 1.0, 1.5], "trajectory": {"to": [[3.0, 1.0, 1.5]]}}]
     listeners = [
         {"name": "l", "position": [4, 4, 1.2], "enabled": False},
         {"name": "out", "position": [40, 4, 1.2], "enabled": False},
     ]
     room = Room.from_scene(_scene(sources=sources, listeners=listeners, simulation=quick))
     with pytest.raises(ValueError) as error:
-        simulate_walk(room, step_m=1.0)
+        simulate_trajectory(room, step_m=1.0)
     assert str(error.value) == (
-        "every listener is left out (enabled: false): name the one to hear the walk at "
+        "every listener is left out (enabled: false): name the one to hear it at "
         "(--listener, listener)"
     )
-    walked = simulate_walk(room, listener="l", step_m=1.0)
+    walked = simulate_trajectory(room, listener="l", step_m=1.0)
     assert set(walked.result.responses) == {(name, "l") for name in walked.names}
     assert len(walked.names) == 3
     with pytest.raises(ValueError, match=r"listener 'out' at \[40\.0, 4\.0, 1\.2\] .*outside"):
-        simulate_walk(room, listener="out", step_m=1.0)
+        simulate_trajectory(room, listener="out", step_m=1.0)
 
 
 def test_walk_errors() -> None:
@@ -731,20 +846,21 @@ def test_walk_errors() -> None:
     out = _walker({"to": [[9.0, 1.0, 1.5]]})
     room = Room.from_scene(_scene(sources=sources, listeners=[out]))
     with pytest.raises(ValueError, match=r"leaves the room at \(8\.\d\d, 1\.00, 1\.50\) m"):
-        simulate_walk(room)
+        simulate_trajectory(room)
     still = Room.from_scene(
         _scene(sources=sources, listeners=[{"name": "l", "position": [1, 1, 1]}])
     )
-    with pytest.raises(ValueError, match="no listener or source walks"):
-        simulate_walk(still)
-    with pytest.raises(ValueError, match="'l' has no walk"):
-        simulate_walk(still, "l")
+    with pytest.raises(ValueError, match="no listener or source moves"):
+        simulate_trajectory(still)
+    with pytest.raises(ValueError, match="'l' has no trajectory"):
+        simulate_trajectory(still, "l")
     with pytest.raises(ValueError, match="no listener or source named 'x'"):
-        simulate_walk(still, "x")
+        simulate_trajectory(still, "x")
     two = [_walker({"to": [[2, 2, 1.5]]}), {**_walker({"to": [[3, 3, 1.5]]}), "name": "v"}]
     both = Room.from_scene(_scene(sources=sources, listeners=two))
-    with pytest.raises(ValueError, match=r"more than one walks \(w, v\): pick one, or play them"):
-        simulate_walk(both)
+    two_move = r"more than one listener or source moves \(w, v\): pick one"
+    with pytest.raises(ValueError, match=two_move):
+        simulate_trajectory(both)
 
 
 @dataclass
@@ -778,13 +894,13 @@ class _Result:
         return iter(self.responses.values())
 
 
-def _fake_walk(irs, times) -> WalkResponses:
+def _fake_walk(irs, times) -> TrajectoryResponses:
     names = tuple(f"w{k}" for k in range(len(irs)))
     result = _Result(
         {("s", name): _Response(np.asarray(ir, float)) for name, ir in zip(names, irs, strict=True)}
     )
-    points = WalkPoints(np.asarray(times, float), np.zeros((len(times), 3)), None)
-    return WalkResponses("w", "listeners", points, names, result)
+    points = TrajectoryPoints(np.asarray(times, float), np.zeros((len(times), 3)), None)
+    return TrajectoryResponses("w", "listeners", points, names, result)
 
 
 def test_one_response_everywhere_is_a_plain_convolution() -> None:
@@ -792,7 +908,7 @@ def test_one_response_everywhere_is_a_plain_convolution() -> None:
     ir = rng.standard_normal(64)
     walk = _fake_walk([ir] * 6, np.linspace(0.0, 1.0, 6))
     dry = rng.standard_normal(1500)
-    out = render_walk(walk, {"s": dry}, Mono())
+    out = render_trajectory(walk, {"s": dry}, Mono())
     np.testing.assert_allclose(out[:, 0], convolve(dry, ir[:, None])[:, 0], atol=1e-12)
 
 
@@ -804,7 +920,7 @@ def test_crossfades_are_continuous() -> None:
     times = [0.0, 0.3, 0.6, 0.9]
     walk = _fake_walk([[g] for g in gains], times)
     rate = 1000
-    out = render_walk(walk, {"s": np.ones(1500)}, crossfade_s=0.05)[:, 0]
+    out = render_trajectory(walk, {"s": np.ones(1500)}, crossfade_s=0.05)[:, 0]
     shares = crossfade_weights(times, np.arange(1500) / rate, 0.05)
     np.testing.assert_allclose(out, np.sqrt(np.square(gains) @ shares), atol=1e-12)
     # A raised cosine: at most pi / 2 times the mean slope of a linear crossfade.
@@ -817,7 +933,7 @@ def _two_places(second, signal: np.ndarray, rate: int = 48_000) -> np.ndarray:
     """``signal`` along a walk by two places 0.5 s apart, through a unit impulse at the
     first and ``second`` at the next: one crossfade, over 50 ms from 0.225 s."""
     walk = _fake_walk([[1.0], second], [0.0, 0.5])
-    return render_walk(walk, {"s": signal}, sample_rate=rate, crossfade_s=0.05)[:, 0]
+    return render_trajectory(walk, {"s": signal}, sample_rate=rate, crossfade_s=0.05)[:, 0]
 
 
 def _sine_levels(x: np.ndarray, period: int) -> np.ndarray:
@@ -885,7 +1001,7 @@ def test_unlike_noise_crossfades_at_equal_power() -> None:
     late[-1] = 1.0
     walk = _fake_walk([[1.0] if k % 2 == 0 else late for k in range(40)], times)
     noise = np.random.default_rng(2).standard_normal(4 * rate)
-    out = render_walk(walk, {"s": noise}, sample_rate=rate, crossfade_s=0.05)[:, 0]
+    out = render_trajectory(walk, {"s": noise}, sample_rate=rate, crossfade_s=0.05)[:, 0]
     middles = 0.5 * (times[1:] + times[:-1])
     near = np.abs(np.arange(len(out)) / rate - middles[:, None]).min(axis=0)
     mid = (near < 0.005) & (np.arange(len(out)) < 3.9 * rate)
@@ -898,9 +1014,11 @@ def test_unlike_noise_crossfades_at_equal_power() -> None:
 def test_render_walk_with_the_example(tmp_path: Path) -> None:
     room = Room.from_yaml(GALLERY)
     walker = next(lis for lis in room.scene.listeners if lis.name == "visitor")
-    assert walker.walk is not None and walk_points(walker).times.size == 101
-    short = walker.walk.model_copy(update={"to": [(15.0, 4.0, 1.6)]})
-    scene = room.scene.model_copy(update={"listeners": [walker.model_copy(update={"walk": short})]})
+    assert walker.trajectory is not None and trajectory_points(walker).times.size == 101
+    short = walker.trajectory.model_copy(update={"to": [(15.0, 4.0, 1.6)]})
+    scene = room.scene.model_copy(
+        update={"listeners": [walker.model_copy(update={"trajectory": short})]}
+    )
     room = Room.from_scene(scene, reuse=room)
     sim = room.scene.simulation
     settings = sim.model_copy(
@@ -911,11 +1029,11 @@ def test_render_walk_with_the_example(tmp_path: Path) -> None:
             "late": sim.late.model_copy(update={"rays": 1000}),
         }
     )
-    walked = simulate_walk(room, step_m=0.5, settings=settings)
+    walked = simulate_trajectory(room, step_m=0.5, settings=settings)
     assert len(walked.names) == 5 and walked.late_places == (0, 4)
     rate = settings.sample_rate
     dry = np.random.default_rng(0).standard_normal(rate)
-    out = render_walk(walked, {"guide": dry}, Mono())
+    out = render_trajectory(walked, {"guide": dry}, Mono())
     assert out.shape[0] > rate and out.shape[1] == 1
     assert np.isfinite(out).all() and np.abs(out).max() > 0
 
@@ -949,7 +1067,7 @@ def test_cli_walkthrough(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert main([*args, "--format", "mono", *hrtf]) == 1
     assert "error: --hrtf is for binaural output, not mono" in capsys.readouterr().err
     assert main(["inspect", str(path)]) == 0
-    assert "walks 2.0 m to (3.00, 1.00, 1.50) in 1.0 s" in capsys.readouterr().out
+    assert "moves 2.0 m to (3.00, 1.00, 1.50) in 1.0 s" in capsys.readouterr().out
     assert main(["walkthrough", str(path), "x", "--out", str(out)]) == 1
     assert "expected SOURCE=WAV" in capsys.readouterr().err
     # A video it could not save is reported before simulating.
@@ -972,7 +1090,7 @@ def test_cli_walkthrough_of_a_walker_left_out(tmp_path: Path, capsys) -> None:
     args = ["walkthrough", str(path), f"s={dry}", "--out", str(tmp_path / "walk.wav")]
     _scene(sources=[source], listeners=[walker], simulation=quick).to_yaml(path)
     assert main([*args, "--step", "1"]) == 0
-    assert "w walks for 1.0 s: responses at 3 places" in capsys.readouterr().err
+    assert "w moves for 1.0 s: responses at 3 places" in capsys.readouterr().err
     assert main([*args, "--all"]) == 1
     assert "error: every listener is left out (enabled: false)" in capsys.readouterr().err
     left_out = {**source, "enabled": False}
@@ -996,7 +1114,7 @@ def test_cli_walkthrough_of_every_mover(tmp_path: Path, capsys: pytest.CaptureFi
             {
                 "name": "s",
                 "position": [7.0, 5.0, 1.5],
-                "walk": {"to": [[7.0, 3.0, 1.5]], "speed_m_s": 1.0},
+                "trajectory": {"to": [[7.0, 3.0, 1.5]], "speed_m_s": 1.0},
             },
             {"name": "t", "position": [1.0, 5.0, 1.0]},
         ],
@@ -1006,7 +1124,7 @@ def test_cli_walkthrough_of_every_mover(tmp_path: Path, capsys: pytest.CaptureFi
             {
                 "name": "v",
                 "position": [6.0, 4.0, 1.2],
-                "walk": {"to": [[6, 1, 1.2]], "enabled": False},
+                "trajectory": {"to": [[6, 1, 1.2]], "enabled": False},
             },
         ],
     )
@@ -1027,22 +1145,23 @@ def test_cli_walkthrough_of_every_mover(tmp_path: Path, capsys: pytest.CaptureFi
     assert max(np.abs(x).max() for x, _ in data.values()) == pytest.approx(10 ** (-1 / 20), 1e-3)
     assert main([*args, "--all", "--listener", "seat"]) == 0
     assert read_wav(out)[0].shape == data["seat"][0].shape
-    # Without --all, two walks are too many for one walkthrough; --levels is for one.
+    # Without --all, two trajectories are too many for one walkthrough; --levels is for one.
     assert main(args) == 1
     assert (
-        "more than one walks (w, s): pick one, or play them together (--all"
+        "more than one listener or source moves (w, s): pick one, or play them together (--all"
         in capsys.readouterr().err
     )
     assert main([*args, "--walker", "v"]) == 1
-    assert "the walk of 'v' is off (enabled: false)" in capsys.readouterr().err
+    assert "the trajectory of 'v' is off (enabled: false)" in capsys.readouterr().err
     assert main([*args, "--all", "--levels", str(tmp_path / "levels.csv")]) == 1
-    assert "--levels is for one walk" in capsys.readouterr().err
+    assert "--levels is for one mover (--mover NAME)" in capsys.readouterr().err
     assert main([*args, "--all", "--listener", "nobody"]) == 1
     assert "no listener named 'nobody' in use; the scene has w, seat, v" in capsys.readouterr().err
     assert main(["inspect", str(path)]) == 0
     text = capsys.readouterr().out
     assert "moves through 2 keyframe(s) 2.0 m to (3.00, 1.00, 1.50) in 1.5 s" in text
-    assert "walks 3.0 m to (6.00, 1.00, 1.20) in 2.5 s (the walk is off: it stands still)" in text
+    off = "moves 3.0 m to (6.00, 1.00, 1.20) in 2.5 s (the trajectory is off: it stands still)"
+    assert off in text
 
 
 def test_a_walk_takes_the_threads_of_the_scene(
@@ -1063,7 +1182,7 @@ def test_a_walk_takes_the_threads_of_the_scene(
         listeners=[_walker({"to": [[3.0, 1.0, 1.5]]})],
     )
     with pytest.raises(ValueError, match="stopped"):
-        simulate_walk(Room.from_scene(scene))
+        simulate_trajectory(Room.from_scene(scene))
     path = tmp_path / "scene.yaml"
     scene.to_yaml(path)
     dry = tmp_path / "dry.wav"

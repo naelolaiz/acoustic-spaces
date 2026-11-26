@@ -7,7 +7,7 @@
 # hour at 160 km/h, its sound power per metre and its directivity round the track Schall
 # 03's (Germany's method for the noise of railways, 2014), all of it at the rail top. A
 # train runs past at 160 km/h, its pitch falling as it goes by (Doppler): three sources
-# along one walk, at the rail top, on the roof and at the pantograph, Schall 03's
+# along one trajectory, at the rail top, on the roof and at the pantograph, Schall 03's
 # heights; each plays the train's points at that height one behind the other (its
 # bogies, its cars' roofs, its pantograph), so the train goes by as long as it is. They
 # are left out of simulations until ticked, as is the train's horn at its front, and
@@ -71,7 +71,7 @@ sources:
     position: [-150, 0, 0.2]
     level_db: [111.2, 108.2, 110.2, 111.9, 114.7, 113.8, 108.8, 93.2]
     directivity: {file: train.csv}
-    walk:
+    trajectory:
       to: [[150, 0, 0.2]]
       speed_m_s: 44.44
       doppler: true
@@ -81,7 +81,7 @@ sources:
     position: [-150, 0, 4.2]
     level_db: [112.1, 110.2, 114.9, 112.0, 109.0, 106.5, 101.9, 95.8]
     directivity: {file: train.csv}
-    walk:
+    trajectory:
       to: [[150, 0, 4.2]]
       speed_m_s: 44.44
       doppler: true
@@ -91,7 +91,7 @@ sources:
     position: [-150, 0, 5.2]
     level_db: [101.7, 100.6, 101.1, 99.7, 99.5, 100.3, 95.5, 89.6]
     directivity: {file: train.csv}
-    walk:
+    trajectory:
       to: [[150, 0, 5.2]]
       speed_m_s: 44.44
       doppler: true
@@ -106,7 +106,7 @@ sources:
     position: [-150, 0, 2.2]
     level_db: [86.8, 86.9, 123.6, 134.8, 130.6, 128.6, 126.2, 125.3]
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[150, 0, 2.2]]
       speed_m_s: 44.44
       doppler: true

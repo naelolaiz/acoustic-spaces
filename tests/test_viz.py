@@ -304,15 +304,15 @@ def test_walk_animation(tmp_path: Path) -> None:
     from PIL import Image
 
     from acoustic_spaces.viz import animate_walk
-    from acoustic_spaces.walkthrough import WalkPoints, WalkResponses
+    from acoustic_spaces.walkthrough import TrajectoryPoints, TrajectoryResponses
 
     room = Room.from_yaml(SHOEBOX)
-    points = WalkPoints(
+    points = TrajectoryPoints(
         np.array([0.0, 0.5, 1.0]),
         np.array([[1.0, 1, 1.6], [2, 1, 1.6], [3, 1, 1.6]]),
         np.array([0.0, 90.0, 180.0]),  # an arrow shows the way it faces
     )
-    walk = WalkResponses("visitor", "listeners", points, ("a", "b", "c"), None)
+    walk = TrajectoryResponses("visitor", "listeners", points, ("a", "b", "c"), None)
     out = tmp_path / "walk.gif"
     animate_walk(room, walk, out, fps=2, window_size=(320, 200))
     with Image.open(out) as gif:
@@ -322,10 +322,12 @@ def test_walk_animation(tmp_path: Path) -> None:
 
     from acoustic_spaces.audio import write_wav
     from acoustic_spaces.cli import main
-    from acoustic_spaces.scene import Walk
+    from acoustic_spaces.scene import Trajectory
 
     seat = room.scene.listeners[0]
-    walking = seat.model_copy(update={"walk": Walk(to=[(6.0, 4.0, 1.2)], speed_m_s=1.0)})
+    walking = seat.model_copy(
+        update={"trajectory": Trajectory(to=[(6.0, 4.0, 1.2)], speed_m_s=1.0)}
+    )
     room.scene.model_copy(update={"listeners": [walking]}).to_yaml(tmp_path / "scene.yaml")
     write_wav(tmp_path / "dry.wav", np.zeros((800, 1)), 8000)
     args = ["walkthrough", str(tmp_path / "scene.yaml"), f"talker={tmp_path / 'dry.wav'}"]
@@ -340,7 +342,7 @@ def test_movement_animation(tmp_path: Path) -> None:
     the still sources and listeners where they stand, as long as the longest walk."""
     from PIL import Image
 
-    from acoustic_spaces.scene import Keyframe, Walk
+    from acoustic_spaces.scene import Keyframe, Trajectory
     from acoustic_spaces.viz import animate_movement
     from acoustic_spaces.walkthrough import Movement
 
@@ -350,7 +352,7 @@ def test_movement_animation(tmp_path: Path) -> None:
         Keyframe(time_s=0.5, position=(2.0, 1.0, 1.6)),
         Keyframe(time_s=1.0, position=(2.0, 1.0, 1.6), orientation={"yaw": 90.0}),
     ]
-    moving = seat.model_copy(update={"walk": Walk(keyframes=frames)})
+    moving = seat.model_copy(update={"trajectory": Trajectory(keyframes=frames)})
     still = seat.model_copy(update={"name": "still", "position": (3.0, 3.0, 1.2)})
     room = Room.from_scene(room.scene.model_copy(update={"listeners": [moving, still]}), reuse=room)
     movement = Movement(room, np.array([0.0, 0.5, 1.0]), None, {})
@@ -368,9 +370,9 @@ def test_walk_video_carries_the_sound(tmp_path: Path, capsys, monkeypatch) -> No
 
     from acoustic_spaces.audio import write_wav
     from acoustic_spaces.cli import main
-    from acoustic_spaces.scene import Walk
+    from acoustic_spaces.scene import Trajectory
     from acoustic_spaces.viz import animate_walk, check_video
-    from acoustic_spaces.walkthrough import WalkPoints, WalkResponses
+    from acoustic_spaces.walkthrough import TrajectoryPoints, TrajectoryResponses
 
     real = importlib.util.find_spec
     gone = {"imageio_ffmpeg"}
@@ -382,7 +384,9 @@ def test_walk_video_carries_the_sound(tmp_path: Path, capsys, monkeypatch) -> No
 
     room = Room.from_yaml(SHOEBOX)
     seat = room.scene.listeners[0]
-    walking = seat.model_copy(update={"walk": Walk(to=[(6.0, 4.0, 1.2)], speed_m_s=1.0)})
+    walking = seat.model_copy(
+        update={"trajectory": Trajectory(to=[(6.0, 4.0, 1.2)], speed_m_s=1.0)}
+    )
     room.scene.model_copy(update={"listeners": [walking]}).to_yaml(tmp_path / "scene.yaml")
     write_wav(tmp_path / "dry.wav", np.zeros((16000, 1)), 8000)
     args = ["walkthrough", str(tmp_path / "scene.yaml"), f"talker={tmp_path / 'dry.wav'}"]
@@ -396,8 +400,8 @@ def test_walk_video_carries_the_sound(tmp_path: Path, capsys, monkeypatch) -> No
     )
     assert "Video: h264" in probe.stderr and "Audio: aac" in probe.stderr
 
-    points = WalkPoints(np.array([0.0, 1.0]), np.array([[1.0, 1, 1.6], [2, 1, 1.6]]), None)
-    walk = WalkResponses("visitor", "listeners", points, ("a", "b"), None)
+    points = TrajectoryPoints(np.array([0.0, 1.0]), np.array([[1.0, 1, 1.6], [2, 1, 1.6]]), None)
+    walk = TrajectoryResponses("visitor", "listeners", points, ("a", "b"), None)
     write_wav(tmp_path / "three.wav", np.zeros((800, 3)), 8000)
     with pytest.raises(ValueError, match="one or two channels, not 3"):
         animate_walk(room, walk, tmp_path / "three.mp4", sound=tmp_path / "three.wav")

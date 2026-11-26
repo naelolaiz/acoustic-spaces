@@ -184,10 +184,13 @@ def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
     listeners = {lis.name: lis for lis in scene.listeners}
     assert set(listeners) == {"in sight", "round the corner", "visitor", "standing"}
     assert not listeners["standing"].in_use  # walk_demo.py's, left out of simulations
-    assert listeners["in sight"].walk is None and listeners["round the corner"].walk is None
+    assert (
+        listeners["in sight"].trajectory is None
+        and listeners["round the corner"].trajectory is None
+    )
     visitor = listeners["visitor"]
-    assert visitor.position == (17.0, 4.0, 1.6) and visitor.walk.enabled
-    assert visitor.walk.to == [(4.0, 4.0, 1.6), (4.0, 16.0, 1.6)]
+    assert visitor.position == (17.0, 4.0, 1.6) and visitor.trajectory.enabled
+    assert visitor.trajectory.to == [(4.0, 4.0, 1.6), (4.0, 16.0, 1.6)]
     assert [item.name for _kind, item in movers(scene)] == ["visitor"]
     assert movers(with_moving(scene, [])) == []
     assert scene.outputs[0].format == "binaural"  # what walkthrough plays by default
@@ -1743,13 +1746,15 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     assert demo.moving(args) == ["visitor"] and demo.DEMO.check(args) is None
     assert demo.scene_done(args)
     data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
-    next(lis for lis in data["listeners"] if lis["name"] == "visitor")["walk"]["enabled"] = False
+    next(lis for lis in data["listeners"] if lis["name"] == "visitor")["trajectory"]["enabled"] = (
+        False
+    )
     off = tmp_path / "off.yaml"
     off.write_text(yaml.safe_dump(data), encoding="utf-8")
     os.utime(off, (args.scene.stat().st_mtime + 10,) * 2)
     stood = argparse.Namespace(**vars(args) | {"source": off})
     assert demo.moving(stood) == [] and not demo.scene_done(stood)
-    assert "the visitor's walk is off in off.yaml" in demo.DEMO.check(stood)
+    assert "the visitor's trajectory is off in off.yaml" in demo.DEMO.check(stood)
     guide = next(s for s in room.scene.sources if s.name == "guide")
     # The sound power is what puts the voice at its level 1 m in front of the talker.
     at_1m_a = a_weighted(guide.power_db("octave") - 20.0 * np.log10(1.0) - 11.0 + 5.0)
@@ -1895,10 +1900,12 @@ def test_walk_demo_listeners_order_the_parts(tmp_path: Path, capsys) -> None:
     ]
     # With the visitor's walk off, a run of the turn alone needs no walk and moves nobody.
     data = yaml.safe_load(source.read_text(encoding="utf-8"))
-    next(lis for lis in data["listeners"] if lis["name"] == "visitor")["walk"]["enabled"] = False
+    next(lis for lis in data["listeners"] if lis["name"] == "visitor")["trajectory"]["enabled"] = (
+        False
+    )
     off = tmp_path / "off.yaml"
     off.write_text(yaml.safe_dump(data), encoding="utf-8")
-    assert "walk is off" in demo.DEMO.check(run(source=off))
+    assert "trajectory is off" in demo.DEMO.check(run(source=off))
     assert demo.DEMO.check(run(source=off, listeners="standing")) is None
     assert demo.moving(run(source=off, listeners="standing")) == []
     assert demo.moving(standing) == [] and demo.moving(alone) == ["visitor"]
@@ -2196,13 +2203,13 @@ RECORDING_EXAMPLES = {
     "lakeside_concert": "spicy_funk_cake",
     "open_air_stage": "spicy_funk_cake",
     "studio": "spicy_funk_cake",
-    "town_hall_pa": "speech_male",
-    "lecture_hall": "speech_male",
-    "leaky_classroom": "speech_male",
-    "shoebox": "speech_male",
-    "bim_office": "speech_male",
-    "material_libraries": "speech_male",
-    "gallery": "speech_male",
+    "town_hall_pa": "ace_m4",
+    "lecture_hall": "ace_m4",
+    "leaky_classroom": "ace_m4",
+    "shoebox": "ace_m4",
+    "bim_office": "ace_m4",
+    "material_libraries": "ace_m4",
+    "gallery": "ace_m4",
 }
 
 

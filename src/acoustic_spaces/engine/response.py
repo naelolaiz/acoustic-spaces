@@ -37,7 +37,7 @@ LATE_ARRAYS = ("late", "late_directional", "late_moments", "late_batches")
 @dataclass(frozen=True)
 class Deferred:
     """A late array that a :class:`Response` makes when it is read instead of holding
-    it: what ``make()`` gives. A walk's places between those traced for their
+    it: what ``make()`` gives. A trajectory's places between those traced for their
     late part have theirs so, each mixed from the traced ones on either side
     (``simulate(late_from=...)``), which are held once however many places read them."""
 

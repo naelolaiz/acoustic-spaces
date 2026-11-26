@@ -29,7 +29,7 @@ sources:
     position: [-450, 0, 150]
     level_db: [130.7, 130.5, 131.4, 130.4, 127.0, 125.2, 122.0, 120.2]
     directivity: {file: helicopter.csv}
-    walk:
+    trajectory:
       to: [[450, 0, 150]]
       speed_m_s: 63
       doppler: true

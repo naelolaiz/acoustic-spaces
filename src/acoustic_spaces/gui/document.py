@@ -563,35 +563,35 @@ class Document(QObject):
         self.edit(text.format(count=count), change)
 
     def set_walk_enabled(self, kind: str, index: int, enabled: bool) -> None:
-        """Have the source or listener at ``index`` go along its walk in a movement
-        (``walk.enabled``), or keep the walk but leave it standing where it starts."""
+        """Have the source or listener at ``index`` go along its trajectory in a movement
+        (``trajectory.enabled``), or keep the trajectory but leave it standing where it starts."""
         item = getattr(self.scene, kind)[index]
-        if item.walk is None:
+        if item.trajectory is None:
             raise EditError(
-                _("{name} has no walk yet: add a keyframe first").format(name=item.name)
+                _("{name} has no trajectory yet: add a keyframe first").format(name=item.name)
             )
-        if item.walk.enabled == enabled:
+        if item.trajectory.enabled == enabled:
             return
 
         def change(data: dict) -> None:
-            data[kind][index]["walk"]["enabled"] = enabled
+            data[kind][index]["trajectory"]["enabled"] = enabled
 
-        self.edit(_("turn the walk on") if enabled else _("turn the walk off"), change)
+        self.edit(_("turn the trajectory on") if enabled else _("turn the trajectory off"), change)
 
     def set_walk_doppler(self, kind: str, index: int, doppler: bool) -> None:
-        """Have the walk of the source or listener at ``index`` take the early sound through
-        delays that change as it goes, so its pitch shifts (``walk.doppler``), or crossfade
+        """Have the trajectory of the source or listener at ``index`` take the early sound through
+        delays that change as it goes, so its pitch shifts (``trajectory.doppler``), or crossfade
         from place to place."""
         item = getattr(self.scene, kind)[index]
-        if item.walk is None:
+        if item.trajectory is None:
             raise EditError(
-                _("{name} has no walk yet: add a keyframe first").format(name=item.name)
+                _("{name} has no trajectory yet: add a keyframe first").format(name=item.name)
             )
-        if item.walk.doppler == doppler:
+        if item.trajectory.doppler == doppler:
             return
 
         def change(data: dict) -> None:
-            data[kind][index]["walk"]["doppler"] = doppler
+            data[kind][index]["trajectory"]["doppler"] = doppler
 
         self.edit(_("turn Doppler on") if doppler else _("turn Doppler off"), change)
 

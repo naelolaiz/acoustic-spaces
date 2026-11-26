@@ -158,12 +158,18 @@ class MovementJob(SimulationJob):
     def compute(self) -> dict:
         from acoustic_spaces.audio import read_wav
         from acoustic_spaces.walkthrough import (
+            head_turners,
             render_movement,
             save_movement,
             simulate_movement,
         )
 
-        movement = simulate_movement(self.room, threads=self.threads, progress=self._say)
+        movement = simulate_movement(
+            self.room,
+            threads=self.threads,
+            progress=self._say,
+            head_tracked=head_turners(self.room.scene, self.fmt),
+        )
         self._say("rendering the movement")
         signals = {name: read_wav(path) for name, path in self.signals.items()}
         rendered = render_movement(movement, signals, self.fmt)

@@ -191,7 +191,7 @@ def test_the_street_garden_has_no_step() -> None:
     weights = 10 ** ((np.array(car.level_db) + [-26.2, -16.1, -8.6, -3.2, 0, 1.2, 1, -1.1]) / 10)
     levels = []
     for x in (-42.5, -42.0):
-        moved = car.model_copy(update={"position": (x, -2.0, 0.05), "walk": None})
+        moved = car.model_copy(update={"position": (x, -2.0, 0.05), "trajectory": None})
         moved = moved.model_copy(update={"enabled": True})
         paths = early_paths(scene.model_copy(update={"sources": [moved]}), "car", "garden")
         levels.append(10 * np.log10(np.sum(total_energy(paths) * weights)))
@@ -213,7 +213,7 @@ def test_the_street_garden_goes_on_where_a_second_event_stops_a_path(x: float) -
     car = next(s for s in scene.sources if s.name == "car")
     levels = []
     for at in (x - 0.01, x, x + 0.01):
-        moved = car.model_copy(update={"position": (at, -2.0, 0.05), "walk": None})
+        moved = car.model_copy(update={"position": (at, -2.0, 0.05), "trajectory": None})
         moved = moved.model_copy(update={"enabled": True})
         paths = early_paths(scene.model_copy(update={"sources": [moved]}), "car", "garden")
         levels.append(10 * np.log10(total_energy(paths)))
@@ -247,7 +247,7 @@ def test_the_street_does_not_step_where_the_barrier_s_top_fades(
     car = next(s for s in scene.sources if s.name == "car")
     levels = []
     for at in (x - 0.01, x):
-        moved = car.model_copy(update={"position": (at, -2.0, 0.05), "walk": None})
+        moved = car.model_copy(update={"position": (at, -2.0, 0.05), "trajectory": None})
         moved = moved.model_copy(update={"enabled": True})
         paths = early_paths(scene.model_copy(update={"sources": [moved]}), "car", listener)
         levels.append(10 * np.log10(total_energy(paths)))
@@ -779,7 +779,9 @@ def test_no_path_reflects_off_a_roof_s_plane_from_below(x: float) -> None:
     horn = next(s for s in scene.sources if s.name == "train_horn")
     levels = []
     for at in (x - 0.01, x + 0.01):
-        moved = horn.model_copy(update={"position": (at, 0.0, 2.2), "walk": None, "enabled": True})
+        moved = horn.model_copy(
+            update={"position": (at, 0.0, 2.2), "trajectory": None, "enabled": True}
+        )
         paths = early_paths(
             scene.model_copy(update={"sources": [moved]}), "train_horn", "behind_barrier_25m"
         )

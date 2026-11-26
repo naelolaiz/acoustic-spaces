@@ -5,11 +5,11 @@ it passes (Doppler); and a video that follows.
 
 The jet is the example's source `departure` or `arrival` (--vehicle picks it; the
 arrival is left out of the example's own simulations until ticked), each a point whose
-walk gives its ground track. The
+trajectory gives its ground track. The
 demo flies it along that track as ECAC Doc 29 flies JETW (its Appendix B, at Volume 3's
 default weights, in the scene's air): the departure by the ICAO-A noise abatement
 procedure from its start of roll, the arrival down a 3° approach to touch down where its
-walk first comes down to the runway, then its reverse thrust and roll-out. The heights,
+trajectory first comes down to the runway, then its reverse thrust and roll-out. The heights,
 speeds and thrust along the way are Doc 29's, and so is how long the flight takes (the
 example's departure 95 s, its arrival 93 s), so there is no --speed. Its sound power
 comes from its NPD curves (its maximum level 1000 ft under it at the flight's highest

@@ -30,7 +30,7 @@ assignments:
 # below says, downloaded the first time: the ACE corpus's talker M4 (CC BY 4.0).
 # The teacher speaks at normal effort, 60 dB(A) 1 m in front (IEC 60268-16), which
 # with a man's speech spectrum and a cardioid pattern is 73.3 dB of sound power.
-recording: speech_male
+recording: ace_m4
 sources:
   - name: teacher
     level_db: 73.3

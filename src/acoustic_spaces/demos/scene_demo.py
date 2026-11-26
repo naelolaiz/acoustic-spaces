@@ -27,15 +27,15 @@ level there, how long the sound takes to arrive and T30 at mid frequencies, and 
 the sound was made. The simulation keeps every listener in use, so another choice of
 ``--listeners`` needs no new one.
 
-Sources and listeners whose walk is on move along it while the piece plays, all on one
+Sources and listeners whose trajectory is on move along it while the piece plays, all on one
 clock from its start (:func:`acoustic_spaces.walkthrough.simulate_movement`): every
-listener is heard as it walks or as the sources walk past it, and the video moves them
-as they go, its captions giving the level at each moment. ``--moving`` picks the walks
+listener is heard as it moves or as the sources move past it, and the video moves them
+as they go, its captions giving the level at each moment. ``--moving`` picks the trajectories
 of a run without changing the scene: ``--moving visitor,guide`` moves those two and
-leaves every other walker standing where it starts, ``--moving none`` keeps them all
+leaves every other mover standing where it starts, ``--moving none`` keeps them all
 still, so one scene serves both; without it, a source a given ``--sources`` leaves out
-stands where it starts, as it plays nothing (without ``--sources`` a silent source walks
-as the scene has it). A walk with Doppler (a car going past) moves
+stands where it starts, as it plays nothing (without ``--sources`` a silent source moves
+as the scene has it). A trajectory with Doppler (a car going past) moves
 alone: every listener hears each early path through its own delay as it changes, so the
 pitch shifts as it passes, the late sound crossfaded from place to place
 (:func:`acoustic_spaces.walkthrough.render_movement`), all from one simulation.
@@ -45,12 +45,12 @@ pitch shifts as it passes, the late sound crossfaded from place to place
     acoustic-spaces demo scene.yaml feeds        # one step
     acoustic-spaces demo scene.yaml --hrtf me.sofa --seconds 15 --listeners front,back
     acoustic-spaces demo scene.yaml --input talker=other_take.wav
-    acoustic-spaces demo scene.yaml --moving none   # every walker standing where it starts
+    acoustic-spaces demo scene.yaml --moving none   # every mover standing where it starts
     acoustic-spaces demo scene.yaml --sources PA     # the sources of the group PA alone
     acoustic-spaces demo scene.yaml --sources PA,band --sources-play in-turn
 
 The editor runs it from **Simulation > Run demo…** as *This scene*, with a tick for each
-walk in its Movement table, for each listener in its Listeners list and for each source
+trajectory in its Movement table, for each listener in its Listeners list and for each source
 in its Sources list. The video needs ffmpeg on the PATH and Pillow (the ``viz`` extra).
 The five demos of the examples are scripts of their own, with their recordings; this one
 takes any scene.
@@ -136,6 +136,15 @@ CROSSFADE_S = 1.0
 FADE_OUT_S = 3.0
 #: The folder of the mixes when something moves (the still ones go to ``seats``).
 MOVING = "moving"
+#: How long a stop lasts without ``--seconds`` on a shared timeline, or from a
+#: listener's start where nothing moves (s).
+SECONDS = 20.0
+#: The silence between two stops that each start from the clock's start (s).
+GAP_S = 1.0
+#: The run's timelines (``--timeline``): one clock the tour moves along from listener
+#: to listener, or each listener heard from the clock's start; ``auto`` (the default),
+#: the second when something moves and the first otherwise.
+TIMELINES = ("auto", "shared", "per-listener")
 
 
 def work_of(args: argparse.Namespace) -> Path:
@@ -306,10 +315,10 @@ def completed(args: argparse.Namespace) -> argparse.Namespace:
 
 
 def walking(args: argparse.Namespace, scene: Scene) -> list[str] | None:
-    """Who walks in this run, as :func:`~acoustic_spaces.walkthrough.with_moving` takes
+    """Who moves in this run, as :func:`~acoustic_spaces.walkthrough.with_moving` takes
     it: those ``--moving`` names; without it, when ``--sources`` is given and leaves out
-    a source whose walk is on, every walker of the scene but that one, which stands where
-    it starts, as it plays nothing; None: the scene's own walkers (without ``--sources``
+    a source whose trajectory is on, every mover of the scene but that one, which stands where
+    it starts, as it plays nothing; None: the scene's own movers (without ``--sources``
     too, a source the scene keeps silent walking as the scene has it)."""
     from acoustic_spaces.walkthrough import movers
 
@@ -317,25 +326,64 @@ def walking(args: argparse.Namespace, scene: Scene) -> list[str] | None:
     chosen = getattr(args, "playing", None)
     if names is not None or chosen is None or given_names(getattr(args, "sources", None)) is None:
         return names
-    walkers = movers(scene)
-    kept = [item.name for kind, item in walkers if kind == "listeners" or item.name in chosen]
-    return None if len(kept) == len(walkers) else kept
+    movers = movers(scene)
+    kept = [item.name for kind, item in movers if kind == "listeners" or item.name in chosen]
+    return None if len(kept) == len(movers) else kept
 
 
 def moving_scene(args: argparse.Namespace) -> Scene:
-    """The scene as this run plays it: with ``--moving``, those walk and every other
-    walker stands where it starts (:func:`~acoustic_spaces.walkthrough.with_moving`); a
-    source a given ``--sources`` leaves out stands too (:func:`walking`)."""
+    """The scene as this run plays it: with ``--moving``, those move and every other
+    mover stands where it starts (:func:`~acoustic_spaces.walkthrough.with_moving`); a
+    source a given ``--sources`` leaves out stands too (:func:`walking`); every
+    trajectory that moves at ``--speed`` and simulated every ``--step``, when given
+    (:func:`run_trajectories`)."""
     from acoustic_spaces.walkthrough import with_moving
 
     found = scene_of(args)
-    return with_moving(found, walking(args, found))
+    return run_trajectories(args, with_moving(found, walking(args, found)))
+
+
+def run_trajectories(args: argparse.Namespace, scene: Scene) -> Scene:
+    """``scene`` with each trajectory that moves at the run's ``--speed`` (km/h; along
+    keyframes, through their places at that speed:
+    :func:`~acoustic_spaces.walkthrough.at_speed`) and its places ``--step`` apart (m),
+    where the run gives them; as it is otherwise."""
+    from acoustic_spaces.walkthrough import at_speed, movers
+
+    speed = getattr(args, "speed", None)
+    step = getattr(args, "step_m", None)
+    if speed is None and step is None:
+        return scene
+    moving = {(kind, item.name) for kind, item in movers(scene)}
+    update = {}
+    for kind in ("listeners", "sources"):
+        items = []
+        for item in getattr(scene, kind):
+            if (kind, item.name) in moving:
+                if speed is not None:
+                    item = at_speed(item, float(speed) / 3.6)
+                if step is not None:
+                    trajectory = item.trajectory.model_copy(update={"step_m": float(step)})
+                    item = item.model_copy(update={"trajectory": trajectory})
+            items.append(item)
+        update[kind] = items
+    return scene.model_copy(update=update)
+
+
+def timeline_of(args: argparse.Namespace, moving: list[str]) -> str:
+    """The run's timeline, ``shared`` or ``per-listener``: as ``--timeline`` says, or with
+    ``auto`` (the default) each listener from the clock's start when something moves
+    (``moving``), and one shared clock otherwise."""
+    chosen = getattr(args, "timeline", None) or "auto"
+    if chosen != "auto":
+        return str(chosen)
+    return "per-listener" if moving else "shared"
 
 
 def moving_of(args: argparse.Namespace) -> list[str]:
     """Who moves in this run (:func:`walking`): the sources and listeners in use whose
-    walks are on, by name, listeners first; none when the scene cannot be read or
-    ``--moving`` names what does not walk (:func:`problems` says why)."""
+    trajectories are on, by name, listeners first; none when the scene cannot be read or
+    ``--moving`` names what does not move (:func:`problems` says why)."""
     from acoustic_spaces.walkthrough import movers, with_moving
 
     scene = _current(getattr(args, "scene", None))
@@ -413,11 +461,11 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
         moving = with_moving(scene, walking(resolved, scene))
     except ValueError as exc:
         return f"--moving: {exc}"
-    walkers = [item for _kind, item in movers(moving)]
-    for item in walkers:
-        if item.walk.doppler and len(walkers) > 1:
+    movers = [item for _kind, item in movers(moving)]
+    for item in movers:
+        if item.trajectory.doppler and len(movers) > 1:
             return (
-                f"{item.name} walks with Doppler, which plays alone: leave the others "
+                f"{item.name} moves with Doppler, which plays alone: leave the others "
                 f"standing (--moving {item.name}), or turn its Doppler off"
             )
     return None
@@ -614,7 +662,7 @@ def format_of(args: argparse.Namespace, scene: Scene):
 def moving_done(
     args: argparse.Namespace, folder: Path, moving: list[str], names: list[str]
 ) -> bool:
-    """Whether the moving mixes in ``folder`` are there for this run: the same walks,
+    """Whether the moving mixes in ``folder`` are there for this run: the same trajectories,
     listeners and format, newer than the scene and the feeds."""
     path = folder / pipeline.SEATS
     if getattr(args, "again", False) or not path.exists():
@@ -624,9 +672,20 @@ def moving_done(
         seats.get("moving") == moving
         and seats.get("label") == pipeline.output_label(args)
         and sorted(seats.get("seats", {})) == sorted(names)
+        and seats.get("trajectories") == trajectories_of(args)
     )
     made = [Path(args.scene), feeds_folder(args) / FEEDS]
     return same and all(path.stat().st_mtime >= p.stat().st_mtime for p in made if p.exists())
+
+
+def trajectories_of(args: argparse.Namespace) -> dict:
+    """What the run changes of the trajectories, as seats.json keeps it: the speed (km/h)
+    and the step (m) it gives them, None where it keeps theirs."""
+    speed, step = getattr(args, "speed", None), getattr(args, "step_m", None)
+    return {
+        "speed_kmh": None if speed is None else float(speed),
+        "step_m": None if step is None else float(step),
+    }
 
 
 def levels_along(movement, source, listener: str) -> list[float | None]:
@@ -647,17 +706,21 @@ def levels_along(movement, source, listener: str) -> list[float | None]:
 
 def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None = None) -> None:
     """Every listener's mix with ``moving`` walking, all on one clock: the scene
-    simulated with every mover at each moment of its walk
+    simulated with every mover at each moment of its trajectory
     (:func:`~acoustic_spaces.walkthrough.simulate_movement`), the feed of each source
     that plays in the run (``--sources``) played through it at its sound power, one gain
-    for all (the loudest peak at -1 dBFS), into ``moving/`` with seats.json; a walk with
+    for all (the loudest peak at -1 dBFS), into ``moving/`` with seats.json; a trajectory with
     Doppler, which moves alone, with each early path through its changing delay. That
     also keeps the moments and, at each, the A-weighted level of each source that plays
     at every listener, for the pictures; the arrival time (``arrival_s``) is left out
     where something moves, as it changes along the way, and the tour shifts no mix by it
     (``lag_s`` 0), so that the stops keep one clock."""
     from acoustic_spaces.room import Room
-    from acoustic_spaces.walkthrough import render_movement, simulate_movement
+    from acoustic_spaces.walkthrough import (
+        head_turners,
+        render_movement,
+        simulate_movement,
+    )
 
     table = feeds_table(args, demo)
     names = listeners_of(args, responses_of(args, demo))
@@ -677,7 +740,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     sounding = [s for s in scene.sources if s.name in feeds]
     fmt = format_of(args, scene)
     print(f"simulating the movement of {', '.join(moving)}, on one clock")
-    movement = simulate_movement(room, progress=print)
+    movement = simulate_movement(room, progress=print, head_tracked=head_turners(scene, fmt))
     with_doppler = ", each early path through its changing delay" if movement.doppler else ""
     print(f"mixing {len(names)} listeners through {len(movement.times)} moments{with_doppler}")
     mixes = render_movement(movement, feeds, fmt, sample_rate=rate)
@@ -695,7 +758,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
         write(folder / file, x, rate)
         moves = sources_move or name in moving
         # Where nothing moves, the sound arrives as in the still simulation. The tour
-        # shifts none of the mixes, as they keep the walks' one clock.
+        # shifts none of the mixes, as they keep the trajectories' one clock.
         arrival = None if moves else pipeline.arrival_s(results_of(args), entries, name, weights)
         info[name] = {
             "listener": name,
@@ -717,6 +780,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
         "label": pipeline.output_label(args),
         "gain": gain,
         "moving": moving,
+        "trajectories": trajectories_of(args),
         "seats": info,
         "movement": {"times": [float(t) for t in times], "levels_a_db": levels},
     }
@@ -739,29 +803,74 @@ def length_of(table: dict, names: list[str]) -> float:
 def tour_of(
     args: argparse.Namespace, seats: dict, length_s: float, demo: Demo | None = None
 ) -> list[pipeline.TourStop]:
-    """The stops: each listener for ``--seconds`` while the piece runs on; a piece too
-    short for that shares its length out."""
+    """The stops, on the run's timeline (:func:`timeline_of`): :func:`shared_stops` or
+    :func:`stops_from_start`, for ``--seconds`` or as long as the timeline has them."""
     entries = responses_of(args, demo)
     names = [name for name in listeners_of(args, entries) if name in seats["seats"]]
     if not names:
         run = (demo or DEMO).command("render", args)
         raise SystemExit(f"error: no mix to tour; run first: {run}")
-    each = min(float(args.seconds), length_s / len(names))
-    if each < float(args.seconds) - 1e-6:
-        print(f"the piece lasts {length_s:.0f} s: each listener is heard {each:.1f} s")
     gains = pipeline.gains_of(seats, names)
+    given = getattr(args, "seconds", None)
+    seconds = None if given is None else float(given)
+    if timeline_of(args, seats.get("moving") or []) == "shared":
+        return shared_stops(names, gains, seconds, length_s)
+    return stops_from_start(names, seats, gains, seconds)
+
+
+def shared_stops(
+    names: list[str], gains: dict[str, float], seconds: float | None, length_s: float
+) -> list[pipeline.TourStop]:
+    """The stops of a shared timeline: each listener of ``names`` in turn for
+    ``seconds`` (SECONDS when None) while the piece runs on, crossfaded into the next; a
+    piece too short for that (``length_s``) shares its length out."""
+    seconds = SECONDS if seconds is None else seconds
+    each = min(seconds, length_s / len(names))
+    if each < seconds - 1e-6:
+        print(f"the piece lasts {length_s:.0f} s: each listener is heard {each:.1f} s")
     return [
         pipeline.TourStop(name, k * each, k * each, (k + 1) * each, gains[name])
         for k, name in enumerate(names)
     ]
 
 
+def stops_from_start(
+    names: list[str], seats: dict, gains: dict[str, float], seconds: float | None
+) -> list[pipeline.TourStop]:
+    """The stops of a timeline from each listener's start: each listener of ``names``
+    from the clock's start, for ``seconds`` or, None, until every mover has arrived (the
+    last moment of ``seats``' movement) and FADE_OUT_S more, SECONDS where nothing moves;
+    each as long as its mix at most, faded out over its last FADE_OUT_S (half of it at
+    most) and GAP_S before the next."""
+    if seconds is None:
+        movement = seats.get("movement")
+        moving = seats.get("moving") and movement
+        seconds = float(movement["times"][-1]) + FADE_OUT_S if moving else SECONDS
+    stops, at = [], 0.0
+    for name in names:
+        length = min(seconds, float(seats["seats"][name]["length_s"]))
+        stops.append(
+            pipeline.TourStop(
+                name,
+                at,
+                0.0,
+                length,
+                gains[name],
+                joined_before=False,
+                joined_after=False,
+                fade_s=min(FADE_OUT_S, length / 2),
+            )
+        )
+        at += length + GAP_S
+    return stops
+
+
 def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> None:
     """The run's audio (``<run>.wav``), one still per stop, the thumbnail, and the video
     (``<run>.mp4``): the stills with a scrolling spectrogram in the panel at their foot
     (ffmpeg, unless ``--no-mp4``). When
-    something moves, the video is a moving picture instead: the walkers go along their
-    walks as the piece plays, with a still of each stop. ``demo``, this one by default,
+    something moves, the video is a moving picture instead: the movers go along their
+    trajectories as the piece plays, with a still of each stop. ``demo``, this one by default,
     is the demo that runs it: its commands and its settings go in the messages and on
     the stills. ``indoors`` (a :class:`~acoustic_spaces.demos.indoors.StillHouses`),
     the mixes heard in a house at each listener: the stills give the levels there."""
@@ -776,7 +885,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
     seats = pipeline.seats_of(folder, demo.command("render", args), args)
     if seats.get("moving", []) != moving:
         raise SystemExit(
-            f"error: the mixes in {folder} are of other walks; run first: "
+            f"error: the mixes in {folder} are of other trajectories; run first: "
             f"{demo.command('render', args)}"
         )
     # The mixes heard where the stills say: outdoors, or in the houses --indoors asks.
@@ -844,9 +953,12 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
             shown=drawing.shown_at,
         )
         return
+    # Each still lasts until the next stop: through the silence after it, between stops
+    # heard from each listener's start.
+    ends = [stop.at for stop in stops[1:]] + [stops[-1].end]
     pipeline.video(
         run_folder(args),
-        [(stop.key, stop.length) for stop in stops],
+        [(stop.key, end - stop.at) for stop, end in zip(stops, ends, strict=True)],
         drawing.still,
         sound,
         out=product(args, ".mp4"),
@@ -909,10 +1021,24 @@ DEMO = Demo(
         ),
         Option(
             "seconds",
-            "how long each listener is heard (s); a piece too short for every listener "
-            "shares its length out",
-            20.0,
+            "how long each listener is heard (s): on a shared timeline 20 s by default, and "
+            "a piece too short for every listener shares its length out; from each "
+            "listener's start, by default until every mover has arrived and 3 s more",
+            None,
             "float",
+            steps=("video",),
+            unit="s",
+            unset="as the timeline has it",
+        ),
+        Option(
+            "timeline",
+            "shared: one clock, the tour going from listener to listener as the piece and "
+            "the movers go on; per-listener: each listener heard from the clock's start, "
+            "the whole of what moves; auto: per-listener when something moves, shared "
+            "otherwise",
+            "auto",
+            "choice",
+            choices=TIMELINES,
             steps=("video",),
         ),
         dataclasses.replace(
@@ -933,13 +1059,37 @@ DEMO = Demo(
         ),
         Option(
             "moving",
-            "the sources and listeners that move along their walks in this run, by name, "
-            "comma separated, every other walker standing where it starts; none keeps them "
-            "all still (default: those whose walk is on in the scene, but a source "
+            "the sources and listeners that move along their trajectories in this run, by name, "
+            "comma separated, every other mover standing where it starts; none keeps them "
+            "all still (default: those whose trajectory is on in the scene, but a source "
             "--sources leaves out, which stands)",
             None,
             "movers",
             steps=("render", "video"),
+        ),
+        Option(
+            "speed",
+            "the speed every trajectory that moves goes at in this run (km/h), along its "
+            "points, or through its keyframes' places in turn (default: as in the scene)",
+            None,
+            "float",
+            steps=("render", "video"),
+            unit="km/h",
+            unset="as in the scene",
+            moot=lambda args: None if moving_of(args) else "nothing moves",
+        ),
+        Option(
+            "step_m",
+            "how far apart along each trajectory that moves the sound is simulated in this "
+            "run (m): finer is smoother and slower (default: each trajectory's own step, "
+            "0.25 m unless it gives one)",
+            None,
+            "float",
+            flag="--step",
+            steps=("render", "video"),
+            unit="m",
+            unset="each trajectory's own",
+            moot=lambda args: None if moving_of(args) else "nothing moves",
         ),
         Option(
             "work",
@@ -969,7 +1119,7 @@ DEMO = Demo(
     stem_of=stem_of,
     plays=plays,
     moving=moving_of,
-    walks=moving_scene,
+    trajectories=moving_scene,
     listeners=lambda args: listeners_in(args.scene),
     sources=sources_of,
 )

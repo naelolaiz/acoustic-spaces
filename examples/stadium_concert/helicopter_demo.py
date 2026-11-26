@@ -127,7 +127,7 @@ def helicopter_of(data: dict) -> dict:
 def places_of(source: dict) -> np.ndarray:
     """(n, 3) where a source's walk goes: where it starts, then its points (or the places
     of its keyframes)."""
-    walk = source.get("walk") or {}
+    walk = source.get("trajectory") or {}
     keyframes = [k["position"] for k in walk.get("keyframes", []) if "position" in k]
     return np.array([source["position"], *walk.get("to", []), *keyframes], dtype=float)
 
@@ -143,7 +143,7 @@ def flight_of(helicopter: dict, height_m: float | None) -> dict:
         return [float(place[0]), float(place[1]), float(height_m)]
 
     flown["position"] = lifted(flown["position"])
-    walk = flown.get("walk") or {}
+    walk = flown.get("trajectory") or {}
     if "to" in walk:
         walk["to"] = [lifted(place) for place in walk["to"]]
     for key in walk.get("keyframes", []):

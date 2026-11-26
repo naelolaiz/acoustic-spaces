@@ -47,7 +47,7 @@ Each listener hears each of the train's points through every early path the scen
 traces (the reflection off the ground, the barrier's top and ends diffracted), each
 through its own delay as it changes, so each shifts in pitch as it passes; the late
 sound is crossfaded from place to place. The train's points appear one after the other
-where its walk starts and leave where it ends, each faded in and out over a second. The
+where its trajectory starts and leave where it ends, each faded in and out over a second. The
 captions give the level heard at each moment, the loudest (L_Amax) and the sound
 exposure level (SEL) of the pass, as simulated: every point's, each as far behind as it
 goes.

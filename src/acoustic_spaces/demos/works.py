@@ -279,7 +279,7 @@ def scene(args: argparse.Namespace) -> None:
     listeners = {item["name"]: item for item in data.get("listeners") or []}
     data["name"] = data["name"] + ", 2 m in front of the walls"
     data["listeners"] = [
-        {k: v for k, v in listeners[name].items() if k != "walk"}
+        {k: v for k, v in listeners[name].items() if k != "trajectory"}
         | {"name": indoors.front_name(name), "position": list(where[indoors.front_name(name)])}
         for name in points
     ]
@@ -491,8 +491,8 @@ def demo(script: Path, example: str = "street") -> Demo:
         sources=sources_of,
         # The works' scene keeps the street's listeners: read them before it is made.
         listeners=lambda args: listeners_in(args.source),
-        # Its render step plays what walks in the works' scene, as the scene demo does.
-        walks=scene_demo.moving_scene,
+        # Its render step plays what moves in the works' scene, as the scene demo does.
+        trajectories=scene_demo.moving_scene,
     )
     made.steps = [
         Step(

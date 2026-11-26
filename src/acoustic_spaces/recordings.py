@@ -24,6 +24,25 @@ FOLDER = "recordings"
 #: The ACE challenge corpus's anechoic speech (CC BY 4.0): one tar archive of 148 MB.
 ACE = "https://zenodo.org/api/records/6257551/files/ACE_Corpus_Speech.tbz2/content"
 ACE_DOI = "10.5281/zenodo.6257551"
+#: The ACE corpus's talkers (5 women, 9 men), each one's take 4, about a minute on how
+#: they get to work: its title, and the MB of the archive read before the take is out
+#: (the archive is read as it comes).
+ACE_TALKERS = {
+    "F1": (N_("A woman talking (ACE corpus, talker F1)"), 145),
+    "F2": (N_("A woman talking (ACE corpus, talker F2)"), 49),
+    "F3": (N_("A woman talking (ACE corpus, talker F3)"), 125),
+    "F4": (N_("A woman talking (ACE corpus, talker F4)"), 120),
+    "F5": (N_("A woman talking (ACE corpus, talker F5)"), 136),
+    "M1": (N_("A man talking (ACE corpus, talker M1)"), 79),
+    "M2": (N_("A man talking (ACE corpus, talker M2)"), 43),
+    "M3": (N_("A man talking (ACE corpus, talker M3)"), 110),
+    "M4": (N_("A man talking (ACE corpus, talker M4)"), 16),
+    "M5": (N_("A man talking (ACE corpus, talker M5)"), 99),
+    "M6": (N_("A man talking (ACE corpus, talker M6)"), 87),
+    "M7": (N_("A man talking (ACE corpus, talker M7)"), 133),
+    "M8": (N_("A man talking (ACE corpus, talker M8)"), 49),
+    "M9": (N_("A man talking (ACE corpus, talker M9)"), 135),
+}
 _EIF = (
     "https://raw.githubusercontent.com/ichbinsoftware/everythingisfree/"
     "e1d0d5c0422d2626c211d5d877e6f69c37ce8712/src/"
@@ -53,6 +72,9 @@ class Recording:
     download_mb: float = 0.0
     #: A song's tempo, beats a minute (the demos' tours move on its phrases).
     bpm: float | None = None
+    #: Speech's talker, ``male`` or ``female``: the speech spectrum a source that says it
+    #: takes (IEC 60268-16), which the STI weights for.
+    talker: str | None = None
 
     def summary(self) -> str:
         """``Title (kind, licence, N MB download)``: what the editor offers."""
@@ -104,29 +126,25 @@ RECORDINGS = (
         download_mb=6,
         bpm=90.0,
     ),
-    Recording(
-        name="speech_male",
-        title=N_("A man talking (ACE corpus, talker M4)"),
-        kind="speech",
-        licence="CC BY 4.0",
-        credit="Speech: ACE challenge corpus, talker M4, by J. Eaton, N. D. Gaubitch, "
-        f"A. H. Moore and P. A. Naylor, CC BY 4.0 · doi.org/{ACE_DOI}",
-        tar=(ACE, "Speech/M4s4.wav"),
-        download_mb=16,
-    ),
-    Recording(
-        name="speech_female",
-        title=N_("A woman talking (ACE corpus, talker F2)"),
-        kind="speech",
-        licence="CC BY 4.0",
-        credit="Speech: ACE challenge corpus, talker F2, by J. Eaton, N. D. Gaubitch, "
-        f"A. H. Moore and P. A. Naylor, CC BY 4.0 · doi.org/{ACE_DOI}",
-        tar=(ACE, "Speech/F2s4.wav"),
-        download_mb=49,
+    *(
+        Recording(
+            name=f"ace_{talker.lower()}",
+            title=title,
+            kind="speech",
+            licence="CC BY 4.0",
+            credit=f"Speech: ACE challenge corpus, talker {talker}, by J. Eaton, N. D. "
+            f"Gaubitch, A. H. Moore and P. A. Naylor, CC BY 4.0 · doi.org/{ACE_DOI}",
+            tar=(ACE, f"Speech/{talker}s4.wav"),
+            download_mb=mb,
+            talker="female" if talker.startswith("F") else "male",
+        )
+        for talker, (title, mb) in ACE_TALKERS.items()
     ),
 )
 #: The names a scene can give as its recording.
 NAMES = tuple(item.name for item in RECORDINGS)
+#: The names two of the ACE talkers had before 4.4.0, still read as theirs.
+ALIASES = {"speech_male": "ace_m4", "speech_female": "ace_f2"}
 
 
 def recordings() -> tuple[Recording, ...]:
@@ -134,8 +152,14 @@ def recordings() -> tuple[Recording, ...]:
     return RECORDINGS
 
 
+def canonical(name: str) -> str:
+    """``name``, or the name it has now when it is an old one (:data:`ALIASES`)."""
+    return ALIASES.get(name, name)
+
+
 def named(name: str) -> Recording:
-    """The recording called ``name``."""
+    """The recording called ``name`` (or by its old name, :data:`ALIASES`)."""
+    name = canonical(name)
     for item in RECORDINGS:
         if item.name == name:
             return item
@@ -170,6 +194,11 @@ def get(item: Recording | str, folder: str | Path | None = None) -> Path:
     if path.exists():
         return path
     path.parent.mkdir(parents=True, exist_ok=True)
+    for old, new in ALIASES.items():
+        kept = path.with_name(f"{old}.wav")
+        if new == item.name and kept.exists():
+            kept.replace(path)  # fetched under its old name
+            return path
     if item.tar is not None:
         url, member = item.tar
         print(f"reading {url} for {item.title}")
@@ -188,10 +217,13 @@ def get(item: Recording | str, folder: str | Path | None = None) -> Path:
 __all__ = [
     "ACE",
     "ACE_DOI",
+    "ACE_TALKERS",
+    "ALIASES",
     "FOLDER",
     "NAMES",
     "RECORDINGS",
     "Recording",
+    "canonical",
     "data_folder",
     "file_of",
     "get",

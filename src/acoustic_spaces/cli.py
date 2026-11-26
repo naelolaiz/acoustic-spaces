@@ -391,7 +391,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
                 f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}"
                 + ("" if item.in_use else "  left out")
                 + _extent_text(item)
-                + _walk_text(item)
+                + _trajectory_text(item)
                 + _ground_text(room, item)
             )
     print()
@@ -547,26 +547,26 @@ def _extent_text(item) -> str:
     return f"  surface {width:g} x {height:g} m, {count} points"
 
 
-def _walk_text(item) -> str:
-    """'  walks 25.0 m to (4.00, 16.00, 1.60) in 20.8 s' for a listener or source with a
-    walk."""
-    if getattr(item, "walk", None) is None:
+def _trajectory_text(item) -> str:
+    """'  moves 25.0 m to (4.00, 16.00, 1.60) in 20.8 s' for a listener or source with a
+    trajectory."""
+    if getattr(item, "trajectory", None) is None:
         return ""
-    walk = item.walk
+    walk = item.trajectory
     if walk.keyframes is not None:
         corners = [item.position, *(frame.position for frame in walk.keyframes)]
         seconds = walk.keyframes[-1].time_s
         verb = f"moves through {len(walk.keyframes)} keyframe(s)"
     else:
         corners = [item.position, *walk.to]
-        verb = "walks"
+        verb = "moves"
     length = sum(math.dist(a, b) for a, b in zip(corners, corners[1:], strict=False))
     if walk.keyframes is None:
         seconds = length / walk.speed_m_s
     x, y, z = corners[-1]
     text = f"  {verb} {length:.1f} m to ({x:.2f}, {y:.2f}, {z:.2f}) in {seconds:.1f} s"
     text += " with Doppler" if walk.doppler else ""
-    return text + ("" if walk.enabled else " (the walk is off: it stands still)")
+    return text + ("" if walk.enabled else " (the trajectory is off: it stands still)")
 
 
 def _directivity_text(directivity) -> str:
@@ -2416,10 +2416,10 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 
 def _cmd_walkthrough(args: argparse.Namespace) -> int:
     from acoustic_spaces.spatial import from_output
-    from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
+    from acoustic_spaces.walkthrough import pass_by, render_trajectory, simulate_trajectory
 
     room = _load_room(args.scene)
-    # A walk takes its walker even when left out, and its scene is checked as it is
+    # A trajectory takes its mover even when left out, and its scene is checked as it is
     # simulated; every mover together (--all) takes the sources and listeners in use.
     in_use = ("sources", "listeners") if args.all_movers else ()
     if room is None or not _print_checks(room, in_use=in_use):
@@ -2460,9 +2460,9 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
         }
         if args.all_movers:
             return _cmd_movement(room, args, settings, signals, fmt)
-        walk = simulate_walk(
+        walk = simulate_trajectory(
             room,
-            args.walker,
+            args.mover,
             listener=args.listener,
             step_m=args.step,
             late_step_m=args.late_step or None,
@@ -2470,7 +2470,7 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
             threads=args.threads,
             progress=lambda message: print(message, file=sys.stderr),
         )
-        wet = render_walk(
+        wet = render_trajectory(
             walk, signals, fmt, crossfade_s=args.crossfade * 1e-3, equal_power=args.equal_power
         )
     except (OSError, ValueError, ImportError) as exc:
@@ -2481,7 +2481,7 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
     else:
         late = f"the late part traced at {len(walk.late_places)} of them"
     print(
-        f"{walk.name} walks for {walk.duration_s:.1f} s: responses at "
+        f"{walk.name} moves for {walk.duration_s:.1f} s: responses at "
         f"{len(walk.names)} places, {late}",
         file=sys.stderr,
     )
@@ -2502,12 +2502,12 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
     mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
     _write_wet(Path(args.out), wet, rate, mask, args.normalize)
     if args.video:
-        from acoustic_spaces.viz import animate_walk
+        from acoustic_spaces.viz import animate_trajectory
 
         # An MP4 takes the sound along when players can play it: in one or two channels.
         with_sound = Path(args.video).suffix.lower() == ".mp4" and wet.shape[1] <= 2
         try:
-            animate_walk(
+            animate_trajectory(
                 room, walk, args.video, fps=args.fps, sound=Path(args.out) if with_sound else None
             )
         except (ImportError, ValueError) as exc:
@@ -2524,13 +2524,18 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
 def _cmd_movement(room, args: argparse.Namespace, settings, signals, fmt) -> int:
     """``walkthrough --all``: every mover on one clock, heard at every listener in use (or
     ``--listener``), one WAV each, and the video of them all."""
-    from acoustic_spaces.walkthrough import render_movement, save_movement, simulate_movement
+    from acoustic_spaces.walkthrough import (
+        head_turners,
+        render_movement,
+        save_movement,
+        simulate_movement,
+    )
 
     rate = settings.sample_rate
     try:
         if args.levels:
             raise ValueError(
-                "--levels is for one walk (--walker NAME): the level over time at the listener"
+                "--levels is for one mover (--mover NAME): the level over time at the listener"
             )
         movement = simulate_movement(
             room,
@@ -2540,6 +2545,7 @@ def _cmd_movement(room, args: argparse.Namespace, settings, signals, fmt) -> int
             settings=settings,
             threads=args.threads,
             progress=lambda message: print(message, file=sys.stderr),
+            head_tracked=head_turners(room.scene, fmt),
         )
         rendered = render_movement(
             movement, signals, fmt, crossfade_s=args.crossfade * 1e-3, equal_power=args.equal_power
@@ -3413,10 +3419,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     walkthrough = sub.add_parser(
         "walkthrough",
-        help="hear dry signals as listeners or sources walk through the room",
-        description="Simulate responses along the walk of a listener or source (its "
-        "'walk' in the scene) and play dry signals through them, crossfading from each "
-        "place to the next; or, with --all, every walk at once on one clock, heard at "
+        help="hear dry signals as listeners or sources move through the room",
+        description="Simulate responses along the trajectory of a listener or source (its "
+        "'trajectory' in the scene) and play dry signals through them, crossfading from each "
+        "place to the next; or, with --all, every trajectory at once on one clock, heard at "
         "every listener.",
     )
     walkthrough.add_argument("scene", help=SCENE_HELP)
@@ -3430,19 +3436,23 @@ def build_parser() -> argparse.ArgumentParser:
         "<out>_<listener>.wav)",
     )
     walkthrough.add_argument(
-        "--walker", help="listener or source that walks (default: the only one with a walk)"
+        "--mover",
+        "--walker",
+        dest="mover",
+        help="listener or source that moves (default: the only one with a trajectory); "
+        "--walker is its name before 4.4.0",
     )
     walkthrough.add_argument(
         "--all",
         dest="all_movers",
         action="store_true",
-        help="every listener and source whose walk is enabled moves, all on one clock, in "
-        "one simulation, heard at every listener in use (or --listener); a walk with "
+        help="every listener and source whose trajectory is enabled moves, all on one clock, "
+        "in one simulation, heard at every listener in use (or --listener); a trajectory with "
         "Doppler only when it is the one that moves",
     )
     walkthrough.add_argument(
         "--listener",
-        help="listener that hears a walking source, even one left out (default: the only one "
+        help="listener that hears a moving source, even one left out (default: the only one "
         "in use); with --all, the one listener to render",
     )
     walkthrough.add_argument(
@@ -3459,9 +3469,10 @@ def build_parser() -> argparse.ArgumentParser:
     walkthrough.add_argument(
         "--step",
         type=float,
-        default=STEP_M,
+        default=None,
         metavar="M",
-        help=f"distance between the places responses are simulated at (default {STEP_M:g} m)",
+        help="distance between the places responses are simulated at (default: each "
+        f"trajectory's step_m, else {STEP_M:g} m)",
     )
     walkthrough.add_argument(
         "--late-step",
@@ -3477,7 +3488,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=STEP_DEG,
         metavar="DEG",
-        help="angle between the places of a walk along keyframes where it turns on the spot "
+        help="angle between the places of a trajectory along keyframes where it turns on the spot "
         f"(default {STEP_DEG:g} degrees)",
     )
     walkthrough.add_argument(
@@ -3494,14 +3505,14 @@ def build_parser() -> argparse.ArgumentParser:
     walkthrough.add_argument(
         "--video",
         metavar="FILE",
-        help="also save the walk as a .gif, or an .mp4 with the sound in it (viz extra)",
+        help="also save the trajectory as a .gif, or an .mp4 with the sound in it (viz extra)",
     )
     walkthrough.add_argument("--fps", type=int, default=25, help="video frames per second")
     walkthrough.add_argument(
         "--levels",
         metavar="CSV",
         help="also save the level over time at the listener (dB(A) and per octave band), "
-        "with the source standing at each place; a walk with Doppler prints its L_Amax, "
+        "with the source standing at each place; a trajectory with Doppler prints its L_Amax, "
         "SEL and L_Aeq either way",
     )
     walkthrough.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")

@@ -61,7 +61,7 @@ from acoustic_spaces.demos.passby import (
 )
 
 #: The sources of the street example's police car: the car itself, tyres and engine,
-#: 0.05 m above the road; and its siren, on its roof, along the same walk.
+#: 0.05 m above the road; and its siren, on its roof, along the same trajectory.
 POLICE_CAR = "police_car"
 SIREN = "police_car_siren"
 #: The siren's patterns.
@@ -100,7 +100,7 @@ SOUND_RMS = 0.1
 SIREN_FILE = "siren.wav"
 #: The sources of the street example's fire engine: the vehicle itself, tyres and
 #: engine, 0.05 m above the road; its siren, on its cab's roof; and its air horn, at its
-#: front, all along the same walk.
+#: front, all along the same trajectory.
 FIRE_ENGINE = "fire_engine"
 FIRE_SIREN = "fire_engine_siren"
 FIRE_HORN = "fire_engine_horn"
@@ -509,7 +509,7 @@ class EmergencyVehicle(Vehicle):
         write_directivity_csv(table, directivity(), directivity_comment(self.script))
         named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
-        source.setdefault("walk", {})["face_forward"] = True
+        source.setdefault("trajectory", {})["face_forward"] = True
 
     def feeds(self, args: argparse.Namespace, speed: str) -> dict[str, str]:
         devices = self.played(args)
@@ -610,9 +610,9 @@ class EmergencyVehicle(Vehicle):
         files = " and ".join(d.file for d in devices)
         nouns = " and ".join(f"the {d.noun}'s" for d in devices)
         return {
-            "speed": f"how fast the {self.noun} drives along its walk (km/h; m/s times 3.6), "
+            "speed": f"how fast the {self.noun} drives along its trajectory (km/h; m/s times 3.6), "
             f"which sets how long its pass and its sound last, and the {self.itself}'s sound "
-            "power; by default as its walk in the scene goes",
+            "power; by default as its trajectory in the scene goes",
             "input": f"a WAV file a source of the {self.noun} plays instead of its made "
             f"sound, as {self.name}=WAV for the {self.itself} itself (a dry recording, on "
             f"board or close to it) or {recordings}, mixed down to mono, at least as long as "
@@ -630,7 +630,7 @@ class PoliceCar(EmergencyVehicle):
     """A police car driving past with its siren on: the street example's sources
     ``police_car``, the car itself (tyres and engine, CNOSSOS-EU's passenger car, as
     :class:`~acoustic_spaces.demos.passby.RoadVehicle` makes it) 0.05 m above the road,
-    and ``police_car_siren`` along the same walk at the height of a siren on its roof,
+    and ``police_car_siren`` along the same trajectory at the height of a siren on its roof,
     facing the way it drives, playing :func:`siren_sound` in ``--siren``'s pattern with
     :func:`siren_power` and the measured siren's directivity; ``--sources
     police_car_siren`` plays the siren alone. At 50 km/h the car's sound power is some

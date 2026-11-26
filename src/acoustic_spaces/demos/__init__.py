@@ -231,7 +231,7 @@ ADVANCED = frozenset(
 
 def moving_names(text: str | None) -> list[str] | None:
     """The names a ``movers`` option gives (``--moving visitor,guide``): None when it is
-    not given, so that the scene's own walks decide, and none for ``none``."""
+    not given, so that the scene's own trajectories decide, and none for ``none``."""
     if text is None:
         return None
     if str(text).strip().casefold() == NO_MOVERS:
@@ -651,7 +651,7 @@ def series_option(
 def run_folder(args: argparse.Namespace) -> Path:
     """The folder of a run with ``args`` (resolved, :meth:`Demo.resolved`): in the work
     folder, named as the run is (:meth:`Demo.run_name`). What depends on the run's
-    settings goes there (the mixes, the walks, the stills), so that a run with others
+    settings goes there (the mixes, the trajectories, the stills), so that a run with others
     writes over none of it."""
     folder = getattr(args, "run_folder", None)
     if folder is None:
@@ -774,16 +774,16 @@ class Demo:
     #: Cake, both channels"}``), from the arguments (paths resolved): the rows of the
     #: editor's map of inputs, and the names ``--input`` takes.
     plays: Callable[[argparse.Namespace], dict[str, str]] | None = None
-    #: The sources and listeners the demo plays moving along their walks, by name, from
+    #: The sources and listeners the demo plays moving along their trajectories, by name, from
     #: the arguments (paths resolved); None for a demo that plays every one standing where
     #: it starts. The editor's Run demo window ticks them in its table of what moves, which
     #: a ``movers`` option lets the user change for a run.
     moving: Callable[[argparse.Namespace], list[str]] | None = None
-    #: The scene whose walks a run simulates its walkers along, from the arguments (paths
+    #: The scene whose trajectories a run simulates its movers along, from the arguments (paths
     #: resolved), when it is not the scene the editor has open: the pass-by demos'
     #: vehicle at --speed in a scene of its own. While the demo runs, the editor draws the
-    #: walkers where the run simulates them, on these walks; None: the open scene's.
-    walks: Callable[[argparse.Namespace], Scene] | None = None
+    #: movers where the run simulates them, on these trajectories; None: the open scene's.
+    trajectories: Callable[[argparse.Namespace], Scene] | None = None
     #: The listeners a run can play, in the demo's order, from the arguments (paths
     #: resolved): the names its ``listeners`` option (``--listeners``) takes, and the
     #: rows of the editor's list of them, all ticked by default.
@@ -893,7 +893,7 @@ class Demo:
         """The arguments (resolved) of the run with ``args`` (resolved) but for
         ``changes``, by option name: ``sibling(args, listeners=None)`` is the run of every
         listener with the same settings, whose work a run of some listeners may play
-        (a walk's passes). The files a run writes in its folder (:attr:`Option.in_run`)
+        (a trajectory's passes). The files a run writes in its folder (:attr:`Option.in_run`)
         are that run's."""
         values = vars(args) | changes
         own = getattr(args, "run_folder", None)
@@ -908,8 +908,8 @@ class Demo:
     def upstream(self, args: argparse.Namespace, step: str) -> argparse.Namespace:
         """The arguments (resolved) of the run with ``args`` (resolved) but for the
         options that matter to none of the steps up to ``step`` (:attr:`Option.steps`),
-        at their defaults: ``upstream(args, "walk")`` is the run whose walk a run with
-        another ``--tour`` or ``--at`` may play, as its walk is the same."""
+        at their defaults: ``upstream(args, "walk")`` is the run whose trajectory a run with
+        another ``--tour`` or ``--at`` may play, as its trajectory is the same."""
         names = [s.name for s in self.steps]
         before = set(names[: names.index(step) + 1])
         # The sources a run plays name it apart (:meth:`run_parts`), not by their naming;

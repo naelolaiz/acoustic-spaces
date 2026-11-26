@@ -1,4 +1,4 @@
-"""The sound a source sends each way, for a walk with Doppler.
+"""The sound a source sends each way, for a trajectory with Doppler.
 
 A source's directivity (:mod:`acoustic_spaces.directivity`) weighs each path's energy
 per octave band, and every path carries the same signal. The sound of a rotor changes
@@ -6,7 +6,7 @@ with the direction in more than its band levels: each harmonic of the blades has
 pattern and a phase of its own, and the broadband noise has another. An
 :class:`Emission` gives the signal itself in every direction, in the source's own frame
 (x forward, y left, z up, as :class:`acoustic_spaces.scene.Orientation` turns it), and a
-walk with Doppler (:func:`acoustic_spaces.doppler.render`) plays down each early path
+trajectory with Doppler (:func:`acoustic_spaces.doppler.render`) plays down each early path
 the sound sent the way the path leaves the source, at the time it leaves.
 
 What the early paths carry then comes from the emission alone: each path's share of
@@ -21,7 +21,7 @@ emission in pascals 1 m away, its sound power (:meth:`Emission.sound_power_db`).
   (harmonics, as a cosine and a sine each, and noises in separate bands), each with an
   amplitude in every direction on the grid of :func:`acoustic_spaces.directivity.on_grid`.
 - :class:`Periodic` is a sound that repeats, such as a rotor's tones: one period of it
-  in every direction, which keeps a long walk's emission small.
+  in every direction, which keeps a long trajectory's emission small.
 - :class:`Sum` sends several emissions at once, such as a helicopter's two rotors.
 - :class:`Faded` fades one in and out, so that it does not start or stop at once.
 """

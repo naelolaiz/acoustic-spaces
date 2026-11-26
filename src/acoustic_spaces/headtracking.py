@@ -6,6 +6,9 @@ direction. :class:`HeadTrackedBinaural` runs a dry signal through it in real tim
 turns the field against the head's latest orientation once per block (crossfading from
 the previous orientation over the block, so turning does not click) and decodes it to
 the two ears with :func:`~acoustic_spaces.spatial.decoder.binaural_decoder`.
+:class:`FieldToEars` does the turning and the decoding alone, for a sound field already
+heard at the listener (a listener that turns on the spot along its trajectory, in
+:func:`acoustic_spaces.walkthrough.render_movement`).
 
 The orientation lives in a :class:`HeadOrientation`, which anything may set: the
 editor's controls, a script, or a head tracker sending OSC over UDP to an
@@ -264,6 +267,105 @@ class OscReceiver:
                     self.received += 1
 
 
+class FieldToEars:
+    """An Ambisonics signal turned against the head and decoded to the two ears, one
+    block at a time: the turning and decoding of :class:`HeadTrackedBinaural`, for a
+    sound field already heard at the listener (as :func:`~acoustic_spaces.walkthrough.
+    render_movement` renders a listener that turns).
+
+    ``order`` is the AmbiX (ACN / SN3D) order of the field, 1 to 7, at ``sample_rate``,
+    its directions relative to the listener's orientation in the scene, which the head
+    turns from; ``hrtf``, ``orientation``, ``block`` and ``decoder`` are as for
+    :class:`HeadTrackedBinaural`. The orientation is read once per block, and the field
+    crossfades from the previous one's turn over the block, so that turning does not
+    click.
+    """
+
+    def __init__(
+        self,
+        order: int,
+        sample_rate: float,
+        *,
+        hrtf: HRTF | None = None,
+        orientation: HeadOrientation | None = None,
+        block: int = 256,
+        decoder: str = "magls",
+    ) -> None:
+        if hrtf is None:
+            hrtf = spherical_head(sample_rate)
+        elif hrtf.sample_rate != sample_rate:
+            hrtf = hrtf.resampled(sample_rate)
+        self.order = order
+        self.sample_rate = sample_rate
+        self.orientation = orientation if orientation is not None else HeadOrientation()
+        self._ears = Convolver(binaural_decoder(order, hrtf, decoder), block)
+        self._field = FieldRotation(order)
+        self._ramp = (np.arange(1, block + 1, dtype=np.float32) / block)[:, None]
+        # Buffers the size of a block, kept from block to block (see process).
+        channels = (order + 1) ** 2
+        self._turned = np.zeros((block, channels), np.float32)
+        self._moved = np.zeros_like(self._turned)
+        self._version, rotation = self.orientation.rotation()
+        self._matrix = self._turn(rotation)
+
+    @property
+    def taps(self) -> int:
+        return self._ears.taps
+
+    @property
+    def block(self) -> int:
+        return self._ears.block
+
+    def _turn(self, rotation: np.ndarray) -> np.ndarray:
+        # A source straight ahead of the centred head is at rotation.T @ d once it turns.
+        return self._field.matrix(rotation.T).T.astype(np.float32)
+
+    def process(self, field: np.ndarray, out: np.ndarray | None = None) -> np.ndarray:
+        """One block (block, channels) of the field to (block, 2) float32, into ``out``
+        when given. The buffers the size of a block are kept from block to block."""
+        version, rotation = self.orientation.rotation()
+        turned = np.matmul(field, self._matrix, out=self._turned)
+        if version != self._version:
+            matrix = self._turn(rotation)
+            moved = np.matmul(field, matrix, out=self._moved)
+            moved -= turned
+            moved *= self._ramp
+            turned += moved
+            self._matrix, self._version = matrix, version
+        return self._ears.process(turned, out=out)
+
+    def run(
+        self,
+        field: np.ndarray,
+        head: Callable[[float], tuple[float, float, float]] | None = None,
+    ) -> np.ndarray:
+        """A whole field (samples, channels) to the ears: (samples + taps - 1, 2).
+
+        ``head`` gives the yaw, pitch and roll in degrees at a time in seconds, relative
+        to the centre as :meth:`HeadOrientation.look` takes them; it is asked at the
+        start of every block. Without it, the orientation stays as it is."""
+        x = np.asarray(field, dtype=np.float32)
+        channels = (self.order + 1) ** 2
+        if x.ndim != 2 or x.shape[1] != channels:
+            raise ValueError(
+                f"the field must be (samples, {channels}): Ambisonics of order {self.order}"
+            )
+        length = len(x) + self.taps - 1
+        blocks = -(-length // self.block)
+        padded = np.zeros((blocks * self.block, channels), np.float32)
+        padded[: len(x)] = x
+        out = []
+        for k in range(blocks):
+            if head is not None:
+                self.orientation.look(*head(k * self.block / self.sample_rate))
+            out.append(self.process(padded[k * self.block : (k + 1) * self.block]))
+        return np.concatenate(out)[:length]
+
+    def reset(self) -> None:
+        """Forget all past input."""
+        self._ears.reset()
+
+
 class HeadTrackedBinaural:
     """A dry signal through an Ambisonics response, turned against the head and decoded
     to the two ears, one block at a time.
@@ -275,7 +377,8 @@ class HeadTrackedBinaural:
     ``"magls"`` or ``"ls"`` (see :func:`~acoustic_spaces.spatial.decoder.binaural_decoder`).
     ``orientation`` (a new :class:`HeadOrientation` by default) is read once per block.
     It works with :func:`acoustic_spaces.render.play` as a :class:`Convolver` does, with
-    one input and two outputs, and the only latency is the block.
+    one input and two outputs, and the only latency is the block. The turning and the
+    decoding are a :class:`FieldToEars`.
     """
 
     inputs = 1
@@ -300,51 +403,30 @@ class HeadTrackedBinaural:
                 f"head tracking needs Ambisonics of order 1 or more: 4, 9, 16... channels, "
                 f"not {h.shape[1]}"
             )
-        if hrtf is None:
-            hrtf = spherical_head(sample_rate)
-        elif hrtf.sample_rate != sample_rate:
-            hrtf = hrtf.resampled(sample_rate)
+        self._room = Convolver(h, block)
+        self._to_ears = FieldToEars(
+            order, sample_rate, hrtf=hrtf, orientation=orientation, block=block, decoder=decoder
+        )
         self.order = order
         self.sample_rate = sample_rate
-        self.orientation = orientation if orientation is not None else HeadOrientation()
-        self._room = Convolver(h, block)
-        self._ears = Convolver(binaural_decoder(order, hrtf, decoder), block)
-        self._field = FieldRotation(order)
-        self._ramp = (np.arange(1, block + 1, dtype=np.float32) / block)[:, None]
-        # Buffers the size of a block, kept from block to block (see process).
+        self.orientation = self._to_ears.orientation
+        # A buffer the size of a block, kept from block to block (see process).
         self._wet = np.zeros((block, h.shape[1]), np.float32)
-        self._turned = np.zeros_like(self._wet)
-        self._moved = np.zeros_like(self._wet)
-        self._version, rotation = self.orientation.rotation()
-        self._matrix = self._turn(rotation)
 
     @property
     def taps(self) -> int:
-        return self._room.taps + self._ears.taps - 1
+        return self._room.taps + self._to_ears.taps - 1
 
     @property
     def block(self) -> int:
         return self._room.block
-
-    def _turn(self, rotation: np.ndarray) -> np.ndarray:
-        # A source straight ahead of the centred head is at rotation.T @ d once it turns.
-        return self._field.matrix(rotation.T).T.astype(np.float32)
 
     def process(self, block: np.ndarray, out: np.ndarray | None = None) -> np.ndarray:
         """One block (block,) of the dry signal to (block, 2) float32, into ``out`` when
         given, as :meth:`Convolver.process <acoustic_spaces.render.Convolver.process>`
         takes it. The buffers the size of a block are kept from block to block."""
         wet = self._room.process(block, out=self._wet)  # (block, channels)
-        version, rotation = self.orientation.rotation()
-        turned = np.matmul(wet, self._matrix, out=self._turned)
-        if version != self._version:
-            matrix = self._turn(rotation)
-            moved = np.matmul(wet, matrix, out=self._moved)
-            moved -= turned
-            moved *= self._ramp
-            turned += moved
-            self._matrix, self._version = matrix, version
-        return self._ears.process(turned, out=out)
+        return self._to_ears.process(wet, out=out)
 
     def run(
         self,
@@ -377,13 +459,14 @@ class HeadTrackedBinaural:
     def reset(self) -> None:
         """Forget all past input."""
         self._room.reset()
-        self._ears.reset()
+        self._to_ears.reset()
 
 
 __all__ = [
     "AXES",
     "DEFAULT_OSC_PORT",
     "QUATERNION_ADDRESSES",
+    "FieldToEars",
     "HeadOrientation",
     "HeadTrackedBinaural",
     "OscReceiver",

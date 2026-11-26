@@ -15,6 +15,7 @@ from test_demos import RATE, _any_scene, _tone
 
 from acoustic_spaces.demos import audio, mix_stem, pipeline, playing, run_folder, scene_demo
 from acoustic_spaces.demos.scene_demo import DEMO
+from acoustic_spaces.scene import Scene
 
 
 def _grouped(tmp_path: Path) -> Path:
@@ -170,29 +171,29 @@ def test_a_demo_of_any_scene_mixes_the_sources_picked_alone(tmp_path: Path, monk
 
 
 def test_a_source_left_out_stands_where_it_starts(tmp_path: Path) -> None:
-    """Without ``--moving``, a source ``--sources`` leaves out does not walk, as it plays
-    nothing: it moves no mix, and its walk with Doppler, which plays alone, no longer
+    """Without ``--moving``, a source ``--sources`` leaves out does not move, as it plays
+    nothing: it moves no mix, and its trajectory with Doppler, which plays alone, no longer
     keeps the others from walking; ``--moving`` still moves what it names."""
     scene = _grouped(tmp_path)
     data = yaml.safe_load(scene.read_text(encoding="utf-8"))
-    data["listeners"][1]["walk"] = {
+    data["listeners"][1]["trajectory"] = {
         "keyframes": [
             {"time_s": 1.0, "position": [6.0, 2.5, 1.2]},
             {"time_s": 1.5, "position": [6.0, 3.5, 1.2]},
         ]
     }
-    data["sources"][1]["walk"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 10.0, "doppler": True}
+    data["sources"][1]["trajectory"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 10.0, "doppler": True}
     scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     demo = DEMO.at(scene.parent)
     args, resolved = _run(scene)
     assert scene_demo.moving_of(resolved) == ["seat-b", "radio"]
-    assert demo.check(args).startswith("radio walks with Doppler, which plays alone")
+    assert demo.check(args).startswith("radio moves with Doppler, which plays alone")
     args, resolved = _run(scene, "--sources", "talker")
     assert demo.check(args) is None
     assert scene_demo.moving_of(resolved) == ["seat-b"]
     radio = next(s for s in scene_demo.moving_scene(resolved).sources if s.name == "radio")
-    assert radio.walk is not None and not radio.walk.enabled
-    assert demo.walks(resolved) is not None
+    assert radio.trajectory is not None and not radio.trajectory.enabled
+    assert demo.trajectories(resolved) is not None
     args, resolved = _run(scene, "--sources", "talker", "--moving", "radio")
     assert scene_demo.moving_of(resolved) == ["radio"] and demo.check(args) is None
     args, resolved = _run(scene, "--sources", "radio", "--moving", "none")
@@ -251,21 +252,93 @@ def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypat
     assert one.title("seat-a") == ("seat-a", "Listener 1 of 1")
 
 
+def test_the_timeline_is_shared_or_from_each_listener_s_start(tmp_path: Path) -> None:
+    """``--timeline``: shared, the tour going from listener to listener on one clock,
+    crossfaded; per listener, each from the clock's start for the whole of what moves
+    and 3 s more (or ``--seconds``), as long as its mix at most, faded out and 1 s
+    apart; auto, the default, per listener when something moves."""
+    scene = _grouped(tmp_path)
+    resolved = _run(scene)[1]
+    assert resolved.timeline == "auto" and resolved.seconds is None
+    assert scene_demo.timeline_of(resolved, []) == "shared"
+    assert scene_demo.timeline_of(resolved, ["seat-b"]) == "per-listener"
+    resolved = _run(scene, "--timeline", "shared")[1]
+    assert scene_demo.timeline_of(resolved, ["seat-b"]) == "shared"
+    names, gains = ["seat-a", "seat-b"], {"seat-a": 0.0, "seat-b": 3.0}
+    shared = scene_demo.shared_stops(names, gains, None, 60.0)
+    assert [(s.at, s.start, s.stop) for s in shared] == [(0.0, 0.0, 20.0), (20.0, 20.0, 40.0)]
+    assert all(s.joined_before and s.joined_after and s.fade_s == 0.0 for s in shared)
+    assert [s.stop for s in scene_demo.shared_stops(names, gains, 30.0, 40.0)] == [20.0, 40.0]
+    seats = {
+        "moving": ["seat-b"],
+        "movement": {"times": [0.0, 4.0, 12.5]},
+        "seats": {"seat-a": {"length_s": 30.0}, "seat-b": {"length_s": 10.0}},
+    }
+    stops = scene_demo.stops_from_start(names, seats, gains, None)
+    assert [(s.key, s.at, s.start, s.stop) for s in stops] == [
+        ("seat-a", 0.0, 0.0, 15.5),
+        ("seat-b", 16.5, 0.0, 10.0),
+    ]
+    assert [s.fade_s for s in stops] == [3.0, 3.0] and [s.gain_db for s in stops] == [0.0, 3.0]
+    assert not any(s.joined_before or s.joined_after for s in stops)
+    given = scene_demo.stops_from_start(names, seats, gains, 8.0)
+    assert [(s.at, s.stop) for s in given] == [(0.0, 8.0), (9.0, 8.0)]
+    still = scene_demo.stops_from_start(names, {"seats": seats["seats"]}, gains, None)
+    assert [s.stop for s in still] == [20.0, 10.0]
+    rate = 100
+    folder = tmp_path / "mixes"
+    for name in names:
+        audio.write(folder / f"{name}.wav", np.ones((rate * 30, 2)) * 0.1, rate)
+    seats = {"rate": rate, "format": "binaural", "seats": {n: {"file": f"{n}.wav"} for n in names}}
+    two = [
+        pipeline.TourStop(
+            "seat-a", 0.0, 0.0, 2.0, joined_before=False, joined_after=False, fade_s=1.0
+        ),
+        pipeline.TourStop("seat-b", 3.0, 0.0, 2.0, joined_before=False, joined_after=False),
+    ]
+    heard = pipeline.tour_audio(two, folder, seats, fade_out_s=0.0, peak_db=None)
+    assert heard.shape == (5 * rate, 2)
+    np.testing.assert_allclose(heard[:rate, 0], 0.1)  # the first second as it is
+    assert heard[rate, 0] == pytest.approx(0.1) and heard[2 * rate - 1, 0] < 1e-3
+    np.testing.assert_allclose(heard[2 * rate : 3 * rate], 0.0)  # the gap
+    np.testing.assert_allclose(heard[3 * rate :, 0], 0.1)  # the last fades with the tour
+
+
+def test_a_run_s_speed_and_step_go_to_the_trajectories_that_move(tmp_path: Path) -> None:
+    """``--speed`` (km/h) and ``--step`` (m) set every trajectory that moves in the run,
+    and are kept with the mixes, so that a run at another speed mixes them again."""
+    scene = _grouped(tmp_path)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["listeners"][1]["trajectory"] = {"to": [[6.0, 3.5, 1.2]], "speed_m_s": 1.0}
+    data["sources"][2]["trajectory"] = {"to": [[6.0, 2.0, 1.0]], "enabled": False}
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    resolved = _run(scene, "--speed", "7.2", "--step", "0.5")[1]
+    moved = scene_demo.moving_scene(resolved)
+    seat = next(lis for lis in moved.listeners if lis.name == "seat-b")
+    assert seat.trajectory.speed_m_s == pytest.approx(2.0) and seat.trajectory.step_m == 0.5
+    fan = next(s for s in moved.sources if s.name == "fan")
+    assert fan.trajectory.speed_m_s == 1.2 and fan.trajectory.step_m is None  # it stands
+    assert scene_demo.trajectories_of(resolved) == {"speed_kmh": 7.2, "step_m": 0.5}
+    assert scene_demo.moving_scene(_run(scene)[1]).listeners == Scene.from_yaml(scene).listeners
+    assert DEMO.option("speed").moot(resolved) is None
+    assert DEMO.option("speed").moot(_run(scene, "--moving", "none")[1]) == "nothing moves"
+
+
 def test_a_silent_walker_walks_unless_sources_leaves_it_out(tmp_path: Path) -> None:
     """A source the scene keeps silent walks in a default run, as before ``--sources``
     was there (the default pick leaves it out, but names no source); a ``--sources``
     given that leaves it out has it stand where it starts."""
     scene = _grouped(tmp_path)
     data = yaml.safe_load(scene.read_text(encoding="utf-8"))
-    data["sources"][2]["walk"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 2.0}
+    data["sources"][2]["trajectory"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 2.0}
     scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     args, resolved = _run(scene)
     assert "fan" not in resolved.playing
     assert scene_demo.walking(resolved, scene_demo.scene_of(resolved)) is None
     assert scene_demo.moving_of(resolved) == ["fan"]
     fan = next(s for s in scene_demo.moving_scene(resolved).sources if s.name == "fan")
-    assert fan.walk is not None and fan.walk.enabled
+    assert fan.trajectory is not None and fan.trajectory.enabled
     args, resolved = _run(scene, "--sources", "talker")
     assert scene_demo.moving_of(resolved) == []
     fan = next(s for s in scene_demo.moving_scene(resolved).sources if s.name == "fan")
-    assert fan.walk is not None and not fan.walk.enabled
+    assert fan.trajectory is not None and not fan.trajectory.enabled

@@ -3383,7 +3383,7 @@ class PointPage(Page):
         )
         self.in_use.toggled.connect(self._in_use)
         form.addRow(self.in_use)
-        self.moves = QCheckBox(_("Moves"))
+        self.moves = QCheckBox(_("Moving"))
         self.moves.setToolTip(
             _(
                 "Tick to have the source go along its keyframes in a movement; untick to keep "
@@ -3716,8 +3716,8 @@ class PointPage(Page):
         self.movement_row.setEnabled(not still)
         self.moves.setToolTip(self._moves_tip if not still else self._still_tip)
         self.edit_movement.setToolTip(self._edit_tip if not still else self._still_tip)
-        self.moves.setEnabled(item.walk is not None)
-        self.moves.setChecked(item.walk is not None and item.walk.enabled)
+        self.moves.setEnabled(item.trajectory is not None)
+        self.moves.setChecked(item.trajectory is not None and item.trajectory.enabled)
         for box, value in zip(self.position, item.position, strict=True):
             box.setValue(value)
         o = item.orientation
@@ -4048,7 +4048,7 @@ class SimulationPage(Page):
                 "500 Hz that add their paths in pressure: the solver for whole rows (one "
                 "field over all of them, with the ground and the roofs in it, where their "
                 "tops go on far enough to both sides of the way; seconds for each source "
-                "and listener) or the paths over one edge or two alone. Maps and walks take "
+                "and listener) or the paths over one edge or two alone. Maps and trajectories take "
                 "the paths"
             )
         )

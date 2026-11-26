@@ -377,7 +377,7 @@ def _railway(tmp_path):
         if each["name"].startswith("train"):
             z = each["position"][2]
             each["position"] = [-20, 0, z]
-            each["walk"]["to"] = [[20, 0, z]]
+            each["trajectory"]["to"] = [[20, 0, z]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "tsi_7m5"]
     data["simulation"].update({"sample_rate": RATE, "ir_length_s": 0.2, "seed": 1})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
@@ -394,7 +394,7 @@ def test_a_trains_sound_is_as_loud_as_its_levels_say(tmp_path) -> None:
     from acoustic_spaces.demos.passby import Trail, faded, trailed
     from acoustic_spaces.spatial import Mono
     from acoustic_spaces.synthesis import split_bands
-    from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
+    from acoustic_spaces.walkthrough import pass_by, render_trajectory, simulate_trajectory
 
     folder = _railway(tmp_path)
     speed = 80.0
@@ -404,13 +404,13 @@ def test_a_trains_sound_is_as_loud_as_its_levels_say(tmp_path) -> None:
     sources = []
     for source in scene.sources:
         if source.name == "train":
-            walk = source.walk.model_copy(update={"speed_m_s": speed / 3.6})
+            walk = source.trajectory.model_copy(update={"speed_m_s": speed / 3.6})
             source = source.model_copy(
-                update={"enabled": True, "walk": walk, "level_db": list(points[0].power_db)}
+                update={"enabled": True, "trajectory": walk, "level_db": list(points[0].power_db)}
             )
             sources.append(source)
     room = Room.from_scene(scene.model_copy(update={"sources": sources}))
-    walked = simulate_walk(room, "train", listener="tsi_7m5", step_m=4.0)
+    walked = simulate_trajectory(room, "train", listener="tsi_7m5", step_m=4.0)
     n = int(round(40.0 / (speed / 3.6) * RATE))
     first = faded(rail.point_sound(points[0].power_db, RATE, n / RATE, seed=0), RATE)
     behind = tuple(
@@ -426,8 +426,8 @@ def test_a_trains_sound_is_as_loud_as_its_levels_say(tmp_path) -> None:
         )
         for k, p in enumerate(points[1:], start=1)
     )
-    alone = render_walk(walked, {"train": first}, Mono())
-    every = render_walk(
+    alone = render_trajectory(walked, {"train": first}, Mono())
+    every = render_trajectory(
         walked, {"train": first}, Mono(), followers=[(lag, y) for lag, y, _ in behind]
     )
     weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
@@ -685,7 +685,7 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     for name in parts:
         source = next(s for s in scene.sources if s.name == name)
         assert source.level_db == info["parts"][name][0]["level_db"]
-        assert source.walk.face_forward and source.walk.doppler
+        assert source.trajectory.face_forward and source.trajectory.doppler
         assert source.directivity.file == work / "scene_demo_train.csv"
     facts = pipeline.read_json(work / "walk" / "walk.json")
     assert facts["parts"] == parts and facts["train"] == "s_bahn"
@@ -768,7 +768,7 @@ def test_the_railway_demo_sounds_the_trains_horn(tmp_path, monkeypatch) -> None:
     assert blower.directivity.file == work / "scene_demo_train_horn.csv"
     lines = blower.directivity.file.read_text(encoding="utf-8").splitlines()
     assert lines[3:] == (folder / "siren.csv").read_text(encoding="utf-8").splitlines()[3:]
-    assert blower.walk.face_forward and blower.walk.doppler
+    assert blower.trajectory.face_forward and blower.trajectory.doppler
     facts = pipeline.read_json(work / "walk" / "walk.json")
     assert facts["parts"] == [*parts, "train_horn"] and facts["horn"] == "blasts"
     assert ", its horn in blasts " in facts["about"]
@@ -806,7 +806,7 @@ def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
         if each["name"].startswith("tram"):
             z = each["position"][2]
             each["position"] = [-20, 0, z]
-            each["walk"]["to"] = [[20, 0, z]]
+            each["trajectory"]["to"] = [[20, 0, z]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "pavement"]
     data["simulation"].update({"sample_rate": RATE, "ir_length_s": 0.2, "seed": 1})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}

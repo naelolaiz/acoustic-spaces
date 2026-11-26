@@ -85,6 +85,7 @@ from acoustic_spaces.materials.ground import PRESETS as GROUND_PRESETS
 from acoustic_spaces.materials.ground import band_absorption, surface_impedance
 from acoustic_spaces.materials.libraries import find_material, read_library
 from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB
+from acoustic_spaces.recordings import ALIASES as RECORDING_ALIASES
 from acoustic_spaces.recordings import NAMES as RECORDING_NAMES
 
 Vector3 = tuple[float, float, float]
@@ -1581,7 +1582,7 @@ ArraySpec.model_rebuild()
 
 class Keyframe(_Model):
     """Where a listener or a source is at one moment of its movement, and how it faces
-    (:class:`Walk`, ``keyframes``)."""
+    (:class:`Trajectory`, ``keyframes``)."""
 
     time_s: PositiveFloat = Field(
         description="when it is there, s from the start of the movement (it starts at its "
@@ -1595,18 +1596,19 @@ class Keyframe(_Model):
     )
 
 
-class Walk(_Model):
-    """A path a listener or a point source walks along, for a walkthrough
+class Trajectory(_Model):
+    """The trajectory a listener or a point source moves along, for a walkthrough
     (:mod:`acoustic_spaces.walkthrough`): from its position through ``to`` at
-    ``speed_m_s``, or through ``keyframes``, each timed."""
+    ``speed_m_s``, or through ``keyframes``, each timed. Scenes written before 4.4.0
+    call it ``walk``, which is still read (:func:`_trajectory_key`)."""
 
     enabled: bool = Field(
         default=True,
-        description="whether it moves; false keeps the path but leaves it standing still",
+        description="whether it moves; false keeps the trajectory but leaves it standing still",
     )
     to: list[Vector3] = Field(
         default_factory=list,
-        description="the points it walks through, in order (or give keyframes)",
+        description="the points it goes through, in order (or give keyframes)",
     )
     keyframes: list[Keyframe] | None = Field(
         default=None,
@@ -1616,10 +1618,12 @@ class Walk(_Model):
         "distance over the time (instead of to and speed_m_s; face_forward does not "
         "apply, the keyframes say how it faces)",
     )
-    speed_m_s: PositiveFloat = Field(default=1.2, description="walking speed (m/s), along to")
+    speed_m_s: PositiveFloat = Field(
+        default=1.2, description="its speed along to (m/s; 1.2 is a walking pace)"
+    )
     face_forward: bool = Field(
         default=True,
-        description="turn to face the way it walks (yaw) along to; false keeps its orientation",
+        description="turn to face the way it goes (yaw) along to; false keeps its orientation",
     )
     turn_deg_s: PositiveFloat = Field(
         default=90.0,
@@ -1632,18 +1636,42 @@ class Walk(_Model):
             "(Doppler): for vehicles and aircraft; false crossfades from place to place"
         ),
     )
+    step_m: PositiveFloat | None = Field(
+        default=None,
+        description="how far apart along it the sound is simulated (m): finer is smoother "
+        "and slower (default 0.25 m; a run may set another)",
+    )
+    start_s: Annotated[float, Field(ge=0.0)] = Field(
+        default=0.0,
+        description="when it sets off on the run's clock (s): it stands at its position "
+        "until then, and its keyframes' times count from then",
+    )
 
     @model_validator(mode="after")
-    def _one_path(self) -> Walk:
+    def _one_path(self) -> Trajectory:
         if self.to and self.keyframes is not None:
-            raise ValueError("a walk goes through to or through keyframes, not both")
+            raise ValueError("a trajectory goes through to or through keyframes, not both")
         if not self.to and self.keyframes is None:
-            raise ValueError("a walk needs at least 1 point in to, or keyframes")
+            raise ValueError("a trajectory needs at least 1 point in to, or keyframes")
         if self.keyframes is not None:
             times = [frame.time_s for frame in self.keyframes]
             if any(b <= a for a, b in zip(times, times[1:], strict=False)):
                 raise ValueError("keyframes go in order of time, each later than the last")
         return self
+
+
+#: The name scenes written before 4.4.0 give a :class:`Trajectory`.
+Walk = Trajectory
+
+
+def _trajectory_key(data):
+    """A source's or listener's data with ``walk``, the name scenes written before 4.4.0
+    give its trajectory, read as ``trajectory``."""
+    if isinstance(data, dict) and "walk" in data:
+        if "trajectory" in data:
+            raise ValueError("give a trajectory once: trajectory, or walk, its name before 4.4.0")
+        data = {("trajectory" if key == "walk" else key): value for key, value in data.items()}
+    return data
 
 
 class Source(_Model):
@@ -1714,8 +1742,9 @@ class Source(_Model):
             "responses and its part in combined coverage maps come that much later"
         ),
     )
-    walk: Walk | None = Field(
-        default=None, description="a path to walk, for a walkthrough (point sources only)"
+    trajectory: Trajectory | None = Field(
+        default=None,
+        description="a trajectory to move along, for a walkthrough (point sources only)",
     )
     signal: Path | None = Field(
         default=None,
@@ -1734,6 +1763,11 @@ class Source(_Model):
             "recording; None: its signal mixed down to mono, and silent without one"
         ),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_names(cls, data):
+        return _trajectory_key(data)
 
     @field_validator("level_db", mode="before")
     @classmethod
@@ -1774,8 +1808,10 @@ class Source(_Model):
             raise ValueError("spectrum shapes a level given in all; a level per band has its own")
         if self.line_m is not None and self.surface_m is not None:
             raise ValueError("a source is a line or a surface, not both")
-        if self.walk is not None and self.extended:
-            raise ValueError("only a point source walks, not a line or a surface")
+        if self.trajectory is not None and self.extended:
+            raise ValueError(
+                "only a point source moves along a trajectory, not a line or a surface"
+            )
         if len(self._grid()[0]) * len(self._grid()[1]) > MAX_ELEMENTS:
             raise ValueError(f"more than {MAX_ELEMENTS} point sources; make spacing_m larger")
         return self
@@ -1922,7 +1958,9 @@ class Listener(_Model):
     enabled: bool | None = _enabled_field()
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
-    walk: Walk | None = Field(default=None, description="a path to walk, for a walkthrough")
+    trajectory: Trajectory | None = Field(
+        default=None, description="a trajectory to move along, for a walkthrough"
+    )
     pattern: CapsulePattern | MicrophonePair | None = Field(
         default=None,
         description=(
@@ -1933,6 +1971,11 @@ class Listener(_Model):
             "parameters and the other outputs stay an omni listener's"
         ),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_names(cls, data):
+        return _trajectory_key(data)
 
     @field_validator("pattern")
     @classmethod
@@ -2632,7 +2675,7 @@ class EarlyStage(_Model):
             "field over the whole row of them, with the ground and the roofs in it, "
             "where their tops go on far enough to both sides of the way; seconds for "
             "each source and listener) or edges (the paths over one edge or two alone). "
-            "Maps and walks take the paths over the edges (docs/outdoor.md)"
+            "Maps and trajectories take the paths over the edges (docs/outdoor.md)"
         ),
     )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
@@ -3092,13 +3135,15 @@ class Scene(_Model):
         no suffix, as a free recording's has: then it is a free name mistyped."""
         if value is None or (isinstance(value, str) and value in RECORDING_NAMES):
             return value
+        if isinstance(value, str) and value in RECORDING_ALIASES:
+            return RECORDING_ALIASES[value]  # its name before 4.4.0
         if isinstance(value, str) and not value.strip():
             raise ValueError(f"a recording file, or one of {', '.join(RECORDING_NAMES)}")
         if not isinstance(value, (str, Path)):
             raise ValueError(f"a recording file, or one of {', '.join(RECORDING_NAMES)}")
         path = _resolve_path(Path(value), info)
         if not path.suffix and not path.is_file():
-            close = difflib.get_close_matches(str(value), RECORDING_NAMES, n=1)
+            close = difflib.get_close_matches(str(value).lower(), RECORDING_NAMES, n=1)
             hint = f"; did you mean {close[0]}?" if close else ""
             raise ValueError(
                 f"{str(value)!r} is no free recording, nor a file there ({path}): a "
@@ -3360,7 +3405,7 @@ def map_files(data: dict, change: Callable[[str], str]) -> None:
         places += [(spec, "file") for spec in directivity_entries(source.get("directivity"))]
         places.append((source, "signal"))
     places += [(output, "hrtf") for output in data["outputs"]]
-    if data.get("recording") not in (None, *RECORDING_NAMES):
+    if data.get("recording") not in (None, *RECORDING_NAMES, *RECORDING_ALIASES):
         places.append((data, "recording"))
     for holder, key in places:
         if key in holder:

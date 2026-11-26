@@ -699,7 +699,8 @@ def seats_of(folder: Path, hint: str, args: argparse.Namespace | None = None) ->
 class TourStop:
     """A stop of the tour: the mix ``key`` from its time ``start`` to ``stop``, playing
     at ``at`` in the tour's time, turned up by ``gain_db``, crossfaded with its
-    neighbours unless it starts or ends a piece (``joined_before``, ``joined_after``)."""
+    neighbours unless it starts or ends a piece (``joined_before``, ``joined_after``);
+    one not joined to the next fades out over its last ``fade_s``."""
 
     key: str
     at: float
@@ -708,6 +709,7 @@ class TourStop:
     gain_db: float = 0.0
     joined_before: bool = True
     joined_after: bool = True
+    fade_s: float = 0.0
 
     @property
     def length(self) -> float:
@@ -824,6 +826,11 @@ def tour_audio(
         alone = slice(a + before, b - after)
         out[alone] += x[alone]
         previous = x if after else None
+        # A stop not joined to the next fades out at its end: silence follows, or another
+        # listener from the clock's start.
+        if not after and k < len(stops) - 1 and stop.fade_s > 0.0:
+            fade = min(round(stop.fade_s * rate), b - a)
+            out[b - fade : b] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
     fade = min(int(fade_out_s * rate), length)
     if fade:
         out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
@@ -1011,7 +1018,7 @@ def animation(
     the chapters beside ``out`` when given (:func:`chapters_file`). The run's
     ``run.json`` in ``folder`` keeps the video's file, length and chapters. As it is
     encoded, its messages begin with what the frame at ``t`` shows, ``shown(t)``: the
-    sources and listeners it is of, a walker with the moment of its walk
+    sources and listeners it is of, a mover with the moment of its trajectory
     (:func:`_encode`)."""
     pictures = _stills_folder(folder)
     for k, (name, t) in enumerate(stills):

@@ -409,11 +409,13 @@ acoustic-spaces view examples/archway/scene.yaml --paths --listener "behind the 
 acoustic-spaces simulate examples/archway/scene.yaml --out archway --diffraction first_order
 ```
 
-![Early level along a walk round the corner of the gallery example, with and without diffraction](images/diffraction.png)
+![Early level along a trajectory round the corner of the gallery example, with and
+without diffraction](images/diffraction.png)
 
-The figure walks round the corner of the `gallery` example, away from the guide. Without
-diffraction (dotted) the direct sound and each reflection stop at the line where the
-corner hides them; with it, the level falls smoothly, by more at high frequencies.
+The figure follows a trajectory round the corner of the `gallery` example, away from the
+guide. Without diffraction (dotted) the direct sound and each reflection stop at the
+line where the corner hides them; with it, the level falls smoothly, by more at high
+frequencies.
 
 Paths with more reflections than that fade at edges too. Every specular path, found or
 stopped by one event, takes the UTD's term of its own boundary at each edge near each
@@ -854,28 +856,28 @@ Before a simulation or a coverage map starts, the memory of its late part is est
 (`engine.run_size`): the energy at every listener (or map point), band and millisecond
 of the response, and at a listener, every 10 ms, for each arrival direction
 (`late.directions`) and as each batch of rays gives it (`late.batches`), for every
-source until the run ends; and while a source is traced,
-the tracer's own. The places of a [walk](spatial-audio.md#walkthroughs) between those
-traced for their late part hold none of it: theirs is mixed from the traced places on
-either side when it is read, and the estimate counts the traced ones alone. On the CPU
-the tracer's own is a copy of the results for each thread that sums
-rays, 256 MiB at most together (one thread at least, however large the copy): a run
-whose copies would take more runs on fewer threads, and more slowly. The examples'
-copies take 1.6 MiB a thread at most, as the default vector-based scattering traces one
-band at a time; with one ray for all eight octave bands, 20 listeners and responses of
-10 s would take 90 MiB a thread, so two threads. On a GPU it is the GPU's buffers, which
-a GPU built into the processor takes from the computer's memory. With `late.device`
-gpu, both or auto (auto only where there is a hardware GPU), the estimate takes the
-worst of the CPU, the GPU and the two together. So the memory grows with
-`simulation.ir_length_s`, the listeners, `late.directions`, `late.batches`, the sources
-and their points, and the map points (`coverage.spacing`). On the CPU the rays cost
-time, not memory. The 10 batches of the default add about an eighth to the late part's
-memory with 64 arrival directions: in the estimate, the late part of `stadium_concert`
-at 8 s went from 896 to 1,014 MiB and `orchestra`'s at 6 s from 668 to 758 MiB; measured
-on 4 threads, the whole runs went from 890 to 1,020 MiB and from 724 to 815 MiB.
-`orchestra`'s grew as estimated, `stadium_concert`'s by 11 MiB more, as the batches' many
-smaller arrays leave the memory allocator more to hold (with glibc's mmap threshold fixed
-at 128 KiB, that run grew by 124 MiB against the estimate's 118).
+source until the run ends; and while a source is traced, the tracer's own. The places of
+a [trajectory](spatial-audio.md#walkthroughs) between those traced for their late part
+hold none of it: theirs is mixed from the traced places on either side when it is read,
+and the estimate counts the traced ones alone. On the CPU the tracer's own is a copy of
+the results for each thread that sums rays, 256 MiB at most together (one thread at
+least, however large the copy): a run whose copies would take more runs on fewer
+threads, and more slowly. The examples' copies take 1.6 MiB a thread at most, as the
+default vector-based scattering traces one band at a time; with one ray for all eight
+octave bands, 20 listeners and responses of 10 s would take 90 MiB a thread, so two
+threads. On a GPU it is the GPU's buffers, which a GPU built into the processor takes
+from the computer's memory. With `late.device` gpu, both or auto (auto only where there
+is a hardware GPU), the estimate takes the worst of the CPU, the GPU and the two
+together. So the memory grows with `simulation.ir_length_s`, the listeners,
+`late.directions`, `late.batches`, the sources and their points, and the map points
+(`coverage.spacing`). On the CPU the rays cost time, not memory. The 10 batches of the
+default add about an eighth to the late part's memory with 64 arrival directions: in the
+estimate, the late part of `stadium_concert` at 8 s went from 896 to 1,014 MiB and
+`orchestra`'s at 6 s from 668 to 758 MiB; measured on 4 threads, the whole runs went
+from 890 to 1,020 MiB and from 724 to 815 MiB. `orchestra`'s grew as estimated,
+`stadium_concert`'s by 11 MiB more, as the batches' many smaller arrays leave the memory
+allocator more to hold (with glibc's mmap threshold fixed at 128 KiB, that run grew by
+124 MiB against the estimate's 118).
 
 A run that would need more memory than the computer has (or than its container may
 use: on Linux, the lowest limit on the process's control groups and on those above

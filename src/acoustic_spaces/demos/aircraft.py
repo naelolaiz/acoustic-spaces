@@ -3,14 +3,14 @@ Doc 29's hypothetical wing-engined twin jet JETW (Volume 3) taking off and landi
 flown as Doc 29 flies it and sounding as its NPD curves say.
 
 Each is the example's source of its name, ``departure`` or ``arrival``, a point with a
-walk that gives its ground track: its points' places in plan, the departure's from its
-start of roll, the arrival's touching down where its walk first comes down to the
+trajectory that gives its ground track: its points' places in plan, the departure's from its
+start of roll, the arrival's touching down where its trajectory first comes down to the
 runway (at most 1 m up). The demo's scene step writes the flight along that track into
-the demo's scene as the walk's keyframes (:func:`acoustic_spaces.doc29.source.flight`):
+the demo's scene as the trajectory's keyframes (:func:`acoustic_spaces.doc29.source.flight`):
 the heights, speeds and thrust Doc 29's Appendix B gives JETW for Volume 3's procedures
 (:data:`PROCEDURES`) at its default weights, in the scene's air (its temperature and
 pressure; ANP's reference headwind of 8 kt), as its flight path's segments
-(:func:`acoustic_spaces.doc29.path.flight_path`); the example's own walk is that flight
+(:func:`acoustic_spaces.doc29.path.flight_path`); the example's own trajectory is that flight
 already. The aircraft faces the way it flies.
 
 Its sound power and directivity are its NPD curves' and its spectral class's
@@ -68,16 +68,18 @@ def _data():
 
 
 def track_points(source) -> list[tuple[float, float, float]]:
-    """The places (x, y, z) of the walk of ``source`` (a scene source): its position,
+    """The places (x, y, z) of the trajectory of ``source`` (a scene source): its position,
     then its points or its keyframes' places, each once."""
-    walk = source.walk
+    trajectory = source.trajectory
 
     def point(at) -> tuple[float, float, float]:
         x, y, z = at
         return float(x), float(y), float(z)
 
     places = [point(source.position)]
-    later = [k.position for k in walk.keyframes] if walk.keyframes else list(walk.to)
+    later = (
+        [k.position for k in trajectory.keyframes] if trajectory.keyframes else list(trajectory.to)
+    )
     for place in map(point, later):
         if place != places[-1]:
             places.append(place)
@@ -116,7 +118,7 @@ class Aircraft(Vehicle):
     # -- the flight --------------------------------------------------------------------
 
     def problem(self, source) -> str | None:
-        """Its walk gives a ground track, two places apart at least; an arrival's comes
+        """Its trajectory gives a ground track, two places apart at least; an arrival's comes
         down to the runway, where it touches down."""
         from acoustic_spaces.doc29.path import LOWEST_SOURCE_M, SAME_PLAN_POINT_M
 
@@ -124,17 +126,17 @@ class Aircraft(Vehicle):
         # Track.through draws a ground track if a place lies more than this from the first.
         x0, y0, _ = places[0]
         if not any(math.hypot(x - x0, y - y0) > SAME_PLAN_POINT_M for x, y, _ in places):
-            return f"the {self.name}'s walk needs two places apart in plan, its ground track"
+            return f"the {self.name}'s trajectory needs two places apart in plan, its ground track"
         if not self.departing and not any(z <= LOWEST_SOURCE_M + 1e-6 for *_, z in places):
             return (
-                f"the {self.name} touches down where its walk first comes down to the runway, "
-                f"at most {LOWEST_SOURCE_M:g} m up, but none of its places is that low"
+                f"the {self.name} touches down where its trajectory first comes down to the "
+                f"runway, at most {LOWEST_SOURCE_M:g} m up, but none of its places is that low"
             )
         return None
 
     def segments_of(self, scene) -> tuple:
         """The segments of its flight path (:class:`~acoustic_spaces.doc29.path.Segment`)
-        along the ground track of its walk in ``scene``, in the scene's air: what Doc 29
+        along the ground track of its trajectory in ``scene``, in the scene's air: what Doc 29
         sums its levels over."""
         places = tuple(track_points(car_of(scene, self)))
         air = scene.air
@@ -142,7 +144,7 @@ class Aircraft(Vehicle):
 
     def flight_of(self, scene):
         """Its flight (:class:`~acoustic_spaces.doc29.source.Flight`) along the ground
-        track of its walk in ``scene``, in the scene's air: its segments' keyframes."""
+        track of its trajectory in ``scene``, in the scene's air: its segments' keyframes."""
         return _flight(self.segments_of(scene))
 
     def mean_speed_m_s(self, args: argparse.Namespace, scene) -> float:
@@ -156,7 +158,7 @@ class Aircraft(Vehicle):
         going = "speeding up" if self.departing else "slowing"
         height = "climbing" if self.departing else "coming down"
         return (
-            f"The {self.noun} flies {self.track_m(scene):.0f} m along its walk's ground "
+            f"The {self.noun} flies {self.track_m(scene):.0f} m along its trajectory's ground "
             f"track in {flown.duration_s:.1f} s, {going} from {kmh(3.6 * flown.speeds[0])} "
             f"to {kmh(3.6 * flown.speeds[-1])} km/h and {height} from {first:.0f} to "
             f"{last:.0f} m up, as Doc 29 flies {JET}'s {self.procedure} procedure in the "
@@ -205,7 +207,7 @@ class Aircraft(Vehicle):
             "temperature_c": air.temperature_c,
             "pressure_kpa": air.pressure_kpa,
             "rate": int(example.simulation.sample_rate),
-            # As long as the walk the scene gets, whose keyframes' times are rounded: a
+            # As long as the trajectory the scene gets, whose keyframes' times are rounded: a
             # sound as long as the flight itself can end a sample or two before its pass.
             "duration_s": flown.keyframes()[-1]["time_s"],
             "speed_kmh": round(float(speed_kmh), 6),
@@ -264,7 +266,7 @@ class Aircraft(Vehicle):
         return 10.0 ** (self.gains_db(args, at) / 10.0)
 
     def edit(self, source: dict, info: dict, args: argparse.Namespace) -> None:
-        """Its flight as its walk's keyframes, its sound power at its highest thrust, and
+        """Its flight as its trajectory's keyframes, its sound power at its highest thrust, and
         its engines' installation as its directivity, in a CSV table beside the demo's
         scene."""
         from acoustic_spaces.directivity import write_directivity_csv
@@ -274,9 +276,9 @@ class Aircraft(Vehicle):
         source["position"] = [round(v, 4) for v in flown.positions[0]]
         yaw, pitch, roll = (round(v, 4) for v in flown.orientations[0])
         source["orientation"] = {"yaw": yaw, "pitch": pitch, "roll": roll}
-        walk = source.setdefault("walk", {})
-        walk.pop("to", None)
-        walk["keyframes"] = flown.keyframes()
+        trajectory = source.setdefault("trajectory", {})
+        trajectory.pop("to", None)
+        trajectory["keyframes"] = flown.keyframes()
         source["level_db"] = info["level_db"]
         source.pop("spectrum", None)
         table = args.scene.with_name(f"{args.scene.stem}_{self.name}.csv")

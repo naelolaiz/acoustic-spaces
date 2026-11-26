@@ -246,7 +246,7 @@ simulation that takes it, where the paths over the edges are up to 10.7 dB off (
   in the straight line between the two; in the bands above 500 Hz; in each octave band
   in which the solver does not take the row (what it does not hold is listed under
   [Validation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation));
-  in coverage maps, with thousands of points; and along the walk of a source or a
+  in coverage maps, with thousands of points; and along the trajectory of a source or a
   listener, with a place every 0.25 m, where the level would step between a place that
   the solver takes and the next that it does not.
 - **Time.** Behind one long barrier the solver takes 1.5 to 1.9 s for a source and a
@@ -960,26 +960,25 @@ in ten, largest), and a coverage map of 96 points over grass behind two barriers
 
 These come on top of the parabolic equation's own error (see
 [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)),
-and the bands below 4 kHz do not change. A source or a listener on a building's roof costs what a
-listener behind a building does: from a source 1 m over a roof 6 m high, upwind in the
-`windy` preset, one listener 43 m away takes 3.5 s on one core and one 200 m away
-9.7 s (0.9 and 2.2 s when the building was left out), but ones 20 and 25 m away, close
-behind the edge where the wide-angle equation runs, 19 and 22 s (2.0 and 2.5 s), 16 s
-of the first in its 8 kHz run; a map of 22 points round the building takes 124 s
-(10 s for its 24 points with the building left out), 71 s with
-`barrier_frequencies: 16` and 36 s with 8. The places of a walking source share the parabolic
-equation's runs where they stand at one height over one ground and neither the weather
-nor the ground has zones: a run from one place serves the listeners of every other that
-the sound goes the same way to, each reached by a last step of its own under the
-absorbing layer of a run for it alone, so that it gets what a run
-of its own place would give it (see
-[Validation](validation.md#the-wide-angle-parabolic-equation)). Each place keeps its bent paths
-while it waits for the shared runs, so the memory a walk takes grows with the places
-that share them. An aircraft's 26 places 64 m apart, 100 m up over 1.6 km of a meadow
-in the `windy` preset, heard 30 m off the middle of its track, take about four fifths
-of the time on one core that a run for each place takes, with the same early levels. An atmosphere in which sound goes straight (`neutral`, no wind and no
-temperature gradient) changes nothing: the results are those of still air, bit
-for bit.
+and the bands below 4 kHz do not change. A source or a listener on a building's roof
+costs what a listener behind a building does: from a source 1 m over a roof 6 m high,
+upwind in the `windy` preset, one listener 43 m away takes 3.5 s on one core and one 200
+m away 9.7 s (0.9 and 2.2 s when the building was left out), but ones 20 and 25 m away,
+close behind the edge where the wide-angle equation runs, 19 and 22 s (2.0 and 2.5 s),
+16 s of the first in its 8 kHz run; a map of 22 points round the building takes 124 s
+(10 s for its 24 points with the building left out), 71 s with `barrier_frequencies: 16`
+and 36 s with 8. The places of a moving source share the parabolic equation's runs where
+they stand at one height over one ground and neither the weather nor the ground has
+zones: a run from one place serves the listeners of every other that the sound goes the
+same way to, each reached by a last step of its own under the absorbing layer of a run
+for it alone, so that it gets what a run of its own place would give it (see
+[Validation](validation.md#the-wide-angle-parabolic-equation)). Each place keeps its
+bent paths while it waits for the shared runs, so the memory a trajectory takes grows
+with the places that share them. An aircraft's 26 places 64 m apart, 100 m up over 1.6
+km of a meadow in the `windy` preset, heard 30 m off the middle of its track, take about
+four fifths of the time on one core that a run for each place takes, with the same early
+levels. An atmosphere in which sound goes straight (`neutral`, no wind and no
+temperature gradient) changes nothing: the results are those of still air, bit for bit.
 
 **Without turbulence, shadows come out deeper than measured.** The eddies of the wind
 and of the temperature scatter sound into a shadow: in the validation's shadows, 280 to
@@ -1110,14 +1109,13 @@ C_v² / c0² (Ostashev and Wilson 2015).
   eddies every sixteenth of the time they take to drift past (the outer scale over the
   wind's speed, at least 1 m/s; at most every 50 ms). Each early path plays through its
   own delay, which goes from one moment's to the next's (its top band's; how its other
-  bands lag behind it goes into its filter), as along a
-  [walk with Doppler](spatial-audio.md#moving-sources-and-doppler): crossfading the
-  moments' responses instead would mix each path at two delays a few microseconds
-  apart, which cancels the treble half-way between them. The moments change as an
-  Ornstein-Uhlenbeck process, so the delays drift rather than jump, and a walker keeps
-  the same eddies from place to place. The `auralize` command
-  and live playback (`play`, head tracking) go through the saved responses, one moment
-  each.
+  bands lag behind it goes into its filter), as along a [trajectory with
+  Doppler](spatial-audio.md#moving-sources-and-doppler): crossfading the moments'
+  responses instead would mix each path at two delays a few microseconds apart, which
+  cancels the treble half-way between them. The moments change as an Ornstein-Uhlenbeck
+  process, so the delays drift rather than jump, and a mover keeps the same eddies from
+  place to place. The `auralize` command and live playback (`play`, head tracking) go
+  through the saved responses, one moment each.
 
 ## Vegetation
 
@@ -1441,7 +1439,7 @@ classes favourable to propagation to the long-term level follows ISO 9613-2's wi
 
 ## Passing vehicles
 
-A car, a train or an aircraft is a source with a [walk](scenes.md#walks) and `doppler:
+A car, a train or an aircraft is a source with a [trajectory](scenes.md#trajectories) and `doppler:
 true`: `walkthrough` plays it past the listener with its pitch shifting along each
 path, and prints the listener's L_Amax, sound exposure level and L_Aeq over the
 pass-by; `--levels pass.csv` saves the level over time, A-weighted and per octave
@@ -1453,7 +1451,7 @@ listener passes standing sources the same way.
 ### Helicopters
 
 From Python, `acoustic_spaces.rotorcraft` gives the sound a helicopter's two rotors
-send each way, as an `Emission` for a walk with Doppler (see
+send each way, as an `Emission` for a trajectory with Doppler (see
 [Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)):
 
 - `trim` balances a `Helicopter` flying level at an airspeed by momentum theory: the
@@ -1466,7 +1464,7 @@ send each way, as an `Emission` for a walk with Doppler (see
   90 dB under the loudest), and each rotor's **broadband noise**, louder ahead and
   quieter behind as a moving source is. It is the pressure 1 m from the main rotor's
   hub, in pascals, as the far field has it, in the helicopter's frame: x along its
-  flight, y to its left, z up; a walk with `face_forward` turns it along its path.
+  flight, y to its left, z up; a trajectory with `face_forward` turns it along its path.
 - The broadband noise comes from one of two models, the helicopter's `broadband`:
   `"pegg"`, the default, is Pegg's semi-empirical method (NASA TM-80200), a fit to
   measured rotors' noise, one spectrum for each rotor round a peak set by its thrust
@@ -1488,11 +1486,11 @@ send each way, as an `Emission` for a walk with Doppler (see
 
 ```python
 from acoustic_spaces import rotorcraft
-from acoustic_spaces.walkthrough import render_walk
+from acoustic_spaces.walkthrough import render_trajectory
 
 trim = rotorcraft.trim(rotorcraft.AS350_B3, 63.0, temperature_c=25.0)  # 63 m/s
 sent = rotorcraft.emission(trim, seconds=30.0)  # 48 kHz: tones and broadband noise
-sound = render_walk(walk, {"helicopter": sent})  # its walk with doppler: true
+sound = render_trajectory(responses, {"helicopter": sent})  # its trajectory with doppler: true
 ```
 
 The tones agree with Gutin's formula for a hovering rotor to within 3 x 10⁻¹⁵, and with
@@ -1677,10 +1675,10 @@ at receivers, so a source of a scene that sends the same sound is made from them
   level there (`directivity`, `below_offset_db`);
 - *its thrust along the flight*: its sound power changes with the thrust as the NPD
   curves' maximum level 1000 ft away does, its spectrum kept (`power_change_db`);
-- *its flight* as a walk's keyframes (`flight`): the flight path's segments flown as
-  Doc 29 interpolates them (along a segment the square of the speed changes evenly with
-  the distance), so each place is reached when the aircraft gets there, the aircraft
-  facing the way it flies.
+- *its flight* as a trajectory's keyframes (`flight`): the flight path's segments flown
+  as Doc 29 interpolates them (along a segment the square of the speed changes evenly
+  with the distance), so each place is reached when the aircraft gets there, the
+  aircraft facing the way it flies.
 
 The airport example's [flight demo](demos.md#aircraft-taking-off-and-landing) flies
 Volume 3's JETW this way. The NPD curves are measured at 160 kt and give no

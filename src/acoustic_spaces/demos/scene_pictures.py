@@ -2,8 +2,8 @@
 from above, drawn from its own geometry, with its sources, its listeners and the
 listener of the moment, what is heard there and the tour; the frame round it is the
 demos' (:mod:`acoustic_spaces.demos.pictures`). When something moves, the frames of a
-moving picture (:meth:`Pictures.frame`) draw every walker where it is at that moment,
-along its walk."""
+moving picture (:meth:`Pictures.frame`) draw every mover where it is at that moment,
+along its trajectory."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ class Pictures:
     :func:`acoustic_spaces.room.outline_edges`), ``report`` the results' parameters.json,
     ``seats`` the mixes' entries of seats.json, ``stops`` the tour, ``playing`` the
     sources that play a signal, ``credit`` and ``tool`` the footer's lines. When
-    something moves, ``paths`` gives each walker's knots (("sources" or "listeners",
+    something moves, ``paths`` gives each mover's knots (("sources" or "listeners",
     name): :class:`~acoustic_spaces.walkthrough.Knots`) and ``movement`` the moving mixes'
     moments and the level of each source at each listener at each (seats.json's
     ``movement``), which :meth:`frame` draws and says at any moment of the tour.
@@ -169,7 +169,7 @@ class Pictures:
     # -- where things are ----------------------------------------------------------
 
     def placed(self, kind: str, item: dict, t: float | None) -> dict:
-        """``item`` (a source or listener as scene data) where its walk has it at ``t`` (s
+        """``item`` (a source or listener as scene data) where its trajectory has it at ``t`` (s
         from the start), facing as it does then; as it is when it does not move or
         ``t`` is None."""
         path = self.paths.get((kind, item["name"])) if t is not None else None
@@ -202,7 +202,7 @@ class Pictures:
         }
 
     def draw_paths(self, draw, plan: Plan) -> None:
-        """Each walk as a dotted line, every quarter of a metre or so along it."""
+        """Each trajectory as a dotted line, every quarter of a metre or so along it."""
         for path in self.paths.values():
             count = max(2, int(math.ceil(path.length_m / 0.25)) + 1)
             positions, _ = path.at(np.linspace(0.0, path.duration_s, count))
@@ -215,7 +215,7 @@ class Pictures:
     ) -> None:
         """The outline, the sources with their names, the listeners as rings and the
         listener of the moment as a head, with a ray from each playing source; with
-        ``t``, the walks dotted and every walker where it is then."""
+        ``t``, the trajectories dotted and every mover where it is then."""
         draw = ImageDraw.Draw(img)
         for (xa, ya), (xb, yb) in self.outline:
             draw.line([plan(xa, ya), plan(xb, yb)], fill=LINE, width=2)
@@ -319,7 +319,7 @@ class Pictures:
             lines.append(f"The sound arrives {lag * 1e3:.0f} ms after it leaves")
         t30 = self.t30_at(stop.key)
         if t30 is not None:
-            where = " where the walks start" if seat.get("moves") else ""
+            where = " where the trajectories start" if seat.get("moves") else ""
             lines.append(f"Reverberation time T30 {t30:.1f} s{where} (mean of 500 Hz and 1 kHz)")
         near = self.nearest(stop.key, t)
         if near is not None:
@@ -337,7 +337,7 @@ class Pictures:
             lines += [(line, MUTED) for line in about.split("\n")]
         if t is not None and self.paths:
             walking = ", ".join(name.replace("_", " ") for _kind, name in self.paths)
-            lines.append((f"Moving along their walks: {walking}", MUTED))
+            lines.append((f"Moving along their trajectories: {walking}", MUTED))
         if self.fmt == "binaural":
             lines.append(("L and R mark your ears", MUTED))
         return lines
@@ -351,7 +351,7 @@ class Pictures:
     # -- the pictures ------------------------------------------------------------------
 
     def still(self, k: int, t: float | None = None) -> Image.Image:
-        """The still of stop ``k``; at ``t`` of the tour, with every walker where it is
+        """The still of stop ``k``; at ``t`` of the tour, with every mover where it is
         then."""
         stop = self.stops[k]
         img = canvas()
@@ -380,19 +380,19 @@ class Pictures:
 
     def stop_at(self, t: float) -> tuple[int, float]:
         """The stop playing at ``t`` (s of the tour), and the moment of its mix then (s,
-        the walks' time when something moves)."""
+        the trajectories' time when something moves)."""
         k = max((j for j, stop in enumerate(self.stops) if stop.at <= t + 1e-9), default=0)
         stop = self.stops[k]
         return k, stop.start + (t - stop.at)
 
     def frame(self, t: float) -> Image.Image:
         """The moving picture at ``t`` (s of the tour): the still of the stop then, with
-        every walker where it is and the level at that moment."""
+        every mover where it is and the level at that moment."""
         return self.still(*self.stop_at(t))
 
     def shown(self, k: int, t: float | None = None) -> str:
         """What the still of stop ``k`` shows, for the video's messages: the sources that
-        play, then the stop's listener, each walker at ``t`` of its walk
+        play, then the stop's listener, each mover at ``t`` of its trajectory
         (:func:`~acoustic_spaces.walkthrough.moment_name`), as ``stage, car @ 3.40 s ->
         seat``."""
 

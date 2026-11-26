@@ -426,7 +426,7 @@ def _long_railway(tmp_path: Path) -> Path:
         if each["name"].startswith("train"):
             z = each["position"][2]
             each["position"] = [-80, 0, z]
-            each["walk"]["to"] = [[80, 0, z]]
+            each["trajectory"]["to"] = [[80, 0, z]]
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return folder
 
@@ -537,7 +537,7 @@ def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path, monke
     def nothing(*args, **kwargs):
         raise AssertionError("the rumble alone simulates nothing")
 
-    monkeypatch.setattr("acoustic_spaces.walkthrough.simulate_walk", nothing)
+    monkeypatch.setattr("acoustic_spaces.walkthrough.simulate_trajectory", nothing)
     assert demo.main(["walk", *rumble]) == 0
     alone = pipeline.read_json(run_of(demo, *rumble) / "walk" / "walk.json")["listeners"]["tsi_7m5"]
     assert "parts" not in alone and "pitch_semitones" not in alone
@@ -563,12 +563,12 @@ def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, mo
         if each["name"].startswith("tram"):
             z = each["position"][2]
             each["position"] = [-10, 0, z]
-            each["walk"]["to"] = [[20, 0, z]]
+            each["trajectory"]["to"] = [[20, 0, z]]
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     simulated, outside = [], []
-    real_walk, real_through = walkthrough.simulate_walk, indoors.House.through
+    real_walk, real_through = walkthrough.simulate_trajectory, indoors.House.through
 
-    def simulate_walk(room, name, **kwargs):
+    def simulate_trajectory(room, name, **kwargs):
         at = next(lis for lis in room.scene.listeners if lis.name == kwargs["listener"])
         simulated.append((name, at.name, at.position))
         return real_walk(room, name, **kwargs)
@@ -583,7 +583,7 @@ def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, mo
         shifts.append((shift_db, times))
         return real_heard(self, wet, rate, shift_db, times)
 
-    monkeypatch.setattr(walkthrough, "simulate_walk", simulate_walk)
+    monkeypatch.setattr(walkthrough, "simulate_trajectory", simulate_trajectory)
     monkeypatch.setattr(indoors.House, "through", through)
     monkeypatch.setattr(indoors.House, "heard", heard_in)
     demo = load(folder / "passby_demo.py").at(folder)

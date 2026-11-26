@@ -32,7 +32,7 @@ sources:
     orientation: {yaw: 0, pitch: 0, roll: 0}
     level_db: [142.6, 150.4, 152.1, 148.9, 148.3, 150.7, 148.5, 144.5]
     directivity: {file: jetw.csv}
-    walk:
+    trajectory:
       doppler: true
       keyframes:
         - {time_s: 1.9822, position: [4.6073, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
@@ -71,7 +71,7 @@ sources:
     orientation: {yaw: 0, pitch: -3, roll: 0}
     level_db: [131.9, 142.1, 139.0, 139.8, 139.0, 137.5, 139.2, 138.5]
     directivity: {file: jetw.csv}
-    walk:
+    trajectory:
       doppler: true
       keyframes:
         - {time_s: 19.2132, position: [-2655.1915, 0, 154.3509], orientation: {yaw: 0, pitch: -3, roll: 0}}

@@ -41,7 +41,7 @@ sources:
     enabled: false
     position: [75, 2, 0.05]
     level_db: [98.3, 91.2, 89.4, 90.7, 95.6, 92.3, 84.6, 76.1]
-    walk:
+    trajectory:
       to: [[-75, 2, 0.05]]
       speed_m_s: 13.89
       doppler: true
@@ -51,7 +51,7 @@ sources:
     enabled: false
     position: [-75, -2, 0.05]
     level_db: [108.9, 104.8, 104.6, 107.0, 107.0, 101.5, 95.7, 89.7]
-    walk:
+    trajectory:
       to: [[75, -2, 0.05]]
       speed_m_s: 19.44
       doppler: true

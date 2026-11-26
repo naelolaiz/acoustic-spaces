@@ -133,8 +133,14 @@ def test_the_examples_road_vehicles_are_cnossos_at_their_speed(example: str, veh
     scene = Scene.from_yaml(example_path(example))
     (source,) = [s for s in scene.sources if s.name == vehicle.name]
     assert not source.in_use and not source.extended and source.position[2] == 0.05
-    assert source.walk.doppler and source.walk.enabled and source.walk.keyframes is None
-    power = vehicle_power(vehicle.category, source.walk.speed_m_s * 3.6, scene.air.temperature_c)
+    assert (
+        source.trajectory.doppler
+        and source.trajectory.enabled
+        and source.trajectory.keyframes is None
+    )
+    power = vehicle_power(
+        vehicle.category, source.trajectory.speed_m_s * 3.6, scene.air.temperature_c
+    )
     assert source.level_db == pytest.approx(power.total_db, abs=0.05)
 
 
@@ -149,14 +155,14 @@ def test_the_streets_police_car_has_the_measured_siren(tmp_path: Path) -> None:
     scene = Scene.from_yaml(path)
     (car,) = [s for s in scene.sources if s.name == "police_car_siren"]
     assert not car.in_use and car.position[2] == 1.5
-    assert car.walk.doppler and car.walk.face_forward
+    assert car.trajectory.doppler and car.trajectory.face_forward
     assert car_problem(scene, path.name, siren.POLICE_CAR_VEHICLE) is None
     # A siren whose walk goes elsewhere does not go along with its car.
-    walk = car.walk.model_copy(update={"to": [(-50.0, 2.0, 1.5)]})
+    walk = car.trajectory.model_copy(update={"to": [(-50.0, 2.0, 1.5)]})
     moved = scene.model_copy(
         update={
             "sources": [
-                s.model_copy(update={"walk": walk}) if s.name == car.name else s
+                s.model_copy(update={"trajectory": walk}) if s.name == car.name else s
                 for s in scene.sources
             ]
         }
@@ -197,8 +203,8 @@ def test_the_streets_fire_engine_has_its_siren_and_horn_at_their_rules() -> None
     ):
         source = sources[name]
         assert not source.in_use and source.position[2] == height
-        assert source.walk.doppler and source.walk.face_forward
-        assert source.walk.to[-1][:2] == sources[siren.FIRE_ENGINE].walk.to[-1][:2]
+        assert source.trajectory.doppler and source.trajectory.face_forward
+        assert source.trajectory.to[-1][:2] == sources[siren.FIRE_ENGINE].trajectory.to[-1][:2]
         assert source.level_db == pytest.approx(power, abs=0.05)
         assert source.directivity.file == path.parent / "siren.csv"
 
@@ -218,8 +224,8 @@ def test_the_streets_car_has_its_horn_off_unless_asked() -> None:
     assert car_problem(scene, path.name, vehicle) is None
     source = sources[siren.CAR_HORN_PART]
     assert not source.in_use and source.position[2] == horn.CAR_HEIGHT_M
-    assert source.walk.doppler and source.walk.face_forward
-    assert source.walk.to[-1][:2] == sources[siren.CAR].walk.to[-1][:2]
+    assert source.trajectory.doppler and source.trajectory.face_forward
+    assert source.trajectory.to[-1][:2] == sources[siren.CAR].trajectory.to[-1][:2]
     rate = scene.simulation.sample_rate
     assert source.level_db == pytest.approx(horn.horn_power(rate, horn.CAR_HORN), abs=0.05)
     assert source.directivity.file == path.parent / "siren.csv"
@@ -595,7 +601,7 @@ def _roadside(tmp_path: Path) -> Path:
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     (car,) = [s for s in data["sources"] if s["name"] == "car"]
     car["position"] = [20, 2, 0.05]
-    car["walk"]["to"] = [[-20, 2, 0.05]]
+    car["trajectory"]["to"] = [[-20, 2, 0.05]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] in ("verge", "yard_25m")]
     data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.2})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
@@ -637,19 +643,22 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
     path = folder / "scene.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     (car,) = [s for s in data["sources"] if s["name"] == "car"]
-    car["walk"]["enabled"] = False
+    car["trajectory"]["enabled"] = False
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert "the car's walk is off in scene.yaml" in demo.check(args)
     assert demo.moving(demo.resolved(args)) == []
     # Keyframes at one steady speed drive as they are timed: 40 m in 3 s.
-    car["walk"] = {"keyframes": [{"time_s": 3.0, "position": [-20, 2, 0.05]}], "doppler": True}
+    car["trajectory"] = {
+        "keyframes": [{"time_s": 3.0, "position": [-20, 2, 0.05]}],
+        "doppler": True,
+    }
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert demo.check(args) is None
     assert "at 48.0 km/h (13.33 m/s, as its walk in the scene goes)" in demo.summary(
         demo.resolved(args)
     )
     # Keyframes at two speeds: CNOSSOS-EU has a car's power at one; --speed gives it.
-    car["walk"]["keyframes"] = [
+    car["trajectory"]["keyframes"] = [
         {"time_s": 1.0, "position": [0, 2, 0.05]},
         {"time_s": 3.0, "position": [0, 2, 0.05]},  # it waits
         {"time_s": 5.0, "position": [-20, 2, 0.05]},
@@ -704,7 +713,7 @@ def test_a_vehicles_sources_left_out_walk_at_the_demos_speed(tmp_path: Path) -> 
         assert car_problem(scene, "scene_demo.yaml", vehicle) is None, vehicle.name
         mine = [s for s in scene.sources if s.name in vehicle.every_part()]
         assert any(not s.in_use for s in mine)
-        assert {round(s.walk.speed_m_s, 4) for s in mine} == {round(30.0 / 3.6, 4)}
+        assert {round(s.trajectory.speed_m_s, 4) for s in mine} == {round(30.0 / 3.6, 4)}
 
 
 def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -> None:
@@ -719,7 +728,7 @@ def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -
     path = folder / "scene.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     (car,) = [s for s in data["sources"] if s["name"] == "car"]
-    car["walk"] = {
+    car["trajectory"] = {
         "keyframes": [
             {"time_s": 1.5, "position": [0, 2, 0.05]},
             {"time_s": 3.0, "position": [-20, 2, 0.05], "orientation": {"yaw": 180}},
@@ -731,7 +740,7 @@ def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -
     assert demo.main(["scene"]) == 0
     written = Scene.from_yaml(run_of(demo) / "scene_demo.yaml")
     (driven,) = [s for s in written.sources if s.name == "car"]
-    assert driven.in_use and driven.walk.doppler and len(driven.walk.keyframes) == 2
+    assert driven.in_use and driven.trajectory.doppler and len(driven.trajectory.keyframes) == 2
     assert walk_speed(driven) == pytest.approx(40.0 / 3.0)
     power = vehicle_power("1", 48.0, written.air.temperature_c)
     assert driven.level_db == pytest.approx(power.total_db, abs=0.05)
@@ -744,18 +753,27 @@ def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -
     assert demo.main(["scene", "--speed", "72"]) == 0
     fast = run_of(demo, "--speed", "72") / "scene_demo.yaml"
     (driven,) = [s for s in Scene.from_yaml(fast).sources if s.name == "car"]
-    assert driven.walk.keyframes is None and driven.walk.speed_m_s == pytest.approx(20.0)
-    assert driven.walk.to == [(0.0, 2.0, 0.05), (-20.0, 2.0, 0.05)] and driven.walk.doppler
+    assert driven.trajectory.keyframes is None and driven.trajectory.speed_m_s == pytest.approx(
+        20.0
+    )
+    assert (
+        driven.trajectory.to == [(0.0, 2.0, 0.05), (-20.0, 2.0, 0.05)] and driven.trajectory.doppler
+    )
     assert demo.is_done(demo.step("scene"), args)
     assert demo.is_done(demo.step("scene"), demo.resolved(demo.defaults()))
     # The editor follows the car along the walk the demo simulates: this one, at --speed.
-    assert demo.walks(args).sources == Scene.from_yaml(fast).sources
+    assert demo.trajectories(args).sources == Scene.from_yaml(fast).sources
     # The same, from Python: a wait drops out of the places.
     source = Scene.from_yaml(path)
     (car,) = [s for s in source.sources if s.name == "car"]
-    frames = [*car.walk.keyframes[:1], car.walk.keyframes[0].model_copy(update={"time_s": 2.0})]
-    waiting = car.model_copy(update={"walk": car.walk.model_copy(update={"keyframes": frames})})
-    assert driving(waiting, 36.0).walk.to == [(0.0, 2.0, 0.05)]
+    frames = [
+        *car.trajectory.keyframes[:1],
+        car.trajectory.keyframes[0].model_copy(update={"time_s": 2.0}),
+    ]
+    waiting = car.model_copy(
+        update={"trajectory": car.trajectory.model_copy(update={"keyframes": frames})}
+    )
+    assert driving(waiting, 36.0).trajectory.to == [(0.0, 2.0, 0.05)]
 
 
 def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, capsys) -> None:
@@ -779,7 +797,7 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
     scene = Scene.from_yaml(work / "scene_demo.yaml")
     assert [s.name for s in scene.sources if s.in_use] == ["car"]
     (car,) = [s for s in scene.sources if s.name == "car"]
-    assert car.walk.speed_m_s == pytest.approx(20.0) and car.level_db == info["level_db"]
+    assert car.trajectory.speed_m_s == pytest.approx(20.0) and car.level_db == info["level_db"]
     facts = pipeline.read_json(work / "walk" / "walk.json")
     assert set(facts["listeners"]) == {"verge", "yard_25m"} and len(facts["times"]) == 11
     verge = facts["listeners"]["verge"]
@@ -858,16 +876,16 @@ def _street(tmp_path: Path) -> Path:
         if each["name"].startswith("police_car"):
             z = each["position"][2]
             each["position"] = [20, 2, z]
-            each["walk"]["to"] = [[-20, 2, z]]
+            each["trajectory"]["to"] = [[-20, 2, z]]
         if each["name"].startswith("fire_engine"):
             z = each["position"][2]
             each["position"] = [-20, -2, z]
-            each["walk"]["to"] = [[20, -2, z]]
+            each["trajectory"]["to"] = [[20, -2, z]]
         if each["name"].startswith("car"):
             # Long enough for the horn's second blasts, after its sound's fade in.
             z = each["position"][2]
             each["position"] = [-40, -2, z]
-            each["walk"]["to"] = [[40, -2, z]]
+            each["trajectory"]["to"] = [[40, -2, z]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "pavement"]
     data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.2, "seed": 1})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
@@ -919,7 +937,11 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
         next(s for s in scene.sources if s.name == n) for n in ("police_car", "police_car_siren")
     )
     assert car.level_db == info["vehicle"]["level_db"] and car.directivity == "omni"
-    assert top.level_db == info["siren_level_db"] and top.walk.face_forward and top.walk.doppler
+    assert (
+        top.level_db == info["siren_level_db"]
+        and top.trajectory.face_forward
+        and top.trajectory.doppler
+    )
     assert top.directivity.file == work / "scene_demo_police_car_siren.csv"
     table, own = (
         f.read_text(encoding="utf-8").split("azimuth", 1)[1]
@@ -1035,7 +1057,7 @@ def test_the_passby_demo_drives_the_fire_engine_with_its_siren_and_horn(
     assert sources["fire_engine"].level_db == info["vehicle"]["level_db"]
     for name, key in ((siren.FIRE_SIREN, "siren"), (siren.FIRE_HORN, "horn")):
         assert sources[name].level_db == info[f"{key}_level_db"]
-        assert sources[name].walk.face_forward and sources[name].walk.doppler
+        assert sources[name].trajectory.face_forward and sources[name].trajectory.doppler
         assert sources[name].directivity.file == work / f"scene_demo_{name}.csv"
     facts = pipeline.read_json(work / "walk" / "walk.json")
     assert facts["parts"] == parts and facts["horn"] == "blasts"
@@ -1134,7 +1156,7 @@ def test_the_passby_demo_drives_the_car_with_its_horn(tmp_path: Path) -> None:
     sources = {s.name: s for s in scene.sources}
     assert [s.name for s in scene.sources if s.in_use] == [siren.CAR, siren.CAR_HORN_PART]
     assert sources["car_horn"].level_db == info["horn_level_db"]
-    assert sources["car_horn"].walk.face_forward and sources["car_horn"].walk.doppler
+    assert sources["car_horn"].trajectory.face_forward and sources["car_horn"].trajectory.doppler
     assert sources["car_horn"].directivity.file == work / "scene_demo_car_horn.csv"
     facts = pipeline.read_json(work / "walk" / "walk.json")
     assert facts["about"].startswith("A car at 50 km/h, its horn in blasts\n")

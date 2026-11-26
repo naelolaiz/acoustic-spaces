@@ -157,9 +157,9 @@ Edge diffraction:
   rows in place of the paths over one edge and two, in still air and in wind
   (`simulation.early.rows`, see [Sound over rows of barriers and
   buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
-- [ ] The solver for whole rows in coverage maps and along walks, which take the paths
-  over the edges: a run for every point takes seconds, and along a walk the level would
-  step where the solver takes one place and not the next.
+- [ ] The solver for whole rows in coverage maps and along trajectories, which take the
+  paths over the edges: a run for every point takes seconds, and along a trajectory the
+  level would step where the solver takes one place and not the next.
 - [ ] The solver for whole rows where it does not hold yet: rigid screens on a rigid
   ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind three
   screens, and up to 8.2 dB where the way crosses them at a slant of 75°; part of what
@@ -891,8 +891,8 @@ Next:
   fast as the linear-algebra library's, with the same bits: wider vector instructions
   chosen when it runs, and less to do for a small product. A rotor's `bpm` broadband
   noise takes 23 % longer than it did with the library's sums.
-- [ ] A walk's places rendered on the run's threads, as a run's files are: they are
-  rendered one after the other.
+- [ ] A trajectory's places rendered on the run's threads, as a run's files are: they
+  are rendered one after the other.
 - [ ] A response's echogram worked out once for all that read it: a run works it out
   for the parameters, for the speech results, for the standard errors and, outdoors,
   for the level against the free field. And the early paths' signals on the run's

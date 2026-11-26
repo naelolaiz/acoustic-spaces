@@ -573,7 +573,7 @@ msgstr "Dekkingskaart"
 msgid "Messages"
 msgstr "Meldingen"
 
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/demo_dialog.py
+#: acoustic_spaces/gui/app.py
 msgid "Movement"
 msgstr "Beweging"
 
@@ -885,12 +885,12 @@ msgstr "Run &volgen"
 msgid ""
 "While a run, coverage map, export or demo goes on, ring the sources and "
 "listeners its latest step works on in the 3D view and the plan, and draw the "
-"walkers where the place along a walk it simulates has them"
+"movers where the place along a trajectory it simulates has them"
 msgstr ""
-"Terwijl een berekening, dekkingskaart, export of demo loopt, in de "
-"3D-weergave en de plattegrond een ring tekenen om de bronnen en ontvangers "
-"waaraan de laatste stap werkt, en wat beweegt tekenen waar het is op de "
-"plaats van een route die wordt gesimuleerd"
+"Terwijl een berekening, een dekkingskaart, een export of een demo loopt, in "
+"de 3D-weergave en de plattegrond een ring zetten om de bronnen en ontvangers "
+"waaraan de laatste stap werkt, en de bewegende elementen tekenen waar het "
+"gesimuleerde punt van een route ze plaatst"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
@@ -1178,10 +1178,11 @@ msgstr "Wacht tot de lopende berekening klaar is en render dan de beweging."
 
 #: acoustic_spaces/gui/app.py
 msgid ""
-"Nothing moves: add a keyframe to a source or listener in use, and tick Moves."
+"Nothing moves: add a keyframe to a source or listener in use, and tick "
+"Moving."
 msgstr ""
-"Niets beweegt: geef een meegenomen bron of ontvanger een keyframe en vink "
-"Beweegt aan."
+"Niets beweegt: geef een meegenomen bron of ontvanger een keyframe en vink In "
+"beweging aan."
 
 #: acoustic_spaces/gui/app.py
 msgid "Nothing to play: give a source in use a WAV file under Plays first."
@@ -2081,20 +2082,24 @@ msgid ", with Doppler"
 msgstr ", met doppler"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "Trajectories"
+msgstr "Routes"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"The sources and listeners with a walk. Ticked ones move along it while the "
-"piece plays, all on one clock; the others stand where they start"
+"The sources and listeners with a trajectory. Ticked ones move along it while "
+"the piece plays, all on one clock; the others stand where they start"
 msgstr ""
 "De bronnen en ontvangers met een route. Aangevinkte volgen die terwijl het "
 "stuk speelt, allemaal op één klok; de andere blijven staan waar ze beginnen"
 
 #: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
-msgid "Moves"
-msgstr "Beweegt"
+msgid "Moving"
+msgstr "In beweging"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick to move it along its walk in this run"
-msgstr "Aanvinken om het in deze run zijn route te laten volgen"
+msgid "Tick to move it along its trajectory in this run"
+msgstr "Vink aan om het in deze run zijn route te laten volgen"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "The source or listener, as the scene names it"
@@ -2109,7 +2114,7 @@ msgid "A source or a listener"
 msgstr "Een bron of een ontvanger"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Walk"
+msgid "Trajectory"
 msgstr "Route"
 
 #: acoustic_spaces/gui/demo_dialog.py
@@ -2134,9 +2139,9 @@ msgstr "Beweging bewerken…"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"Close this window and open the Movement panel on the selected walker, to "
-"change its walk or give a source or listener one; save the scene before "
-"running the demo"
+"Close this window and open the Movement panel on the selected mover, to "
+"change its trajectory or give a source or listener one; save the scene "
+"before running the demo"
 msgstr ""
 "Sluit dit venster en opent het bewegingspaneel op het geselecteerde element, "
 "om zijn route te wijzigen of een bron of ontvanger er een te geven; sla de "
@@ -2147,8 +2152,8 @@ msgid "As in the scene"
 msgstr "Zoals in de scène"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick what Moves ticks in the scene again"
-msgstr "Vink weer aan wat Beweegt in de scène aanvinkt"
+msgid "Tick what Moving ticks in the scene again"
+msgstr "Vink opnieuw aan wat In beweging in de scène aanvinkt"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "All together, in each part"
@@ -2281,18 +2286,18 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
 msgid ""
-"Ticked sources and listeners move along their walks while the piece plays; "
-"the others stand where they start. The ticks start as Moves sets them in the "
-"scene, and change this run only ({option})."
+"Ticked sources and listeners move along their trajectories while the piece "
+"plays; the others stand where they start. The ticks start as Moving sets "
+"them in the scene, and change this run only ({option})."
 msgstr ""
 "Aangevinkte bronnen en ontvangers volgen hun routes terwijl het stuk speelt; "
-"de andere blijven staan waar ze beginnen. De vinkjes beginnen zoals Beweegt "
-"ze in de scène zet, en veranderen alleen deze run ({option})."
+"de andere blijven staan waar ze beginnen. De vinkjes beginnen zoals In "
+"beweging ze in de scène zet, en veranderen alleen deze run ({option})."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"What this run moves along its walk, as the options below pick what plays; "
-"Edit movement… changes a walk."
+"What this run moves along its trajectory, as the options below pick what "
+"plays; Edit movement… changes a trajectory."
 msgstr ""
 "Wat deze run langs zijn route beweegt, zoals de opties hieronder kiezen wat "
 "speelt; Beweging bewerken… wijzigt een route."
@@ -2300,7 +2305,7 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "This demo moves nothing: every source and listener stands where it starts. "
-"This scene plays the walks."
+"This scene plays the trajectories."
 msgstr ""
 "Deze demo beweegt niets: elke bron en elke ontvanger blijft staan waar hij "
 "begint. Deze scène speelt de routes."
@@ -2429,15 +2434,15 @@ msgstr[1] "{count} ontvangers weglaten"
 
 #: acoustic_spaces/gui/document.py
 #, python-brace-format
-msgid "{name} has no walk yet: add a keyframe first"
+msgid "{name} has no trajectory yet: add a keyframe first"
 msgstr "{name} heeft nog geen route: voeg eerst een keyframe toe"
 
 #: acoustic_spaces/gui/document.py
-msgid "turn the walk on"
+msgid "turn the trajectory on"
 msgstr "route inschakelen"
 
 #: acoustic_spaces/gui/document.py
-msgid "turn the walk off"
+msgid "turn the trajectory off"
 msgstr "route uitschakelen"
 
 #: acoustic_spaces/gui/document.py
@@ -5545,7 +5550,7 @@ msgid ""
 "their paths in pressure: the solver for whole rows (one field over all of "
 "them, with the ground and the roofs in it, where their tops go on far enough "
 "to both sides of the way; seconds for each source and listener) or the paths "
-"over one edge or two alone. Maps and walks take the paths"
+"over one edge or two alone. Maps and trajectories take the paths"
 msgstr ""
 "Buiten het geluid over schermen en gebouwen in het verticale vlak door een "
 "bron en een ontvanger, in de octaafbanden tot 500 Hz die hun paden in "
@@ -6728,8 +6733,8 @@ msgstr "Doppler"
 msgid ""
 "Tick for a vehicle or an aircraft: the early sound goes through delays that "
 "change as it goes, so its pitch shifts as it passes (doppler in the scene "
-"file). A walk with Doppler moves alone: Render movement… and the demos play "
-"it while every other walk is off"
+"file). A trajectory with Doppler moves alone: Render movement… and the demos "
+"play it while every other trajectory is off"
 msgstr ""
 "Vink aan voor een voertuig of een vliegtuig: het vroege geluid gaat door "
 "vertragingen die onderweg veranderen, zodat de toonhoogte verschuift bij het "
@@ -6834,8 +6839,8 @@ msgstr ""
 msgid ""
 "How fast it goes from this keyframe to the next: the distance between them "
 "over the time between them (m/s; 3.6 km/h each). Nothing to set: change a "
-"time or a position and the speed follows. A walk through points goes at one "
-"speed: type it here and the times follow"
+"time or a position and the speed follows. A trajectory through points goes "
+"at one speed: type it here and the times follow"
 msgstr ""
 "Hoe snel het van dit keyframe naar het volgende gaat: de afstand ertussen "
 "gedeeld door de tijd ertussen (m/s; elk 3,6 km/h). Niets in te stellen: "
@@ -6848,8 +6853,8 @@ msgstr "Omzetten in keyframes"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
-"Turn a walk along points at a speed (to, speed_m_s) into keyframes that move "
-"the same way, timed, so that they can be edited here"
+"Turn a trajectory along points at a speed (to, speed_m_s) into keyframes "
+"that move the same way, timed, so that they can be edited here"
 msgstr ""
 "Een route langs punten met een snelheid (to, speed_m_s) omzetten in "
 "keyframes die op dezelfde manier bewegen, met tijden, zodat ze hier te "
@@ -6878,9 +6883,9 @@ msgstr ""
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
-"Where the timeline ends: at least the longest walk; make it longer to add "
-"keyframes past the end, and the movers that have ended stand where their "
-"walks end"
+"Where the timeline ends: at least the longest trajectory; make it longer to "
+"add keyframes past the end, and the movers that have ended stand where their "
+"trajectories end"
 msgstr ""
 "Waar de tijdlijn eindigt: minstens de langste route; maak ze langer om "
 "keyframes na het einde toe te voegen; wat zijn route heeft afgelegd staat "
@@ -6941,8 +6946,9 @@ msgstr "Keyframe {n}"
 #, python-brace-format
 msgid ""
 "{name} goes through its points at one speed, {speed:.2f} m/s ({kmh:.1f} "
-"km/h): type or drag a point to move it, type a speed for the whole walk, and "
-"the times follow. Convert to keyframes to time each point yourself."
+"km/h): type or drag a point to move it, type a speed for the whole "
+"trajectory, and the times follow. Convert to keyframes to time each point "
+"yourself."
 msgstr ""
 "{name} gaat met één snelheid door zijn punten, {speed:.2f} m/s ({kmh:.1f} "
 "km/h): typ of sleep een punt om het te verplaatsen, typ een snelheid voor de "
@@ -6987,7 +6993,7 @@ msgstr "Punt verwijderen"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Remove the selected point; the mover goes straight from the one before to "
-"the one after. With the last one, the walk goes too"
+"the one after. With the last one, the trajectory goes too"
 msgstr ""
 "Het geselecteerde punt verwijderen; het bewegende gaat rechtstreeks van het "
 "vorige naar het volgende. Met het laatste verdwijnt ook de route"
@@ -6999,8 +7005,8 @@ msgstr "Keyframe toevoegen"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Add a keyframe at the playhead, where the mover is then (on a keyframe "
-"already, or at 0 s: a second past the end of its walk, where it ends), then "
-"drag it into place or type where it is"
+"already, or at 0 s: a second past the end of its trajectory, where it ends), "
+"then drag it into place or type where it is"
 msgstr ""
 "Een keyframe toevoegen op de afspeelkop, waar het bewegende dan is (al op "
 "een keyframe, of op 0 s: een seconde na het einde van zijn route, waar het "
@@ -7013,7 +7019,7 @@ msgstr "Keyframe verwijderen"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Remove the selected keyframe; the mover goes straight from the one before to "
-"the one after. With the last one, the walk goes too"
+"the one after. With the last one, the trajectory goes too"
 msgstr ""
 "Het geselecteerde keyframe verwijderen; het bewegende gaat rechtstreeks van "
 "het vorige naar het volgende. Met het laatste verdwijnt ook de route"
@@ -7024,7 +7030,7 @@ msgid "{text} is not a number"
 msgstr "{text} is geen getal"
 
 #: acoustic_spaces/gui/movement.py
-msgid "a walk goes at a speed above 0 m/s"
+msgid "a trajectory goes at a speed above 0 m/s"
 msgstr "een route heeft een snelheid boven 0 m/s"
 
 #: acoustic_spaces/gui/movement.py
@@ -7088,7 +7094,7 @@ msgid "remove keyframe"
 msgstr "keyframe verwijderen"
 
 #: acoustic_spaces/gui/movement.py
-msgid "convert walk to keyframes"
+msgid "convert trajectory to keyframes"
 msgstr "route omzetten in keyframes"
 
 #: acoustic_spaces/gui/movement.py
@@ -7300,7 +7306,7 @@ msgstr "hoek verplaatsen"
 #, python-brace-format
 msgid ""
 "Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
-"its walk; drag it once the run is over"
+"its trajectory; drag it once the run is over"
 msgstr ""
 "Niet verplaatst: {name} is getekend waar de run het simuleert, op {time:.2f} "
 "s van zijn route; sleep het als de run voorbij is"
@@ -8376,6 +8382,62 @@ msgid "In step with the scene"
 msgstr "Gelijk met de scène"
 
 #: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F1)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F1)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F2)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F2)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F3)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F3)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F4)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F4)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F5)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F5)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M1)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M1)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M2)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M2)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M3)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M3)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M4)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M4)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M5)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M5)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M6)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M6)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M7)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M7)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M8)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M8)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M9)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M9)"
+
+#: acoustic_spaces/recordings.py
 msgid "\"Spicy Funk Cake\", Rhythmussportgruppe"
 msgstr "\"Spicy Funk Cake\", Rhythmussportgruppe"
 
@@ -8386,14 +8448,6 @@ msgstr "\"Great British Summer\", Tom McKenzie"
 #: acoustic_spaces/recordings.py
 msgid "\"Potassium\", Software-Entwicklungskit"
 msgstr "\"Potassium\", Software-Entwicklungskit"
-
-#: acoustic_spaces/recordings.py
-msgid "A man talking (ACE corpus, talker M4)"
-msgstr "Een man die spreekt (ACE-corpus, spreker M4)"
-
-#: acoustic_spaces/recordings.py
-msgid "A woman talking (ACE corpus, talker F2)"
-msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F2)"
 
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py
@@ -8991,9 +9045,9 @@ msgid ""
 "wall_3 and wall_4 meet at the inner corner (8, 8). One visitor sees the "
 "guide, one stands round the corner, and one walks from 3 m in front of the "
 "guide down the long arm and round the corner at 1.2 m/s: `acoustic-spaces "
-"walkthrough` plays a recording along that walk, and walk_demo.py makes a "
-"video of it. Turn the walk off (Moves, or `enabled: false`) and that visitor "
-"stands where it starts."
+"walkthrough` plays a recording along that trajectory, and walk_demo.py makes "
+"a video of it. Turn the trajectory off (Moving, or `enabled: false`) and "
+"that visitor stands where it starts."
 msgstr ""
 "Een L-vormige galerij, 4 m hoog (1150 m3), met een marmeren vloer, ruwe "
 "bakstenen wanden en een absorberend plafond: een gids spreekt in de lange "
@@ -9003,7 +9057,7 @@ msgstr ""
 "Eén bezoeker ziet de gids, één staat om de hoek, en één loopt van 3 m voor "
 "de gids door de lange arm en om de hoek met 1,2 m/s: `acoustic-spaces "
 "walkthrough` speelt een opname langs die route af, en walk_demo.py maakt er "
-"een video van. Zet de route uit (Beweegt, of `enabled: false`) en die "
+"een video van. Zet de route uit (In beweging, of `enabled: false`) en die "
 "bezoeker blijft staan waar hij begint."
 
 #: examples/helicopter_flyover/scene.yaml
@@ -9262,13 +9316,13 @@ msgid ""
 "km/h, its sound power per metre and its directivity round the track Schall "
 "03's (Germany's method for the noise of railways, 2014), all of it at the "
 "rail top. A train runs past at 160 km/h, its pitch falling as it goes by "
-"(Doppler): three sources along one walk, at the rail top, on the roof and at "
-"the pantograph, Schall 03's heights; each plays the train's points at that "
-"height one behind the other (its bogies, its cars' roofs, its pantograph), "
-"so the train goes by as long as it is. They are left out of simulations "
-"until ticked, as is the train's horn at its front, and passby_demo.py runs "
-"one of four trains past, its horn sounding with --sources "
-"train,train_roof,train_pantograph,train_horn."
+"(Doppler): three sources along one trajectory, at the rail top, on the roof "
+"and at the pantograph, Schall 03's heights; each plays the train's points at "
+"that height one behind the other (its bogies, its cars' roofs, its "
+"pantograph), so the train goes by as long as it is. They are left out of "
+"simulations until ticked, as is the train's horn at its front, and "
+"passby_demo.py runs one of four trains past, its horn sounding with "
+"--sources train,train_roof,train_pantograph,train_horn."
 msgstr ""
 "Buiten: een spoorlijn op ballast door een weiland, gehoord waar de EU-regel "
 "voor het geluid van treinen een passage meet (7.5 m van het midden van het "

@@ -1956,30 +1956,32 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     scene = _any_scene(tmp_path)
     data = yaml.safe_load(scene.read_text(encoding="utf-8"))
     turn = {"time_s": 1.5, "position": [6.0, 2.5, 1.2], "orientation": {"yaw": 180}}
-    data["listeners"][1]["walk"] = {
+    data["listeners"][1]["trajectory"] = {
         "keyframes": [{"time_s": 1.0, "position": [6.0, 2.5, 1.2]}, turn]
     }
-    data["sources"][1]["walk"] = {"enabled": False, "to": [[5.0, 2.0, 1.0]], "doppler": True}
+    data["sources"][1]["trajectory"] = {"enabled": False, "to": [[5.0, 2.0, 1.0]], "doppler": True}
     scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     monkeypatch.chdir(scene.parent)
     demo = DEMO.at(scene.parent)
     args = demo.defaults()
     args.scene = Path("scene.yaml")
     assert moving_of(demo.resolved(args)) == ["seat-b"] and demo.check(args) is None
-    # The editor follows the walks the run plays: those of --moving alone, else the scene's.
-    assert [item.name for _kind, item in movers(demo.walks(demo.resolved(args)))] == ["seat-b"]
+    # The editor follows the trajectories the run plays: those of --moving alone, else the scene's.
+    moving = movers(demo.trajectories(demo.resolved(args)))
+    assert [item.name for _kind, item in moving] == ["seat-b"]
     args.moving = "seat-b,radio"
     assert demo.check(args) == (
-        "radio walks with Doppler, which plays alone: leave the others standing "
+        "radio moves with Doppler, which plays alone: leave the others standing "
         "(--moving radio), or turn its Doppler off"
     )
     args.moving = "seat-a"
     assert demo.check(args) == (
-        "--moving: 'seat-a' has no walk to move along; the scene's walks: seat-b, radio"
+        "--moving: 'seat-a' has no trajectory to move along; the scene's trajectories: "
+        "seat-b, radio"
     )
     args.moving = "none"
     assert moving_of(demo.resolved(args)) == [] and demo.check(args) is None
-    assert movers(demo.walks(demo.resolved(args))) == []
+    assert movers(demo.trajectories(demo.resolved(args))) == []
     assert demo.command("render", args) == "acoustic-spaces demo scene.yaml render --moving none"
 
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
@@ -2023,12 +2025,11 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     assert drawing.placed("listeners", walker, None) is walker
     assert drawing.moment(1.5) == len(moments) - 1 and drawing.moment(0.05) == 0
     words = [str(line) for line in drawing.lines(1, 1.2)]
-    assert any("Moving along their walks: seat-b" in line for line in words)
+    assert any("Moving along their trajectories: seat-b" in line for line in words)
     assert not any("arrives" in line for line in words)
     drawing.t30[("talker", "seat-b")] = 1.5  # the quick scene's responses are too short
-    assert "Reverberation time T30 1.5 s where the walks start (mean of 500 Hz and 1 kHz)" in (
-        drawing.lines(1, 1.2)
-    )
+    t30 = "Reverberation time T30 1.5 s where the trajectories start (mean of 500 Hz and 1 kHz)"
+    assert t30 in drawing.lines(1, 1.2)
     assert drawing.frame(1.2).getbbox() is not None
     # The video's messages name what each moment shows: the walker at its walk's moment.
     assert drawing.stop_at(1.2) == (1, pytest.approx(1.2))
@@ -2055,7 +2056,7 @@ def test_a_demo_of_any_scene_plays_a_walk_with_doppler(tmp_path: Path, monkeypat
 
     scene = _any_scene(tmp_path)
     data = yaml.safe_load(scene.read_text(encoding="utf-8"))
-    data["sources"][1]["walk"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 10.0, "doppler": True}
+    data["sources"][1]["trajectory"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 10.0, "doppler": True}
     scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     monkeypatch.chdir(scene.parent)
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
@@ -2281,7 +2282,7 @@ def test_free_recordings_are_downloaded_once(tmp_path: Path, monkeypatch) -> Non
         files=((str((source / "a.wav").as_uri()), None), ((source / "b.wav").as_uri(), None)),
     )
     talk = dataclasses.replace(
-        recordings.named("speech_male"),
+        recordings.named("ace_m4"),
         name="test_talk",
         tar=((source / "corpus.tar.bz2").as_uri(), "Speech/talk.wav"),
     )
@@ -2300,6 +2301,11 @@ def test_free_recordings_are_downloaded_once(tmp_path: Path, monkeypatch) -> Non
     )
     with pytest.raises(KeyError, match="no free recording 'nothing'"):
         recordings.named("nothing")
+    # A talk fetched under its name before 4.4.0 is kept under its name now.
+    monkeypatch.setattr(recordings, "ALIASES", {"old_talk": "test_talk"})
+    talked.replace(path.with_name("old_talk.wav"))
+    assert recordings.get("old_talk") == talked and talked.exists()
+    assert not path.with_name("old_talk.wav").exists()
 
 
 def test_a_demo_scene_written_elsewhere_still_finds_its_files(tmp_path: Path) -> None:

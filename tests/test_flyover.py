@@ -31,8 +31,10 @@ def test_the_examples_helicopter_is_its_rotors_model() -> None:
     path = Path(example_path("helicopter_flyover"))
     scene = Scene.from_yaml(path)
     (helicopter,) = scene.sources
-    assert helicopter.in_use and helicopter.walk.doppler and helicopter.position[2] == 150.0
-    assert helicopter.walk.speed_m_s == 63.0 and HELICOPTER_VEHICLE.problem(helicopter) is None
+    assert helicopter.in_use and helicopter.trajectory.doppler and helicopter.position[2] == 150.0
+    assert (
+        helicopter.trajectory.speed_m_s == 63.0 and HELICOPTER_VEHICLE.problem(helicopter) is None
+    )
     wind = float(scene.atmosphere.wind_speed(np.array([150.0]))[0])
     assert airspeed(helicopter, scene, 63.0) == pytest.approx(63.0 + wind)
     (broadband,) = HELICOPTER_VEHICLE.options()
@@ -65,7 +67,7 @@ def _flyover(tmp_path: Path) -> Path:
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     (helicopter,) = data["sources"]
     helicopter["position"] = [-20, 0, 150]
-    helicopter["walk"]["to"] = [[20, 0, 150]]
+    helicopter["trajectory"]["to"] = [[20, 0, 150]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "under_track"]
     data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.7})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
@@ -86,7 +88,7 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
     path = folder / "scene.yaml"
     level = path.read_text(encoding="utf-8")
     data = yaml.safe_load(level)
-    data["sources"][0]["walk"]["to"] = [[20, 0, 160]]
+    data["sources"][0]["trajectory"]["to"] = [[20, 0, 160]]
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert demo.check(demo.defaults()).endswith(
         "the helicopter flies level, its rotors trimmed for it, but its walk goes from "
@@ -105,7 +107,7 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
     scene = Scene.from_yaml(work / "scene_demo.yaml")
     (helicopter,) = scene.sources
     assert helicopter.level_db == pytest.approx(info["level_db"])
-    assert helicopter.walk.face_forward and helicopter.walk.doppler
+    assert helicopter.trajectory.face_forward and helicopter.trajectory.doppler
     # The example's at 48 kHz: at 16 kHz the 8 kHz band is half above the sound's top.
     table = read_directivity_csv(work / "scene_demo_helicopter.csv").table[..., :7]
     full = read_directivity_csv(folder / "helicopter.csv").table[..., :7]
@@ -129,8 +131,12 @@ def test_the_stadiums_helicopter_is_its_rotors_model() -> None:
     path = Path(example_path("stadium_concert"))
     scene = Scene.from_yaml(path)
     helicopter = next(s for s in scene.sources if s.name == "helicopter")
-    assert not helicopter.in_use and helicopter.walk.doppler and helicopter.position[2] == 150.0
-    assert helicopter.walk.speed_m_s == 63.0 and HELICOPTER_VEHICLE.problem(helicopter) is None
+    assert (
+        not helicopter.in_use and helicopter.trajectory.doppler and helicopter.position[2] == 150.0
+    )
+    assert (
+        helicopter.trajectory.speed_m_s == 63.0 and HELICOPTER_VEHICLE.problem(helicopter) is None
+    )
     assert airspeed(helicopter, scene, 63.0) == pytest.approx(63.0)
     args = argparse.Namespace(speed=None, broadband="pegg")
     trim, sent = HELICOPTER_VEHICLE.emission(
@@ -301,9 +307,11 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     assert helicopter == pipeline.files_from(own, run / "scene_flight.yaml", folder)
     assert helicopter["directivity"]["file"] == str(folder / "helicopter.csv")
     assert helicopter["enabled"] is False and helicopter["position"] == [-600, 0, 150]
-    assert helicopter["walk"] == {"to": [[600, 0, 150]], "speed_m_s": 63, "doppler": True}
+    assert helicopter["trajectory"] == {"to": [[600, 0, 150]], "speed_m_s": 63, "doppler": True}
     lower = sibling(folder / "helicopter_demo.py", "helicopter_demo").flight_of(own, 40.0)
-    assert lower["position"] == [-600.0, 0.0, 40.0] and lower["walk"]["to"] == [[600.0, 0.0, 40.0]]
+    assert lower["position"] == [-600.0, 0.0, 40.0] and lower["trajectory"]["to"] == [
+        [600.0, 0.0, 40.0]
+    ]
     # The stadium's length: outdoors the simulation counts it from the latest direct sound.
     assert flown["simulation"] == stadium_scene["simulation"]
     resolved = demo.resolved(args)
@@ -311,7 +319,7 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     assert not demo.step("flight").done(argparse.Namespace(**vars(resolved) | {"height": 400.0}))
     # Quick: 40 m of the flight over the centre spot, responses 1.5 s long.
     helicopter["position"] = [-20.0, 0.0, 150.0]
-    helicopter["walk"]["to"] = [[20.0, 0.0, 150.0]]
+    helicopter["trajectory"]["to"] = [[20.0, 0.0, 150.0]]
     flown["simulation"]["ir_length_s"] = 1.5
     (run / "scene_flight.yaml").write_text(yaml.safe_dump(flown, sort_keys=False), "utf-8")
     for step in ("helicopter", "scene", "walk"):

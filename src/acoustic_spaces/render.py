@@ -6,7 +6,7 @@
   through a 48 kHz response.
 - :func:`crossfaded`: a crossfade from one sound to another whose power runs on however
   alike the two are, broadband or band by band: a tour's cuts from one seat to the
-  next, a walk's from one place to the next.
+  next, a trajectory's from one place to the next.
 - :func:`auralize`: the sources of a simulation each playing their own signal, heard at
   one listener in a spatial format (mono, binaural, Ambisonics, loudspeakers), summed.
   Outdoors in turbulence the early paths change as the eddies drift past: a new
@@ -309,7 +309,7 @@ def through_eddies(
         fmt,
         sample_rate,
         end,
-        source_walks=False,
+        source_moves=False,
         planes=np.zeros(0, dtype=np.int64),
         step_s=0.0,
         gusts=gusts,

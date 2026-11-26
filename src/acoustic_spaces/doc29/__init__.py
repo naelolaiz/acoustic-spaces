@@ -18,7 +18,7 @@ flight path built of segments.
   (Volume 2 Appendix D);
 - :mod:`.source` makes an aircraft a source for the engine: its sound power and
   directivity from its NPD curves, its spectral class and its installation correction,
-  and its flight path as a walk timed as it flies.
+  and its flight path as a trajectory timed as it flies.
 
 The ANP database's own aircraft are not part of this package: its terms (EASA's ANP
 Database Terms and Conditions, issue 3, 2024) allow their use only for noise contours

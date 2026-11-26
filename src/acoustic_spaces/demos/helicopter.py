@@ -2,13 +2,13 @@
 rotors send each way, and the sound power and directivity that go with it in the scene.
 
 The helicopter is the example's source ``helicopter``, a point at the main rotor's hub
-with a walk at one height and one speed, facing the way it flies (``face_forward``). Its
+with a trajectory at one height and one speed, facing the way it flies (``face_forward``). Its
 rotors are trimmed for level flight (:func:`acoustic_spaces.rotorcraft.trim`) at its
-airspeed: the walk's speed over the ground less the wind at its height, from the scene's
+airspeed: the trajectory's speed over the ground less the wind at its height, from the scene's
 atmosphere (its own weather, not its zones'), in the scene's air. The trim faces the
-way it moves through the air; facing along the walk instead, the helicopter does not
+way it moves through the air; facing along the trajectory instead, the helicopter does not
 turn into a wind from the side (it would fly crabwise), so a scene's wind is best along
-the walk or none. What the rotors send (:func:`acoustic_spaces.rotorcraft.emission`)
+the trajectory or none. What the rotors send (:func:`acoustic_spaces.rotorcraft.emission`)
 plays down each early path; the scene's source gets the sound power and the directivity
 of that emission (:meth:`~acoustic_spaces.emission.Emission.sound_power_db`,
 :meth:`~acoustic_spaces.emission.Emission.directivity`), for the levels the simulation
@@ -35,7 +35,7 @@ HELICOPTER = "helicopter"
 #: this far apart follow the exact field of a flyover more closely than a car's places 1
 #: m apart do the car's (``validation/doppler.py``).
 STEP_M = 4.0
-#: How far the walk's points may differ in height and still be level flight (m).
+#: How far the trajectory's points may differ in height and still be level flight (m).
 LEVEL_M = 0.5
 #: The noise's seed, so that every step makes the same sound.
 SEED = 0
@@ -48,7 +48,7 @@ INFO_FILE = "helicopter.json"
 
 
 def airspeed(source, scene, speed_m_s: float) -> float:
-    """The airspeed of ``source`` (the helicopter, a scene source with a walk) in
+    """The airspeed of ``source`` (the helicopter, a scene source with a trajectory) in
     ``scene`` flying at ``speed_m_s`` over the ground along its first leg: that, less
     the wind of the scene's own atmosphere at its height, both as vectors."""
     from acoustic_spaces.walkthrough import knots
@@ -151,13 +151,13 @@ class Helicopter(Vehicle):
         return None
 
     def problem(self, source) -> str | None:
-        """A helicopter flies level: its walk keeps one height."""
+        """A helicopter flies level: its trajectory keeps one height."""
         from acoustic_spaces.walkthrough import knots
 
         heights = knots(source).positions[:, 2]
         if float(np.ptp(heights)) > LEVEL_M:
             return (
-                f"the {self.name} flies level, its rotors trimmed for it, but its walk goes "
+                f"the {self.name} flies level, its rotors trimmed for it, but its trajectory goes "
                 f"from {heights.min():.1f} to {heights.max():.1f} m up: give its points one "
                 "height"
             )
@@ -235,7 +235,7 @@ class Helicopter(Vehicle):
         )
         named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
-        source.setdefault("walk", {})["face_forward"] = True
+        source.setdefault("trajectory", {})["face_forward"] = True
 
     def made(self, args: argparse.Namespace, rate: int, duration_s: float, part: str = ""):
         """What its rotors send along its pass, at ``rate``."""
@@ -277,9 +277,9 @@ class Helicopter(Vehicle):
 
     def texts(self) -> dict[str, str]:
         return {
-            "speed": "how fast the helicopter flies along its walk (km/h; m/s times 3.6), "
-            "which sets how long its pass and its sound last (the walk's length over the "
-            "speed) and its rotors' trim; by default as its walk in the scene goes: its "
+            "speed": "how fast the helicopter flies along its trajectory (km/h; m/s times 3.6), "
+            "which sets how long its pass and its sound last (the trajectory's length over the "
+            "speed) and its rotors' trim; by default as its trajectory in the scene goes: its "
             "speed along points, or the one steady speed of its keyframes (whose places it "
             "goes through at --speed when given)",
             "input": "a WAV file the helicopter plays instead of its rotors' sound, as "

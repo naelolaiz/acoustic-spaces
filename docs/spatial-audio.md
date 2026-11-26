@@ -276,20 +276,20 @@ sound system and monitors in the stadium.
 
 ### Walkthroughs
 
-A listener or a source with a [walk](scenes.md#walks) can be heard as it goes. In the
-`gallery` example a visitor walks away from a guide, down the long arm of the L-shaped
-gallery and round the corner, while the guide talks (any dry speech recording does as
-`speech.wav`; see [dry recordings to try](#dry-recordings-to-try)); the gallery's two
-other listeners stand still, and with the visitor's walk turned off (**Moves**, or
-`enabled: false`) the visitor stands too, so one scene serves both:
+A listener or a source with a [trajectory](scenes.md#trajectories) can be heard as it
+goes. In the `gallery` example a visitor walks away from a guide, down the long arm of
+the L-shaped gallery and round the corner, while the guide talks (any dry speech
+recording does as `speech.wav`; see [dry recordings to try](#dry-recordings-to-try));
+the gallery's two other listeners stand still, and with the visitor's trajectory turned
+off (**Moving**, or `enabled: false`) the visitor stands too, so one scene serves both:
 
 ```sh
 acoustic-spaces examples --copy . gallery && cd gallery
 acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video walk.mp4
 ```
 
-- Responses are simulated every `--step` along the path (25 cm by default, 101 places
-  for the gallery's 25 m). The early sound, which changes quickly from place to place,
+- Responses are simulated every `--step` along the path (by default the trajectory's
+  `step_m`, 25 cm unless it says otherwise: 101 places for the gallery's 25 m). The early sound, which changes quickly from place to place,
   is simulated at every one of them; the late field changes slowly, so the late part,
   by far the costliest to trace, is traced only every `--late-step` (2 m by default,
   14 places), and the places in between mix the late parts of the two on either side
@@ -298,11 +298,11 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   4 m apart, twice the default, came within 0.3 dB on average of those traced at the
   places themselves, band by band, and within 1.3 dB next to the corner, where the
   field changes fastest (with 10,000 rays per band, whose own noise is part of that).
-  The gallery's walk takes about five minutes on 4 cores, six times as long as one
+  The gallery's trajectory takes about five minutes on 4 cores, six times as long as one
   response.
-- The dry signals play through the response of the place the walker is nearest to, with
+- The dry signals play through the response of the place the mover is nearest to, with
   a `--crossfade` (50 ms by default) half-way between two places, so the sound changes
-  smoothly as it walks. In each octave band the power goes from one place's to the
+  smoothly as it moves. In each octave band the power goes from one place's to the
   next's along a raised cosine, however alike the two sound: they fade along a quarter
   period of a cosine and of a sine, equal power for unlike sounds, and both are turned
   up or down by how alike they are over the crossfade (their correlation coefficient),
@@ -314,30 +314,31 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   level the gain changes no faster than π/2 times a linear crossfade's mean slope (the
   tests). Every place's late part is drawn from the same random sequence, so the tails
   that cross fade differ only in their level and decay, not in their noise. Once the
-  walk is over, the walker stays where it ends for as long as the signals last.
-- A walking listener hears every source in use; a walking source is heard at
+  trajectory is over, the mover stays where it ends for as long as the signals last.
+- A moving listener hears every source in use; a moving source is heard at
   `--listener`, even one left out (`enabled: false`), by default the only listener in
   use, with the other sources in use where they stand. `--format` takes the formats of
   `simulate --output` (by default the scene's first output, or binaural with `--hrtf`,
-  which is for binaural only) and `--video` saves the room, the path and the walker
+  which is for binaural only) and `--video` saves the room, the path and the mover
   going along it, with an arrow and its yaw for the way it faces, as a GIF or an MP4
   (both with the viz extra) at `--fps`. An MP4 carries the sound when the format has one
   or two channels (mono, stereo, binaural) and then lasts as long as the sound; with
   more channels, play the WAV alongside it.
-- A walker faces the way it goes (unless its walk says `face_forward: false`) and
+- A mover faces the way it goes (unless its trajectory says `face_forward: false`) and
   turns through each corner at 90 degrees per second. The gallery's visitor has the
   guide behind it all down the long arm, and at the corner turns over a second towards
   the short arm, which brings the guide round to its right. The default binaural head
   is a sphere, which tells left from right but hardly front from behind (it has no
   outer ears), so the guide behind sounds much as one ahead would; a measured HRTF
   (`--hrtf`) tells them apart.
-- At walking speed the Doppler shift is under half a percent (8 cents), and the
+- At a walking pace the Doppler shift is under half a percent (8 cents), and the
   crossfades leave it out. A car, a train or an aircraft takes `doppler: true` in its
-  walk (see [Moving sources and Doppler](#moving-sources-and-doppler)).
-- A walk along [keyframes](scenes.md#walks) (timed places and facings, so the walker
-  can wait, turn on the spot or go at any pace) is placed every `--step` along each leg
-  and every `--turn-step` (20° by default) of a turn on the spot, and at every keyframe.
-- Outdoors in wind or a temperature gradient, the places of a walking source share the
+  trajectory (see [Moving sources and Doppler](#moving-sources-and-doppler)).
+- A trajectory along [keyframes](scenes.md#trajectories) (timed places and facings, so
+  the mover can wait, turn on the spot or go at any pace) is placed every `--step` along
+  each leg and every `--turn-step` (20° by default) of a turn on the spot, and at every
+  keyframe.
+- Outdoors in wind or a temperature gradient, the places of a moving source share the
   parabolic equation's runs, with the results of a run per place: an aircraft's
   flyover in the `windy` preset runs in about a third of the time (see
   [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
@@ -347,49 +348,56 @@ From Python:
 ```python
 from acoustic_spaces import Room
 from acoustic_spaces.spatial import Binaural
-from acoustic_spaces.viz import animate_walk
-from acoustic_spaces.walkthrough import render_walk, simulate_walk
+from acoustic_spaces.viz import animate_trajectory
+from acoustic_spaces.walkthrough import render_trajectory, simulate_trajectory
 
 room = Room.from_yaml("scene.yaml")
-walk = simulate_walk(room)  # the only listener or source with a walk
-sound = render_walk(walk, {"guide": (speech, 44_100)}, Binaural())  # (samples, 2)
-animate_walk(room, walk, "walk.gif")
+responses = simulate_trajectory(room)  # the only listener or source with a trajectory
+sound = render_trajectory(responses, {"guide": (speech, 44_100)}, Binaural())  # (samples, 2)
+animate_trajectory(room, responses, "walk.gif")
 ```
 
 #### Several movers at once
 
-When more than one listener or source has a walk, `walkthrough --all` plays them all
-together, on one clock, in one simulation:
+When more than one listener or source has a trajectory, `walkthrough --all` plays them
+all together, on one clock, in one simulation:
 
 ```sh
 acoustic-spaces walkthrough scene.yaml band=song.wav speaker=talk.wav --all --out heard.wav
 ```
 
-- Every walk that is `enabled` moves (the default; `enabled: false` leaves a walker
+- Every trajectory that is `enabled` moves (the default; `enabled: false` leaves a mover
   standing where it starts), and every listener in use hears every source in use, still
   or moving, so the balance between listeners is the scene's. One WAV is written per
   listener (`heard_<listener>.wav`; `--listener NAME` for one of them, as `--out`
   names it).
-- The moments simulated are every mover's places: every `--step` along its walk, every
-  `--turn-step` of a turn on the spot, and its keyframes or corners. At each moment each
-  mover stands as a copy of itself where its walk has it then, one copy serving every
-  moment it stands still at (once its walk is over, say). All the copies go into one
-  simulation with the still sources and listeners, so a moving listener costs what a
-  walk of its own does, and the late part is traced every `--late-step` along each walk,
-  the places between mixing theirs, as for one walk. A scene where both a source and a
-  listener move simulates every copy of the one against every copy of the other, which
-  grows with the square of the moments: keep `--step` coarse there, or let one of them
-  stand.
-- A pair that moves crossfades from each moment's response to the next's, as a walk
-  does; a still pair plays through its one response. `--video` draws every mover along
-  its path with an arrow the way it faces, and the still sources and listeners where
-  they stand; an MP4 carries the sound when one listener is rendered.
-- A walk with Doppler moves alone: `--all` plays it when it is the only walk that is
-  on, every listener hearing each early path through its own changing delay as
-  `--walker` does, from one simulation, and refuses it beside another mover. `--levels`
-  is for one walk (`--walker`). The demo of any scene and the editor's **Render
-  movement…** play a walk with Doppler the same way
+- The moments simulated are every mover's places: every `--step` along its trajectory,
+  every `--turn-step` of a turn on the spot, and its keyframes or corners. At each
+  moment each mover stands as a copy of itself where its trajectory has it then, one
+  copy serving every moment it stands still at (once its trajectory is over, say). All
+  the copies go into one simulation with the still sources and listeners, so a moving
+  listener costs what simulating its trajectory alone does, and the late part is traced
+  every `--late-step` along each trajectory, the places between mixing theirs, as for
+  one mover. A scene where both a source and a listener move simulates every copy of
+  the one against every copy of the other, which grows with the square of the moments:
+  keep `--step` coarse there, or let one of them stand.
+- A pair that moves crossfades from each moment's response to the next's, as one mover
+  does; a still pair plays through its one response. `--video` draws every
+  mover along its path with an arrow the way it faces, and the still sources and
+  listeners where they stand; an MP4 carries the sound when one listener is rendered.
+- A trajectory with Doppler moves alone: `--all` plays it when it is the only trajectory
+  that is on, every listener hearing each early path through its own changing delay as
+  `--mover` does, from one simulation, and refuses it beside another mover. `--levels`
+  is for one trajectory (`--mover`). The demo of any scene and the editor's **Render
+  movement…** play a trajectory with Doppler the same way
   ([demos](demos.md#a-demo-of-any-scene)).
+- Binaurally, a listener whose trajectory turns it on the spot (keyframes that face
+  another way where it stands) is heard through the head tracker: it is simulated
+  facing ahead, at its places only, and its response in Ambisonics of order 7 is turned
+  against the way it faces, every 256 samples, and decoded to the ears, as [Head
+  tracking](#head-tracking) does, instead of a response every `--turn-step` of the turn.
+  `--all`, the demo of any scene and the editor's **Render movement…** do this; one
+  mover alone (`--mover`) crossfades its places as above.
 
 From Python: `simulate_movement(room)`, `render_movement(movement, signals, fmt)` (a
 dict of each listener's sound), `save_movement(rendered, "heard.wav", rate, fmt)` and
@@ -401,51 +409,51 @@ in the background (see [Graphical editor](editor.md)).
 
 A source that passes quickly, a car, a train or an aircraft, drops in pitch as it goes
 by, and so does a source that a listener passes quickly. With `doppler: true` in its
-[walk](scenes.md#walks), the walker's early sound follows it:
+[trajectory](scenes.md#trajectories), the mover's early sound follows it:
 
 ```yaml
 sources:
   - name: car
     position: [-60.0, 0.0, 0.5]
     power_db: 94
-    walk: {to: [[60.0, 0.0, 0.5]], speed_m_s: 25, face_forward: false, doppler: true}
+    trajectory: {to: [[60.0, 0.0, 0.5]], speed_m_s: 25, face_forward: false, doppler: true}
 ```
 
 ```sh
 acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass.wav --levels pass.csv
 ```
 
-- Each early path (the direct sound, each reflection, the sound bent round each edge)
-  is followed from place to place (at the next place it is the path off the same
-  surfaces over the same edge whose delay carries on from its own, changed by no more
-  than the time sound takes over the walker's step, with a margin) and played through a
-  delay that changes smoothly as the walker goes: a cubic curve through the path's delay at each place, read through a
-  windowed sinc that cuts off below the Nyquist frequency as the pitch rises, so that
-  nothing aliases. A walking source is heard at the retarded time, when the sound it
-  sent from each place arrives; a walking listener hears what reaches it at each place.
-  So each path shifts in pitch as its own length changes: the ground's reflection
-  shifts a little differently from the direct sound, and their interference sweeps as
-  it does by a road. Each path keeps its filter (the ground's, the air's, a barrier's,
-  a microphone's pattern, the ears' in binaural), which goes in a straight line from
-  one place's to the next's as their sound is heard, however fast the walker passes
-  them, but for its spreading: each sample is divided by the path's delay then, so the
-  level follows one over the distance from sample to sample, as the pitch does. In
-  turbulence the eddies drift past as in any walkthrough, the delay they give each path
-  in its delay. In binaural, where each ear's
-  response starts goes into that ear's delay instead of its filter: measured ears start
-  a few samples apart from one direction to the next (KEMAR's far ear by up to 11
-  samples between places 1 m apart along a road 25 m away), and two places' filters
-  that start apart, mixed, would cancel the treble between them. A walking listener's
-  ear is that much further along the path; a walking source's sound reaches the ear
-  that long after it passes the head's centre, so the time between the two ears is the
-  head's own whatever the pitch does, and each ear's sound is divided by one plus its
-  onset's slope (the ear's Doppler factor over the centre's).
+- Each early path (the direct sound, each reflection, the sound bent round each edge) is
+  followed from place to place (at the next place it is the path off the same surfaces
+  over the same edge whose delay carries on from its own, changed by no more than the
+  time sound takes over the mover's step, with a margin) and played through a delay that
+  changes smoothly as the mover goes: a cubic curve through the path's delay at each
+  place, read through a windowed sinc that cuts off below the Nyquist frequency as the
+  pitch rises, so that nothing aliases. A moving source is heard at the retarded time,
+  when the sound it sent from each place arrives; a moving listener hears what reaches
+  it at each place. So each path shifts in pitch as its own length changes: the ground's
+  reflection shifts a little differently from the direct sound, and their interference
+  sweeps as it does by a road. Each path keeps its filter (the ground's, the air's, a
+  barrier's, a microphone's pattern, the ears' in binaural), which goes in a straight
+  line from one place's to the next's as their sound is heard, however fast the mover
+  passes them, but for its spreading: each sample is divided by the path's delay then,
+  so the level follows one over the distance from sample to sample, as the pitch does.
+  In turbulence the eddies drift past as in any walkthrough, the delay they give each
+  path in its delay. In binaural, where each ear's response starts goes into that ear's
+  delay instead of its filter: measured ears start a few samples apart from one
+  direction to the next (KEMAR's far ear by up to 11 samples between places 1 m apart
+  along a road 25 m away), and two places' filters that start apart, mixed, would cancel
+  the treble between them. A moving listener's ear is that much further along the path;
+  a moving source's sound reaches the ear that long after it passes the head's centre,
+  so the time between the two ears is the head's own whatever the pitch does, and each
+  ear's sound is divided by one plus its onset's slope (the ear's Doppler factor over
+  the centre's).
 - The late part is crossfaded from place to place by weights that add up to one, its
   pitch unshifted: the places' tails, drawn from one random sequence, are alike (in a
   shoebox room, neighbouring places 25 cm apart, each traced, correlate by 0.97 or more
-  in every band, a one-off check), so its power runs on. A walking source's sound goes
+  in every band, a one-off check), so its power runs on. A moving source's sound goes
   from one place's late part to the next's as it is sent, so that each place's late part
-  follows its early paths at the retarded time; a walking listener hears the late part
+  follows its early paths at the retarded time; a moving listener hears the late part
   of the place it is at. Outdoors it is far below the early sound.
 - Against the exact field of a source passing 10 m from a listener over a hard ground,
   the sound is within 45 dB of it at 30 m/s, with places 1 m apart, and its level within
@@ -462,7 +470,7 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   be no more than 1 m apart (the default `--step` is 25 cm): 2 m apart the sound is
   within 38 dB of the field, 4 m apart only within 18 dB. What depends on the direction
   a path arrives from (a microphone's pattern, the ears, panning, Ambisonics) goes in a
-  straight line between two places, so a walker that passes close wants them close as
+  straight line between two places, so a mover that passes close wants them close as
   the listener sees them: 7° apart left third-order Ambisonics 0.3 % from the field over
   a pass, 14° apart 1.3 % (a one-off check, see
   [Validation](validation.md#moving-sources-against-the-exact-field)).
@@ -473,7 +481,7 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   Mach number towards the listener as the sound leaves, so its level as
   40 lg 1/(1 − M cos θ), which would add up to 1.6 dB straight ahead at 30 m/s and 4.0
   dB at 70 m/s, and take 1.5 and 3.2 dB straight behind.
-- **The sound sent each way.** From Python, the walker (or, for a walking listener, a
+- **The sound sent each way.** From Python, the mover (or, for a moving listener, a
   source it passes) may send an `Emission` (`acoustic_spaces.emission`) instead of one
   signal: the sound it sends in every direction of its own frame, as a rotor sends each
   harmonic of its blades with a pattern and a phase of its own. Each early path then
@@ -498,32 +506,33 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   [Validation](validation.md#moving-sources-against-the-exact-field)). An emission
   measured or computed in a moving source's frame may carry its convective
   amplification.
-- The walker must go slower than sound, as every walk must, with Doppler or without:
-  shock waves and sonic booms are not simulated. The wave solver's bands do not follow
-  a walk with Doppler: with `simulation.wave.enabled` it stops with an error.
+- The mover must go slower than sound, as every trajectory must, with Doppler or
+  without: shock waves and sonic booms are not simulated. The wave solver's bands do not
+  follow a trajectory with Doppler: with `simulation.wave.enabled` it stops with an
+  error.
 
-The **pass-by levels** come with it: the walkthrough of a walk with Doppler prints the
-listener's L_Amax and when it is reached, the sound exposure level (SEL) and L_Aeq over
-the pass-by, and `--levels CSV` (for any walk) saves the level over time, A-weighted and
-in each octave band. Each is the level of the source's sound power at a place, as
-`simulate` gives it, at the time its sound arrives, so its maximum and its exposure are
-those of noise mapping's quasi-static source; `slow_a` gives them as a sound level meter
-reads them with slow time weighting, as ECAC Doc 29 measures an aircraft: L_ASmax and
-the SEL over the time the level is within 10 dB of it (`parameters.event_levels` does so
-for any level over time). In a band where a place's G is undefined, as where the few
-rays that reach a far place carry no energy in it, the place's level is that of the
-energy its response holds, as outdoors (-inf where none arrives). Through the walk's
-sound over grass, each band's energy came within 0.26 dB of them, 0.8 dB in the band of
-the ground's dip, where the band levels are averages over the band and the sound is read
-through band filters, whose skirts fill a dip (see
+The **pass-by levels** come with it: the walkthrough of a trajectory with Doppler prints
+the listener's L_Amax and when it is reached, the sound exposure level (SEL) and L_Aeq
+over the pass-by, and `--levels CSV` (for any trajectory) saves the level over time,
+A-weighted and in each octave band. Each is the level of the source's sound power at a
+place, as `simulate` gives it, at the time its sound arrives, so its maximum and its
+exposure are those of noise mapping's quasi-static source; `slow_a` gives them as a
+sound level meter reads them with slow time weighting, as ECAC Doc 29 measures an
+aircraft: L_ASmax and the SEL over the time the level is within 10 dB of it
+(`parameters.event_levels` does so for any level over time). In a band where a place's G
+is undefined, as where the few rays that reach a far place carry no energy in it, the
+place's level is that of the energy its response holds, as outdoors (-inf where none
+arrives). Through the trajectory's sound over grass, each band's energy came within 0.26
+dB of them, 0.8 dB in the band of the ground's dip, where the band levels are averages
+over the band and the sound is read through band filters, whose skirts fill a dip (see
 [Validation](validation.md#moving-sources-against-the-exact-field)).
 
 ```python
 from acoustic_spaces.walkthrough import pass_by
 
-walk = simulate_walk(room)  # the car, with doppler: true
-sound = render_walk(walk, {"car": (engine, 48_000)})
-passing = pass_by(walk)  # passing.max_a, .exposure_a, .equivalent_a, .levels_a, .slow_a
+responses = simulate_trajectory(room)  # the car, with doppler: true
+sound = render_trajectory(responses, {"car": (engine, 48_000)})
+passing = pass_by(responses)  # passing.max_a, .exposure_a, .equivalent_a, .levels_a, .slow_a
 
 # Or the sound it sends each way: signals that do not correlate (here a tone's sine
 # and cosine), each with an amplitude per direction on a grid of elevations from -90
@@ -531,7 +540,7 @@ passing = pass_by(walk)  # passing.max_a, .exposure_a, .equivalent_a, .levels_a,
 from acoustic_spaces.emission import Mixture
 
 sent = Mixture(signals, weights, 48_000)  # (K, samples), (elevations, azimuths, K)
-sound = render_walk(walk, {"car": sent})
+sound = render_trajectory(responses, {"car": sent})
 ```
 
 ### Head tracking

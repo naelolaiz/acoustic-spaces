@@ -2810,7 +2810,7 @@ def test_rows_choice(window) -> None:
     page = window.inspector.pages["simulation"]
     assert page.rows.isEnabled()
     assert page.rows.currentText() == "solver for whole rows"
-    assert "Maps and walks take the paths" in page.rows.toolTip()
+    assert "Maps and trajectories take the paths" in page.rows.toolTip()
     page.rows.setCurrentIndex(page.rows.findData("edges"))
     assert window.document.scene.simulation.early.rows == "edges"
     page.diffraction.setCurrentIndex(page.diffraction.findData("none"))
@@ -4517,11 +4517,11 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert walk.picker.currentData() == "walk"
     assert walk.command.text() == "python walk_demo.py all"
     assert "talker" in walk.fields and "song" not in walk.fields
-    # The Movement box: the gallery's visitor walks. The walk demo shows that it moves
-    # it; This scene's ticks are the run's, starting as Moves sets them in the scene.
+    # The Trajectories box: the gallery's visitor walks. The walk demo shows that it moves
+    # it; This scene's ticks are the run's, starting as Moving sets them in the scene.
     box = walk.movement
-    assert not box.isHidden() and box.walkers == [("listeners", "visitor", True)]
-    assert box.table.item(0, box.WALK).text() == "At 1.2 m/s (4.3 km/h), 25.0 m in 20.8 s"
+    assert not box.isHidden() and box.movers == [("listeners", "visitor", True)]
+    assert box.table.item(0, box.TRAJECTORY).text() == "At 1.2 m/s (4.3 km/h), 25.0 m in 20.8 s"
     assert box.table.item(0, box.KIND).text() == "Listener"
     assert box.table.item(0, box.NAME).text() == "visitor"
     assert box.ticked() == ["visitor"] and not box.editable and box.reset.isHidden()
@@ -4545,7 +4545,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     road = DemoDialog(scene=example_path("roadside"))
     assert road.picker.currentData() == "passby"
     box = road.movement
-    assert box.walkers == [("sources", "car", True), ("sources", "truck", True)]
+    assert box.movers == [("sources", "car", True), ("sources", "truck", True)]
     assert box.used == [False, False]
     assert box.ticked() == ["car"] and not box.table.isHidden()
     assert "a demo that moves it puts it in" in box.table.item(0, box.NAME).toolTip()
@@ -4562,8 +4562,8 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert road.fields["rpm"].edit.placeholderText() == "the vehicle's own"
     assert road.fields["step_m"].edit.text() == "1" and road.fields["step_m"].value() == 1.0
     assert road.summary.text().startswith(
-        "The car drives 150.0 m along its walk at 50.0 km/h (13.89 m/s, as its walk in the "
-        "scene goes): the pass, and the car's sound, last 10.8 s."
+        "The car drives 150.0 m along its trajectory at 50.0 km/h (13.89 m/s, as its "
+        "trajectory in the scene goes): the pass, and the car's sound, last 10.8 s."
     )
     assert road.command.text() == "python passby_demo.py all"
     speed.edit.setText("100")
@@ -4589,8 +4589,8 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert road.command.text() == "python passby_demo.py all --vehicle truck"
     assert box.ticked() == ["truck"]
     assert road.summary.text().startswith(
-        "The truck drives 150.0 m along its walk at 70.0 km/h (19.44 m/s, as its walk in "
-        "the scene goes): the pass, and the truck's sound, last 7.7 s."
+        "The truck drives 150.0 m along its trajectory at 70.0 km/h (19.44 m/s, as its "
+        "trajectory in the scene goes): the pass, and the truck's sound, last 7.7 s."
     )
     assert "car 2000 (4 cylinders), truck 1200 (6 cylinders)" in road.fields["rpm"].edit.toolTip()
     vehicle.pick("car")
@@ -4633,7 +4633,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     street.deleteLater()
     # The stadium's helicopter likewise: the crossing flies it, the concert leaves it out.
     stadium = DemoDialog(scene=example_path("stadium_concert"))
-    assert stadium.movement.walkers == [("sources", "helicopter", True)]
+    assert stadium.movement.movers == [("sources", "helicopter", True)]
     stadium.picker.setCurrentIndex(stadium.picker.findData("crossing"))
     assert stadium.movement.ticked() == ["helicopter"] and not stadium.movement.table.isHidden()
     stadium.picker.setCurrentIndex(stadium.picker.findData("stadium"))
@@ -4732,7 +4732,7 @@ def test_demo_dialog_plays_several_of_a_choice_one_after_another(qapp, monkeypat
     picked: the airport's departure. Several… turns it into a tick for each, the one
     picked ticked; ticking the arrival too plays both, one after another in one video,
     in the list's order, which dragging the rows changes, and One only goes back to the
-    first ticked. The Movement box shows what the run moves, with no ticks. A run with
+    first ticked. The Trajectories box shows what the run moves, with no ticks. A run with
     none ticked cannot go. The Video box lists the parts, and its order of them and
     whether each listener is a part of its own change --series. All and None tick every
     choice or none."""
@@ -4751,13 +4751,13 @@ def test_demo_dialog_plays_several_of_a_choice_one_after_another(qapp, monkeypat
     assert vehicle.ticked() == ["departure"] and vehicle.value() == "departure"
     assert not vehicle.combo.isHidden() and vehicle.list.isHidden()
     assert vehicle.combo.currentText() == "departure"
-    # The Movement box: what moves, no ticks to click.
+    # The Trajectories box: what moves, no ticks to click.
     assert box.ticked() == ["departure"] and not box.editable
     assert box.table.isColumnHidden(box.MOVES)
-    assert [box.walkers[r][1] for r in range(len(box.walkers)) if not box.table.isRowHidden(r)] == [
+    assert [box.movers[r][1] for r in range(len(box.movers)) if not box.table.isRowHidden(r)] == [
         "departure"
     ]
-    assert box.note.text().startswith("What this run moves along its walk")
+    assert box.note.text().startswith("What this run moves along its trajectory")
     assert dialog.command.text() == "python flight_demo.py all"
     assert dialog.summary.text().startswith("The departing jet flies 6500 m")
     assert dialog.parts.text() == "This run makes one video, flight_departure_binaural.mp4."
@@ -4952,7 +4952,7 @@ def test_demo_dialog_shows_sources_play_where_the_run_has_turns(qapp, monkeypatc
     """Sources play shows only where the sources would play in more than one part in
     turn: not for the stadium's PA alone, ticked wholly (one group, one part), but for
     the PA and the band; not for the lakeside's own pick, all of it in its PA; for the
-    railway's own pick of three sources of no group, which its Movement box shows
+    railway's own pick of three sources of no group, which its Trajectories box shows
     moving, with no ticks."""
     from acoustic_spaces import examples
     from acoustic_spaces.gui.demo_dialog import DemoDialog
@@ -4983,8 +4983,8 @@ def test_demo_dialog_shows_sources_play_where_the_run_has_turns(qapp, monkeypatc
     assert railway.fields["sources"].ticked() == ["train", "train_roof", "train_pantograph"]
     assert railway._rows["sources_play"].isRowVisible(railway.fields["sources_play"])
     assert railway.movement.note.text() == (
-        "What this run moves along its walk, as the options below pick what plays; Edit "
-        "movement… changes a walk."
+        "What this run moves along its trajectory, as the options below pick what plays; "
+        "Edit movement… changes a trajectory."
     )
     assert railway.movement.ticked() == ["train", "train_roof", "train_pantograph"]
     assert railway.movement.table.isColumnHidden(railway.movement.MOVES)
@@ -4992,7 +4992,7 @@ def test_demo_dialog_shows_sources_play_where_the_run_has_turns(qapp, monkeypatc
 
 
 def test_demo_dialog_picks_a_vehicle_of_several_walkers(qapp, monkeypatch) -> None:
-    """In the street, the Movement box shows the walkers of the vehicles picked, the
+    """In the street, the Trajectories box shows the movers of the vehicles picked, the
     police car with its siren, and no others. A sources pick made for one vehicle does
     not carry over to another: the horn ticked and unticked is the car's own pick again,
     and the police car's siren alone, the bus beside it, gives both their own picks."""
@@ -5002,7 +5002,7 @@ def test_demo_dialog_picks_a_vehicle_of_several_walkers(qapp, monkeypatch) -> No
     monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
     street = DemoDialog(scene=example_path("street"))
     box, vehicle, sources = street.movement, street.fields["vehicle"], street.fields["sources"]
-    names = [name for _kind, name, _on in box.walkers]
+    names = [name for _kind, name, _on in box.movers]
 
     def rows() -> list[str]:
         return [name for row, name in enumerate(names) if not box.table.isRowHidden(row)]
@@ -5409,7 +5409,7 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     walk.picker.setCurrentIndex(walk.picker.findData("scene"))
     box = walk.movement
     box.table.item(0, box.MOVES).setCheckState(Qt.CheckState.Unchecked)
-    kept = "Changed from the defaults and kept for next time: Movement."
+    kept = "Changed from the defaults and kept for next time: Trajectories."
     assert walk.kept.text().startswith(kept)
     walk.reject()
     walk.deleteLater()
@@ -6923,7 +6923,7 @@ def test_new_room_from_a_floor_plan(window, qapp) -> None:
 
 def _give_walk(window, kind: str, index: int, keyframes: list[dict]) -> None:
     def change(data: dict) -> None:
-        data[kind][index]["walk"] = {"keyframes": keyframes}
+        data[kind][index]["trajectory"] = {"keyframes": keyframes}
 
     window.document.edit("walk", change)
 
@@ -6953,7 +6953,7 @@ def test_edit_movement_from_the_demo_window(window, monkeypatch) -> None:
 def test_movement_panel_edits_keyframes_in_place(window) -> None:
     """The Movement panel: a keyframe added at the playhead, no speed to set (it follows
     from the times), each change one step of the history, the timeline made longer with
-    End, dimmed angles that keep facing as before, and Moves for enabled."""
+    End, dimmed angles that keep facing as before, and Moving for enabled."""
     window.open_example(example_path("studio"))
     window.select("listeners", 0)
     panel, dock = window.movement, window.docks["movement"]
@@ -6970,7 +6970,7 @@ def test_movement_panel_edits_keyframes_in_place(window) -> None:
 
     panel.add.click()  # the playhead at 0 s: a second on, where it starts
     listener = window.document.scene.listeners[0]
-    assert [(f.time_s, f.position, f.orientation) for f in listener.walk.keyframes] == [
+    assert [(f.time_s, f.position, f.orientation) for f in listener.trajectory.keyframes] == [
         (1.0, start, None)
     ]
     assert window.undo_action.text() == "&Undo add keyframe"
@@ -6981,13 +6981,13 @@ def test_movement_panel_edits_keyframes_in_place(window) -> None:
 
     panel.table.item(1, 1).setText("3")  # x of keyframe 1: the speed follows
     listener = window.document.scene.listeners[0]
-    assert listener.walk.keyframes[0].position == (3.0, start[1], start[2])
+    assert listener.trajectory.keyframes[0].position == (3.0, start[1], start[2])
     distance = 3.0 - start[0]
     assert panel.table.item(0, 7).text() == f"{distance:.2f}"
     assert panel.table.item(1, 7).text() == "" and not panel.table.item(0, 7).flags() & editable
     assert window.undo_action.text() == "&Undo move keyframe"
     panel.table.item(1, 0).setText("2")  # later: slower, nothing else to set
-    assert window.document.scene.listeners[0].walk.keyframes[0].time_s == 2.0
+    assert window.document.scene.listeners[0].trajectory.keyframes[0].time_s == 2.0
     assert panel.table.item(0, 7).text() == f"{distance / 2:.2f}"
     assert panel.end == 2.0 and panel.end_box.minimum() == 2.0
 
@@ -6997,7 +6997,7 @@ def test_movement_panel_edits_keyframes_in_place(window) -> None:
     panel.slider.setValue(500)
     assert panel.time == 3.0 and times[-1] == 3.0
     panel.add.click()
-    keyframes = window.document.scene.listeners[0].walk.keyframes
+    keyframes = window.document.scene.listeners[0].trajectory.keyframes
     assert [f.time_s for f in keyframes] == [2.0, 3.0]
     assert keyframes[1].position == keyframes[0].position  # it waits there
     panel.table.item(1, 0).setText("3")  # the same time as keyframe 2: refused
@@ -7010,7 +7010,7 @@ def test_movement_panel_edits_keyframes_in_place(window) -> None:
     assert panel.table.item(2, 4).toolTip().startswith("Keeps facing")
     assert panel.table.item(0, 4).text() == f"{start_yaw(window):.1f}"
     panel.table.item(2, 4).setText("90")
-    keyframes = window.document.scene.listeners[0].walk.keyframes
+    keyframes = window.document.scene.listeners[0].trajectory.keyframes
     assert keyframes[1].orientation.yaw == 90.0 and keyframes[0].orientation is None
     assert not panel.table.item(2, 4).toolTip()
     assert window.undo_action.text() == "&Undo turn keyframe"
@@ -7025,15 +7025,16 @@ def test_movement_panel_edits_keyframes_in_place(window) -> None:
     # Moves: the walk stays, the listener stands still; the form follows.
     panel.moves.setChecked(False)
     listener = window.document.scene.listeners[0]
-    assert listener.walk is not None and not listener.walk.enabled
-    assert not page.moves.isChecked() and window.undo_action.text() == "&Undo turn the walk off"
+    assert listener.trajectory is not None and not listener.trajectory.enabled
+    assert not page.moves.isChecked()
+    assert window.undo_action.text() == "&Undo turn the trajectory off"
     assert _shown(window, "listeners", 0).position == listener.position
     page.moves.setChecked(True)
-    assert window.document.scene.listeners[0].walk.enabled
+    assert window.document.scene.listeners[0].trajectory.enabled
     window.undo()
     window.undo()
     window.undo()  # the turn
-    assert window.document.scene.listeners[0].walk.keyframes[1].orientation is None
+    assert window.document.scene.listeners[0].trajectory.keyframes[1].orientation is None
 
     # Remove: the last keyframe takes the walk with it.
     panel.table.setCurrentCell(0, 1)
@@ -7041,10 +7042,10 @@ def test_movement_panel_edits_keyframes_in_place(window) -> None:
     assert "Select a keyframe to remove" in window.messages.toPlainText()
     panel.table.setCurrentCell(2, 1)
     panel.remove.click()
-    assert len(window.document.scene.listeners[0].walk.keyframes) == 1
+    assert len(window.document.scene.listeners[0].trajectory.keyframes) == 1
     panel.table.setCurrentCell(1, 1)
     panel.remove.click()
-    assert window.document.scene.listeners[0].walk is None
+    assert window.document.scene.listeners[0].trajectory is None
     assert panel.table.rowCount() == 1 and not panel.moves.isEnabled()
     assert window.undo_action.text() == "&Undo remove keyframe"
 
@@ -7073,10 +7074,10 @@ def test_a_car_drives_with_doppler_and_a_line_stays(window) -> None:
     panel = window.movement
     assert panel.key == ("sources", 1) and panel.doppler.isChecked()
     panel.doppler.setChecked(False)
-    assert not window.document.scene.sources[1].walk.doppler
+    assert not window.document.scene.sources[1].trajectory.doppler
     assert window.undo_action.text() == "&Undo turn Doppler off"
     window.undo()
-    assert window.document.scene.sources[1].walk.doppler and panel.doppler.isChecked()
+    assert window.document.scene.sources[1].trajectory.doppler and panel.doppler.isChecked()
 
 
 def start_yaw(window) -> float:
@@ -7093,7 +7094,10 @@ def test_a_walk_along_points_is_edited_in_place(window, qapp) -> None:
     window.open_example(example_path("studio"))
 
     def change(data: dict) -> None:
-        data["sources"][0]["walk"] = {"to": [[1.0, 1.0, 1.2], [1.0, 4.0, 1.2]], "speed_m_s": 1.0}
+        data["sources"][0]["trajectory"] = {
+            "to": [[1.0, 1.0, 1.2], [1.0, 4.0, 1.2]],
+            "speed_m_s": 1.0,
+        }
 
     window.document.edit("walk", change)
     window.show_movement("sources", 0)
@@ -7122,31 +7126,31 @@ def test_a_walk_along_points_is_edited_in_place(window, qapp) -> None:
     assert panel.table.item(2, 7).text() == "" and not panel.table.item(2, 7).flags() & editable
 
     panel.table.item(2, 2).setText("5")  # y of point 2
-    assert window.document.scene.sources[0].walk.to[1] == (1.0, 5.0, 1.2)
+    assert window.document.scene.sources[0].trajectory.to[1] == (1.0, 5.0, 1.2)
     assert window.undo_action.text() == "&Undo move point"
     assert panel.table.item(2, 0).text() == f"{first + 4.0:.2f}"
     panel.table.item(1, 7).setText("2")  # the one speed: every time halves
-    assert window.document.scene.sources[0].walk.speed_m_s == 2.0
+    assert window.document.scene.sources[0].trajectory.speed_m_s == 2.0
     assert window.undo_action.text() == "&Undo change speed"
     assert panel.table.item(2, 0).text() == f"{(first + 4.0) / 2:.2f}"
     assert panel.table.item(0, 7).text() == "2.00"
     assert panel.end_box.minimum() == pytest.approx((first + 4.0) / 2, abs=0.05)
     panel.table.item(0, 7).setText("0")
     assert "a speed above 0 m/s" in window.messages.toPlainText()
-    assert window.document.scene.sources[0].walk.speed_m_s == 2.0
+    assert window.document.scene.sources[0].trajectory.speed_m_s == 2.0
 
     # A point at the playhead splits the leg it is on, where the source is then.
     panel.set_time(round(first / 2, 2) + 1.0)  # about 2 m along the second leg
     y = 1.0 + 2.0 * (panel.time - first / 2)
     panel.add.click()
-    walk = window.document.scene.sources[0].walk
+    walk = window.document.scene.sources[0].trajectory
     assert walk.to[0] == (1.0, 1.0, 1.2) and walk.to[2] == (1.0, 5.0, 1.2)
     np.testing.assert_allclose(walk.to[1], (1.0, y, 1.2), atol=1e-6)
     assert window.undo_action.text() == "&Undo add point" and panel.table.currentRow() == 2
     # Dragged in the plan, it bends the walk.
     canvas = _plan(window, qapp)
     _drag(qapp, canvas, _at(canvas, (1.0, y)), _at(canvas, (2.0, 3.0)))
-    moved = window.document.scene.sources[0].walk.to[1]
+    moved = window.document.scene.sources[0].trajectory.to[1]
     assert moved[0] == pytest.approx(2.0, abs=0.11) and moved[1] == pytest.approx(3.0, abs=0.11)
     assert window.document.undo_text() == "move point"
     assert "Moved point 2 of left-speaker" in window.messages.toPlainText()
@@ -7154,18 +7158,18 @@ def test_a_walk_along_points_is_edited_in_place(window, qapp) -> None:
     leg = np.subtract((1.0, 5.0, 1.2), moved)
     panel.set_time(0.0)
     panel.add.click()
-    last = window.document.scene.sources[0].walk.to[-1]
+    last = window.document.scene.sources[0].trajectory.to[-1]
     np.testing.assert_allclose(last, (1.0, 5.0, 1.2) + 2.0 * leg / np.linalg.norm(leg), atol=1e-5)
     panel.table.setCurrentCell(4, 1)
     panel.remove.click()
-    assert len(window.document.scene.sources[0].walk.to) == 3
+    assert len(window.document.scene.sources[0].trajectory.to) == 3
     assert window.undo_action.text() == "&Undo remove point"
 
     before = knots(window.document.scene.sources[0])
     panel.convert.click()
     source = window.document.scene.sources[0]
-    assert source.walk.to == [] and len(source.walk.keyframes) == len(before.times) - 1
-    assert window.undo_action.text() == "&Undo convert walk to keyframes"
+    assert source.trajectory.to == [] and len(source.trajectory.keyframes) == len(before.times) - 1
+    assert window.undo_action.text() == "&Undo convert trajectory to keyframes"
     after = knots(source)
     for t in (0.0, 0.5, 1.7, 3.0, 4.2):
         np.testing.assert_allclose(after.at(t)[0], before.at(t)[0], atol=1e-5)
@@ -7189,7 +7193,7 @@ def test_keyframe_handles_in_the_plan(window, qapp) -> None:
     assert canvas.hit(canvas.to_screen(handle)) == ("keyframe", 1)
     assert canvas.hit(canvas.to_screen(start[:2])) == ("keyframe", 0)
     _drag(qapp, canvas, _at(canvas, handle), _at(canvas, (start[0] + 2.0, start[1] + 0.5)))
-    keyframe = window.document.scene.listeners[0].walk.keyframes[0]
+    keyframe = window.document.scene.listeners[0].trajectory.keyframes[0]
     assert keyframe.position[0] == pytest.approx(start[0] + 2.0, abs=0.11)  # snapped
     assert keyframe.position[1] == pytest.approx(start[1] + 0.5, abs=0.11)
     assert keyframe.position[2] == pytest.approx(start[2])
@@ -7277,7 +7281,7 @@ def _walking_scene(walk_to=(4.0, 1.0, 1.5), speed=2.0) -> Scene:
         data["sources"][0],
         name="car",
         position=[1.0, 1.0, 1.5],
-        walk={"to": [list(walk_to)], "speed_m_s": speed, "doppler": True},
+        trajectory={"to": [list(walk_to)], "speed_m_s": speed, "doppler": True},
     )
     data["sources"] = [still, walker]
     seat = dict(data["listeners"][0], name="late stage")
@@ -7454,15 +7458,16 @@ def test_a_run_shows_what_it_works_on_though_hidden(window, qapp) -> None:
 
 
 def test_a_demo_s_walker_follows_the_demo_s_scene(window, qapp, tmp_path: Path) -> None:
-    """A demo runs on a scene of its own (Demo.walks): the editor follows its walks."""
+    """A demo runs on a scene of its own (Demo.trajectories): the editor follows its
+    trajectories."""
     from acoustic_spaces.gui.worker import DemoJob
 
     window.open_example(example_path("studio"))
     own = tmp_path / "scene_demo.yaml"
 
     class Walking:
-        def __init__(self, walks) -> None:
-            self.walks = walks
+        def __init__(self, trajectories) -> None:
+            self.trajectories = trajectories
 
         def each(self, args):
             return list(args)
@@ -7470,16 +7475,16 @@ def test_a_demo_s_walker_follows_the_demo_s_scene(window, qapp, tmp_path: Path) 
     job = DemoJob(Walking(lambda args: args.scene), "walk", None)
     first, second = (type("Args", (), {"scene": tmp_path / name})() for name in ("a", "b"))
     job.args = [first, second]
-    assert window._walks_of(job)() == first.scene
-    # A run of several parts: the walks of the part its demo said it started last.
+    assert window._trajectories_of(job)() == first.scene
+    # A run of several parts: the trajectories of the part its demo said it started last.
     job.lines = ["part 1 of 2: x", "wrote y", "part 2 of 2: z", "walking"]
-    assert window._walks_of(job)() == second.scene
+    assert window._trajectories_of(job)() == second.scene
     job.args = [type("Args", (), {"scene": own})()]
     job.lines = []
-    assert window._walks_of(job)() == own
-    # A demo without walks of its own walks the open scene's.
+    assert window._trajectories_of(job)() == own
+    # A demo without trajectories of its own moves along the open scene's.
     job = DemoJob(Walking(None), "walk", None)
-    assert window._walks_of(job)() is window.document.scene
+    assert window._trajectories_of(job)() is window.document.scene
 
 
 # -- the 3D view (needs OpenGL: a display or Xvfb) --------------------------------------
@@ -7489,7 +7494,7 @@ def test_a_demo_s_walker_follows_the_demo_s_scene(window, qapp, tmp_path: Path) 
 def test_the_3d_view_rings_what_a_run_works_on(window, qapp) -> None:
     """A ring around each source and listener a run works on, carried with its walker
     to where the run simulates it, and gone when the run is over."""
-    from acoustic_spaces.gui.following import NO_RUN, RunView, walks_of
+    from acoustic_spaces.gui.following import NO_RUN, RunView, trajectories_of
 
     viewport = window.viewport
     if not viewport.available:
@@ -7498,21 +7503,21 @@ def test_the_3d_view_rings_what_a_run_works_on(window, qapp) -> None:
     window.document.edit("walking", lambda data: data.update(scene.to_data()))
     scene = window.document.scene
     listener = scene.listeners[0].name
-    walks = walks_of(scene)
-    run = RunView(frozenset({("sources", "car"), ("listeners", listener)}), 1.0, walks)
+    trajectories = trajectories_of(scene)
+    run = RunView(frozenset({("sources", "car"), ("listeners", listener)}), 1.0, trajectories)
     viewport.show_run(run)
     assert set(viewport._rings) == {("sources", 1), ("listeners", 0)}
     ring = viewport._rings["sources", 1]
     marker = viewport._point_actors["sources", 1][0]
     assert ring.GetUserMatrix() is not None and marker.GetUserMatrix() is not None
     moved = np.array(ring.GetUserMatrix().MultiplyPoint([*scene.sources[1].position, 1.0]))
-    np.testing.assert_allclose(moved[:3], walks["sources", "car"].at(1.0)[0], atol=1e-9)
+    np.testing.assert_allclose(moved[:3], trajectories["sources", "car"].at(1.0)[0], atol=1e-9)
     assert viewport._rings["listeners", 0].GetUserMatrix() is None  # it stands still
     # Its name goes with it: drawn from the points that move, not from a copy of them.
     names = viewport._names.GetMapper().GetInputAlgorithm().GetInputDataObject(0, 0)
     lift = next(lift for group, index, lift in viewport._lifts if (group, index) == ("sources", 1))
     np.testing.assert_allclose(
-        names.GetPoints().GetPoint(1), walks["sources", "car"].at(1.0)[0] + [0.0, 0.0, lift]
+        names.GetPoints().GetPoint(1), trajectories["sources", "car"].at(1.0)[0] + [0.0, 0.0, lift]
     )
     viewport.show_room(window.document.room, ("sources", 0), run=run)  # a redraw keeps them
     assert set(viewport._rings) == {("sources", 1), ("listeners", 0)}
@@ -7723,7 +7728,7 @@ def test_keyframe_handles_in_3d(window, qapp) -> None:
 
     assert viewport.marker_at(*_display(viewport, widget_point(handle))) == ("keyframe", 1)
     _drag(qapp, widget, widget_point(handle), widget_point((handle[0], handle[1] + 1.0, handle[2])))
-    keyframe = window.document.scene.listeners[0].walk.keyframes[0]
+    keyframe = window.document.scene.listeners[0].trajectory.keyframes[0]
     assert abs(keyframe.position[1] - (start[1] + 1.0)) < 0.1
     assert keyframe.position[2] == pytest.approx(start[2])
     assert window.document.undo_text() == "move keyframe"
