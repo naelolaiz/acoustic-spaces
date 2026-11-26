@@ -2828,23 +2828,27 @@ def test_a_curved_screen_s_edges_match_btm_one_by_one(tmp_path: Path) -> None:
         assert np.all(error < limit), (name, error)
 
 
-def test_a_solid_block_s_edges_stop_at_its_corners(tmp_path: Path) -> None:
-    """Three edges of a solid block meet at each corner, where the paths over them stop at
-    the ends as on endless edges (fading them came out up to 1.25 dB above BTM at 63 and
-    125 Hz near the corner), and the faces behind a convex corner close none of them."""
-    x0, x1, y0, y1, z0, z1 = 0.0, 2.0, -10.0, 0.0, -300.0, 0.0  # open underneath
-    quads = [
-        [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)],
-        [(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)],
-        [(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)],
-        [(x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)],
-        [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)],
-    ]
-    room = edge_diffraction._room(tmp_path, "box", quads, (1.0, 3.0, 1.0), (4.0, -2.0, 0.3))
-    edges = find_edges(TraceModel.from_room(room))
+def test_a_solid_block_s_edges_fade_at_its_corners(tmp_path: Path) -> None:
+    """Three edges of a solid block meet at each corner of its top, and the paths over
+    them fade through the ends there as BTM's integral over each finite edge does (they
+    stopped at the ends, as on endless edges, and the level stepped by 6.2 dB at 63 Hz
+    15 cm past the corner, 3.9 dB from BTM); the faces behind a convex corner close none
+    of them. The listener walks past where the paths over the top's edges reach the
+    corner, 0.3 m over the top (``validation/edge_diffraction.py``'s first walk past a
+    prism's corners)."""
+    block = edge_diffraction.Prism(edge_diffraction.BLOCK_PLAN)
+    source = np.array([1.0, 3.0, 1.0])
+    ys = np.arange(-6.6, -6.0, 0.05) + 0.00317  # none exactly on a boundary
+    rooms = [block.room(tmp_path, source, (4.0, y, 0.3)) for y in ys]
+    edges = find_edges(TraceModel.from_room(rooms[0]))
     assert (np.isclose(edges.wedge, 1.5).sum(), np.isclose(edges.wedge, 2.0).sum()) == (8, 4)
-    assert np.all(edges.fade == 0.0) and np.all(edges.corner == -1)
+    assert np.all(edges.fade == 1.0) and np.all(edges.corner == -1)
     assert not np.any(edges.closed)
+    found = np.array([edge_diffraction.engine(room, "direct", coherent=8)[1] for room in rooms])
+    exact = np.array([block.btm(source, np.array([4.0, y, 0.3])) for y in ys])
+    # 63 to 500 Hz, where the paths' Fresnel zones along the edges reach the corner.
+    assert np.abs(np.diff(found, axis=0))[:, :4].max() < 0.1
+    assert np.abs(found - exact)[:, :4].max() < 0.2
 
 
 def _weighted_share(u: float, v: float) -> complex:
