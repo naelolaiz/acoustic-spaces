@@ -39,6 +39,7 @@ from acoustic_spaces.demos.pictures import (
     tour_column,
 )
 from acoustic_spaces.demos.pipeline import TourStop
+from acoustic_spaces.parameters import sti_rating
 from acoustic_spaces.walkthrough import moment_name
 
 #: Where the plan is drawn on a still: left, top, width, height.
@@ -96,8 +97,10 @@ class Pictures:
     sources that play a signal, ``credit`` and ``tool`` the footer's lines. When
     something moves, ``paths`` gives each mover's knots (("sources" or "listeners",
     name): :class:`~acoustic_spaces.walkthrough.Knots`) and ``movement`` the moving mixes'
-    moments and the level of each source at each listener at each (seats.json's
-    ``movement``), which :meth:`frame` draws and says at any moment of the tour.
+    moments and the level of each source and the STI of each talker's speech at each
+    listener at each (seats.json's ``movement``), which :meth:`frame` draws and says at
+    any moment of the tour. A talker is a source with a speech spectrum: a still says
+    the STI of the one that plays loudest there.
     ``indoors``, the mixes heard in the houses listeners stand in front of, or
     outdoors (:meth:`~acoustic_spaces.demos.indoors.StillHouses.pictures`, with
     ``report``'s levels those where they are heard): whether the sources are heard
@@ -125,6 +128,7 @@ class Pictures:
         self.paths = dict(paths or {})
         self.moments = np.asarray((movement or {}).get("times", [0.0]), dtype=float)
         self.along = (movement or {}).get("levels_a_db", {})
+        self.sti_along = (movement or {}).get("sti", {})
         self.credit, self.tool, self.fmt = credit, tool, fmt
         self.indoors = dict(indoors or {})
         self.sources = [s for s in scene["sources"] if s.get("enabled", True) is not False]
@@ -136,6 +140,10 @@ class Pictures:
             (e["source"], e["listener"]): e["spl_a_db"]
             for e in report["responses"]
             if e.get("spl_a_db") is not None
+        }
+        self.sti = {
+            (e["source"], e["listener"]): (e.get("speech") or {}).get("sti")
+            for e in report["responses"]
         }
         bands = report.get("bands_hz", [63, 125, 250, 500, 1000, 2000, 4000, 8000])
         self.t30 = {
@@ -289,6 +297,26 @@ class Pictures:
             energy += 10.0 ** (rumble / 10.0)
         return 10.0 * math.log10(energy) if energy > 0.0 else None
 
+    def speech_at(self, listener: str, t: float | None = None) -> tuple[str, float] | None:
+        """The playing talker (a source with a speech spectrum) loudest at ``listener``,
+        at ``t`` when something moves, and the STI of its speech there, as simulated;
+        None when no talker that plays is heard there, or its STI is not defined."""
+        levels = self.levels_of(listener, t)
+        talkers = [
+            s["name"]
+            for s in self.playing
+            if s.get("spectrum", "flat") != "flat" and s["name"] in levels
+        ]
+        if not talkers:
+            return None
+        name = max(talkers, key=lambda n: levels[n])
+        if t is not None and listener in self.along:
+            values = self.sti_along.get(listener, {}).get(name)
+            sti = None if values is None else values[self.moment(t)]
+        else:
+            sti = self.sti.get((name, listener))
+        return None if sti is None else (name, float(sti))
+
     def t30_at(self, listener: str) -> float | None:
         values = [self.t30.get((s["name"], listener)) for s in self.playing]
         values = [v for v in values if v is not None]
@@ -313,6 +341,13 @@ class Pictures:
         level = self.level_at(stop.key, t)
         if level is not None:
             lines.append(f"{level:.0f} dB(A) here, as simulated")
+        speech = None if stop.key in self.indoors.get("about", {}) else self.speech_at(stop.key, t)
+        if speech is not None:
+            name, sti = speech
+            said = f"Speech of {name.replace('_', ' ')}: STI {sti:.2f}, {sti_rating(sti)}"
+            lines.append(said)
+            if len(self.playing) > 1:
+                lines.append(("Of that speech alone, the others not counted as noise", MUTED))
         # The moving mixes keep when the sound arrives apart, where nothing moves.
         lag = seat["arrival_s"] if "arrival_s" in seat else seat.get("lag_s")
         if lag is not None:

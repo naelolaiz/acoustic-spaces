@@ -760,7 +760,9 @@ class ChoicesField(ListenersField):
     Several… pressed, a tick for each choice, the run playing the ticked ones one after
     another in the list's order, which the rows are dragged to change. ``choices`` gives
     the choices of an option that lists none (the formats); a value given that is none
-    of them joins them where it ``takes_others`` (a scene's own output, ``binaural-me``)."""
+    of them joins them where it ``takes_others`` (a scene's own output, ``binaural-me``).
+    An option with no default and an :attr:`~acoustic_spaces.demos.Option.unset` text
+    ("as in the scene") lists that first, which gives the run none of the choices."""
 
     def __init__(
         self,
@@ -772,6 +774,10 @@ class ChoicesField(ListenersField):
     ) -> None:
         super().__init__(option, tip, parent)
         self.takes_others = takes_others
+        #: The first entry's words where the option has no default, and whether it is
+        #: picked: the run gives the option none of its choices.
+        self.unset = option.unset if option.default is None else ""
+        self.none_picked = bool(self.unset)
         self.combo = QComboBox()
         self.combo.setToolTip(tip)
         self.combo.currentIndexChanged.connect(self._picked)
@@ -807,9 +813,14 @@ class ChoicesField(ListenersField):
         current = self.combo.currentText()
         self.combo.blockSignals(True)
         self.combo.clear()
+        if self.unset:
+            self.combo.addItem(_(self.unset))
         self.combo.addItems(self.names)
         ticked = self.ticked_rows()
-        self.combo.setCurrentText(ticked[0] if ticked else current)
+        if self.none_picked and not self.several.isChecked():
+            self.combo.setCurrentIndex(0)
+        else:
+            self.combo.setCurrentText(ticked[0] if ticked else current)
         self.combo.blockSignals(False)
         self._show_mode()
 
@@ -829,19 +840,31 @@ class ChoicesField(ListenersField):
         """The choices the run plays: the one picked, or the ticked ones in order."""
         if self.several.isChecked():
             return self.ticked_rows()
+        if self.none_picked:
+            return []
         text = self.combo.currentText()
         return [text] if text else []
 
     def value(self) -> Any:
         """The choice picked, or the ticked ones in the list's order (several, a tuple;
-        one alone as itself); an empty tuple for none ticked."""
+        one alone as itself); an empty tuple for none ticked, None for the unset entry."""
+        if self.none_picked and not self.several.isChecked():
+            return None
         ticked = tuple(self.ticked())
         return ticked[0] if len(ticked) == 1 else ticked
 
     def set_value(self, value) -> None:
         """Pick ``value``, or tick its values in their order, Several… pressed for more
         than one."""
-        given = [str(v) for v in values_of(value)]
+        given = [] if value is None else [str(v) for v in values_of(value)]
+        if not given and self.unset:  # none: the unset entry
+            self.none_picked = True
+            self.several.blockSignals(True)
+            self.several.setChecked(False)
+            self.several.blockSignals(False)
+            self.unticked = set(self.names)
+            self._fill()
+            return
         if self.takes_others:
             added = [v for v in given if v not in self.names]
             if added:
@@ -849,6 +872,7 @@ class ChoicesField(ListenersField):
         names = [v for v in given if v in self.names]
         if not names:
             return  # a value it does not offer: the pick stays
+        self.none_picked = False
         self.several.blockSignals(True)
         self.several.setChecked(len(names) > 1)
         self.several.blockSignals(False)
@@ -860,15 +884,20 @@ class ChoicesField(ListenersField):
         self.changed.emit()
 
     def _picked(self) -> None:
-        """Another choice picked in the list: the run's alone."""
-        self.unticked = set(self.names) - {self.combo.currentText()}
+        """Another choice picked in the list: the run's alone (none, the unset entry)."""
+        self.none_picked = bool(self.unset) and self.combo.currentIndex() == 0
+        picked = set() if self.none_picked else {self.combo.currentText()}
+        self.unticked = set(self.names) - picked
         super()._fill()
         self.changed.emit()
 
     def _toggled(self, many: bool) -> None:
         """Several… pressed: the ticks, the choice picked ticked alone; released: the
-        first ticked picked alone."""
+        first ticked picked alone (the first choice, from the unset entry)."""
         first = (self.ticked_rows() or [self.combo.currentText()])[0]
+        if first not in self.names:
+            first = self.names[0] if self.names else first
+        self.none_picked = False
         self.unticked = set(self.names) - {first}
         self._fill()
         self.changed.emit()
@@ -2307,12 +2336,13 @@ class DemoDialog(QDialog):
         what = self._downloads(demo, step, args)
         self.downloads.setText(_("This run downloads {what}.").format(what=what) if what else "")
         self.downloads.setVisible(bool(what))
-        # A choice with none ticked: the command line takes none (--vehicle '').
+        # A choice with none ticked: the command line takes none (--vehicle ''); its
+        # unset entry ("as in the scene") gives it none.
         empty = [
             widget.option.option
             for name, widget in self.fields.items()
             if isinstance(widget, ChoicesField)
-            and not widget.ticked()
+            and widget.value() == ()
             and demo.option(name).applies(vars(args))
         ]
         if empty:

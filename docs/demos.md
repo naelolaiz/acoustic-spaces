@@ -238,6 +238,16 @@ group as lakeside_demo.py feeds it), open_air_stage and studio a song; town_hall
 lecture_hall, leaky_classroom, shoebox, bim_office, material_libraries and gallery the
 male talk. A stereo mix has none of the parts that the monitors or a band on the stage
 play, so they stay silent; the stadium demo plays its song's stems through them.
+`--recording ace_f1` plays another free recording in a run, in place of the scene's
+own; a source with a speech spectrum that plays it takes its talker's, a woman's or a
+man's, so that the levels and the STI weight for that speech.
+
+**Talkers.** A source with a speech spectrum is a talker. `--vocal-effort raised`
+(`--voice`) has every talker in use talk so in a run: relaxed, normal, raised or loud,
+as ISO 9921 has them ([vocal effort](scenes.md#sources-and-directivity)). A run that
+changes a talker's sound power or speech spectrum simulates the scene as it plays it,
+written once to `scenes/` in the work folder (`scene_vocal-effort-raised.yaml`, its
+results beside the scene's own), and a run back to the scene as it is finds its own.
 
 ```sh
 acoustic-spaces demo scene.yaml                 # every step, into demo/ beside the scene
@@ -245,6 +255,7 @@ acoustic-spaces demo scene.yaml recording       # download the scene's free reco
 acoustic-spaces demo scene.yaml feeds           # one step: feeds, simulate, render, video
 acoustic-spaces demo scene.yaml --seconds 15 --listeners front,back --hrtf me.sofa
 acoustic-spaces demo scene.yaml --moving none   # every mover standing where it starts
+acoustic-spaces demo scene.yaml --recording ace_f1 --vocal-effort raised,loud
 ```
 
 - **recording**: downloads the free recording the scene names, unless it is there or
@@ -279,10 +290,14 @@ acoustic-spaces demo scene.yaml --moving none   # every mover standing where it 
   own model, with its sources (those that play in colour, with a ray to the listener),
   the listeners and the one of the moment as a head, and beside it the A-weighted level
   there of the sources that play, as simulated, when their sound arrives, the
-  reverberation time T30 at mid frequencies (the mean of the 500 Hz and 1 kHz bands) and
-  the nearest source that plays. `--credit` puts a line about the recordings on the
-  stills (who made them, their licence); without it the line gives the free recording's
-  credit, when one plays, and says which source plays which other file.
+  reverberation time T30 at mid frequencies (the mean of the 500 Hz and 1 kHz bands),
+  the nearest source that plays and, where a talker plays, the STI of the speech of the
+  one loudest there (IEC 60268-16), rated as ISO 9921 rates it (bad below 0.30, poor,
+  fair, good, excellent from 0.75); it counts the scene's background noise (coverage
+  `noise_db`) but not the other sources that play, which the still then says. `--credit`
+  puts a line about the recordings on the stills (who made them, their licence); without
+  it the line gives the free recording's credit, when one plays, and says which source
+  plays which other file.
 
 **Movement.** Sources and listeners whose [trajectory](scenes.md#trajectories) is on
 move along it while the recordings play, all on one clock from their start, as
@@ -291,27 +306,28 @@ move along it while the recordings play, all on one clock from their start, as
 simulation, and mixes every listener hearing the movers go by, or walking itself, with
 one gain for all; the still simulation stays for what the stills say where nothing
 moves. The video is a moving picture: the trajectories dotted, every mover where it is
-at that moment, and the level of the sources that play as simulated at that moment; the
-arrival time is left out where something moves, and T30 is the one where the
+at that moment, and the level of the sources that play and the STI as simulated at that
+moment; the arrival time is left out where something moves, and T30 is the one where the
 trajectories start. A stop hears its listener where the clock has it then: from the
-start on the `per-listener` timeline, and on a `shared` one as the tour reaches it.
-A trajectory sets off at its `start_s` and is simulated every `step_m` along it
+start on the `per-listener` timeline, and on a `shared` one as the tour reaches it. A
+trajectory sets off at its `start_s` and is simulated every `step_m` along it
 ([trajectories](scenes.md#trajectories)); `--speed 5` moves every trajectory of the run
 at 5 km/h (along keyframes, through their places in turn) and `--step 0.5` simulates
 them 0.5 m apart, without changing the scene. Binaurally, a listener who turns on the
 spot is heard through the head tracker ([several movers at
 once](spatial-audio.md#several-movers-at-once)). `--moving` picks the trajectories of a
-run without changing the scene: `--moving visitor,guide` moves
-those two and leaves every other mover standing where it starts, `--moving none` keeps
-them all still, so one scene serves both. A trajectory with Doppler (a car, a train)
-moves alone: every listener hears each early path through its own delay as it changes,
-so the pitch shifts as it passes, and the late sound crossfaded from place to place
-([moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)), all from
-the one simulation of the moving run, as the editor's **Render movement…** plays it.
-With other trajectories on as well, the demo says to leave them standing.
+run without changing the scene: `--moving visitor,guide` moves those two and leaves
+every other mover standing where it starts, `--moving none` keeps them all still, so one
+scene serves both. A trajectory with Doppler (a car, a train) moves alone: every
+listener hears each early path through its own delay as it changes, so the pitch shifts
+as it passes, and the late sound crossfaded from place to place ([moving sources and
+Doppler](spatial-audio.md#moving-sources-and-doppler)), all from the one simulation of
+the moving run, as the editor's **Render movement…** plays it. With other trajectories
+on as well, the demo says to leave them standing.
 
 Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds in
-`feeds/`, the results in `results/<scene>/<output>`, and the run's folder (named as in
+`feeds/`, the scene as a run changes it in `scenes/`, the results in
+`results/<scene>/<output>`, and the run's folder (named as in
 [runs and their names](#running-a-demo), as `scene_binaural`) with the mixes in
 `seats/` (in `moving/` when something moves) and the stills, beside its video
 (`scene_binaural.mp4`), sound and thumbnail.

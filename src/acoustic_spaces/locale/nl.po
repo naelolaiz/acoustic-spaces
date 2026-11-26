@@ -27,6 +27,14 @@ msgstr "taal: {language} ({source})"
 msgid "Scene"
 msgstr "Scène"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Recording"
+msgstr "Opname"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Vocal effort"
+msgstr "Steminspanning"
+
 #: acoustic_spaces/demos/__init__.py
 msgid "Time per listener"
 msgstr "Tijd per ontvanger"
@@ -3154,10 +3162,6 @@ msgid "Air pressure"
 msgstr "Luchtdruk"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Recording"
-msgstr "Opname"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Choose recording…"
 msgstr "Opname kiezen…"
 
@@ -5401,10 +5405,6 @@ msgstr "Geluidsvermogen"
 #: acoustic_spaces/gui/inspector.py
 msgid "Spectrum"
 msgstr "Spectrum"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Vocal effort"
-msgstr "Steminspanning"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Gain"

@@ -27,6 +27,14 @@ msgstr "Sprache: {language} ({source})"
 msgid "Scene"
 msgstr "Szene"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Recording"
+msgstr "Aufnahme"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Vocal effort"
+msgstr "Sprechanstrengung"
+
 #: acoustic_spaces/demos/__init__.py
 msgid "Time per listener"
 msgstr "Zeit je Empfänger"
@@ -3184,10 +3192,6 @@ msgid "Air pressure"
 msgstr "Luftdruck"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Recording"
-msgstr "Aufnahme"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Choose recording…"
 msgstr "Aufnahme wählen…"
 
@@ -5430,10 +5434,6 @@ msgstr "Schallleistung"
 #: acoustic_spaces/gui/inspector.py
 msgid "Spectrum"
 msgstr "Spektrum"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Vocal effort"
-msgstr "Sprechanstrengung"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Gain"

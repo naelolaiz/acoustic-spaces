@@ -755,9 +755,11 @@ sources:
   the standard's spectrum, is 54, 60, 66 or 72 dB(A) 1 m in front of it in free field
   (`relaxed`, `normal`, `raised`, `loud`; ISO 9921), and its directivity ahead sets
   the sound power per band that gives it. It needs a speech spectrum and no
-  `level_db`. The editor's **Vocal effort** sets it on the source's page. Every effort
-  keeps the spectrum's shape: a raised voice leans towards the treble (ANSI
-  S3.5-1997's speech spectra per vocal effort), which this leaves out.
+  `level_db`. The editor's **Vocal effort** sets it on the source's page, and a demo
+  run can have every talker talk louder or quieter (`--vocal-effort`, [a demo of any
+  scene](demos.md#a-demo-of-any-scene)). Every effort keeps the spectrum's shape: a
+  raised voice leans towards the treble (ANSI S3.5-1997's speech spectra per vocal
+  effort), which this leaves out.
 - `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
   the sound power and on the impulse responses, so a mix made with `auralize` hears
   them. G stays the room's: it is measured against the same source, fed the same way,

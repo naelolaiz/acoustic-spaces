@@ -10,7 +10,9 @@
   `speech_male` and `speech_female` are now `ace_m4` and `ace_f2`, still read.
 - Added: a talker's `vocal_effort` (relaxed, normal, raised or loud, ISO 9921) in
   place of `level_db`, its sound power set through its directivity; **Vocal effort** in
-  the editor.
+  the editor. The demo of any scene's `--vocal-effort` (`--voice`) has every talker talk
+  so, `--recording` plays another free recording, and its stills give the STI of the
+  talker heard there, with its rating (ISO 9921).
 - Added: a trajectory's `step_m` (how far apart it is simulated) and `start_s` (when it
   sets off); the demo of any scene's `--timeline` (each listener heard from the start
   when something moves, by default), `--speed` and `--step`; binaurally, a listener

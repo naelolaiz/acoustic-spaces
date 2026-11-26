@@ -162,6 +162,8 @@ def given_names(text: str | None) -> list[str] | None:
 #: the flag in the label's tip); an option not named here shows its flag.
 LABELS = {
     "--scene": N_("Scene"),
+    "--recording": N_("Recording"),
+    "--vocal-effort": N_("Vocal effort"),
     "--seconds": N_("Time per listener"),
     "--tour": N_("Tour"),
     "--credit": N_("Credit"),

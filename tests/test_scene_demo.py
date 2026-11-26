@@ -345,3 +345,109 @@ def test_a_silent_walker_walks_unless_sources_leaves_it_out(tmp_path: Path) -> N
     assert scene_demo.moving_of(resolved) == []
     fan = next(s for s in scene_demo.moving_scene(resolved).sources if s.name == "fan")
     assert fan.trajectory is not None and not fan.trajectory.enabled
+
+
+def test_a_run_gives_the_talkers_a_vocal_effort_and_another_recording(tmp_path: Path) -> None:
+    """``--vocal-effort`` has every talker in use (a source with a speech spectrum) talk
+    so in the run, and ``--recording`` plays another free recording, the sources that
+    play it with a speech spectrum taking its talker's: a run that changes a talker's
+    level simulates the scene so changed, written once into the work folder's scenes,
+    and names its run and feeds after it; a run that changes nothing of it simulates the
+    scene itself; and what nothing hears is refused."""
+    scene = _any_scene(tmp_path)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["recording"] = "ace_m4"
+    talker = data["sources"][0]
+    talker.pop("signal")
+    talker["channel"] = "mono"
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    own = Scene.from_yaml(scene)
+    resolved = _run(scene)[1]
+    assert scene_demo.run_scene_file(resolved) == scene
+    assert scene_demo.talkers_of(resolved) == ["talker"]
+    args, resolved = _run(scene, "--vocal-effort", "raised")
+    assert DEMO.at(scene.parent).check(args) is None
+    file = scene_demo.run_scene_file(resolved)
+    assert file == tmp_path / "room" / "demo" / "scenes" / "scene_vocal-effort-raised.yaml"
+    changed = Scene.from_yaml(file)
+    voice = changed.sources[0]
+    assert voice.vocal_effort == "raised"
+    assert np.allclose(voice.power_db(), own.sources[0].talking("raised").power_db())
+    assert [s.power_db().tolist() for s in changed.sources[1:]] == [
+        s.power_db().tolist() for s in own.sources[1:]
+    ]
+    made = file.stat().st_mtime_ns
+    assert scene_demo.simulations(resolved)[0].scene == file
+    assert scene_demo.run_scene_file(resolved).stat().st_mtime_ns == made  # not again
+    assert run_folder(resolved).name == "scene_vocal-effort-raised_binaural"
+    assert scene_demo.results_of(resolved).parent.name == "scene_vocal-effort-raised"
+    assert _run(scene, "--voice", "raised")[1].vocal_effort == "raised"  # its old flag
+    # A woman's talk: the talker takes a woman's speech spectrum, at its level in all.
+    resolved = _run(scene, "--recording", "ace_f1")[1]
+    voice = scene_demo.scene_of(resolved).sources[0]
+    assert voice.spectrum == "speech_female" and voice.level_db == own.sources[0].level_db
+    assert scene_demo.run_scene_file(resolved).name == "scene_female-speech.yaml"
+    assert scene_demo.plays(resolved)["talker"].startswith(
+        "A woman talking (ACE corpus, talker F1)"
+    )
+    assert scene_demo.feeds_folder(resolved).name == "scene_ace_f1"
+    # Another man's talk changes nothing the simulation hears.
+    resolved = _run(scene, "--recording", "ace_m1")[1]
+    assert scene_demo.run_scene_file(resolved) == scene
+    assert scene_demo.scene_of(resolved).recording == "ace_m1"
+    # A talker given a file of its own does not play the recording.
+    args = _run(scene, "--recording", "ace_f1", "--input", f"talker={tmp_path / 'x.wav'}")[0]
+    assert "no source plays the scene's recording" in DEMO.at(scene.parent).check(args)
+    # A scene with no talker in use has nothing to talk louder.
+    data["sources"][0]["spectrum"] = "flat"
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    args = _run(scene, "--vocal-effort", "loud")[0]
+    assert "no source in use talks" in DEMO.at(scene.parent).check(args)
+
+
+def test_a_still_says_the_sti_of_the_talker_heard_loudest() -> None:
+    """A still says the STI of the speech of the playing talker loudest at its listener,
+    with its rating (ISO 9921), from the report, or along the movement at that moment;
+    with other sources playing, that it is of that speech alone."""
+    from acoustic_spaces.demos import scene_pictures
+    from acoustic_spaces.parameters import sti_rating
+
+    assert [sti_rating(v) for v in (0.2, 0.3, 0.5, 0.62, 0.75, None)] == [
+        "bad", "poor", "fair", "good", "excellent", "not defined",
+    ]  # fmt: skip
+    sources = [
+        {"name": "guide", "position": [0, 0, 1.6], "spectrum": "speech_male"},
+        {"name": "radio", "position": [4, 0, 1.0], "spectrum": "flat"},
+    ]
+    scene = {
+        "name": "Room",
+        "sources": sources,
+        "listeners": [{"name": "seat", "position": [2, 2, 1.2]}],
+    }
+    report = {
+        "responses": [
+            {"source": "guide", "listener": "seat", "spl_a_db": 60.0, "speech": {"sti": 0.62}},
+            {"source": "radio", "listener": "seat", "spl_a_db": 70.0, "speech": {"sti": 0.4}},
+        ]
+    }
+    stops = [pipeline.TourStop("seat", 0.0, 0.0, 1.0)]
+
+    def lines(playing, movement=None):
+        drawing = scene_pictures.Pictures(
+            scene, np.zeros((0, 2, 2)), report, {}, stops, playing=playing, movement=movement
+        )
+        return drawing.lines(0, 0.5 if movement else None)
+
+    alone = lines(["guide"])
+    assert "Speech of guide: STI 0.62, good" in alone
+    assert not any("alone" in str(line) for line in alone)
+    both = lines(["guide", "radio"])
+    assert "Speech of guide: STI 0.62, good" in both
+    assert ("Of that speech alone, the others not counted as noise", scene_pictures.MUTED) in both
+    assert not any("Speech of" in str(line) for line in lines(["radio"]))
+    moving = {
+        "times": [0.0, 0.4],
+        "levels_a_db": {"seat": {"guide": [60.0, 55.0]}},
+        "sti": {"seat": {"guide": [0.7, 0.44]}},
+    }
+    assert "Speech of guide: STI 0.44, poor" in lines(["guide"], moving)

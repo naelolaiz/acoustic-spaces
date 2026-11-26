@@ -23,9 +23,13 @@ Every listener in use is heard in turn, in the scene's order (or only those
 with one gain for all the stops and a crossfade between them, binaural through the HRTFs
 of the scene's binaural output (or ``--hrtf``, or a spherical head model when neither
 names any). The stills show the scene from above with the listener of the moment, the
-level there, how long the sound takes to arrive and T30 at mid frequencies, and say how
+level there, how long the sound takes to arrive and T30 at mid frequencies, where a
+talker plays (a source with a speech spectrum) the STI of its speech there, and say how
 the sound was made. The simulation keeps every listener in use, so another choice of
-``--listeners`` needs no new one.
+``--listeners`` needs no new one. ``--recording`` plays another free recording in place
+of the scene's, and ``--vocal-effort`` has every talker talk relaxed, normal, raised or
+loud (ISO 9921); a run that changes a talker's sound power or speech spectrum so
+simulates the scene as it plays it (:func:`run_scene_file`).
 
 Sources and listeners whose trajectory is on move along it while the piece plays, all on one
 clock from its start (:func:`acoustic_spaces.walkthrough.simulate_movement`): every
@@ -48,6 +52,7 @@ pitch shifts as it passes, the late sound crossfaded from place to place
     acoustic-spaces demo scene.yaml --moving none   # every mover standing where it starts
     acoustic-spaces demo scene.yaml --sources PA     # the sources of the group PA alone
     acoustic-spaces demo scene.yaml --sources PA,band --sources-play in-turn
+    acoustic-spaces demo scene.yaml --recording ace_f1 --vocal-effort raised
 
 The editor runs it from **Simulation > Run demo…** as *This scene*, with a tick for each
 trajectory in its Movement table, for each listener in its Listeners list and for each source
@@ -105,6 +110,7 @@ from acoustic_spaces.demos.audio import (
     write,
 )
 from acoustic_spaces.i18n import N_
+from acoustic_spaces.parameters import VOCAL_EFFORT_DB_A
 from acoustic_spaces.scene import Scene
 
 #: What the feeds are brought to (gated RMS, full scale): the loudness every source's
@@ -145,6 +151,11 @@ GAP_S = 1.0
 #: to listener, or each listener heard from the clock's start; ``auto`` (the default),
 #: the second when something moves and the first otherwise.
 TIMELINES = ("auto", "shared", "per-listener")
+#: The vocal efforts a run can give every talker (``--vocal-effort``, ISO 9921).
+VOCAL_EFFORTS = tuple(VOCAL_EFFORT_DB_A)
+#: The folder of the scenes as the runs that change them play them
+#: (:func:`run_scene_file`), in the work folder.
+SCENES = "scenes"
 
 
 def work_of(args: argparse.Namespace) -> Path:
@@ -191,6 +202,94 @@ def _current(scene: str | Path | None) -> Scene | None:
     return _scene_at(str(Path(scene).resolve()), Path(scene).stat().st_mtime_ns)
 
 
+def plays_recording(source, inputs: dict | None = None) -> bool:
+    """Whether ``source`` (of a scene) plays the scene's recording: it has a channel,
+    and neither a signal nor a file ``inputs`` (``--input``) gives it."""
+    return (
+        source.channel is not None and source.signal is None and source.name not in (inputs or {})
+    )
+
+
+def changed(args: argparse.Namespace, scene: Scene) -> Scene:
+    """``scene`` as this run plays it: with ``--recording``, that recording in place of
+    its own, the sources that play it with a speech spectrum taking its talker's (a
+    woman's or a man's); with ``--vocal-effort``, every talker in use (a source with a
+    speech spectrum) talking so (:meth:`~acoustic_spaces.scene.Source.talking`)."""
+    name = getattr(args, "recording", None)
+    effort = getattr(args, "vocal_effort", None)
+    if name is None and effort is None:
+        return scene
+    free = recordings.named(name) if name is not None else None
+    inputs = getattr(args, "inputs", None) or {}
+    sources = []
+    for source in scene.sources:
+        talks = source.spectrum != "flat"
+        if free is not None and free.talker and talks and plays_recording(source, inputs):
+            spectrum = f"speech_{free.talker}"
+            if spectrum != source.spectrum:
+                source = source.model_copy(update={"spectrum": spectrum})
+                source = source.talking(source.vocal_effort)  # its level, of that speech
+        if effort is not None and talks and source.in_use:
+            source = source.talking(effort)
+        sources.append(source)
+    update: dict = {"sources": sources}
+    if free is not None:
+        update["recording"] = free.name
+    return scene.model_copy(update=update)
+
+
+def _run(args: argparse.Namespace) -> Scene | None:
+    """The scene as this run plays it (:func:`changed`) as its file is now, or None when
+    it cannot be read: :func:`problems` says why."""
+    found = _current(getattr(args, "scene", None))
+    return None if found is None else changed(args, found)
+
+
+def talkers_of(args: argparse.Namespace) -> list[str]:
+    """The talkers in use of the scene, by name: its sources with a speech spectrum."""
+    found = _current(getattr(args, "scene", None))
+    if found is None:
+        return []
+    return [s.name for s in found.sources if s.in_use and s.spectrum != "flat"]
+
+
+def recording_heard(args: argparse.Namespace) -> bool:
+    """Whether a source in use plays the scene's recording (:func:`plays_recording`)."""
+    found = _current(getattr(args, "scene", None))
+    inputs = getattr(args, "inputs", None)
+    return found is not None and any(s.in_use and plays_recording(s, inputs) for s in found.sources)
+
+
+def run_scene_file(args: argparse.Namespace) -> Path:
+    """The scene file the run simulates: the scene's own, or, where the run changes what
+    its simulation hears (a talker's level or speech: :func:`changed`), the scene so
+    changed, written to ``scenes/<the scene's name>_<the changes>.yaml`` in the work
+    folder, again only when it changes, so that its simulation, once made, stays valid
+    and a run back to the scene's own finds that one."""
+    path = Path(args.scene)
+    found = _current(path)
+    if found is None:
+        return path
+    run = changed(args, found)
+    before = {s.name: s for s in found.sources}
+    levelled = [s for s in run.sources if not np.allclose(s.power_db(), before[s.name].power_db())]
+    if not levelled:
+        return path
+    effort = getattr(args, "vocal_effort", None)
+    parts = [] if effort is None else [f"vocal-effort-{effort}"]
+    spoken = sorted({s.talker for s in levelled if s.spectrum != before[s.name].spectrum})
+    parts += [f"{talker}-speech" for talker in spoken]
+    out = work_of(args) / SCENES / f"{name_part(path.stem)}_{'_'.join(parts)}{path.suffix}"
+    text = (
+        f"# {path.name} as a demo run plays it ({', '.join(parts)}), written by the demo:\n"
+        "# change the scene itself, not this.\n" + run.file_text(out.parent, readable=True)
+    )
+    if not out.exists() or out.read_text(encoding="utf-8") != text:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+    return out
+
+
 def _scene_hrtf(scene: str | Path | None) -> Path | None:
     """The HRTFs the binaural output of the scene names, or None."""
     found = _current(scene)
@@ -232,7 +331,7 @@ def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Played | Non
 def plays(args: argparse.Namespace) -> dict[str, str]:
     """Every source in use and what it plays unless ``--input`` gives it a file: the name
     of its signal or of the scene's recording, and the channel, or silent."""
-    found = _current(getattr(args, "scene", None))
+    found = _run(args)
     if found is None:
         return {}
     free = free_of(found)
@@ -254,7 +353,7 @@ def sources_of(args: argparse.Namespace) -> list[Source]:
     order, with its group; those with something to play (:func:`signals_of`) play unless
     ``--sources`` leaves them out. None at all when the scene cannot be read
     (:func:`problems` says why)."""
-    found = _current(getattr(args, "scene", None))
+    found = _run(args)
     if found is None:
         return []
     groups = {source.name: source.group for source in found.sources}
@@ -266,7 +365,7 @@ def sources_of(args: argparse.Namespace) -> list[Source]:
 
 def recording_needed(args: argparse.Namespace) -> recordings.Recording | None:
     """The free recording the run plays and has not downloaded yet, or None."""
-    scene = _current(getattr(args, "scene", None))
+    scene = _run(args)
     free = free_of(scene) if scene is not None else None
     if free is None:
         return None
@@ -291,7 +390,7 @@ def recording(args: argparse.Namespace) -> None:
     it."""
     free = recording_needed(args)
     if free is None:
-        scene = _current(args.scene)
+        scene = _run(args)
         named = free_of(scene) if scene is not None else None
         if named is None:
             print("the scene names no free recording: nothing to download")
@@ -397,17 +496,21 @@ def moving_of(args: argparse.Namespace) -> list[str]:
 
 
 def results_of(args: argparse.Namespace) -> Path:
-    """Where the scene's simulation is kept for the run's output (:func:`results_at`)."""
-    return results_at(args, args.scene)
+    """Where the simulation of the scene as the run plays it (:func:`run_scene_file`) is
+    kept for the run's output (:func:`results_at`)."""
+    return results_at(args, run_scene_file(args))
 
 
 def scene_of(args: argparse.Namespace) -> Scene:
-    """The scene, its sources' signals resolved against its folder."""
-    return Scene.from_yaml(args.scene)
+    """The scene as the run plays it (:func:`changed`), its sources' signals resolved
+    against its folder."""
+    return changed(args, Scene.from_yaml(args.scene))
 
 
 def simulations(args: argparse.Namespace) -> list[pipeline.Simulation]:
-    return [pipeline.Simulation(Path(args.scene), results_of(args), args.format)]
+    """The simulation of the scene as the run plays it (:func:`run_scene_file`)."""
+    path = run_scene_file(args)
+    return [pipeline.Simulation(path, results_at(args, path), args.format)]
 
 
 def responses_of(args: argparse.Namespace, demo: Demo | None = None) -> list[dict]:
@@ -495,7 +598,7 @@ def feeds_done(args: argparse.Namespace) -> bool:
     table = pipeline.read_json(path)
     if table.get("levels") != FEED_LEVELS:
         return False
-    scene = _current(args.scene)
+    scene = _run(args)
     if scene is None:
         return False
     wanted = {k: [str(v[0]), v[1]] for k, v in signals_of(args, scene).items() if v is not None}
@@ -708,17 +811,32 @@ def levels_along(movement, source, listener: str) -> list[float | None]:
     return levels
 
 
+def speech_along(movement, scene: Scene, source, listener: str) -> list[float | None]:
+    """The STI of the speech of ``source`` (a talker of ``scene``) at ``listener`` at each
+    moment of ``movement``, as the report gives a still listener's (its sound power and
+    the scene's background noise: :meth:`~acoustic_spaces.scene.Scene.level_inputs`);
+    None at a moment where it is not defined."""
+    power, noise, talker = scene.level_inputs(source.name)
+    out: list[float | None] = []
+    for k in range(len(movement.times)):
+        response = movement.result[movement.key(source.name, listener, k)]
+        sti = float(response.speech(power, noise, talker=talker).sti)
+        out.append(round(sti, 3) if math.isfinite(sti) else None)
+    return out
+
+
 def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None = None) -> None:
-    """Every listener's mix with ``moving`` walking, all on one clock: the scene
+    """Every listener's mix with ``moving`` moving, all on one clock: the scene
     simulated with every mover at each moment of its trajectory
     (:func:`~acoustic_spaces.walkthrough.simulate_movement`), the feed of each source
-    that plays in the run (``--sources``) played through it at its sound power, one gain
-    for all (the loudest peak at -1 dBFS), into ``moving/`` with seats.json; a trajectory with
-    Doppler, which moves alone, with each early path through its changing delay. That
-    also keeps the moments and, at each, the A-weighted level of each source that plays
-    at every listener, for the pictures; the arrival time (``arrival_s``) is left out
-    where something moves, as it changes along the way, and the tour shifts no mix by it
-    (``lag_s`` 0), so that the stops keep one clock."""
+    that plays in the run (``--sources``) played through it at its sound power, one
+    gain for all (the loudest peak at -1 dBFS), into ``moving/`` with seats.json; a
+    trajectory with Doppler, which moves alone, with each early path through its
+    changing delay. That also keeps the moments and, at each, the A-weighted level of
+    each source that plays at every listener and the STI of each talker's speech there
+    (:func:`speech_along`), for the pictures; the arrival time (``arrival_s``) is left
+    out where something moves, as it changes along the way, and the tour shifts no mix
+    by it (``lag_s`` 0), so that the stops keep one clock."""
     from acoustic_spaces.room import Room
     from acoustic_spaces.walkthrough import (
         head_turners,
@@ -750,6 +868,10 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     mixes = render_movement(movement, feeds, fmt, sample_rate=rate)
     times, places = movement.times, movement.places
     levels = {name: {s.name: levels_along(movement, s, name) for s in sounding} for name in names}
+    talkers = [s for s in sounding if s.spectrum != "flat"]
+    speech = {
+        name: {s.name: speech_along(movement, scene, s, name) for s in talkers} for name in names
+    }
     peak = max(float(abs(mixes[name]).max(initial=0.0)) for name in names)
     gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
     weights = {s.name: s.sound_power_db for s in sounding}
@@ -786,7 +908,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
         "moving": moving,
         "trajectories": trajectories_of(args),
         "seats": info,
-        "movement": {"times": [float(t) for t in times], "levels_a_db": levels},
+        "movement": {"times": [float(t) for t in times], "levels_a_db": levels, "sti": speech},
     }
     pipeline.write_json(folder / pipeline.SEATS, seats)
     print(f"wrote {folder}: {len(names)} mixes, {places} places along the trajectories")
@@ -1024,6 +1146,25 @@ DEMO = Demo(
             named="never",  # its name begins the run's (stem_of)
         ),
         Option(
+            "recording",
+            "the free recording the sources with a channel play in this run, in place of "
+            "the scene's own (Recording on the scene's page): a song, or a talker of the "
+            "ACE corpus, downloaded the first time; a source with a speech spectrum that "
+            "plays it takes its talker's, a woman's or a man's (default: the scene's "
+            "recording)",
+            None,
+            "choice",
+            choices=recordings.NAMES,
+            steps=("recording", "feeds", "simulate", "render", "video"),
+            unset="the scene's",
+            named="plays",
+            moot=lambda args: (
+                None
+                if recording_heard(args)
+                else "no source plays the scene's recording: give one a channel"
+            ),
+        ),
+        Option(
             "seconds",
             "how long each listener is heard (s): on a shared timeline 20 s by default, and "
             "a piece too short for every listener shares its length out; from each "
@@ -1054,6 +1195,20 @@ DEMO = Demo(
             aliases=("--tour",),
         ),
         *sources_options(help=SOURCES_HELP, steps=("render", "video")),
+        Option(
+            "vocal_effort",
+            "how loud every talker in use (a source with a speech spectrum) talks in this "
+            "run, as ISO 9921 has it: relaxed, normal, raised or loud, its speech 54, 60, "
+            "66 or 72 dB(A) 1 m in front of it; the scene so changed is simulated once "
+            "(default: as in the scene)",
+            None,
+            "choice",
+            choices=VOCAL_EFFORTS,
+            steps=("simulate", "render", "video"),
+            unset="as in the scene",
+            aliases=("--voice",),
+            moot=lambda args: None if talkers_of(args) else "no source in use talks",
+        ),
         Option(
             "credit",
             "a line on the stills about the recordings: who made them, under which licence",

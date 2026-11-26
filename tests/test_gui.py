@@ -4535,6 +4535,15 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert "song" not in dialog.fields and "seconds" in dialog.fields
     assert dialog.problem.text() == "" and ok.isEnabled()
     assert '"Spicy Funk Cake"' in dialog.downloads.text() and "61 MB" in dialog.downloads.text()
+    # A choice that the scene makes unless given lists that first, which gives none.
+    effort = dialog.fields["vocal_effort"]
+    assert isinstance(effort, ChoicesField) and effort.combo.itemText(0) == "as in the scene"
+    assert effort.value() is None and "--vocal-effort" not in dialog.command.text()
+    effort.combo.setCurrentIndex(effort.combo.findText("raised"))
+    assert dialog.command.text() == "acoustic-spaces demo scene.yaml all --vocal-effort raised"
+    assert "no source in use talks" in dialog.problem.text()  # the stadium has no talker
+    effort.combo.setCurrentIndex(0)
+    assert dialog.problem.text() == "" and dialog.command.text().endswith("scene.yaml all")
 
     # Another example's scene: its own demo, steps, options and command.
     walk = DemoDialog(scene=example_path("gallery"))

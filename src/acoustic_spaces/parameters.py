@@ -838,6 +838,21 @@ def speech_transmission_index(
     return min(max(sti, 0.0), 1.0)
 
 
+#: The ratings ISO 9921 gives the STI, each up to the value its next one starts at.
+STI_RATINGS = ((0.30, "bad"), (0.45, "poor"), (0.60, "fair"), (0.75, "good"))
+
+
+def sti_rating(sti: float | None) -> str:
+    """The STI in words, as ISO 9921 rates it: bad below 0.30, then poor, fair, good,
+    and excellent from 0.75; ``not defined`` for none."""
+    if sti is None or not math.isfinite(sti):
+        return "not defined"
+    for top, words in STI_RATINGS:
+        if sti < top:
+            return words
+    return "excellent"
+
+
 @dataclass
 class SpeechParameters:
     """Speech intelligibility at a listener: STI and STIPA (0 to 1), U50 per octave band
@@ -1448,6 +1463,8 @@ def free_field_reference(
 
 
 __all__ = [
+    "STI_RATINGS",
+    "sti_rating",
     "ALL_PARAMETERS",
     "A_WEIGHTING_DB",
     "C_WEIGHTING_DB",

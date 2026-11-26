@@ -38,6 +38,7 @@ from acoustic_spaces.demos.pictures import (
     tool_line,
     tour_column,
 )
+from acoustic_spaces.parameters import sti_rating as rating
 from acoustic_spaces.walkthrough import facing_name, moment_name
 
 FLOOR = (34, 38, 52)
@@ -99,16 +100,6 @@ def bearing(at, yaw: float, target) -> tuple[str, float]:
     else:
         words = "behind you"
     return words, angle
-
-
-def rating(sti: float) -> str:
-    """The STI's words (IEC 60268-16)."""
-    if not math.isfinite(sti):
-        return "not defined"
-    for top, words in ((0.30, "bad"), (0.45, "poor"), (0.60, "fair"), (0.75, "good")):
-        if sti < top:
-            return words
-    return "excellent"
 
 
 #: What each part is, for the heading (after "you" or "then") and for the thumbnail.
