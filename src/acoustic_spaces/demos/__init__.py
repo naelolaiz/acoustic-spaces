@@ -372,7 +372,9 @@ class Option:
     #: Flags an example's script gave it by before the script became a preset of the
     #: demo of any scene, with values of another form: each flag, and what a value of
     #: it is in this option's (``("--talker", lambda code: f"ace_{code.lower()}")`` for
-    #: ``--recording``), each of several for an option that :attr:`varies`.
+    #: ``--recording``), each of several for an option that :attr:`varies`. Its own
+    #: flag reads so too (the gallery's ``--stand 16,4``, for ``--stand
+    #: standing=16,4``).
     renamed: tuple[tuple[str, Callable[[str], str]], ...] = ()
     #: How it counts in the name of a run (:meth:`Demo.run_name`), one of
     #: :data:`NAMINGS`; None: as its kind has it (:attr:`naming`).
@@ -548,8 +550,14 @@ class Option:
             kwargs["type"] = float
         if self.choices and not self.varies:
             kwargs["choices"] = list(self.choices)
+        own = (self.option, *self.aliases)
+        for flag, form in self.renamed:
+            if flag in own:  # its own flag, in the old form or its own
+                kwargs["type"] = self._renamed(form, kwargs.get("type"))
         parser.add_argument(self.option, *self.aliases, **kwargs)
         for flag, form in self.renamed:
+            if flag in own:
+                continue
             parser.add_argument(
                 flag,
                 dest=self.name,
@@ -558,14 +566,16 @@ class Option:
                 help=f"{self.option} as the example's script took it before",
             )
 
-    def _renamed(self, form: Callable[[str], str]) -> Callable[[str], Any]:
+    def _renamed(
+        self, form: Callable[[str], str], then: Callable[[str], Any] | None = None
+    ) -> Callable[[str], Any]:
         """How a value of a :attr:`renamed` flag reads: in this option's form
-        (``form``), then as one of its own (:meth:`parse`)."""
+        (``form``), then as one of its own (:meth:`parse`, or ``then``)."""
 
         def read(text: str) -> Any:
             if self.varies:
                 return self.parse(",".join(form(item) for item in given_names(text) or []))
-            return form(text)
+            return form(text) if then is None else then(form(text))
 
         return read
 

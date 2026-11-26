@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
@@ -25,7 +26,6 @@ from acoustic_spaces.examples import (
     example_path,
     list_examples,
 )
-from acoustic_spaces.parameters import a_weighted
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Scene
 
@@ -174,16 +174,18 @@ def test_examples_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
 
 
 def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
-    """One gallery for the still listeners and the visitor who walks: the walk turns off
-    and on, and the gallery copies with its demo."""
-    from acoustic_spaces.walkthrough import movers, with_moving
+    """One gallery for the still listeners, the visitor who walks and the one who turns
+    their head on the spot 4 m in front of the guide, a quarter at a time and held for
+    4 s, round to the front again (the script's turn of before, heard through the head
+    tracker): the trajectories turn off and on, and the gallery copies with its demo."""
+    from acoustic_spaces.walkthrough import head_turners, knots, movers, with_moving
 
     assert "gallery" in NAMES
     path = example_path("gallery")
     scene = Scene.from_yaml(path)
     listeners = {lis.name: lis for lis in scene.listeners}
     assert set(listeners) == {"in sight", "round the corner", "visitor", "standing"}
-    assert not listeners["standing"].in_use  # walk_demo.py's, left out of simulations
+    assert all(lis.in_use for lis in listeners.values())
     assert (
         listeners["in sight"].trajectory is None
         and listeners["round the corner"].trajectory is None
@@ -191,7 +193,14 @@ def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
     visitor = listeners["visitor"]
     assert visitor.position == (17.0, 4.0, 1.6) and visitor.trajectory.enabled
     assert visitor.trajectory.to == [(4.0, 4.0, 1.6), (4.0, 16.0, 1.6)]
-    assert [item.name for _kind, item in movers(scene)] == ["visitor"]
+    standing = listeners["standing"]
+    assert math.dist(standing.position, scene.sources[0].position) == pytest.approx(4.0)
+    turn = knots(standing)
+    assert turn.times.tolist() == [0.0, 4.0, 10.0, 14.0, 20.0, 24.0, 30.0, 34.0, 40.0]
+    assert turn.angles[:, 0].tolist() == [0.0, 0.0, 90.0, 90.0, 180.0, 180.0, 270.0, 270.0, 360.0]
+    assert np.ptp(turn.positions, axis=0).max() == 0.0
+    assert [item.name for _kind, item in movers(scene)] == ["visitor", "standing"]
+    assert head_turners(scene) == ["standing"]
     assert movers(with_moving(scene, [])) == []
     assert scene.outputs[0].format == "binaural"  # what walkthrough plays by default
     assert demo_for("gallery").example == "gallery"
@@ -1721,447 +1730,56 @@ def test_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path, monkeypatch
     assert not any(line.startswith("Playing") for line in whole.facts("audience", "evening"))
 
 
-def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
-    """walk_demo.py writes the gallery with the guide speaking at the level IEC 60268-16
-    gives that voice and the visitor standing round the corner; it cuts from the walk to
-    the turn at a pause in the talk; and its pictures name the moments of the tour."""
-    demo = _script("gallery", "walk_demo")
-    # The head tracker's head turns as --turn scripts it, and says which way it faces.
-    head = demo.turning([0.0, 10.0], [0.0, 90.0], 90.0, 10.0, every_s=0.0)
-    assert head(5.0) == (45.0, 0.0, 0.0)
-    assert capsys.readouterr().out == (
-        "guide -> standing facing 135.0 deg: turning the head, 5.0 of 10.0 s\n"
-    )
-    args = _demo_args(
-        demo.DEMO,
-        source=EXAMPLES / "gallery" / "scene.yaml",  # the script's own: the default
-        scene=tmp_path / "scene_demo.yaml",
-        work=tmp_path / "demo",
-    )
-    demo.scene(args)
-    room = Room.from_yaml(args.scene)
-    assert room.problems() == []
-    # The demo walks the visitor while its walk is on, says so when it is off, and makes
-    # its scene again from an example scene changed since.
-    assert demo.moving(args) == ["visitor"] and demo.DEMO.check(args) is None
-    assert demo.scene_done(args)
-    data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
-    next(lis for lis in data["listeners"] if lis["name"] == "visitor")["trajectory"]["enabled"] = (
-        False
-    )
-    off = tmp_path / "off.yaml"
-    off.write_text(yaml.safe_dump(data), encoding="utf-8")
-    os.utime(off, (args.scene.stat().st_mtime + 10,) * 2)
-    stood = argparse.Namespace(**vars(args) | {"source": off})
-    assert demo.moving(stood) == [] and not demo.scene_done(stood)
-    assert "the visitor's trajectory is off in off.yaml" in demo.DEMO.check(stood)
-    guide = next(s for s in room.scene.sources if s.name == "guide")
-    # The sound power is what puts the voice at its level 1 m in front of the talker.
-    at_1m_a = a_weighted(guide.power_db("octave") - 20.0 * np.log10(1.0) - 11.0 + 5.0)
-    assert guide.level_db == pytest.approx(
-        demo.voice_level("speech_male", demo.VOICE_PATTERN, demo.VOICES["normal"]), abs=0.05
-    )
-    assert float(at_1m_a) == pytest.approx(demo.VOICES["normal"], abs=6.0)  # the pattern's gain
-    assert guide.spectrum == "speech_male"
-    standing = next(lis for lis in room.scene.listeners if lis.name == "standing")
-    # The gallery's own, left out of its simulations; --stand moves it, facing the guide.
-    placed = next(lis for lis in Scene.from_yaml(args.source).listeners if lis.name == "standing")
-    assert standing.in_use and not placed.in_use and standing.position == placed.position
-    assert standing.orientation.yaw == pytest.approx(0.0, abs=0.1)  # facing the guide
-    moved = argparse.Namespace(**vars(args) | {"stand": "16,7", "scene": tmp_path / "moved.yaml"})
-    demo.scene(moved)
-    standing = next(lis for lis in Scene.from_yaml(moved.scene).listeners if lis.name == "standing")
-    assert standing.position == (16.0, 7.0, 1.6)
-    assert standing.orientation.yaw == pytest.approx(-36.87, abs=0.01)  # facing the guide
-    # A female talker speaks with the female spectrum, and a louder voice is louder.
-    assert demo.voice_level("speech_female", demo.VOICE_PATTERN, 60.0) != guide.level_db
-    assert demo.VOICES["raised"] > demo.VOICES["normal"] > demo.VOICES["relaxed"]
-    with pytest.raises(SystemExit, match="--stand takes"):
-        demo.stand_of(argparse.Namespace(stand="over there"))
-    assert demo.turn_of(argparse.Namespace(turn="0:0,3:90")) == [(0.0, 0.0), (3.0, 90.0)]
-    with pytest.raises(SystemExit, match="--turn takes"):
-        demo.turn_of(argparse.Namespace(turn="round"))
-    # The cuts fall in the talk's pauses: one after the walk and the visitor's four
-    # seconds of listening, the next after the turn and four more.
-    walk_s = float(demo.walk_points_of(room).times[-1])
-    turn_s = demo.turn_of(args)[-1][0]
-    rate = 8000
-    length = walk_s + turn_s + 4 * demo.LINGER_S
-    t = np.arange(int(length * rate)) / rate
-    talk = 0.3 * np.sin(2 * np.pi * 180 * t) * (1.0 + np.sin(2 * np.pi * 3 * t))
-    pauses = (walk_s + demo.LINGER_S, walk_s + demo.LINGER_S + turn_s + demo.LINGER_S)
-    for pause in pauses:
-        talk[int((pause - 0.5) * rate) : int((pause + 0.7) * rate)] = 0.0
-    (args.work / "speech").mkdir(parents=True)
-    write_wav(args.work / "speech" / f"{args.talker}.wav", talk, rate)
-    cuts = demo.segments(args, room)
-    assert list(cuts) == ["walk", "turn"] and cuts["walk"][0] == 0.0
-    (_, first), (start, second) = cuts["walk"], cuts["turn"]
-    assert start == first  # the turn's talk goes on from the walk's
-    assert first == pytest.approx(pauses[0], abs=demo.PAUSE_S)
-    assert second == pytest.approx(pauses[1], abs=demo.PAUSE_S)
-    assert second - first >= turn_s
-    assert demo.said(args, room)[2] == 1  # long enough: said once, as recorded
-    # A talk too short for the walk and the turn is said again from its start, AGAIN_S
-    # after it ends, as often as they need; the cuts fall in its pauses as before.
-    short = argparse.Namespace(**vars(args) | {"talker": "short"})
-    half = talk[: int(0.5 * length * rate)]
-    write_wav(args.work / "speech" / "short.wav", half, rate)
-    spoken, _, times = demo.said(short, room)
-    gap = int(demo.AGAIN_S * rate)
-    assert times == 2 and len(spoken) == 2 * len(half) + gap
-    assert len(spoken) / rate >= demo.needed_s(short, room)
-    np.testing.assert_allclose(spoken[len(half) + gap :][: len(half)], half, atol=1e-6)
-    assert not spoken[len(half) : len(half) + gap].any()
-    (_, first), (_, second) = demo.segments(short, room).values()
-    assert second - first >= turn_s and second <= len(spoken) / rate
-    write_wav(args.work / "speech" / "silent.wav", np.zeros(0), rate)
-    with pytest.raises(SystemExit, match="silent is empty"):
-        demo.said(argparse.Namespace(**vars(args) | {"talker": "silent"}), room)
-    with pytest.raises(SystemExit, match="run first"):
-        demo.talk(argparse.Namespace(**vars(args) | {"talker": "F9"}))
-    # --input guide=WAV: the guide says that file; no talk to download, its name in the
-    # credit and in the refusal, and what the walk and the turn made from another is
-    # made again (walk.json from before "plays" was kept said the talk of its talker).
-    assert demo.plays(args) == {"guide": f"the talk of ACE talker {args.talker}"}
-    assert {s.name for s in room.scene.sources} >= set(demo.plays(args))
-    mine = tmp_path / "mine.wav"
-    write_wav(mine, talk[: int(0.5 * length * rate)], rate)
-    given = argparse.Namespace(**vars(args) | {"talker": "F9", "inputs": {"guide": mine}})
-    assert demo.speech_done(given) and demo.talk(given)[1] == rate
-    assert demo.credit_of(given) == "Playing guide: mine.wav"
-    assert demo.credit_of(args).startswith("Speech: ACE challenge corpus, talker M4")
-    assert demo.said(given, room)[2] == 2  # said again, as the corpus's short takes are
-    walked = args.run_folder / "walk"  # the run's own
-    assert walked == args.work / "walk_M4_binaural" / "walk"
-    # A scene of another file is named in the run (the walk is that scene's).
-    other = demo.DEMO.resolved(argparse.Namespace(**vars(args) | {"source": off}))
-    assert other.run_folder.name == "walk_M4_from-off_binaural"
-    walked.mkdir(parents=True)
-    pipeline.write_json(walked / demo.WALK, {"talker": args.talker})
-    assert not demo.part_done(args, "walk")  # no sound for these ears yet
-    write_wav(walked / f"walk.{demo.label_of(args)}.wav", np.zeros((8, 2)), rate)
-    assert demo.part_done(args, "walk")
-    # A run with another --turn walks the same: it plays this run's walk.
-    turned = demo.DEMO.resolved(argparse.Namespace(**vars(args) | {"turn": "0:0,2:90"}))
-    assert turned.run_folder != args.run_folder
-    assert demo.part_folder(turned, "walk") == walked
-    assert not demo.part_done(turned, "turn")
-    # Through another head (--hrtf) the walk is made again, not taken as done.
-    kemar = argparse.Namespace(**vars(args) | {"hrtf": tmp_path / "kemar.sofa"})
-    assert demo.label_of(kemar) != demo.label_of(args)
-    assert not demo.part_done(kemar, "walk")
-    assert not demo.part_done(given, "walk")
-    assert not demo.part_done(args, "turn")
+def test_the_gallery_walk_is_a_preset_of_the_demo_of_its_scene() -> None:
+    """walk_demo.py is the demo of the gallery's scene with the walker and the one turning
+    alone: each command line of the script it was reads as the demo of any scene's (the
+    talker as its ACE recording, several too, the voice as the vocal effort, the stand
+    and the turn as the listener standing's, the example's scene as the scene), its
+    steps run as those that took them over, and a run of it is This scene's run on the
+    gallery with those listeners, in the same folder."""
+    from acoustic_spaces.demos import run_folder
+    from acoustic_spaces.demos.scene_demo import DEMO
 
-
-def test_walk_demo_listeners_order_the_parts(tmp_path: Path, capsys) -> None:
-    """walk_demo.py's --listeners picks its parts by the listener each follows, the
-    visitor's walk and standing's head turn, and their order: by default the walk, then
-    the turn, under the run's old name; in another order the talk goes on from one part
-    into the next in that order; a part left out is neither simulated nor needed; and a
-    part's sound is taken from another run only when it holds the same part of the talk.
-    Its one source, the guide, is all --sources takes."""
-    demo = _script("gallery", "walk_demo")
-    source = EXAMPLES / "gallery" / "scene.yaml"
-
-    def run(**values) -> argparse.Namespace:
-        given = {"source": source, "scene": tmp_path / "scene_demo.yaml", "work": tmp_path}
-        return _demo_args(demo.DEMO, **(given | values))
-
-    args = run()
-    assert args.run_folder.name == "walk_M4_binaural" and args.playing == ("guide",)
-    assert demo.DEMO.listeners(args) == ["visitor", "standing"]
-    assert [(s.name, s.group, s.on) for s in demo.DEMO.sources(args)] == [("guide", None, True)]
-    assert demo.order_of(args) == ["walk", "turn"] and demo.parts_words(args) == (
-        "the walk and the turn"
+    walk = _script("gallery", "walk_demo").DEMO
+    assert (walk.name, walk.example, walk.title) == (
+        "walk",
+        "gallery",
+        "A walk through the gallery",
     )
-    turn_first = run(listeners="standing,visitor")
-    assert turn_first.run_folder.name == "walk_M4_standing+visitor_binaural"
-    assert demo.order_of(turn_first) == ["turn", "walk"]
-    alone = run(listeners="visitor")
-    assert alone.run_folder.name == "walk_M4_visitor_binaural"
-    assert demo.order_of(alone) == ["walk"] and demo.parts_words(alone) == "the walk"
-    standing = run(listeners="standing")
-    # The guide alone plays, together or in turn: the run is the same, its name too.
-    assert run(sources="guide").run_folder == args.run_folder
-    assert run(sources_play="in-turn").run_folder == args.run_folder
-    assert demo.DEMO.check(run(sources="band")) == (
-        "--sources band: no such source or group here; it has guide"
-    )
-    assert demo.DEMO.check(run(listeners="in sight")) == (
-        "--listeners in sight: no such listener here; it has visitor, standing"
-    )
-    # --series listeners: a part each, an ordinary run of one listener, in that order.
-    series = run(listeners="standing,visitor", series="listeners")
-    assert [each.run_folder.name for each in demo.DEMO.each(series)] == [
-        "walk_M4_standing_binaural",
-        "walk_M4_visitor_binaural",
-    ]
-    # With the visitor's walk off, a run of the turn alone needs no walk and moves nobody.
-    data = yaml.safe_load(source.read_text(encoding="utf-8"))
-    next(lis for lis in data["listeners"] if lis["name"] == "visitor")["trajectory"]["enabled"] = (
-        False
-    )
-    off = tmp_path / "off.yaml"
-    off.write_text(yaml.safe_dump(data), encoding="utf-8")
-    assert "trajectory is off" in demo.DEMO.check(run(source=off))
-    assert demo.DEMO.check(run(source=off, listeners="standing")) is None
-    assert demo.moving(run(source=off, listeners="standing")) == []
-    assert demo.moving(standing) == [] and demo.moving(alone) == ["visitor"]
-    # The talk, cut in the run's order: the turn first, then the walk from its cut.
-    demo.scene(args)
-    room = Room.from_yaml(args.scene)
-    walk_s = float(demo.walk_points_of(room).times[-1])
-    turn_s = demo.turn_of(args)[-1][0]
-    rate = 8000
-    t = np.arange(int((walk_s + turn_s + 4 * demo.LINGER_S) * rate)) / rate
-    talk = 0.3 * np.sin(2 * np.pi * 180 * t) * (1.0 + np.sin(2 * np.pi * 3 * t))
-    pauses = (turn_s + demo.LINGER_S, turn_s + walk_s + 2 * demo.LINGER_S)
-    for pause in pauses:
-        talk[int((pause - 0.5) * rate) : int((pause + 0.7) * rate)] = 0.0
-    (tmp_path / "speech").mkdir()
-    write_wav(tmp_path / "speech" / "M4.wav", talk, rate)
-    cuts = demo.segments(turn_first, room)
-    assert list(cuts) == ["turn", "walk"]
-    assert cuts["turn"][0] == 0.0 and cuts["walk"][0] == cuts["turn"][1]
-    assert cuts["turn"][1] == pytest.approx(pauses[0], abs=demo.PAUSE_S)
-    assert cuts["walk"][1] == pytest.approx(pauses[1], abs=demo.PAUSE_S)
-    assert demo.segments(alone, room) == {"walk": demo.segments(args, room)["walk"]}
-    assert demo.needed_s(alone, room) == pytest.approx(walk_s + demo.LINGER_S + demo.PAUSE_S + 1.0)
-    assert demo.needed_s(args, room) == pytest.approx(
-        walk_s + turn_s + 2 * (demo.LINGER_S + demo.PAUSE_S) + 1.0
-    )
-    # A part left out does nothing and is done; the facts say what came before a part
-    # only out of the demo's own order, so a default run writes them as before.
-    capsys.readouterr()
-    demo.turn(alone)
-    demo.walk(standing)
-    assert capsys.readouterr().out == (
-        "turn: --listeners leaves out standing: no turn to play\n"
-        "walk: --listeners leaves out the visitor: no walk to play\n"
-    )
-    assert demo.part_done(alone, "turn") and demo.part_done(standing, "walk")
-    assert demo.facts_after(args, "walk") == {} and demo.facts_after(args, "turn") == {}
-    assert demo.facts_after(turn_first, "walk") == {"after": ["turn"]}
-    assert demo.facts_after(turn_first, "turn") == {"after": []}
-    assert demo.facts_after(standing, "turn") == {"after": []}
-
-    def made(run_args, part: str, **facts) -> Path:
-        folder = run_args.run_folder / part
-        folder.mkdir(parents=True)
-        pipeline.write_json(folder / demo.FACTS[part], {"talker": "M4", **facts})
-        write_wav(folder / f"{part}.{demo.label_of(run_args)}.wav", np.zeros((8, 2)), rate)
-        return folder
-
-    # The default run's walk (as written before --listeners) starts the talk: the walk
-    # alone plays it, a walk after the turn does not.
-    walked = made(args, "walk")
-    assert demo.part_folder(alone, "walk") == walked
-    assert demo.part_folder(turn_first, "walk") is None
-    # Its turn follows the walk: the turn alone, from the talk's start, is made anew.
-    turned = made(args, "turn")
-    assert demo.part_folder(args, "turn") == turned
-    assert demo.part_folder(standing, "turn") is None
-    # A walk after the turn follows that --turn: a run with another turns anew.
-    after = made(turn_first, "walk", after=["turn"])
-    assert demo.part_folder(turn_first, "walk") == after
-    other = run(listeners="standing,visitor", turn="0:0,2:90")
-    assert demo.DEMO.upstream(other, "walk").run_folder == turn_first.run_folder
-    assert demo.part_folder(other, "walk") is None
-    # The turn alone is the turn first of the run that walks after it.
-    first = made(standing, "turn", after=[])
-    assert demo.part_folder(turn_first, "turn") == first
-
-
-def test_walk_demo_video_plays_its_parts_in_order(tmp_path: Path) -> None:
-    """walk_demo.py's video step (stills only, no ffmpeg) plays the parts the run has, in
-    its --listeners order, a breath of silence between them, and marks their moments:
-    the walk then the turn by default, the turn first when standing comes first, and one
-    part alone with no silence."""
-    pytest.importorskip("PIL")
-    demo = _script("gallery", "walk_demo")
-
-    def run(**values) -> argparse.Namespace:
-        given = {
-            "source": EXAMPLES / "gallery" / "scene.yaml",
-            "scene": tmp_path / "scene_demo.yaml",
-            "work": tmp_path,
-            "no_mp4": True,
-        }
-        return _demo_args(demo.DEMO, **(given | values))
-
-    args = run()
-    demo.scene(args)
-    rate = 8000
-    facts = {
-        "walk": {
-            "talker": "M4",
-            "talk_s": [0.0, 1.0],
-            "times": [0.0, 1.0, 2.0],
-            "positions": [[17.0, 4.0, 1.6], [10.0, 4.0, 1.6], [4.0, 16.0, 1.6]],
-            "yaws": [180.0, 180.0, 90.0],
-            "level_a_db": [56.0, 52.0, 48.0],
-            "sti": [0.7, 0.6, 0.5],
-        },
-        "turn": {
-            "talker": "M4",
-            "talk_s": [1.0, 3.0],
-            "facing": 0.0,
-            "keys": [[0.0, 0.0], [1.0, 90.0]],
-            "times": [0.0, 1.0],
-            "positions": [[16.0, 4.0, 1.6]] * 2,
-            "yaws": [0.0, 90.0],
-            "level_a_db": [60.0, 60.0],
-            "sti": [0.8, 0.8],
-        },
+    parser = walk.parser()
+    read = {
+        ("walk", "--talker", "F1"): {"recording": "ace_f1"},
+        ("all", "--talker", "M4,F1"): {"recording": ("ace_m4", "ace_f1")},
+        ("all", "--voice", "raised"): {"vocal_effort": "raised"},
+        ("turn", "--stand", "4,15"): {"stand": "standing=4,15"},
+        ("turn", "--turn", "0:0,6:180"): {"turn": "standing=0:0,6:180"},
+        ("all", "--turn", "visitor=0:0,6:180"): {"turn": "visitor=0:0,6:180"},
+        ("all", "--from", "other.yaml"): {"scene": "other.yaml"},
+        ("all", "--listeners", "standing,visitor"): {"listeners": "standing,visitor"},
+        ("all", "--input", "guide=talk.wav"): {"inputs": {"guide": Path("talk.wav")}},
     }
-    for part, data in facts.items():
-        folder = args.run_folder / part
-        folder.mkdir(parents=True)
-        pipeline.write_json(folder / demo.FACTS[part], data)
-        write_wav(folder / f"{part}.binaural.wav", np.full((5 * rate, 2), 0.1), rate)
-    walk_n = int((1.0 + demo.TAIL_S) * rate)
-    turn_n = int((2.0 + demo.TAIL_S) * rate)
-    gap = int(demo.GAP_S * rate)
-
-    def stills(run_args) -> list[str]:
-        found = sorted((run_args.run_folder / "stills").glob("*.png"))
-        return [re.sub(r"^\d+_", "", p.stem) for p in found]
-
-    demo.video(args)
-    audio, _ = read_wav(tmp_path / "walk_M4_binaural.wav")
-    assert len(audio) == walk_n + gap + turn_n
-    assert not audio[walk_n : walk_n + gap].any()  # the breath between the parts
-    assert stills(args)[0] == "setting-off" and stills(args)[-1] == "still"  # the turn's
-    # The turn first: it starts the talk, so the run plays its own turn, not the default
-    # run's, and its own walk after it.
-    first = run(listeners="standing,visitor")
-    for part, after in (("turn", []), ("walk", ["turn"])):
-        folder = first.run_folder / part
-        folder.mkdir(parents=True)
-        pipeline.write_json(folder / demo.FACTS[part], facts[part] | {"after": after})
-        write_wav(folder / f"{part}.binaural.wav", np.full((5 * rate, 2), 0.1), rate)
-    demo.video(first)
-    audio, _ = read_wav(tmp_path / "walk_M4_standing+visitor_binaural.wav")
-    assert len(audio) == turn_n + gap + walk_n
-    assert not audio[turn_n : turn_n + gap].any()
-    assert stills(first)[0] == "turning-left" and "setting-off" in stills(first)
-    # The walk alone plays the default run's walk, which starts the talk too: no silence.
-    alone = run(listeners="visitor")
-    demo.video(alone)
-    audio, _ = read_wav(tmp_path / "walk_M4_visitor_binaural.wav")
-    assert len(audio) == walk_n
-    assert not any(name.startswith(("turning", "still")) for name in stills(alone))
-
-
-def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
-    """The walk's pictures work out where the guide is from the visitor, whether the
-    corner is in the way, and the moments the video's chapters and stills mark."""
-    pytest.importorskip("PIL")
-    demo = _script("gallery", "walk_demo")
-    pictures = _script("gallery", "walk_pictures")
-    scene = yaml.safe_load(example_path("gallery").read_text(encoding="utf-8"))
-    plan = np.array(scene["geometry"]["floor_plan"], dtype=float)
-    # The L's short arm cannot see the guide at the far end of the long one.
-    assert pictures.in_sight(plan, (17.0, 4.0), (20.0, 4.0))
-    assert not pictures.in_sight(plan, (4.0, 16.0), (20.0, 4.0))
-    assert pictures.inside(plan, 4.0, 16.0) and not pictures.inside(plan, 20.0, 16.0)
-    assert (8.0, 8.0) in pictures.inner_corners(plan)
-    words, angle = pictures.bearing((0.0, 0.0), 0.0, (1.0, 0.0))
-    assert words == "in front of you" and angle == pytest.approx(0.0)
-    assert pictures.bearing((0.0, 0.0), 0.0, (0.0, 1.0))[0] == "on your left"
-    assert pictures.bearing((0.0, 0.0), 0.0, (0.0, -1.0))[0] == "on your right"
-    assert pictures.bearing((0.0, 0.0), 0.0, (-1.0, 0.0))[0] == "behind you"
-    assert pictures.rating(0.2) == "bad" and pictures.rating(0.8) == "excellent"
-    assert pictures.rating(float("nan")) == "not defined"
-    # The tour: walking down the long arm, round the corner, then turning on the spot.
-    times = [0.0, 5.0, 10.0, 15.0]
-    walked = {
-        "times": times,
-        "positions": [[17.0, 4.0, 1.6], [10.0, 4.0, 1.6], [4.0, 10.0, 1.6], [4.0, 16.0, 1.6]],
-        "yaws": [180.0, 150.0, 90.0, 90.0],
-        "level_a_db": [62.0, 56.0, 50.0, 44.0],
-        "sti": [0.72, 0.64, 0.5, 0.38],
-    }
-    keys = [[0.0, 0.0], [4.0, 0.0], [10.0, 90.0], [14.0, 90.0]]
-    turned = {
-        "facing": 90.0,
-        "keys": keys,
-        "times": [t for t, _ in keys],
-        "positions": [[4.0, 16.0, 1.6]] * len(keys),
-        "yaws": [90.0 + yaw for _, yaw in keys],
-        "level_a_db": [44.0] * len(keys),
-        "sti": [0.38] * len(keys),
-    }
-    voice = ("normal", demo.VOICES["normal"])
-    drawing = pictures.Pictures(
-        scene,
-        [("walk", walked, 0.0, 16.0), ("turn", turned, 16.6, 31.6)],
-        voice=voice,
-        credit="Speech: a corpus",
+    for argv, given in read.items():
+        args = parser.parse_args(list(argv))
+        assert {name: getattr(args, name) for name in given} == given, argv
+    for old, new in {
+        "speech": "recording",
+        "scene": "simulate",
+        "walk": "render",
+        "turn": "render",
+        "video": "video",
+    }.items():
+        assert walk.step(old).name == new
+    args = parser.parse_args(["all"])
+    assert args.listeners == "visitor,standing" and walk.check(args) is None
+    general = DEMO.at(EXAMPLES / "gallery").parser()
+    same = general.parse_args(["all", "--scene", "scene.yaml", "--listeners", "visitor,standing"])
+    assert run_folder(walk.resolved(args)) == run_folder(
+        DEMO.at(EXAMPLES / "gallery").resolved(same)
     )
-    assert walked["sight"] == [True, True, False, False]
-    moments = drawing.moments()
-    assert [name for name, _, _ in moments][:4] == [
-        "setting-off",
-        "corner",
-        "out-of-sight",
-        "standing",
-    ]
-    assert [t for _, t, _ in moments][:4] == [0.0, 5.0, 10.0, 15.0]
-    assert [t for _, t, _ in moments] == sorted(t for _, t, _ in moments)
-    assert any(name.startswith("turning-") for name, _, _ in moments)
-    assert moments[0][1] == 0.0 and moments[-1][1] < 16.6 + keys[-1][0] + 1.0
-    # The state at a moment: where the visitor is, and what it hears there.
-    state = drawing.state(0.0)
-    assert state["part"] == "walk" and state["at"][0] == pytest.approx(17.0)
-    assert state["level"] == 62.0 and state["sight"]
-    late = drawing.state(16.6 + 12.0)
-    assert late["part"] == "turn" and late["yaw"] == pytest.approx(180.0)
-    assert not late["sight"]
-    for picture in (drawing.frame(0.0), drawing.frame(20.0), drawing.thumbnail()):
-        assert picture.getbbox() is not None
-    # The video's messages: the visitor at the moment of its walk, then standing.
-    assert drawing.shown(5.0, "visitor", "standing") == "guide -> visitor @ 5.00 s"
-    assert drawing.shown(16.6 + 12.0, "visitor", "standing") == (
-        "guide -> standing facing 180.0 deg"
+    assert walk.command("all", args) == "python walk_demo.py all"
+    assert walk.command("all", parser.parse_args(["all", "--talker", "F1"])).endswith(
+        "all --recording ace_f1"
     )
-    # --listeners standing,visitor: the turn, then the walk; the moments and the states
-    # follow that order, each part's from where its sound starts.
-    first = pictures.Pictures(
-        scene,
-        [("turn", turned, 0.0, 15.0), ("walk", walked, 15.6, 31.6)],
-        voice=voice,
-        credit="Speech: a corpus",
-    )
-    moments = first.moments()
-    assert [name for name, _, _ in moments] == [
-        "still",
-        "turning-left",
-        "still",
-        "still",
-        "setting-off",
-        "corner",
-        "out-of-sight",
-        "standing",
-    ]
-    assert [t for _, t, _ in moments][4:] == pytest.approx([15.6, 20.6, 25.6, 30.6])
-    assert first.state(0.0)["part"] == "turn" and first.state(15.3)["part"] == "walk"
-    assert first.state(15.3)["local"] == 0.0  # in the silence before the walk: its start
-    assert first.shown(15.6 + 5.0, "visitor", "standing") == "guide -> visitor @ 5.00 s"
-    # One part alone: its moments, and pictures of it alone (no walk drawn for the turn).
-    alone = pictures.Pictures(
-        scene, [("turn", turned, 0.0, 15.0)], voice=voice, credit="Speech: a corpus"
-    )
-    assert alone.walked is None and {name for name, _, _ in alone.moments()} == {
-        "still",
-        "turning-left",
-    }
-    assert alone.state(40.0)["part"] == "turn"  # after its end, the end of the last part
-    for drawn in (first, alone):
-        for picture in (drawn.frame(0.0), drawn.frame(20.0), drawn.thumbnail()):
-            assert picture.getbbox() is not None
 
 
 # --------------------------------------------------------------------------- the demo code
@@ -2278,16 +1896,13 @@ TALKERS = {
 
 @pytest.mark.parametrize("name", sorted(TALKERS))
 def test_the_talkers_speak_at_normal_effort(name: str) -> None:
-    """Every example's talker speaks as IEC 60268-16 has normal speech: 60 dB(A) 1 m in
-    front, a man's speech spectrum, its sound power from its directivity (the gallery
-    demo's voice_level), not the default 94 dB, which is a shout."""
+    """Every example's talker speaks with a normal vocal effort, as ISO 9921 has it:
+    60 dB(A) 1 m in front, a man's speech spectrum, its sound power from its
+    directivity, not the default 94 dB, which is a shout."""
     skip_without_extra(name)
-    walk = _script("gallery", "walk_demo")
     talker = next(s for s in Scene.from_yaml(example_path(name)).sources if s.name == TALKERS[name])
-    assert talker.spectrum == "speech_male"
-    pattern = [talker.directivity] * 8
-    expected = walk.voice_level("speech_male", pattern, walk.VOICES["normal"])
-    assert talker.level_db == pytest.approx(expected, abs=0.05)
+    assert talker.spectrum == "speech_male" and talker.vocal_effort == "normal"
+    assert talker.level_db == talker.talking_db("normal")
 
 
 def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:

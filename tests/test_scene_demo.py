@@ -390,11 +390,21 @@ def test_a_run_gives_the_talkers_a_vocal_effort_and_another_recording(tmp_path: 
     assert run_folder(resolved).name == "scene_vocal-effort-raised_binaural"
     assert scene_demo.results_of(resolved).parent.name == "scene_vocal-effort-raised"
     assert _run(scene, "--voice", "raised")[1].vocal_effort == "raised"  # its old flag
-    # A woman's talk: the talker takes a woman's speech spectrum, at its level in all.
+    # A woman's talk: the talker takes a woman's speech spectrum, at its vocal effort
+    # (the same A-weighted level 1 m in front, another sound power per band) ...
     resolved = _run(scene, "--recording", "ace_f1")[1]
     voice = scene_demo.scene_of(resolved).sources[0]
-    assert voice.spectrum == "speech_female" and voice.level_db == own.sources[0].level_db
+    assert voice.spectrum == "speech_female" and voice.vocal_effort == "normal"
+    assert own.sources[0].vocal_effort == "normal"
+    assert voice.level_db == voice.talking_db("normal") != own.sources[0].level_db
     assert scene_demo.run_scene_file(resolved).name == "scene_female-speech.yaml"
+    # ... or, given a level in all in place of a vocal effort, at that level.
+    data["sources"][0].pop("vocal_effort")
+    data["sources"][0]["level_db"] = 70.0
+    in_all = tmp_path / "room" / "in_all.yaml"
+    in_all.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    voice = scene_demo.scene_of(_run(in_all, "--recording", "ace_f1")[1]).sources[0]
+    assert voice.spectrum == "speech_female" and voice.level_db == 70.0
     assert scene_demo.plays(resolved)["talker"].startswith(
         "A woman talking (ACE corpus, talker F1)"
     )

@@ -1023,7 +1023,9 @@ def test_scene_yaml_text_applied_after_a_save_elsewhere_keeps_its_files(
 
     def edited_and_saved(target: Path) -> None:
         text = panel.view.toPlainText()
-        panel.view.setPlainText(re.sub(r"level_db: [0-9.]+", "level_db: 77.0", text, count=1))
+        # The first source's sound power, or a talker's in place of its vocal effort.
+        level = r"level_db: [0-9.]+|vocal_effort: \w+"
+        panel.view.setPlainText(re.sub(level, "level_db: 77.0", text, count=1))
         assert window._save_to(target)
         assert "Edited: Apply makes the text the scene" in panel.status.text()
         assert panel.apply() and window.document.scene.sources[0].level_db == 77.0
@@ -4549,22 +4551,26 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     walk = DemoDialog(scene=example_path("gallery"))
     assert walk.picker.currentData() == "walk"
     assert walk.command.text() == "python walk_demo.py all"
-    assert "talker" in walk.fields and "song" not in walk.fields
-    # The Trajectories box: the gallery's visitor walks. The walk demo shows that it moves
-    # it; This scene's ticks are the run's, starting as Moving sets them in the scene.
+    assert "recording" in walk.fields and "talker" not in walk.fields  # --talker reads
+    assert "song" not in walk.fields
+    # The Trajectories box: the gallery's visitor walks and the one standing turns its
+    # head. The walk demo, a preset of This scene, moves them as it does: the ticks are
+    # the run's, starting as Moving sets them in the scene.
     box = walk.movement
-    assert not box.isHidden() and box.movers == [("listeners", "visitor", True)]
+    assert not box.isHidden()
+    assert box.movers == [("listeners", "visitor", True), ("listeners", "standing", True)]
     assert box.table.item(0, box.TRAJECTORY).text() == "At 1.2 m/s (4.3 km/h), 25.0 m in 20.8 s"
+    assert box.table.item(1, box.TRAJECTORY).text() == "8 keyframes, 0.0 m in 40.0 s"
     assert box.table.item(0, box.KIND).text() == "Listener"
     assert box.table.item(0, box.NAME).text() == "visitor"
-    assert box.ticked() == ["visitor"] and not box.editable and box.reset.isHidden()
+    assert box.ticked() == ["visitor", "standing"] and box.editable
     checkable = Qt.ItemFlag.ItemIsUserCheckable
-    assert not box.table.item(0, box.MOVES).flags() & checkable
-    walk.picker.setCurrentIndex(walk.picker.findData("scene"))
-    assert box.editable and box.ticked() == ["visitor"] and walk.fields["moving"] is box
     assert box.table.item(0, box.MOVES).flags() & checkable
+    walk.picker.setCurrentIndex(walk.picker.findData("scene"))
+    assert box.editable and box.ticked() == ["visitor", "standing"]
+    assert walk.fields["moving"] is box
     box.table.item(0, box.MOVES).setCheckState(Qt.CheckState.Unchecked)
-    assert walk.command.text() == "acoustic-spaces demo scene.yaml all --moving none"
+    assert walk.command.text() == "acoustic-spaces demo scene.yaml all --moving standing"
     box.reset.click()
     assert walk.command.text() == "acoustic-spaces demo scene.yaml all"
     box.table.selectRow(0)
@@ -4753,7 +4759,9 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
     ]
     church.deleteLater()
     walk = DemoDialog(scene=example_path("gallery"))
-    assert walk.fields["listeners"].names == ["visitor", "standing"]  # the walk, the turn
+    names = ["in sight", "round the corner", "visitor", "standing"]
+    assert walk.fields["listeners"].names == names
+    assert walk.fields["listeners"].ticked() == ["visitor", "standing"]  # the walk, the turn
     walk.deleteLater()
     unsaved = DemoDialog(scene=None)
     assert not unsaved._rows["listeners"].isRowVisible(unsaved.fields["listeners"])
@@ -5447,12 +5455,12 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     walk.reject()
     walk.deleteLater()
     walk = DemoDialog(scene=gallery)
-    assert walk.picker.currentData() == "scene" and walk.movement.ticked() == []
-    assert walk.command.text() == "acoustic-spaces demo scene.yaml all --moving none"
+    assert walk.picker.currentData() == "scene" and walk.movement.ticked() == ["standing"]
+    assert walk.command.text() == "acoustic-spaces demo scene.yaml all --moving standing"
     walk.deleteLater()
     keep_options(DEMO, str(gallery.resolve()), {"moving": "a walker no longer there"})
     walk = DemoDialog(scene=gallery)
-    assert walk.movement.ticked() == ["visitor"] and walk.kept.isHidden()
+    assert walk.movement.ticked() == ["visitor", "standing"] and walk.kept.isHidden()
     walk.deleteLater()
 
     # The last 20 scene files, the latest last; the demo's own options for any scene.

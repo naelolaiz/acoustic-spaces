@@ -1469,5 +1469,60 @@ DEMO = Demo(
     sources=sources_of,
 )
 
+
+def preset(
+    name: str,
+    example: str,
+    title: str,
+    description: str,
+    script: Path,
+    *,
+    defaults: dict | None = None,
+    renamed: dict | None = None,
+    steps: dict[str, tuple[str, ...]] | None = None,
+) -> Demo:
+    """An example's script as a preset of the demo of any scene: :data:`DEMO` on the
+    example's own scene (``scene.yaml`` beside the script), with the defaults the script
+    has (``defaults``, by option), its flags read as this demo's (``renamed``, by option:
+    each old flag and what a value of it is in that option's,
+    :attr:`~acoustic_spaces.demos.Option.renamed`) and its steps run as the ones that
+    took them over (``steps``, by step: the old names), so that the command lines written
+    for the script keep working."""
+    defaults, renamed, steps = defaults or {}, renamed or {}, steps or {}
+    unknown = sorted(
+        ({*defaults, *renamed} - {o.name for o in DEMO.options})
+        | ({*steps} - {s.name for s in DEMO.steps})
+    )
+    if unknown:
+        raise ValueError(f"{name}: the demo of any scene has no {', '.join(unknown)}")
+
+    def option(given: Option) -> Option:
+        changes: dict = {}
+        if given.name == "scene":
+            changes["default"] = Path("scene.yaml")
+        if given.name in defaults:
+            changes["default"] = defaults[given.name]
+        if given.name in renamed:
+            changes["renamed"] = (*given.renamed, *renamed[given.name])
+        return dataclasses.replace(given, **changes) if changes else given
+
+    return dataclasses.replace(
+        DEMO,
+        name=name,
+        example=example,
+        title=title,
+        description=description,
+        script=script,
+        steps=[
+            dataclasses.replace(s, aliases=(*s.aliases, *steps[s.name])) if s.name in steps else s
+            for s in DEMO.steps
+        ],
+        options=[option(o) for o in DEMO.options],
+        program=None,
+        leading=None,
+        module=None,
+    )
+
+
 if __name__ == "__main__":
     sys.exit(DEMO.main())
