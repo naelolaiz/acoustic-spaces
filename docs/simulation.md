@@ -429,7 +429,12 @@ where one edge explains each run of the events that stop it, or two edges explai
 between them, in at most two runs: a reflection past the end of its face with a corner
 in the way of a leg next to it, say. Of several edges that explain a run, the one whose
 term there is the strongest does, and of several pairs, the one whose terms' product
-is. An edge explains a reflection only in front of its face, and stands on a plane only
+is. A product of two edges' terms takes as much of the path from one edge to the other
+as the model gives back: for each reflection on it, the Fresnel integral over the faces
+there, as a share of the whole plane's, less what the plane gives back past the two
+edges themselves, and over each leg what the faces and edges near it leave free; so the
+reflections in the gap between two screens in a row, which both stop and which no path
+over both tops can take, add nothing. An edge explains a reflection only in front of its face, and stands on a plane only
 where the plane goes on round its end on its open side, so no path reflects off a roof's
 plane from below beside the building. Reflections off perpendicular planes, such as the
 floor and a wall, give the same image in either order, and the path over an edge may

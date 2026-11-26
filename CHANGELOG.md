@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Fixed (results change): with `method: image_sources` over two thin screens or
+  barriers in a row, the terms that make paths fade at edges added a path in the gap
+  between them (off the second's front and then the first's back, which both stop) that
+  cannot be: image sources were up to 3.2 dB from ray tracing over two screens close
+  together, and 0.3 to 0.8 dB higher behind two barriers. Each product of two edges'
+  terms is now weighed by its path from one edge to the other (the Fresnel integral over
+  the faces of each reflection on it, less what lies past the two edges, and over its
+  legs), and image sources give ray tracing's level there. Levels also move where such
+  a path reflects near a face's edge: under a ceiling over two screens the level steps
+  by 3.5 to 6.6 dB (63 to 500 Hz), not 6.7 to 11.7 dB, where the ceiling's end crosses
+  the point that path reflects at; of the examples, the archway's diner behind the wall
+  moves by 0.11 dB at 63 Hz. `validation/edge_diffraction.py` checks two screens close
+  together and a ceiling over two screens against a wave calculation.
 - Added: `engine.diffraction.diffract` takes the plane sequences the early stage tested
   (`candidates`) and then adds the terms that make paths fade at edges, as a simulation
   does; without them it is the edge diffraction alone, as before.
