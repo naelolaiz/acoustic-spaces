@@ -15,9 +15,10 @@
   talker heard there, with its rating (ISO 9921).
 - Added: a trajectory's `step_m` (how far apart it is simulated) and `start_s` (when it
   sets off); the demo of any scene's `--timeline` (each listener heard from the start
-  when something moves, by default), `--speed` and `--step`; binaurally, a listener
-  turning on the spot is heard through the head tracker in `walkthrough --all`, the
-  demo and **Render movement…**.
+  when something moves, by default, each until what moves is over for it), `--speed`,
+  `--step`, `--stand` and `--turn` (a listener elsewhere, or turning on the spot);
+  binaurally, a listener turning on the spot is heard through the head tracker in
+  `walkthrough --all`, the demo and **Render movement…**.
 - Added: every demo plays several of something in one video: an option that changes
   what plays or how it sounds, and `--format`, take several values (`--vehicle
   departure,arrival`, `--speed 50,80`), each value a run of its own played after a title

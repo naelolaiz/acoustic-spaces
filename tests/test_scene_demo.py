@@ -6,6 +6,7 @@ simulates or mixes (the runs themselves are in test_demos)."""
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -254,8 +255,8 @@ def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypat
 
 def test_the_timeline_is_shared_or_from_each_listener_s_start(tmp_path: Path) -> None:
     """``--timeline``: shared, the tour going from listener to listener on one clock,
-    crossfaded; per listener, each from the clock's start for the whole of what moves
-    and 3 s more (or ``--seconds``), as long as its mix at most, faded out and 1 s
+    crossfaded; per listener, each from the clock's start until what moves is over for
+    it and 3 s more (or ``--seconds``), as long as its mix at most, faded out and 1 s
     apart; auto, the default, per listener when something moves."""
     scene = _grouped(tmp_path)
     resolved = _run(scene)[1]
@@ -285,6 +286,13 @@ def test_the_timeline_is_shared_or_from_each_listener_s_start(tmp_path: Path) ->
     assert [(s.at, s.stop) for s in given] == [(0.0, 8.0), (9.0, 8.0)]
     still = scene_demo.stops_from_start(names, {"seats": seats["seats"]}, gains, None)
     assert [s.stop for s in still] == [20.0, 10.0]
+    # Each until what moves is over for it: a listener standing while another walks is
+    # heard as where nothing moves (mixes made before that hear every one to the end).
+    seats["seats"] = {
+        "seat-a": {"length_s": 30.0, "until_s": None},
+        "seat-b": {"length_s": 30.0, "until_s": 9.0},
+    }
+    assert [s.stop for s in scene_demo.stops_from_start(names, seats, gains, None)] == [20.0, 12.0]
     rate = 100
     folder = tmp_path / "mixes"
     for name in names:
@@ -451,3 +459,84 @@ def test_a_still_says_the_sti_of_the_talker_heard_loudest() -> None:
         "sti": {"seat": {"guide": [0.7, 0.44]}},
     }
     assert "Speech of guide: STI 0.44, poor" in lines(["guide"], moving)
+
+
+def test_a_run_moves_a_listener_or_turns_it_on_the_spot(tmp_path: Path) -> None:
+    """``--stand LISTENER=X,Y`` stands a listener elsewhere in the run, its height kept,
+    facing the nearest source in use, its trajectory moved and turned with it (the
+    scene so changed simulated once); ``--turn LISTENER=T:YAW,...`` turns it on the spot
+    in place of its trajectory, the yaws from the way it faces, which a binaural run
+    hears through the head tracker; what does not read is refused."""
+    from acoustic_spaces.walkthrough import head_turners, knots
+
+    scene = _any_scene(tmp_path)
+    own = Scene.from_yaml(scene)
+    seat = next(lis for lis in own.listeners if lis.name == "seat-b")
+    near = min(own.sources, key=lambda s: np.hypot(s.position[0] - 6.0, s.position[1] - 2.0))
+    assert near.name == "radio"
+    resolved = _run(scene, "--stand", "seat-b=6,2")[1]
+    moved = next(lis for lis in scene_demo.scene_of(resolved).listeners if lis.name == "seat-b")
+    assert moved.position == (6.0, 2.0, seat.position[2])
+    yaw = np.degrees(np.arctan2(near.position[1] - 2.0, near.position[0] - 6.0))
+    assert moved.orientation.yaw == pytest.approx(yaw, abs=0.01)
+    file = scene_demo.run_scene_file(resolved)
+    assert file.name == "scene_seat-b-at-6-2.yaml"
+    assert next(lis for lis in Scene.from_yaml(file).listeners if lis.name == "seat-b") == moved
+    turn = "seat-b=0:0,2:90,3:90,5:180"
+    resolved = _run(scene, "--turn", turn)[1]
+    turned = scene_demo.scene_of(resolved)
+    path = knots(next(lis for lis in turned.listeners if lis.name == "seat-b"))
+    assert path.times.tolist() == [0.0, 2.0, 3.0, 5.0]
+    assert (path.angles[:, 0] - seat.orientation.yaw).tolist() == [0.0, 90.0, 90.0, 180.0]
+    assert np.ptp(path.positions, axis=0).max() == 0.0  # on the spot
+    assert head_turners(turned) == ["seat-b"]
+    assert scene_demo.run_scene_file(resolved) == scene  # the still simulation the same
+    assert scene_demo.moving_of(resolved) == ["seat-b"]
+    # Both: it stands there and turns from the way it faces there.
+    resolved = _run(scene, "--stand", "seat-b=6,2", "--turn", "seat-b=0:0,2:90")[1]
+    both = next(lis for lis in scene_demo.scene_of(resolved).listeners if lis.name == "seat-b")
+    assert both.trajectory.keyframes[0].orientation.yaw == pytest.approx(yaw + 90.0, abs=0.01)
+    demo = DEMO.at(scene.parent)
+    for flag, value, said in (
+        ("--stand", "seat-b=6", "--stand takes LISTENER=X,Y in metres"),
+        ("--stand", "nobody=1,1", "--stand: no listener 'nobody'"),
+        ("--turn", "seat-b=2:0,1:90", "--turn takes LISTENER=T:YAW,... with the times rising"),
+        ("--turn", "seat-b", "--turn takes LISTENER=T:YAW"),
+    ):
+        assert said in demo.check(_run(scene, flag, value)[0])
+
+
+def test_an_example_s_old_flags_and_steps_read_as_their_general_forms() -> None:
+    """An option takes a flag of an example's script in another form (``renamed``),
+    each of several values turned into its own; a step runs under the name of the
+    steps it took over (``aliases``)."""
+    from acoustic_spaces.demos import SIMULATE, Demo, Option, Step, simulates
+
+    ran: list[str] = []
+    recording = Option(
+        "recording",
+        "a recording",
+        None,
+        "choice",
+        choices=("ace_m4", "ace_f1"),
+        renamed=(("--talker", lambda code: f"ace_{code.lower()}"),),
+    )
+    demo = Demo(
+        name="old",
+        example="",
+        title="Old",
+        description="An old script.",
+        script=Path(__file__),
+        steps=[
+            Step("render", lambda args: ran.append("render"), "mix", aliases=("walk", "turn")),
+            dataclasses.replace(SIMULATE, aliases=("scene",)),
+        ],
+        options=[recording],
+    )
+    parser = demo.parser()
+    assert parser.parse_args(["walk", "--talker", "F1"]).recording == "ace_f1"
+    assert parser.parse_args(["all", "--talker", "M4,F1"]).recording == ("ace_m4", "ace_f1")
+    assert parser.parse_args(["all", "--recording", "ace_m4"]).recording == "ace_m4"
+    assert parser.parse_args(["all"]).recording is None
+    assert demo.step("turn").name == "render" and simulates(demo.step("scene"))
+    assert demo.main(["walk", "--talker", "M4"]) == 0 and ran == ["render"]

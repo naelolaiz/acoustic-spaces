@@ -178,7 +178,7 @@ LABELS = {
     "--listeners": N_("Listeners"),
     "--talker": N_("Talker"),
     "--voice": N_("Voice"),
-    "--stand": N_("Where the visitor stands"),
+    "--stand": N_("Where a listener stands"),
     "--turn": N_("Head turns"),
     "--speed": N_("Speed"),
     "--broadband": N_("Broadband noise"),
@@ -369,6 +369,11 @@ class Option:
     #: Other flags it is given by, as before it took this one (``--tour``, for the demo
     #: of any scene's ``--listeners``).
     aliases: tuple[str, ...] = ()
+    #: Flags an example's script gave it by before the script became a preset of the
+    #: demo of any scene, with values of another form: each flag, and what a value of
+    #: it is in this option's (``("--talker", lambda code: f"ace_{code.lower()}")`` for
+    #: ``--recording``), each of several for an option that :attr:`varies`.
+    renamed: tuple[tuple[str, Callable[[str], str]], ...] = ()
     #: How it counts in the name of a run (:meth:`Demo.run_name`), one of
     #: :data:`NAMINGS`; None: as its kind has it (:attr:`naming`).
     named: str | None = None
@@ -544,6 +549,25 @@ class Option:
         if self.choices and not self.varies:
             kwargs["choices"] = list(self.choices)
         parser.add_argument(self.option, *self.aliases, **kwargs)
+        for flag, form in self.renamed:
+            parser.add_argument(
+                flag,
+                dest=self.name,
+                default=argparse.SUPPRESS,
+                type=self._renamed(form),
+                help=f"{self.option} as the example's script took it before",
+            )
+
+    def _renamed(self, form: Callable[[str], str]) -> Callable[[str], Any]:
+        """How a value of a :attr:`renamed` flag reads: in this option's form
+        (``form``), then as one of its own (:meth:`parse`)."""
+
+        def read(text: str) -> Any:
+            if self.varies:
+                return self.parse(",".join(form(item) for item in given_names(text) or []))
+            return form(text)
+
+        return read
 
 
 @dataclass(frozen=True)
@@ -558,6 +582,10 @@ class Step:
     #: What the step downloads with the arguments, in words and with its size (the Run
     #: demo window says it before a run); None when it downloads nothing.
     downloads: Callable[[argparse.Namespace], str | None] | None = None
+    #: The names steps that it took over had in an example's script before the script
+    #: became a preset of the demo of any scene (``walk`` and ``turn``, for ``render``):
+    #: a command line that names one runs it.
+    aliases: tuple[str, ...] = ()
 
 
 def input_option(steps: tuple[str, ...] = ("render",)) -> Option:
@@ -579,6 +607,12 @@ def input_option(steps: tuple[str, ...] = ("render",)) -> Option:
 #: The simulation, run by the framework: ``acoustic-spaces simulate`` on each scene the
 #: demo names (:meth:`Demo.simulations`), unless its results are there.
 SIMULATE = Step("simulate", None, "simulate each scene of the demo (acoustic-spaces simulate)")
+
+
+def simulates(step: Step) -> bool:
+    """Whether ``step`` is the framework's simulation (:data:`SIMULATE`, under its own
+    name or with :attr:`Step.aliases` of a preset's)."""
+    return step.run is None and step.name == SIMULATE.name
 
 
 @dataclass(frozen=True)
@@ -871,8 +905,13 @@ class Demo:
         return path
 
     def step(self, name: str) -> Step:
+        """The step called ``name``, or that took over a step of that name
+        (:attr:`Step.aliases`)."""
         for step in self.steps:
             if step.name == name:
+                return step
+        for step in self.steps:
+            if name in step.aliases:
                 return step
         raise KeyError(f"{self.name}: no step {name!r}")
 
@@ -1439,6 +1478,7 @@ class Demo:
     def parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(description=self.description)
         choices = [s.name for s in self.steps] + ["all"]
+        choices += [alias for s in self.steps for alias in s.aliases]
         parser.add_argument(
             "step",
             choices=choices,
@@ -1666,14 +1706,14 @@ class Demo:
 
     def first_step(self, args: argparse.Namespace | None = None) -> str:
         """The command that writes the scenes, or the first step of the demo."""
-        step = self.scene_step() or next(s for s in self.steps if s is not SIMULATE)
+        step = self.scene_step() or next(s for s in self.steps if not simulates(s))
         return self.command(step.name, args)
 
     def is_done(self, step: Step, args: argparse.Namespace) -> bool:
         """Whether ``all`` may leave ``step`` out: its result is there already."""
         from acoustic_spaces.demos.pipeline import simulated
 
-        if step is SIMULATE:
+        if simulates(step):
             return all(simulated(s, args) for s in self.simulations(args))
         return step.done is not None and step.done(args)
 
@@ -1717,7 +1757,7 @@ class Demo:
             if skip_done and self.is_done(step, args):
                 print(f"{name}: done already")
                 continue
-            if step is SIMULATE:
+            if simulates(step):
                 self.simulate(args, only_missing=skip_done)
             else:
                 step.run(args)
@@ -1741,7 +1781,7 @@ class Demo:
         problem = demo.check(args)
         if problem:
             parser.error(problem)
-        names = demo.all_steps() if args.step == "all" else [args.step]
+        names = demo.all_steps() if args.step == "all" else [demo.step(args.step).name]
         demo.run(names, args, skip_done=args.step == "all")
         return 0
 
@@ -1948,6 +1988,7 @@ __all__ = [
     "RUN_NAME_MOST",
     "RUN_RECORD",
     "SIMULATE",
+    "simulates",
     "TEXT_MOST",
     "Demo",
     "Option",

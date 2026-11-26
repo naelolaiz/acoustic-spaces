@@ -92,8 +92,8 @@ msgid "Voice"
 msgstr "Stem"
 
 #: acoustic_spaces/demos/__init__.py
-msgid "Where the visitor stands"
-msgstr "Waar de bezoeker staat"
+msgid "Where a listener stands"
+msgstr "Waar een ontvanger staat"
 
 #: acoustic_spaces/demos/__init__.py
 msgid "Head turns"

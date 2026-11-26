@@ -93,8 +93,8 @@ msgid "Voice"
 msgstr "Voz"
 
 #: acoustic_spaces/demos/__init__.py
-msgid "Where the visitor stands"
-msgstr "Dónde está el visitante"
+msgid "Where a listener stands"
+msgstr "Dónde está un receptor"
 
 #: acoustic_spaces/demos/__init__.py
 msgid "Head turns"

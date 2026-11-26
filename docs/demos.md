@@ -280,24 +280,25 @@ acoustic-spaces demo scene.yaml --recording ace_f1 --vocal-effort raised,loud
   `shared` one (where nothing moves, by default) each is heard for `--seconds` (20 by
   default) while the recordings run on, crossfading between them; a recording too short
   for every listener shares its length out. On a `per-listener` one (where something
-  moves, by default) each is heard from the clock's start, for `--seconds` or until
-  every mover has arrived and 3 s more, faded out and 1 s before the next, so that each
-  hears the whole of what moves. Each stop is turned up to the loudness of the loudest, by 40 dB
-  at most and by as much as the still says, the only step that is not the simulation's:
-  K-weighted, with the channels' powers added up as ITU-R BS.1770-4 adds them (the side
-  surrounds of a loudspeaker layout 1.5 dB up, the LFE left out), an Ambisonics mix
-  measured on its W channel alone. The stills show the scene from above, drawn from its
-  own model, with its sources (those that play in colour, with a ray to the listener),
-  the listeners and the one of the moment as a head, and beside it the A-weighted level
-  there of the sources that play, as simulated, when their sound arrives, the
-  reverberation time T30 at mid frequencies (the mean of the 500 Hz and 1 kHz bands),
-  the nearest source that plays and, where a talker plays, the STI of the speech of the
-  one loudest there (IEC 60268-16), rated as ISO 9921 rates it (bad below 0.30, poor,
-  fair, good, excellent from 0.75); it counts the scene's background noise (coverage
-  `noise_db`) but not the other sources that play, which the still then says. `--credit`
-  puts a line about the recordings on the stills (who made them, their licence); without
-  it the line gives the free recording's credit, when one plays, and says which source
-  plays which other file.
+  moves, by default) each is heard from the clock's start, for `--seconds` or until what
+  moves is over for it (every moving source arrived, or the listener itself) and 3 s
+  more, or 20 s where nothing moves for it, faded out and 1 s before the next, so that
+  each hears the whole of what moves. Each stop is turned up to the loudness of the
+  loudest, by 40 dB at most and by as much as the still says, the only step that is not
+  the simulation's: K-weighted, with the channels' powers added up as ITU-R BS.1770-4
+  adds them (the side surrounds of a loudspeaker layout 1.5 dB up, the LFE left out), an
+  Ambisonics mix measured on its W channel alone. The stills show the scene from above,
+  drawn from its own model, with its sources (those that play in colour, with a ray to
+  the listener), the listeners and the one of the moment as a head, and beside it the
+  A-weighted level there of the sources that play, as simulated, when their sound
+  arrives, the reverberation time T30 at mid frequencies (the mean of the 500 Hz and 1
+  kHz bands), the nearest source that plays and, where a talker plays, the STI of the
+  speech of the one loudest there (IEC 60268-16), rated as ISO 9921 rates it (bad below
+  0.30, poor, fair, good, excellent from 0.75); it counts the scene's background noise
+  (coverage `noise_db`) but not the other sources that play, which the still then says.
+  `--credit` puts a line about the recordings on the stills (who made them, their
+  licence); without it the line gives the free recording's credit, when one plays, and
+  says which source plays which other file.
 
 **Movement.** Sources and listeners whose [trajectory](scenes.md#trajectories) is on
 move along it while the recordings play, all on one clock from their start, as
@@ -313,14 +314,18 @@ start on the `per-listener` timeline, and on a `shared` one as the tour reaches 
 trajectory sets off at its `start_s` and is simulated every `step_m` along it
 ([trajectories](scenes.md#trajectories)); `--speed 5` moves every trajectory of the run
 at 5 km/h (along keyframes, through their places in turn) and `--step 0.5` simulates
-them 0.5 m apart, without changing the scene. Binaurally, a listener who turns on the
-spot is heard through the head tracker ([several movers at
-once](spatial-audio.md#several-movers-at-once)). `--moving` picks the trajectories of a
-run without changing the scene: `--moving visitor,guide` moves those two and leaves
-every other mover standing where it starts, `--moving none` keeps them all still, so one
-scene serves both. A trajectory with Doppler (a car, a train) moves alone: every
-listener hears each early path through its own delay as it changes, so the pitch shifts
-as it passes, and the late sound crossfaded from place to place ([moving sources and
+them 0.5 m apart, without changing the scene. `--stand seat=6,2` stands a listener
+elsewhere in a run, facing the nearest source in use, its trajectory moved with it (the
+scene so changed is simulated once), and `--turn seat=0:0,4:0,10:90` turns it on the
+spot in place of its trajectory: the yaw in degrees, turning left from the way it faces,
+at each time in seconds. Binaurally, a listener who turns on the spot is heard through
+the head tracker ([several movers at once](spatial-audio.md#several-movers-at-once)).
+`--moving` picks the trajectories of a run without changing the scene: `--moving
+visitor,guide` moves those two and leaves every other mover standing where it starts,
+`--moving none` keeps them all still, so one scene serves both. A trajectory with
+Doppler (a car, a train) moves alone: every listener hears each early path through its
+own delay as it changes, so the pitch shifts as it passes, and the late sound crossfaded
+from place to place ([moving sources and
 Doppler](spatial-audio.md#moving-sources-and-doppler)), all from the one simulation of
 the moving run, as the editor's **Render movement…** plays it. With other trajectories
 on as well, the demo says to leave them standing.

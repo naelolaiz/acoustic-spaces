@@ -210,11 +210,144 @@ def plays_recording(source, inputs: dict | None = None) -> bool:
     )
 
 
+def stand_of(text: str) -> tuple[str, float, float]:
+    """``--stand``'s listener and where it stands, from ``LISTENER=X,Y`` (m); ValueError
+    for another form."""
+    name, sep, place = str(text).partition("=")
+    try:
+        x, y = (float(v) for v in place.split(","))
+    except ValueError:
+        sep = ""
+    if not sep or not name.strip():
+        raise ValueError(f"--stand takes LISTENER=X,Y in metres, not {text!r}")
+    return name.strip(), x, y
+
+
+def turn_of(text: str) -> tuple[str, list[tuple[float, float]]]:
+    """``--turn``'s listener and its turn, from ``LISTENER=T:YAW,T:YAW,...``: the yaw
+    (degrees, turning left from the way it faces) at each time (s), the times rising
+    from 0; ValueError for another form."""
+    name, sep, keys = str(text).partition("=")
+    turn: list[tuple[float, float]] = []
+    try:
+        for key in keys.split(","):
+            t, yaw = key.split(":")
+            turn.append((float(t), float(yaw)))
+    except ValueError:
+        sep = ""
+    times = [key[0] for key in turn]
+    if not sep or not name.strip() or times[0] < 0.0 or sorted(set(times)) != times:
+        raise ValueError(
+            f"--turn takes LISTENER=T:YAW,... with the times rising from 0, not {text!r}"
+        )
+    return name.strip(), turn
+
+
+def stood(scene: Scene, name: str, x: float, y: float) -> Scene:
+    """``scene`` with the listener ``name`` standing at ``x``, ``y`` (its height kept) and
+    facing the nearest source in use, its trajectory moved and turned with it, so that a
+    turn on the spot stays one."""
+    from acoustic_spaces.scene.model import Orientation
+
+    listener = next(lis for lis in scene.listeners if lis.name == name)
+    near = min(
+        (s for s in scene.sources if s.in_use),
+        key=lambda s: math.dist(s.position[:2], (x, y)),
+        default=None,
+    )
+    yaw = listener.orientation.yaw
+    if near is not None:
+        yaw = round(math.degrees(math.atan2(near.position[1] - y, near.position[0] - x)), 2)
+    shift = np.array([x, y, listener.position[2]]) - np.asarray(listener.position)
+    turned = yaw - listener.orientation.yaw
+
+    def moved(point) -> tuple[float, float, float]:
+        a, b, c = (float(v) for v in np.asarray(point) + shift)
+        return a, b, c
+
+    def faced(orientation):
+        if orientation is None:
+            return None
+        return orientation.model_copy(update={"yaw": orientation.yaw + turned})
+
+    trajectory = listener.trajectory
+    if trajectory is not None:
+        keyframes = trajectory.keyframes
+        if keyframes is not None:
+            keyframes = [
+                frame.model_copy(
+                    update={
+                        "position": moved(frame.position),
+                        "orientation": faced(frame.orientation),
+                    }
+                )
+                for frame in keyframes
+            ]
+        trajectory = trajectory.model_copy(
+            update={"to": [moved(point) for point in trajectory.to], "keyframes": keyframes}
+        )
+    own = listener.orientation
+    listener = listener.model_copy(
+        update={
+            "position": moved(listener.position),
+            "orientation": Orientation(yaw=yaw, pitch=own.pitch, roll=own.roll),
+            "trajectory": trajectory,
+        }
+    )
+    return _with_listener(scene, listener)
+
+
+def turning(scene: Scene, name: str, turn: list[tuple[float, float]]) -> Scene:
+    """``scene`` with the listener ``name`` turning on the spot as ``turn`` (time s, yaw
+    degrees turning left from the way it faces) has it, in place of its trajectory: a
+    keyframe at each time after 0 s, the yaw at 0 s its own."""
+    from acoustic_spaces.scene.model import Keyframe, Orientation, Trajectory
+
+    listener = next(lis for lis in scene.listeners if lis.name == name)
+    facing = listener.orientation
+    if turn[0][0] == 0.0:
+        listener = listener.model_copy(
+            update={"orientation": facing.model_copy(update={"yaw": facing.yaw + turn[0][1]})}
+        )
+    frames = [
+        Keyframe(
+            time_s=t,
+            position=listener.position,
+            orientation=Orientation(yaw=facing.yaw + yaw, pitch=facing.pitch, roll=facing.roll),
+        )
+        for t, yaw in turn
+        if t > 0.0
+    ]
+    trajectory = Trajectory(keyframes=frames) if frames else None
+    return _with_listener(scene, listener.model_copy(update={"trajectory": trajectory}))
+
+
+def _with_listener(scene: Scene, listener) -> Scene:
+    """``scene`` with ``listener`` in place of its listener of that name."""
+    listeners = [listener if lis.name == listener.name else lis for lis in scene.listeners]
+    return scene.model_copy(update={"listeners": listeners})
+
+
 def changed(args: argparse.Namespace, scene: Scene) -> Scene:
-    """``scene`` as this run plays it: with ``--recording``, that recording in place of
-    its own, the sources that play it with a speech spectrum taking its talker's (a
-    woman's or a man's); with ``--vocal-effort``, every talker in use (a source with a
-    speech spectrum) talking so (:meth:`~acoustic_spaces.scene.Source.talking`)."""
+    """``scene`` as this run plays it: with ``--stand``, a listener standing elsewhere
+    (:func:`stood`), and with ``--turn``, turning on the spot (:func:`turning`); with
+    ``--recording``, that recording in place of its own, the sources that play it with
+    a speech spectrum taking its talker's (a woman's or a man's); with
+    ``--vocal-effort``, every talker in use (a source with a speech spectrum) talking so
+    (:meth:`~acoustic_spaces.scene.Source.talking`). ValueError for a ``--stand`` or a
+    ``--turn`` that does not read, or names a listener the scene does not have."""
+    names = [lis.name for lis in scene.listeners]
+    stand, turn = getattr(args, "stand", None), getattr(args, "turn", None)
+    if stand is not None:
+        name, x, y = stand_of(stand)
+        if name not in names:
+            raise ValueError(f"--stand: no listener {name!r}; the scene has {', '.join(names)}")
+        scene = stood(scene, name, x, y)
+    if turn is not None:
+        name, keys = turn_of(turn)
+        if name not in names:
+            raise ValueError(f"--turn: no listener {name!r}; the scene has {', '.join(names)}")
+        scene = turning(scene, name, keys)
     name = getattr(args, "recording", None)
     effort = getattr(args, "vocal_effort", None)
     if name is None and effort is None:
@@ -240,9 +373,12 @@ def changed(args: argparse.Namespace, scene: Scene) -> Scene:
 
 def _run(args: argparse.Namespace) -> Scene | None:
     """The scene as this run plays it (:func:`changed`) as its file is now, or None when
-    it cannot be read: :func:`problems` says why."""
+    it cannot be read or the run's changes do not read: :func:`problems` says why."""
     found = _current(getattr(args, "scene", None))
-    return None if found is None else changed(args, found)
+    try:
+        return None if found is None else changed(args, found)
+    except ValueError:
+        return None
 
 
 def talkers_of(args: argparse.Namespace) -> list[str]:
@@ -262,23 +398,27 @@ def recording_heard(args: argparse.Namespace) -> bool:
 
 def run_scene_file(args: argparse.Namespace) -> Path:
     """The scene file the run simulates: the scene's own, or, where the run changes what
-    its simulation hears (a talker's level or speech: :func:`changed`), the scene so
+    its simulation hears (a talker's level or speech, where a listener stands or how it
+    faces: :func:`changed`), the scene so
     changed, written to ``scenes/<the scene's name>_<the changes>.yaml`` in the work
     folder, again only when it changes, so that its simulation, once made, stays valid
     and a run back to the scene's own finds that one."""
     path = Path(args.scene)
     found = _current(path)
-    if found is None:
+    run = _run(args)
+    if found is None or run is None:
         return path
-    run = changed(args, found)
     before = {s.name: s for s in found.sources}
     levelled = [s for s in run.sources if not np.allclose(s.power_db(), before[s.name].power_db())]
-    if not levelled:
+    placed = {lis.name: (lis.position, lis.orientation) for lis in found.listeners}
+    moved = [lis for lis in run.listeners if (lis.position, lis.orientation) != placed[lis.name]]
+    if not levelled and not moved:
         return path
     effort = getattr(args, "vocal_effort", None)
-    parts = [] if effort is None else [f"vocal-effort-{effort}"]
+    parts = [] if effort is None or not levelled else [f"vocal-effort-{effort}"]
     spoken = sorted({s.talker for s in levelled if s.spectrum != before[s.name].spectrum})
     parts += [f"{talker}-speech" for talker in spoken]
+    parts += [name_part(f"{lis.name}-at-{lis.position[0]:g}-{lis.position[1]:g}") for lis in moved]
     out = work_of(args) / SCENES / f"{name_part(path.stem)}_{'_'.join(parts)}{path.suffix}"
     text = (
         f"# {path.name} as a demo run plays it ({', '.join(parts)}), written by the demo:\n"
@@ -481,11 +621,12 @@ def timeline_of(args: argparse.Namespace, moving: list[str]) -> str:
 
 def moving_of(args: argparse.Namespace) -> list[str]:
     """Who moves in this run (:func:`run_movers`): the sources and listeners in use whose
-    trajectories are on, by name, listeners first; none when the scene cannot be read or
+    trajectories are on in the scene as the run plays it (:func:`changed`: a ``--turn``
+    turns one), by name, listeners first; none when the scene cannot be read or
     ``--moving`` names what does not move (:func:`problems` says why)."""
     from acoustic_spaces.walkthrough import movers, with_moving
 
-    scene = _current(getattr(args, "scene", None))
+    scene = _run(args)
     if scene is None:
         return []
     try:
@@ -538,6 +679,10 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
         scene = Scene.from_yaml(path)
     except Exception as exc:  # the scene's own message
         return f"{path.name}: {exc}"
+    try:
+        scene = changed(resolved, scene)
+    except ValueError as exc:
+        return str(exc)
     signals = {k: v for k, v in signals_of(resolved, scene).items() if v is not None}
     if not signals:
         return (
@@ -840,6 +985,8 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     from acoustic_spaces.room import Room
     from acoustic_spaces.walkthrough import (
         head_turners,
+        knots,
+        movers,
         render_movement,
         simulate_movement,
     )
@@ -876,6 +1023,9 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
     weights = {s.name: s.sound_power_db for s in sounding}
     sources_move = any(s.name in moving for s in sounding)
+    own_ends = {
+        item.name: knots(item).duration_s for kind, item in movers(scene) if kind == "listeners"
+    }
     entries = responses_of(args, demo)
     info = {}
     for name in names:
@@ -886,6 +1036,8 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
         # Where nothing moves, the sound arrives as in the still simulation. The tour
         # shifts none of the mixes, as they keep the trajectories' one clock.
         arrival = None if moves else pipeline.arrival_s(results_of(args), entries, name, weights)
+        # What moves is over for it when every source has arrived, or it has itself.
+        until = float(times[-1]) if sources_move else own_ends.get(name)
         info[name] = {
             "listener": name,
             "file": file,
@@ -895,6 +1047,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
             "loudness_db": loudness_db(x, rate, channel_weights(fmt)),
             "length_s": len(x) / rate,
             "moves": moves,
+            "until_s": until if moves else None,
         }
     top = max(v["rms_db"] for v in info.values())
     for name, v in info.items():
@@ -964,17 +1117,13 @@ def stops_from_start(
     names: list[str], seats: dict, gains: dict[str, float], seconds: float | None
 ) -> list[pipeline.TourStop]:
     """The stops of a timeline from each listener's start: each listener of ``names``
-    from the clock's start, for ``seconds`` or, None, until every mover has arrived (the
-    last moment of ``seats``' movement) and FADE_OUT_S more, SECONDS where nothing moves;
-    each as long as its mix at most, faded out over its last FADE_OUT_S (half of it at
-    most) and GAP_S before the next."""
-    if seconds is None:
-        movement = seats.get("movement")
-        moving = seats.get("moving") and movement
-        seconds = float(movement["times"][-1]) + FADE_OUT_S if moving else SECONDS
+    from the clock's start, for ``seconds`` or, None, until what moves is over for it
+    and FADE_OUT_S more (:func:`heard_for`); each as long as its mix at most, faded out
+    over its last FADE_OUT_S (half of it at most) and GAP_S before the next."""
     stops, at = [], 0.0
     for name in names:
-        length = min(seconds, float(seats["seats"][name]["length_s"]))
+        heard = heard_for(seats, name) if seconds is None else seconds
+        length = min(heard, float(seats["seats"][name]["length_s"]))
         stops.append(
             pipeline.TourStop(
                 name,
@@ -989,6 +1138,24 @@ def stops_from_start(
         )
         at += length + GAP_S
     return stops
+
+
+def heard_for(seats: dict, name: str) -> float:
+    """How long the listener ``name`` is heard from the clock's start where ``--seconds``
+    says nothing (s): until what moves is over for it (``seats``' ``until_s`` of it:
+    every moving source arrived, or it has itself where only listeners move) and
+    FADE_OUT_S more; SECONDS where nothing moves for it, as for a listener standing
+    still while another walks. Mixes made before ``until_s`` was kept hear every
+    listener until every mover has arrived."""
+    seat = seats["seats"][name]
+    movement = seats.get("movement")
+    if "until_s" in seat:
+        until = seat["until_s"]
+    elif seats.get("moving") and movement:
+        until = movement["times"][-1]
+    else:
+        until = None
+    return SECONDS if until is None else float(until) + FADE_OUT_S
 
 
 def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> None:
@@ -1168,7 +1335,9 @@ DEMO = Demo(
             "seconds",
             "how long each listener is heard (s): on a shared timeline 20 s by default, and "
             "a piece too short for every listener shares its length out; from each "
-            "listener's start, by default until every mover has arrived and 3 s more",
+            "listener's start, by default until what moves is over for it (every moving "
+            "source arrived, or the listener itself) and 3 s more, 20 s where nothing "
+            "moves for it",
             None,
             "float",
             steps=("video",),
@@ -1224,6 +1393,23 @@ DEMO = Demo(
             "--sources leaves out, which stands)",
             None,
             "movers",
+            steps=("render", "video"),
+        ),
+        Option(
+            "stand",
+            "where a listener stands in this run, as LISTENER=X,Y (m), its height kept, "
+            "facing the nearest source in use, its trajectory moved and turned with it; "
+            "the scene so changed is simulated once (default: where the scene has it)",
+            None,
+            steps=("simulate", "render", "video"),
+        ),
+        Option(
+            "turn",
+            "a listener turning on the spot in this run, in place of its trajectory, as "
+            "LISTENER=T:YAW,T:YAW,...: the yaw (degrees, turning left from the way it "
+            "faces) it has at each time (s), turning evenly in between; binaurally heard "
+            "through the head tracker (default: as the scene has it)",
+            None,
             steps=("render", "video"),
         ),
         Option(
