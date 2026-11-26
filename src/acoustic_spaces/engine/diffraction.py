@@ -2245,8 +2245,22 @@ class EdgeDiffraction:
         # it fades out past the end, and the end's own edge takes the path round it
         # (end_fades), on the dark side where the path round the end is found and on the
         # lit side where its reflection point leaves the face past the end, or lies on
-        # another face in the face's plane.
-        counted = (lit == (found >= 0)) | near[:, None]
+        # another face in the face's plane. Not a reflection off a face whose plane the
+        # source side or the listener side lies in or behind, which is not a wave of its
+        # own there (as the edge fade has it): with the source in the plane of a wall,
+        # its term is the incident wave's once more, and counted it would take that wave
+        # off the paths a second time beside the wall's far end.
+        tol = _TOLERANCE * self.size
+        rho_r = r2 * sin_beta
+        cannot = np.column_stack(
+            [
+                np.zeros(len(edge), dtype=bool),
+                (c["rho_s"] * np.sin(c["phi_s"]) <= tol) | (rho_r * np.sin(c["phi_r"]) <= tol),
+                (c["rho_s"] * np.sin(n * np.pi - c["phi_s"]) <= tol)
+                | (rho_r * np.sin(n * np.pi - c["phi_r"]) <= tol),
+            ]
+        )
+        counted = (lit == (found >= 0)) | (near[:, None] & ~cannot)
         counted[in_line] |= moved
         energy = np.zeros((len(edge), self.wavenumber.shape[0]))
         pressure = (waves * counted[:, :, None, None]).sum(axis=1)
