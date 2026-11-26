@@ -136,7 +136,6 @@ from acoustic_spaces.engine.diffraction import (
     _sequences,
     _subset,
     _waves,
-    beyond_fading_end,
     boundary_angles,
     near_fading_end,
     sheets,
@@ -1552,21 +1551,9 @@ class EdgeFade:
         wavenumber = d.wavenumber[None]  # (1, B, M)
         sin_beta = np.clip(rho_s / r1, 1e-12, 1.0)
         length_param = r1 * r2 / (r1 + r2) * sin_beta**2
-        # Where the edge diffraction's term fades near an end of the edge, and its wave's
-        # way passes the edge's line beyond that end, it counts whether the term's path is
-        # found or not (join).
-        fades = d.fades[edge]
-        _, reach = near_fading_end(fades, t_k, edges.length[edge], r1, r2, sin_beta, d.k_min)
-        near = beyond_fading_end(
-            edges,
-            edge,
-            table["source"][slot],
-            table["listener"][slot],
-            t_k,
-            fades,
-            reach,
-            self.tolerance,
-        )[np.arange(len(edge)), column]
+        # Where the edge diffraction's term fades near an end of the edge, it counts
+        # whether the term's path is found or not (join).
+        near, _ = near_fading_end(d.fades[edge], t_k, edges.length[edge], r1, r2, sin_beta, d.k_min)
         rho_r = r2 * sin_beta
         tol = self.tolerance
         never = np.zeros(len(edge), dtype=bool)
