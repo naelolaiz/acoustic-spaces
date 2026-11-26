@@ -2952,6 +2952,12 @@ def _visible(triangles, start, end, out, reach, tolerance) -> list[np.ndarray]:
             probe = start + share * (end - start) + 2.0 * tolerance * out
             seam |= _in_triangles(probe, triangles, tolerance)
         start, end, out = start[~seam], end[~seam], out[~seam]
+        # A corner farther than ``reach`` hides and shows nothing within it.
+        run = end - start
+        square = np.maximum(np.einsum("sa,sa->s", run, run), 1e-300)
+        t = np.clip(-np.einsum("sa,sa->s", start, run) / square, 0.0, 1.0)
+        near = np.linalg.norm(start + t[:, None] * run, axis=-1) <= reach
+        start, end, out = start[near], end[near], out[near]
     # Each corner hides the wedge past it from the origin: n . x >= c for each (n, c).
     shadows = []
     front = np.zeros(len(start), dtype=bool)
@@ -3049,9 +3055,10 @@ def _ellipses_covered(polygons, centre, axes, inverse) -> np.ndarray:
         outward = np.stack([side[..., 1], -side[..., 0]], axis=-1)
         outward *= np.where(turn >= 0.0, 1.0, -1.0)[:, None, None]
         length = np.linalg.norm(outward, axis=-1)
-        real = length > 0.0
+        # A side of no length bounds nothing: n . x = 0 <= 1 everywhere; nor does one a
+        # rounding long, whose way is the rounding's.
+        real = length > 1e-9 * length.max(axis=1, keepdims=True)
         outward = np.where(real[..., None], outward / np.where(real, length, 1.0)[..., None], 0.0)
-        # A side of no length bounds nothing: n . x = 0 <= 1 everywhere.
         offset = np.where(real, np.einsum("ksa,ksa->ks", outward, part), 1.0)
         nx, ny = outward[..., 0], outward[..., 1]  # (k, s)
         middle = cx * nx + cy * ny  # (r, J, k, s)
@@ -3102,7 +3109,9 @@ def _clip(polygon, normal, offset) -> np.ndarray:
         j = (i + 1) % len(polygon)
         if inside[i]:
             out.append(polygon[i])
-        if inside[i] != inside[j]:
+        # A corner on the line is where the side crosses it (a point worked out from it
+        # would lie a rounding off it, and make a side of no length that turns back).
+        if inside[i] != inside[j] and height[i] != 0.0 and height[j] != 0.0:
             t = height[i] / (height[i] - height[j])
             out.append(polygon[i] + t * (polygon[j] - polygon[i]))
     return np.array(out)

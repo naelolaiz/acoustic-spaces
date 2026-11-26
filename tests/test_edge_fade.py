@@ -479,6 +479,39 @@ def test_a_wall_of_another_room_in_the_plane_holds_no_zone() -> None:
     assert np.abs(share[-8:] - 1.0).max() < 0.02
 
 
+def test_a_corner_on_a_clipping_line_adds_no_side() -> None:
+    """On the bar's floor of the archway example the zones of a reflection lie on the
+    floor, and the share is about all of it. A corner of a piece of the floor lies on
+    the line of an inside corner's shadow; the point where the piece's side crosses
+    that line, worked out from the corner, lay a rounding off it and made a side that
+    turned back, which put each zone that did not reach it outside the piece: the
+    share was 5.7 at 0.1 m."""
+    room = Room.from_yaml(EXAMPLES / "archway" / "scene.yaml")
+    model = TraceModel.from_room(room)
+    diffraction = EdgeDiffraction(
+        model,
+        model.room.mesh.vertices.mean(axis=0),
+        speed_of_sound=room.speed_of_sound(),
+        air=np.zeros(BANDS),
+        mode="second_order",
+        edges=find_edges(model),
+        coherent=BANDS,
+    )
+    fade = EdgeFade(diffraction, [])
+    floor = int(
+        np.flatnonzero(
+            np.isclose(model.plane_normal[:, 2], 1.0) & np.isclose(model.plane_offset, 0.0)
+        )[0]
+    )
+    at = np.array([3.81597713112511, 6.015272086267256, 1.1102230246251565e-16])
+    before = np.array([4.238740560023109, 5.0082901254990695, 0.898539312376851])
+    after = np.array([2.899648241887276, 8.197879659487306, 1.9475609141335186])
+    own = np.array([0, 0])
+    share = fade._zone_share(floor, at, before, after, own, np.array([0.1, 0.3, 1.0, 3.0]))
+    assert np.abs(share[:2] - 1.0).max() < 1e-3
+    assert share.max() < 1.1
+
+
 def test_diffract_adds_the_fade_with_the_plane_sequences(tmp_path: Path) -> None:
     """``diffract`` with the plane sequences the early stage tested adds the fade's terms
     to the edge diffraction's, as a simulation does; without them it is the edge
