@@ -205,6 +205,17 @@ def siren_power(pattern: str, sample_rate: int) -> np.ndarray:
     return total + 10.0 * np.log10(np.array(_bands(pattern, sample_rate)))
 
 
+#: :func:`siren_power` of each pattern at 48 kHz (dB re 1 pW, 63 Hz to 8 kHz, to 0.01
+#: dB), which a scene's siren model takes (:class:`~acoustic_spaces.scene.SirenModel`):
+#: its sound made and split into octave bands takes seconds, a scene is read at once
+#: (tests/test_sources.py checks the table against the function).
+POWER_DB: dict[str, tuple[float, ...]] = {
+    "wail": (76.13, 76.12, 81.38, 123.25, 128.63, 120.46, 119.97, 118.77),
+    "yelp": (76.14, 76.14, 81.67, 123.25, 128.63, 120.46, 119.97, 118.77),
+    "two_tone": (77.97, 78.42, 86.97, 130.13, 115.56, 119.19, 116.27, 115.21),
+}
+
+
 class Device:
     """A warning device a vehicle carries along its walk: the example's source ``part``,
     what it is in a word (``noun``; ``key`` starts its keys in the vehicle's info),
@@ -800,6 +811,7 @@ __all__ = [
     "LOW_HZ",
     "ON_AXIS_DB_A",
     "PATTERNS",
+    "POWER_DB",
     "POLICE_CAR",
     "POLICE_CAR_VEHICLE",
     "POLAR_DB",

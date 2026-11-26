@@ -66,7 +66,7 @@ The editor works on the same scene files as the command line.
   type its values; every change can be undone. The slider and **Play** move every mover
   along its trajectory, nothing simulated. **Moving** keeps a trajectory but leaves its
   mover standing, and **Doppler** has it play as a passing vehicle does (`doppler:
-  true`; it then moves alone). A line or a surface source does not move. **Render
+  true`; a listener's then moves alone, and no listener moves beside a source's). A line or a surface source does not move. **Render
   movement…** simulates every mover on one clock and writes what each listener hears as
   a WAV file, as `walkthrough --all` does (see
   [Walkthroughs](spatial-audio.md#walkthroughs)).
@@ -145,7 +145,8 @@ The editor works on the same scene files as the command line.
   or an array file, whose elements **Add up the array's elements one by one** sums near
   its listeners), its sound power per band, its **Spectrum** (flat, or male or female
   speech), a talker's **Vocal effort** (which then gives the sound power), the
-  **Model** that gives a road vehicle's sound power (set in the scene file:
+  **Model** that gives a road vehicle's, a siren's, a horn's or a train's sound power
+  (set in the scene file:
   [sources](scenes.md#sources-and-directivity)) and the **Gain**, **Equalizer** and
   **Delay** of its feed. It shows the directivity index per
   band, opens the polar patterns, and the selected source shows its balloon in the 3D

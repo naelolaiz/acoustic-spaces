@@ -3187,15 +3187,140 @@ msgstr "una registrazione multitraccia"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"The standard method that gives the source's sound power in place of the one "
-"you give, and the sound a demo of the scene plays for it (model: in the "
-"scene file): a road vehicle's of CNOSSOS-EU, at the speed of its trajectory, "
-"in the scene's air"
+"The method that gives the source's sound power in place of the one you give, "
+"and the sound a demo of the scene plays for it (model: in the scene file): a "
+"road vehicle's by CNOSSOS-EU, at the speed of its trajectory, in the scene's "
+"air; a siren's, that of the 100 W electronic siren NBS measured; a horn's, "
+"its blasts as loud as its rule or its maker gives them, averaged over its "
+"blasts and pauses; a train's or a tram's by Schall 03, at the speed of its "
+"trajectory, that of the first of its points at one height, a demo playing "
+"those behind it too"
 msgstr ""
-"Il metodo normato che dà la potenza sonora della sorgente al posto di quella "
-"che indicate, e il suono che una demo della scena le fa suonare (model: nel "
-"file della scena): quella di un veicolo stradale di CNOSSOS-EU, alla "
-"velocità della sua traiettoria, nell'aria della scena"
+"Il metodo che dà la potenza sonora della sorgente al posto di quella che "
+"indicate, e il suono che una demo della scena le fa suonare (model: nel file "
+"della scena): quella di un veicolo stradale secondo CNOSSOS-EU, alla "
+"velocità della sua traiettoria, nell'aria della scena; quella di una sirena, "
+"quella della sirena elettronica da 100 W misurata dall'NBS; quella di una "
+"tromba, i suoi colpi forti quanto li dà la sua norma o il suo costruttore, "
+"mediati su colpi e pause; quella di un treno o di un tram secondo Schall 03, "
+"alla velocità della sua traiettoria, quella del primo dei suoi punti a "
+"un'altezza, e una demo suona anche quelli che lo seguono"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the "
+"100 W electronic siren NBS measured"
+msgstr ""
+"Sirena: suona {pattern} (può suonare {patterns}), con la potenza sonora "
+"della sirena elettronica da 100 W misurata dall'NBS"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the "
+"100 W electronic siren NBS measured, {gain} dB"
+msgstr ""
+"Sirena: suona {pattern} (può suonare {patterns}), con la potenza sonora "
+"della sirena elettronica da 100 W misurata dall'NBS, {gain} dB"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Horn: {kind}, {tones} Hz {how}, in blasts, {level} dB({weighting}) {at} m "
+"ahead"
+msgstr ""
+"Tromba: {kind}, {tones} Hz {how}, a colpi, {level} dB({weighting}) a {at} m "
+"davanti"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an air horn"
+msgstr "una tromba ad aria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a pair of disc horns"
+msgstr "una coppia di trombe a disco"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a train horn"
+msgstr "una tromba da treno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "in turn"
+msgstr "a turno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "together"
+msgstr "insieme"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Schall 03: {train} on {track}; its sources {height}, the sound power the "
+"first's, the others played behind it"
+msgstr ""
+"Schall 03: {train} su {track}; le sue sorgenti {height}, con la potenza "
+"sonora della prima, e le altre suonate dietro"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an S-Bahn"
+msgstr "una S-Bahn"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a regional train"
+msgstr "un treno regionale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an intercity train"
+msgstr "un treno intercity"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a freight train"
+msgstr "un treno merci"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a low-floor tram"
+msgstr "un tram a pianale ribassato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "sleepers in ballast"
+msgstr "traverse su massicciata"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "slab track"
+msgstr "binario su piastra"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "slab track with absorbers"
+msgstr "binario su piastra con assorbitori"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a level crossing"
+msgstr "un passaggio a livello"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "track set in the street"
+msgstr "binario annegato nella strada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grassed track, the grass low"
+msgstr "binario inerbito, l'erba bassa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grassed track, the grass up to the rail top"
+msgstr "binario inerbito, l'erba fino al piano del ferro"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "at the rail top (its bogies)"
+msgstr "al piano del ferro (i suoi carrelli)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "on its roof, 4 m up"
+msgstr "sul suo tetto, a 4 m d'altezza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "at its pantograph's head, 5 m up"
+msgstr "alla testa del suo pantografo, a 5 m d'altezza"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "light motor vehicles"
@@ -5687,6 +5812,12 @@ msgstr "{tip}. La dà il modello, alla velocità della traiettoria"
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid "{tip}. Given by the model"
+msgstr "{tip}. La dà il modello"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "{tip}. Given by the vocal effort"
 msgstr "{tip}. Data dallo sforzo vocale"
 
@@ -6993,14 +7124,16 @@ msgstr "Doppler"
 msgid ""
 "Tick for a vehicle or an aircraft: the early sound goes through delays that "
 "change as it goes, so its pitch shifts as it passes (doppler in the scene "
-"file). A trajectory with Doppler moves alone: Render movement… and the demos "
-"play it while every other trajectory is off"
+"file). Sources with Doppler move together, beside other sources that move, "
+"while no listener moves; a listener with Doppler moves alone: Render "
+"movement… and the demos play them so"
 msgstr ""
 "Spunta per un veicolo o un aereo: il suono iniziale passa per ritardi che "
 "cambiano mentre avanza, così la sua altezza cambia al passaggio (doppler nel "
-"file di scena). Una traiettoria con Doppler si muove da sola: Rendering del "
-"movimento… e le demo la riproducono mentre tutte le altre traiettorie sono "
-"disattivate"
+"file di scena). Le sorgenti con Doppler si muovono insieme, accanto ad altre "
+"sorgenti che si muovono, mentre nessun ricevitore si muove; un ricevitore "
+"con Doppler si muove da solo: Rendering del movimento… e le demo le "
+"riproducono così"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""

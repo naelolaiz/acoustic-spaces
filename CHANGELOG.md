@@ -11,6 +11,35 @@
   truck the scene's sources with a model; its options and steps before 4.4.0 still
   work (`--vehicle` as `--sources`), and its runs are named as the demo of any scene's
   (`passby_binaural`).
+- Added: a source's `model` may be a siren (`siren`: wail, yelp or two_tone, of the
+  `patterns` it can sound, as loud as the 100 W electronic siren NBS measured, `gain_db`
+  louder) or a horn (`horn`: an air horn, a car's pair of disc horns or a train horn, in
+  blasts, a train horn's two notes in turn or as a chord), its sound power that of the
+  sound the demo of any scene makes for it; `--siren` and `--horn` set how every one
+  that plays sounds. A `--siren`, `--horn` or `--rpm` that changes nothing in the run is
+  refused, saying why.
+- Added: a source's `model` may be a train or a tram of Schall 03 (`schall-03`: its
+  `train`, `track` and `height`, at the rail top, on the roof or at the pantograph): the
+  source is the train's front, and the demo of any scene plays every point of the train
+  at that height as far behind it as it is, each a noise of its own at its own sound
+  power with its own Doppler (`render_movement`'s `followers` and `leads`).
+- Added: `--indoors` in the demo of any scene hears what moves past in the room behind
+  each listener in front of a building's wall: `airborne` through its closed window,
+  `rumble` the rumble a train's or a tram's wheels make in it, or `airborne_and_rumble`;
+  a run where nothing moves, no listener stands so, or nothing that plays shakes the
+  ground for the rumble is refused, saying why.
+- Changed: the street's `passby_demo.py` is the demo of its scene, its vehicles the
+  scene's sources with a model, each in a group (`Passenger car` with its horn, `Police
+  car` with its siren, `Fire engine` with its siren and its air horn, `Tram`, its four
+  bogies and its roof's two halves) that plays in a part of its own; names joined with
+  `+` in `--sources` play together in one part (`--sources car+car_horn`). Its options
+  and steps before 4.4.0 still work (`--vehicle`, `--car`, `--police-car` and
+  `--fire-engine` as `--sources`, `--indoors tram` and `tram_and_rumble` as `airborne`
+  and `airborne_and_rumble`), and `--indoors` hears any of its vehicles.
+- Added: in the demo of any scene and **Render movement…**, sources with Doppler move
+  together, beside other sources that move (a police car and its siren), every listener
+  hearing each early path of each through its own changing delay; a listener with
+  Doppler still moves alone.
 - Changed: a source's or listener's `walk` is its `trajectory`, in the scene file, the
   editor (**Moving**, and **Trajectories** in Run demo) and the API (`simulate_trajectory`,
   `render_trajectory`, `trajectory_points`, `animate_trajectory`, `walkthrough --mover`);
@@ -101,9 +130,10 @@
   choir alone and its third has the organ on its quiet stops; a long credit takes two
   lines instead of being cut.
 - Changed: the Run demo window puts the options in sections (Recording, Sources,
-  Listeners, Trajectories, Video, Output), and leaves out of view an option that changes
-  nothing for the scene while at its default. Fixed: **Timeline**, **Pieces** and the
-  vibration scripts' options showed their flags as labels.
+  Listeners, Trajectories, Video, Output), and leaves out of view, and out of the
+  command, an option that changes nothing in the run (`--siren` with no police car
+  ticked), keeping what it is set to for when it matters again. Fixed: **Timeline**,
+  **Pieces** and the vibration scripts' options showed their flags as labels.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.
@@ -120,9 +150,8 @@
 - Changed: `--listeners` sets the order of every demo's tour (a tour's timing kept),
   and the gallery walk's parts; `--tour` keeps its own order. The orchestra's
   `--movements` plays and downloads the movements it names, in that order.
-- Removed: the pass-by demos' `--car`, `--police-car` and `--fire-engine`, and `--horn
-  off`: `--sources` picks what a vehicle plays (`--sources police_car_siren`,
-  `--sources car,car_horn`, the train's horn with `train_horn`).
+- Removed: the railway's pass-by demo's `--horn off`: `--sources` picks what the train
+  plays (the train's horn with `train_horn`).
 - Fixed: a police car's or a fire engine's walk was simulated again on every run, and
   the tram's credit named a pantograph it does not have.
 - Changed: every demo run is named after its settings (what it plays, the listeners,

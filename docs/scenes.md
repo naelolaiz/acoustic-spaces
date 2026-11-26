@@ -780,8 +780,29 @@ sources:
   the power at that speed. `rpm` and `cylinders` are what [a demo of the
   scene](demos.md#a-demo-of-any-scene) makes its sound of where it has no `signal` or
   `channel`: tyre noise and an engine of that many cylinders firing at that speed,
-  each with the spectrum of its part of the power, along its pass. The editor shows the
-  model on the source's page (**Model**), with the sound power it gives.
+  each with the spectrum of its part of the power, along its pass. With `method: siren`
+  it is a vehicle's siren, a square wave in its `pattern` (`wail` or `yelp`, swept from
+  500 to 1500 Hz 12 or 180 times a minute, or `two_tone`, 440 and 586.7 Hz in turn) of
+  the `patterns` it can sound, which a demo's `--siren` picks from, as loud in each as
+  the 100 W electronic siren the National Bureau of Standards measured (NBS SP 480-28,
+  1978), `gain_db` louder, whatever its speed. With `method: horn` it is a
+  vehicle's horn in blasts, of the `kind` `air_horn` (a fire engine's two trumpets, as
+  loud as the EU's rule for vehicles' horns lets one be), `disc_horns` (a car's pair,
+  Hella's S77) or `train_horn` (the two notes of the EU's rule for trains, in turn, or
+  together with `signal: chord`), its sound power the average over its blasts and
+  pauses. With `method: schall-03` it is a `train` (`s_bahn`, `regional`, `intercity`,
+  `freight` or `tram`) of Schall 03 (Germany's method for the noise of railways and
+  tramways, 2014) on its `track` (a train's `ballast`, `slab`, `slab_absorber` or
+  `level_crossing`; a tram's `ballast`, `street`, `grass_low` or `grass_high`), its
+  sources at one `height`: `rail_top` (its wheels, bogies, motors and the fans under its
+  floor), `roof` (4 m up) or `pantograph` (5 m up). The source is the train's front, on
+  a trajectory at one steady speed, and its sound power that of the train's first point
+  at that height; a demo of the scene plays every point at that height (a tram's four
+  bogies at the rail top, the two halves of its roof) as far behind the front as it is,
+  each a noise of its own at its own sound power, with Doppler. A siren's, a horn's and
+  a train's directivity is the source's own (the examples' `siren.csv`, `train.csv` and
+  `tram.csv`; see [demos](demos.md#vehicles-passing-by)). The editor shows the model on
+  the source's page (**Model**), with the sound power it gives.
 - `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
   the sound power and on the impulse responses, so a mix made with `auralize` hears
   them. G stays the room's: it is measured against the same source, fed the same way,

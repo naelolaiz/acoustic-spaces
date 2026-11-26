@@ -1583,6 +1583,85 @@ def test_the_passby_demo_is_a_preset_of_the_demo_of_its_scene(tmp_path: Path) ->
     )
 
 
+def test_the_streets_passby_demo_is_a_preset_of_the_demo_of_its_scene(capsys) -> None:
+    """The street's passby_demo.py is the demo of its scene with its car taken in, each
+    vehicle the scene's sources (a group where it has several) in a part of its own:
+    the script's --vehicle reads as the sources that play, --car, --police-car and
+    --fire-engine as what plays of the vehicle picked, in any order, and a flag for a
+    vehicle not picked changes nothing, as in the script; with --sources too, or with a
+    vehicle the street has not, it is refused; its steps run as those that took them
+    over, and the flags are no options of the demo, which the editor shows as
+    --sources."""
+    from acoustic_spaces.demos import run_folder
+
+    street = _script("street", "passby_demo").DEMO
+    assert (street.name, street.example, street.title) == (
+        "passby",
+        "street",
+        "A vehicle driving down the street",
+    )
+    parser = street.parser()
+    for argv, picked in (
+        ((), "car"),
+        (("--vehicle", "bus"), "bus"),
+        (("--vehicle", "motorcycle"), "motorcycle"),
+        (("--vehicle", "tram"), "Tram"),
+        (("--car", "car_and_horn"), "Passenger car"),
+        (("--car", "horn", "--vehicle", "car"), "car_horn"),
+        (("--vehicle", "police_car"), "Police car"),
+        (("--police-car", "siren", "--vehicle", "police_car"), "police_car_siren"),
+        (("--vehicle", "police_car", "--police-car", "siren"), "police_car_siren"),
+        (("--police-car", "siren"), "car"),
+        (("--vehicle", "fire_engine"), "Fire engine"),
+        (
+            ("--vehicle", "fire_engine", "--fire-engine", "truck_and_siren"),
+            "fire_engine+fire_engine_siren",
+        ),
+        (
+            ("--fire-engine", "siren_and_horn", "--vehicle", "fire_engine"),
+            "fire_engine_siren+fire_engine_horn",
+        ),
+        (("--vehicle", "fire_engine", "--fire-engine", "siren"), "fire_engine_siren"),
+        (("--vehicle", "car,police_car", "--car", "car_and_horn"), "Passenger car,Police car"),
+    ):
+        args = parser.parse_args(["all", *argv])
+        assert args.sources == picked, argv
+        assert not [k for k in vars(args) if k.startswith("old_")]
+        assert street.check(args) is None or "tram" in argv, (argv, street.check(args))
+    for argv, problem in (
+        (
+            ("--sources", "bus", "--vehicle", "car"),
+            "--sources picks what --vehicle, --car, --police-car and --fire-engine pick: "
+            "give one or the other",
+        ),
+        (
+            ("--vehicle", "boat"),
+            "--vehicle is one of car, bus, motorcycle, police_car, fire_engine, tram, not 'boat'",
+        ),
+        (("--car", "honk"), "argument --car: invalid choice: 'honk'"),
+    ):
+        capsys.readouterr()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["all", *argv])
+        assert problem in capsys.readouterr().err, argv
+    for old, new in {"sound": "feeds", "scene": "simulate", "walk": "render"}.items():
+        assert street.step(old).name == new
+    assert not {o.name for o in street.options} & {"vehicle", "car", "police_car", "fire_engine"}
+    args = parser.parse_args(["all"])
+    assert (args.sources, args.sources_play) == ("car", "in-turn")
+    assert run_folder(street.resolved(args)).name == "passby_binaural"
+    assert street.command("all", args) == "python passby_demo.py all"
+    police = parser.parse_args(["all", "--vehicle", "police_car"])
+    assert run_folder(street.resolved(police)).name == "passby_Police-car_binaural"
+    assert street.command("all", police) == "python passby_demo.py all --sources 'Police car'"
+    assert street.moving(street.resolved(police)) == ["police_car", "police_car_siren"]
+    several = street.resolved(parser.parse_args(["all", "--vehicle", "car,police_car"]))
+    assert [run_folder(p).name for p in several.series_parts] == [
+        "passby_binaural",
+        "passby_Police-car_binaural",
+    ]
+
+
 def test_the_gallery_walk_is_a_preset_of_the_demo_of_its_scene() -> None:
     """walk_demo.py is the demo of the gallery's scene with the walker and the one turning
     alone: each command line of the script it was reads as the demo of any scene's (the

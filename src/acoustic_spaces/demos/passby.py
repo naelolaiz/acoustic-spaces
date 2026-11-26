@@ -831,12 +831,13 @@ def feed(
 
 
 def faded(x: np.ndarray, rate: int, fade_s: float = FADE_S) -> np.ndarray:
-    """``x`` faded in over its first ``fade_s`` and out over its last (half its length
-    at most each), as a pass's sound plays."""
+    """``x`` (samples, or samples and channels) faded in over its first ``fade_s`` and
+    out over its last (half its length at most each), as a pass's sound plays."""
     x = np.array(x, dtype=float)
     n = len(x)
     fade = min(int(fade_s * rate), n // 2)
     ramp = np.sin(np.linspace(0.0, np.pi / 2, fade)) ** 2
+    ramp = ramp.reshape(-1, *(1,) * (x.ndim - 1))
     x[:fade] *= ramp
     x[n - fade :] *= ramp[::-1]
     return x

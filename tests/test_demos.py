@@ -1999,8 +1999,8 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     assert [item.name for _kind, item in moving] == ["seat-b"]
     args.moving = "seat-b,radio"
     assert demo.check(args) == (
-        "radio moves with Doppler, which plays alone: leave the others standing "
-        "(--moving radio), or turn its Doppler off"
+        "radio moves with Doppler, which no listener that moves hears: leave seat-b "
+        "standing (--moving radio), or turn its Doppler off"
     )
     args.moving = "seat-a"
     assert demo.check(args) == (
@@ -2083,9 +2083,9 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
 
 
 def test_a_demo_of_any_scene_plays_a_walk_with_doppler(tmp_path: Path, monkeypatch) -> None:
-    """A walk with Doppler moves alone: every listener hears the radio drive past, from
-    one simulation with the radio at each place, its level at each place (the talker's,
-    standing, the same at every one), one gain for all."""
+    """A source's walk with Doppler, no listener walking: every listener hears the radio
+    drive past, from one simulation with the radio at each place, its level at each place
+    (the talker's, standing, the same at every one), one gain for all."""
     pytest.importorskip("PIL")
     import yaml
 

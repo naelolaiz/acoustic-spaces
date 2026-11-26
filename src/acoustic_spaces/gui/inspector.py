@@ -244,10 +244,57 @@ RECORDING_KINDS = {
     "multitrack": N_("a multitrack recording"),
 }
 MODEL_TIP = N_(
-    "The standard method that gives the source's sound power in place of the one you give, "
-    "and the sound a demo of the scene plays for it (model: in the scene file): a road "
-    "vehicle's of CNOSSOS-EU, at the speed of its trajectory, in the scene's air"
+    "The method that gives the source's sound power in place of the one you give, and the "
+    "sound a demo of the scene plays for it (model: in the scene file): a road vehicle's "
+    "by CNOSSOS-EU, at the speed of its trajectory, in the scene's air; a siren's, that of "
+    "the 100 W electronic siren NBS measured; a horn's, its blasts as loud as its rule or "
+    "its maker gives them, averaged over its blasts and pauses; a train's or a tram's by "
+    "Schall 03, at the speed of its trajectory, that of the first of its points at one "
+    "height, a demo playing those behind it too"
 )
+#: A siren model on its page, as loud as the siren NBS measured, or louder or quieter.
+SIREN_TEXT = N_(
+    "Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the 100 W "
+    "electronic siren NBS measured"
+)
+SIREN_GAIN_TEXT = N_(
+    "Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the 100 W "
+    "electronic siren NBS measured, {gain} dB"
+)
+#: A horn model on its page: what horn, its notes, how they sound and how loud.
+HORN_TEXT = N_("Horn: {kind}, {tones} Hz {how}, in blasts, {level} dB({weighting}) {at} m ahead")
+HORN_KINDS = {
+    "air_horn": N_("an air horn"),
+    "disc_horns": N_("a pair of disc horns"),
+    "train_horn": N_("a train horn"),
+}
+HORN_HOW = {True: N_("in turn"), False: N_("together")}
+#: A rail model on its page: the train, its track and the height of its sources.
+RAIL_TEXT = N_(
+    "Schall 03: {train} on {track}; its sources {height}, the sound power the first's, "
+    "the others played behind it"
+)
+RAIL_TRAINS = {
+    "s_bahn": N_("an S-Bahn"),
+    "regional": N_("a regional train"),
+    "intercity": N_("an intercity train"),
+    "freight": N_("a freight train"),
+    "tram": N_("a low-floor tram"),
+}
+RAIL_TRACKS = {
+    "ballast": N_("sleepers in ballast"),
+    "slab": N_("slab track"),
+    "slab_absorber": N_("slab track with absorbers"),
+    "level_crossing": N_("a level crossing"),
+    "street": N_("track set in the street"),
+    "grass_low": N_("grassed track, the grass low"),
+    "grass_high": N_("grassed track, the grass up to the rail top"),
+}
+RAIL_HEIGHTS = {
+    "rail_top": N_("at the rail top (its bogies)"),
+    "roof": N_("on its roof, 4 m up"),
+    "pantograph": N_("at its pantograph's head, 5 m up"),
+}
 #: CNOSSOS-EU's road vehicle categories, as a source's model names them.
 ROAD_CATEGORIES = {
     "1": N_("light motor vehicles"),
@@ -3335,10 +3382,35 @@ def plays_text(scene, item) -> str:
 
 
 def model_text(model) -> str:
-    """A source's model (``model``) in words, on its page: none, or the method, the
-    vehicle's category and the engine of its made sound."""
+    """A source's model (``model``) in words, on its page: none; a road vehicle's
+    method, its category and the engine of its made sound; a siren's pattern, those it
+    can sound and how loud it is; a horn's kind, its notes and how loud they sound; a
+    rail vehicle's train, its track and the height of its sources."""
     if model is None:
         return _("none")
+    if model.method == "schall-03":
+        return _(RAIL_TEXT).format(
+            train=_(RAIL_TRAINS[model.train]),
+            track=_(RAIL_TRACKS[model.track]),
+            height=_(RAIL_HEIGHTS[model.height]),
+        )
+    if model.method == "siren":
+        values = {"pattern": model.pattern, "patterns": ", ".join(model.patterns)}
+        if model.gain_db == 0.0:
+            return _(SIREN_TEXT).format(**values)
+        return _(SIREN_GAIN_TEXT).format(**values, gain=f"{model.gain_db:+g}")
+    if model.method == "horn":
+        from acoustic_spaces.demos.models import horn_kind
+
+        kind = horn_kind(model)
+        return _(HORN_TEXT).format(
+            kind=_(HORN_KINDS[model.kind]),
+            tones=" / ".join(f"{f:g}" for f in kind.hz),
+            how=_(HORN_HOW[kind.in_turn]),
+            level=f"{kind.on_axis_db:g}",
+            weighting=kind.weighting,
+            at=f"{kind.at_m:g}",
+        )
     kind = ROAD_CATEGORIES.get(model.category)
     return _(
         "CNOSSOS-EU category {category} ({kind}); its made sound's engine: {cylinders} "
@@ -3870,9 +3942,12 @@ class PointPage(Page):
             self.level.setValue(item.sound_power_db)
             self.level.setEnabled(not per_band and not talking and not modelled)
             tip = _(LEVEL_TIP)
-            if modelled:
+            if modelled and item.model.needs is not None:
                 # Translators: {tip} is the sound power's tip.
                 tip = _("{tip}. Given by the model, at the speed of the trajectory").format(tip=tip)
+            elif modelled:  # a siren's or a horn's, at any speed
+                # Translators: {tip} is the sound power's tip.
+                tip = _("{tip}. Given by the model").format(tip=tip)
             elif talking:
                 # Translators: {tip} is the sound power's tip.
                 tip = _("{tip}. Given by the vocal effort").format(tip=tip)

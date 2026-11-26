@@ -1887,6 +1887,48 @@ def test_source_spectrum_gain_equalizer_and_delay(window) -> None:
     assert page.level.value() == pytest.approx(80.0 + 10 * np.log10(8), abs=0.05)
 
 
+def test_a_source_page_shows_its_model(window) -> None:
+    """A source with a model shows it on its page, its sound power given by it: the
+    street's road vehicles by CNOSSOS-EU at the speed of their trajectories; the police
+    car's and the fire engine's sirens and horns, at any speed, by what they sound; the
+    tram's sources by Schall 03, at the speed of their trajectories."""
+    window.open_example(example_path("street"))
+    page = window.inspector.pages["sources"]
+    names = [source.name for source in window.document.scene.sources]
+    window.select("sources", names.index("car"))
+    assert page.model.text() == (
+        "CNOSSOS-EU category 1 (light motor vehicles); its made sound's engine: 4 cylinders "
+        "at 2000 rpm"
+    )
+    assert page.level.toolTip().endswith(". Given by the model, at the speed of the trajectory")
+    assert not page.level.isEnabled() and page._form.labelForField(page.model).toolTip()
+    window.select("sources", names.index("police_car_siren"))
+    assert page.model.text() == (
+        "Siren: sounds wail (it can sound wail, yelp, two_tone), at the sound power of the "
+        "100 W electronic siren NBS measured"
+    )
+    assert page.level.toolTip().endswith(". Given by the model") and not page.level.isEnabled()
+    window.select("sources", names.index("fire_engine_siren"))
+    assert page.model.text() == (
+        "Siren: sounds two_tone (it can sound two_tone), at the sound power of the 100 W "
+        "electronic siren NBS measured, +6 dB"
+    )
+    window.select("sources", names.index("fire_engine_horn"))
+    assert page.model.text() == (
+        "Horn: an air horn, 150 / 180 Hz together, in blasts, 118 dB(A) 2 m ahead"
+    )
+    window.select("sources", names.index("car_horn"))
+    assert page.model.text() == (
+        "Horn: a pair of disc horns, 360 / 430 Hz together, in blasts, 110 dB(A) 2 m ahead"
+    )
+    window.select("sources", names.index("tram_roof"))
+    assert page.model.text() == (
+        "Schall 03: a low-floor tram on track set in the street; its sources on its roof, 4 m "
+        "up, the sound power the first's, the others played behind it"
+    )
+    assert page.level.toolTip().endswith(". Given by the model, at the speed of the trajectory")
+
+
 def test_a_source_plays_a_wav_in_a_demo(window, monkeypatch, tmp_path: Path) -> None:
     """The source page says what the source plays in a demo of the scene: Choose WAV…
     names a file, Silent takes it away, and the scene file keeps it."""
@@ -4596,12 +4638,16 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert dialog.problem.text() == "" and ok.isEnabled()
     assert '"Spicy Funk Cake"' in dialog.downloads.text() and "61 MB" in dialog.downloads.text()
     # A choice that the scene makes unless given lists that first, which gives none.
+    # Where it changes nothing (the stadium has no talker), it is out of view and out
+    # of the command, set or not (the command line refuses it given there).
     effort = dialog.fields["vocal_effort"]
     assert isinstance(effort, ChoicesField) and effort.combo.itemText(0) == "as in the scene"
     assert effort.value() is None and "--vocal-effort" not in dialog.command.text()
+    assert not dialog.row_shown("vocal_effort")
     effort.combo.setCurrentIndex(effort.combo.findText("raised"))
-    assert dialog.command.text() == "acoustic-spaces demo scene.yaml all --vocal-effort raised"
-    assert "no source in use talks" in dialog.problem.text()  # the stadium has no talker
+    assert dialog.command.text() == "acoustic-spaces demo scene.yaml all"
+    assert dialog.problem.text() == "" and not dialog.row_shown("vocal_effort")
+    assert dialog.arguments().vocal_effort is None and effort.value() == "raised"
     effort.combo.setCurrentIndex(0)
     assert dialog.problem.text() == "" and dialog.command.text().endswith("scene.yaml all")
 
@@ -4697,37 +4743,61 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert box.note.text().startswith("Nothing in this scene moves.")
     assert box.table.isHidden() and box.table.isRowHidden(0) and box.ticked() == []
     road.deleteLater()
-    # In the street, the police car's siren shows only with that vehicle picked; hidden,
-    # it stays out of the command (what each vehicle plays is --sources, for all).
+    # In the street, its vehicles are its sources, each in its group, the car alone by
+    # default. --rpm shows where an engine plays, --siren where a siren plays that can
+    # sound more than one pattern (the police car's): hidden, either stays out of the
+    # command, kept for when it matters again.
     street = DemoDialog(scene=example_path("street"))
-    assert street.picker.currentData() == "passby"
-    vehicle = street.fields["vehicle"]
+    assert street.picker.currentData() == "passby" and "vehicle" not in street.fields
+    sources = street.fields["sources"]
+    tops = {
+        sources.tree.topLevelItem(k).text(0): sources.tree.topLevelItem(k)
+        for k in range(sources.tree.topLevelItemCount())
+    }
+    assert list(tops) == [
+        "traffic",
+        "Passenger car",
+        "bus",
+        "motorcycle",
+        "Police car",
+        "Fire engine",
+        "Tram",
+    ]
 
     def shown() -> set[str]:
         return {
             name
-            for name in ("siren", "rpm")
+            for name in ("siren", "rpm", "horn")
             if street._rows[name].isRowVisible(street.fields[name])
         }
 
-    assert vehicle.value() == "car" and shown() == {"rpm"}
-    vehicle.pick("police_car")
+    assert sources.ticked() == ["car"] and shown() == {"rpm"}
+    tops["Police car"].setCheckState(0, Qt.CheckState.Checked)
+    tops["Passenger car"].setCheckState(0, Qt.CheckState.Unchecked)
     assert shown() == {"siren", "rpm"}
     street.fields["siren"].pick("yelp")
-    assert street.command.text() == "python passby_demo.py all --vehicle police_car --siren yelp"
-    vehicle.pick("fire_engine")
-    assert shown() == {"rpm"}
-    assert street.command.text() == "python passby_demo.py all --vehicle fire_engine"
-    assert street.arguments().siren == "wail"
-    vehicle.pick("police_car")
-    assert street.fields["siren"].value() == "yelp"
-    # The police car and the tram: the siren for the one, no engine of a road
-    # vehicle's for the other, which has no siren.
-    vehicle.pick(("police_car", "tram"))
+    assert street.command.text() == (
+        "python passby_demo.py all --sources 'Police car' --siren yelp"
+    )
+    # The siren alone: no engine plays.
+    tops["Police car"].child(0).setCheckState(0, Qt.CheckState.Unchecked)
+    assert shown() == {"siren"}
+    assert street.command.text() == (
+        "python passby_demo.py all --sources police_car_siren --siren yelp"
+    )
+    # The fire engine, whose siren sounds its two tones alone: --siren out of view and
+    # out of the command, still yelp for the police car.
+    tops["Police car"].setCheckState(0, Qt.CheckState.Unchecked)
+    assert sources.ticked() == [] and "--sources names no source" in street.problem.text()
+    tops["Fire engine"].setCheckState(0, Qt.CheckState.Checked)
+    assert shown() == {"rpm"} and street.problem.text() == ""
+    assert street.command.text() == "python passby_demo.py all --sources 'Fire engine'"
+    assert street.arguments().siren is None and street.fields["siren"].value() == "yelp"
+    tops["Police car"].setCheckState(0, Qt.CheckState.Checked)
     assert shown() == {"siren", "rpm"}
-    assert "--vehicle police_car,tram --siren yelp" in street.command.text()
-    vehicle.pick("tram")
-    assert shown() == set()
+    assert street.command.text() == (
+        "python passby_demo.py all --sources 'Police car,Fire engine' --siren yelp"
+    )
     street.deleteLater()
     # The stadium's helicopter likewise: the crossing flies it, the concert leaves it out.
     stadium = DemoDialog(scene=example_path("stadium_concert"))
@@ -5038,18 +5108,19 @@ def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
     # The street's police car, its siren alone.
     street = DemoDialog(scene=example_path("street"))
     sources = street.fields["sources"]
-    assert [s.name for s in sources.sources] == ["car", "car_horn"]
-    assert sources.ticked() == ["car"]  # the horn off unless ticked
-    street.fields["vehicle"].pick("police_car")
-    assert [s.name for s in sources.sources] == ["police_car", "police_car_siren"]
-    assert sources.ticked() == ["police_car", "police_car_siren"]
-    assert street.command.text() == "python passby_demo.py all --vehicle police_car"
-    sources.none.click()
-    assert "none of them is the police car's" in street.problem.text()
-    sources.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Checked)
-    assert street.command.text() == (
-        "python passby_demo.py all --vehicle police_car --sources police_car_siren"
+    assert sources.ticked() == ["car"]  # the demo's own pick: the car, its horn unticked
+    police = next(
+        sources.tree.topLevelItem(k)
+        for k in range(sources.tree.topLevelItemCount())
+        if sources.tree.topLevelItem(k).text(0) == "Police car"
     )
+    assert [police.child(k).text(0) for k in range(police.childCount())] == [
+        "police_car",
+        "police_car_siren",
+    ]
+    sources.none.click()
+    police.child(1).setCheckState(0, Qt.CheckState.Checked)
+    assert street.command.text() == "python passby_demo.py all --sources police_car_siren"
     assert street.problem.text() == "" and street.chosen()[2].sources == "police_car_siren"
     assert not street._rows["sources_play"].isRowVisible(street.fields["sources_play"])
     street.deleteLater()
@@ -5098,56 +5169,48 @@ def test_demo_dialog_shows_sources_play_where_the_run_has_turns(qapp, monkeypatc
     railway.deleteLater()
 
 
-def test_demo_dialog_picks_a_vehicle_of_several_walkers(qapp, monkeypatch) -> None:
-    """In the street, the Trajectories box shows the movers of the vehicles picked, the
-    police car with its siren, and no others. A sources pick made for one vehicle does
-    not carry over to another: the horn ticked and unticked is the car's own pick again,
-    and the police car's siren alone, the bus beside it, gives both their own picks."""
+def test_demo_dialog_moves_the_vehicles_picked_in_the_street(qapp, monkeypatch) -> None:
+    """In the street, the Trajectories box shows the movers of the vehicles ticked in
+    Sources, the police car with its siren, and no others; two vehicles play in turn,
+    each in a part of its own, or together; The demo's pick moves the car alone again."""
     from acoustic_spaces import examples
     from acoustic_spaces.gui.demo_dialog import DemoDialog
 
     monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
     street = DemoDialog(scene=example_path("street"))
-    box, vehicle, sources = street.movement, street.fields["vehicle"], street.fields["sources"]
+    box, sources = street.movement, street.fields["sources"]
     names = [name for _kind, name, _on in box.movers]
+    tops = {
+        sources.tree.topLevelItem(k).text(0): sources.tree.topLevelItem(k)
+        for k in range(sources.tree.topLevelItemCount())
+    }
 
     def rows() -> list[str]:
         return [name for row, name in enumerate(names) if not box.table.isRowHidden(row)]
 
-    assert vehicle.value() == "car" and box.ticked() == ["car"] and rows() == ["car"]
-    vehicle.pick(("car", "police_car"))
-    assert rows() == ["car", "police_car", "police_car_siren"]
-    assert street.command.text() == "python passby_demo.py all --vehicle car,police_car"
-    vehicle.pick("tram")
-    assert rows() == ["tram", "tram_roof"] and street.problem.text() == ""
-    vehicle.pick("car")
-
-    # The horn ticked and unticked: the car's own pick, which the police car's follows.
-    sources.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Checked)
-    assert street.command.text() == "python passby_demo.py all --sources car,car_horn"
-    sources.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Unchecked)
-    assert street.command.text() == "python passby_demo.py all" and sources.picked is None
-    vehicle.pick("police_car")
-    assert sources.ticked() == ["police_car", "police_car_siren"]
-    assert street.command.text() == "python passby_demo.py all --vehicle police_car"
-    assert street.problem.text() == ""
-    # None for the police car, then the bus: the bus's own pick.
-    sources.none.click()
-    vehicle.pick("bus")
-    assert sources.ticked() == ["bus"] and street.problem.text() == ""
-    assert street.command.text() == "python passby_demo.py all --vehicle bus"
-    # The siren alone, then the bus beside it: both vehicles' own picks, which the run
-    # takes.
-    vehicle.pick("police_car")
-    sources.none.click()
-    sources.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Checked)
+    assert box.ticked() == ["car"] and rows() == ["car"]
+    tops["Police car"].setCheckState(0, Qt.CheckState.Checked)
+    assert rows() == box.ticked() == ["car", "police_car", "police_car_siren"]
+    assert street.command.text() == "python passby_demo.py all --sources 'car,Police car'"
+    play = street.fields["sources_play"]
+    assert street.row_shown("sources_play") and play.currentData() == "in-turn"
+    assert street.parts.text().splitlines()[1:] == ["1. Sources: car", "2. Sources: Police car"]
+    # The horn beside the car: the passenger car's group, wholly ticked.
+    tops["Passenger car"].child(1).setCheckState(0, Qt.CheckState.Checked)
     assert street.command.text() == (
-        "python passby_demo.py all --vehicle police_car --sources police_car_siren"
+        "python passby_demo.py all --sources 'Passenger car,Police car'"
     )
-    vehicle.pick(("police_car", "bus"))
-    assert vehicle.value() == ("police_car", "bus") and sources.value() is None
-    assert street.command.text() == "python passby_demo.py all --vehicle police_car,bus"
+    assert rows() == ["car", "car_horn", "police_car", "police_car_siren"]
+    # Together, in one part: sources with Doppler move together.
+    play.setCurrentIndex(play.findData("together"))
+    assert street.command.text().endswith(" --sources-play together")
     assert street.problem.text() == ""
+    assert street.parts.text() == (
+        "This run makes one video, passby_Passenger-car+Police-car_binaural.mp4."
+    )
+    play.setCurrentIndex(play.findData("in-turn"))
+    sources.own.click()
+    assert street.command.text() == "python passby_demo.py all" and rows() == ["car"]
     street.deleteLater()
 
 

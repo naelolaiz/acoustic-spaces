@@ -185,10 +185,11 @@ def test_the_series_orders_the_parts_outermost_first() -> None:
 
 
 def test_each_part_plays_its_own_sources_in_turn() -> None:
-    """In turn, each vehicle of a series plays its own sources one after another (the
-    car its one, the police car itself, then its siren), named apart from the run of
-    the vehicles alone; a demo with no choice of sources, or one listener, has no parts
-    of them; --hrtf with no binaural part is refused as for one run."""
+    """In turn, each name or group --sources gives plays in a part of its own (the car,
+    the police car itself and its siren together, then its siren alone), named apart
+    from the run of them together; --sources stands before --step among the options, so
+    its turns are outermost; a demo with no choice of sources, or one listener, has no
+    parts of them; --hrtf with no binaural part is refused as for one run."""
     street = _demo("passby", "street")
 
     def run(*argv: str):
@@ -196,33 +197,27 @@ def test_each_part_plays_its_own_sources_in_turn() -> None:
         assert street.check(args) is None, street.check(args)
         resolved = street.resolved(args)
         return run_folder(resolved).name, [
-            (run_folder(p).name, p.playing) for p in getattr(resolved, "series_parts", [])
+            (run_folder(p).name, p.sources) for p in getattr(resolved, "series_parts", [])
         ]
 
-    for vehicles in ("car,police_car", "police_car,car"):
-        name, parts = run("--vehicle", vehicles, "--sources-play", IN_TURN)
-        assert name == f"passby_{vehicles.replace(',', '+')}_each-source_binaural"
+    for vehicles, named in (
+        ("car,police_car", "car+Police-car"),
+        ("police_car,car", "Police-car+car"),
+    ):
+        name, parts = run("--vehicle", vehicles)
+        assert name == f"passby_each-{named}_binaural"
         assert sorted(parts) == [
-            ("passby_car_binaural", ("car",)),
-            ("passby_police_car_police_car_binaural", ("police_car",)),
-            ("passby_police_car_police_car_siren_binaural", ("police_car_siren",)),
+            ("passby_Police-car_binaural", "Police car"),
+            ("passby_binaural", "car"),
         ]
-    assert run("--vehicle", "car,police_car")[0] == "passby_car+police_car_binaural"
-    name, parts = run("--vehicle", "police_car,fire_engine", "--sources-play", IN_TURN)
-    assert [p[1] for p in parts] == [
-        ("police_car",),
-        ("police_car_siren",),
-        ("fire_engine",),
-        ("fire_engine_siren",),
-        ("fire_engine_horn",),
-    ]
-    # --sources stands before --step among the options: its turns are outermost.
-    name, parts = run("--vehicle", "police_car", "--sources-play", IN_TURN, "--step", "1,2")
+    name, parts = run("--sources", "car,police_car", "--sources-play", "together")
+    assert name == "passby_car+police_car_binaural" and not parts
+    name, parts = run("--sources", "Police car,police_car_siren", "--step", "1,2")
     assert [p[0] for p in parts] == [
-        "passby_police_car_police_car_binaural",
-        "passby_police_car_police_car_step-2_binaural",
-        "passby_police_car_police_car_siren_binaural",
-        "passby_police_car_police_car_siren_step-2_binaural",
+        "passby_Police-car_step-1_binaural",
+        "passby_Police-car_step-2_binaural",
+        "passby_police_car_siren_step-1_binaural",
+        "passby_police_car_siren_step-2_binaural",
     ]
     flight = _demo("flight", "airport")
     for argv, problem in (
@@ -243,9 +238,9 @@ def test_each_part_plays_its_own_sources_in_turn() -> None:
 
 def test_values_that_change_nothing_make_one_part() -> None:
     """Several values of an option that changes nothing with the sources picked (the
-    railway's horn when it does not sound, the siren of a police car heard without it)
-    come out as one run, that of the default; with another part between them, each
-    plays once and the run is named after what differs."""
+    railway's horn when it does not sound) come out as one run, that of the default; a
+    part they change nothing for (the street's car, for its sirens) plays once, and the
+    run is named after the values that differ, not after the part's none."""
     railway = _demo("passby", "railway")
     args = railway.parser().parse_args(["all", "--horn", "blasts,chord"])
     assert railway.check(args) is None
@@ -254,18 +249,14 @@ def test_values_that_change_nothing_make_one_part() -> None:
     assert not getattr(resolved, "series_parts", None)
     street = _demo("passby", "street")
     args = street.parser().parse_args(
-        ["all", "--vehicle", "police_car", "--sources", "police_car", "--siren", "wail,yelp"]
-    )
-    assert run_folder(street.resolved(args)).name == "passby_police_car_police_car_binaural"
-    args = street.parser().parse_args(
-        ["all", "--vehicle", "car,police_car", "--siren", "wail,yelp"]
+        ["all", "--sources", "car,Police car", "--siren", "wail,yelp"]
     )
     resolved = street.resolved(args)
-    assert run_folder(resolved).name == "passby_car+police_car_siren-wail+yelp_binaural"
+    assert run_folder(resolved).name == "passby_each-car+Police-car_siren-wail+yelp_binaural"
     assert [run_folder(p).name for p in resolved.series_parts] == [
-        "passby_car_binaural",
-        "passby_police_car_binaural",
-        "passby_police_car_siren-yelp_binaural",
+        "passby_binaural",
+        "passby_Police-car_siren-wail_binaural",
+        "passby_Police-car_siren-yelp_binaural",
     ]
 
 

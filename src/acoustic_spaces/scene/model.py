@@ -1737,22 +1737,229 @@ class RoadVehicleModel(_Model):
         "once every two turns",
     )
 
-    #: What the method needs of the source's trajectory, for its messages.
-    needs: ClassVar[str] = (
+    #: What the method needs of the source's trajectory, for its messages; None for a
+    #: method whose sound power takes no speed.
+    needs: ClassVar[str | None] = (
         "CNOSSOS-EU gives a road vehicle's sound power as it drives, at one steady speed"
     )
+    #: Whether its made sound sounds all along (else now and then, its sound power the
+    #: average over its sounding and its pauses).
+    steady: ClassVar[bool] = True
 
-    def power_db(self, speed_m_s: float, temperature_c: float) -> list[float]:
+    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
         """The sound power per octave band (dB re 1 pW) at ``speed_m_s`` in air at
         ``temperature_c``."""
         from acoustic_spaces.demos.road import vehicle_power
 
+        if speed_m_s is None:
+            raise ValueError(f"{self.needs}: give the source a trajectory")
         power = vehicle_power(self.category, 3.6 * float(speed_m_s), float(temperature_c))
         return [round(float(v), 6) for v in power.total_db]
 
 
-#: The models a source's sound power and made sound can come from (``model``).
-SourceModel = RoadVehicleModel
+#: The patterns a siren sounds: its pitch swept up and down slowly (wail) or fast
+#: (yelp), or two tones a fourth apart in turn (two_tone).
+SirenPattern = Literal["wail", "yelp", "two_tone"]
+SIREN_PATTERNS: tuple[str, ...] = ("wail", "yelp", "two_tone")
+
+
+class SirenModel(_Model):
+    """A vehicle's siren (:mod:`acoustic_spaces.demos.siren`): an electronic siren's
+    square wave in ``pattern``, its sound power that of the 100 W electronic siren the
+    National Bureau of Standards measured (NBS SP 480-28, 1978: its yelp 118 dB(A) 3 m
+    in front of it on its axis, through the directivity measured with it), as loud in
+    every pattern, ``gain_db`` louder; the source's directivity is its own (the
+    examples' siren.csv is the one NBS measured). It sounds all along, at any speed or
+    standing."""
+
+    method: Literal["siren"] = Field(
+        description="the method that gives the source's sound power: siren, a vehicle's"
+    )
+    pattern: SirenPattern = Field(
+        default="wail",
+        description="how it sounds: wail or yelp, its pitch swept 500 to 1500 Hz 12 or 180 "
+        "times a minute (California's rule), or two_tone, 440 and 586.7 Hz in turn, 3 s the "
+        "pair (the Swiss rule, DIN 14610's values)",
+    )
+    patterns: list[SirenPattern] = Field(
+        default_factory=lambda: list(SIREN_PATTERNS),
+        min_length=1,
+        description="the patterns it can sound, which a demo's --siren picks from (default "
+        "all three, an electronic siren's; a two-tone horn's two_tone alone)",
+    )
+    gain_db: float = Field(
+        default=0.0,
+        ge=-30.0,
+        le=30.0,
+        description="how much louder than the 100 W siren NBS measured it is (dB)",
+    )
+
+    needs: ClassVar[str | None] = None
+    steady: ClassVar[bool] = True
+
+    @model_validator(mode="after")
+    def _a_pattern_it_sounds(self) -> SirenModel:
+        if self.pattern not in self.patterns:
+            raise ValueError(
+                f"the siren sounds {', '.join(self.patterns)}, not {self.pattern}: give it "
+                f"{self.pattern} in patterns too, or another pattern"
+            )
+        return self
+
+    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+        """The sound power per octave band (dB re 1 pW): its pattern's
+        (:data:`acoustic_spaces.demos.siren.POWER_DB`), ``gain_db`` up; it takes no speed
+        or air."""
+        from acoustic_spaces.demos.siren import POWER_DB
+
+        return [round(v + self.gain_db, 6) for v in POWER_DB[self.pattern]]
+
+
+#: The horns a horn model sounds (:mod:`acoustic_spaces.demos.horn`).
+HornKind = Literal["air_horn", "disc_horns", "train_horn"]
+
+
+class HornModel(_Model):
+    """A vehicle's horn in blasts (:mod:`acoustic_spaces.demos.horn`): ``kind`` an air
+    horn of two trumpets as loud as the EU's rule for vehicles' horns lets one be on its
+    bench (118 dB(A) 2 m in front of it), a pair of a car's disc horns (Hella's S77, 110
+    dB(A) 2 m away) or a train's warning horn (the two notes of the EU's rule for trains,
+    each 109 dB(C) 25 m ahead, EN 15153-2's most). It sounds now and then, in short
+    blasts: its sound power is the average over its blasts and their pauses, as its made
+    sound plays them; the source's directivity is its own."""
+
+    method: Literal["horn"] = Field(
+        description="the method that gives the source's sound power: horn, a vehicle's in blasts"
+    )
+    kind: HornKind = Field(
+        description="the horn: air_horn (a fire engine's or a truck's, 150 and 180 Hz "
+        "together), disc_horns (a car's pair, 360 and 430 Hz) or train_horn (660 and 370 Hz "
+        "in turn)"
+    )
+    signal: Literal["blasts", "chord"] = Field(
+        default="blasts",
+        description="how it sounds: blasts, as the horn does; chord, a train horn's two notes "
+        "together in the same blasts (EN 15153-2 allows it)",
+    )
+
+    needs: ClassVar[str | None] = None
+    steady: ClassVar[bool] = False
+
+    @model_validator(mode="after")
+    def _a_chord_of_notes_in_turn(self) -> HornModel:
+        if self.signal == "chord" and self.kind != "train_horn":
+            raise ValueError(f"a chord is a train horn's notes together; {self.kind} has none")
+        return self
+
+    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+        """The sound power per octave band (dB re 1 pW): the average of its blasts and
+        pauses (:data:`acoustic_spaces.demos.horn.POWER_DB`); it takes no speed or air."""
+        from acoustic_spaces.demos.horn import POWER_DB
+
+        return [round(float(v), 6) for v in POWER_DB[(self.kind, self.signal)]]
+
+
+#: The trains (and the tram) a rail model runs (:data:`acoustic_spaces.demos.rail.TRAINS`).
+RailTrain = Literal["s_bahn", "regional", "intercity", "freight", "tram"]
+#: Schall 03's tracks: a train's (Tabelle 7) and a tram's (Tabelle 15).
+RailTrack = Literal[
+    "ballast", "slab", "slab_absorber", "level_crossing", "street", "grass_low", "grass_high"
+]
+#: The heights of a train's sources above the rail top, Schall 03's h = 1, 2 and 3 (m).
+RAIL_HEIGHTS_M: dict[str, float] = {"rail_top": 0.0, "roof": 4.0, "pantograph": 5.0}
+RailHeight = Literal["rail_top", "roof", "pantograph"]
+
+
+class RailVehicleModel(_Model):
+    """A train or a tram of Schall 03 (16. BImSchV, Anlage 2, 2014: Germany's method for
+    the noise of railways and tramways), its sources at one ``height`` above the rail
+    top: at the rail top (its wheels, bogies, motors and the fans under its floor), 4 m
+    up (its roof's fans and its pantograph's foot) or 5 m up (its pantograph's head).
+    The source is the front of ``train``, which runs on ``track`` along its trajectory,
+    at the speed the trajectory goes. The method's sources at that height are points
+    along the train behind its front (:func:`acoustic_spaces.demos.rail.train_points`:
+    at each unit's bogies at the rail top, over its cars on the roof, its pantograph in
+    its middle), each an even share of its unit's sound power there at that speed; the
+    source's sound power is its first point's. A demo of the scene plays every point as
+    far behind the front as it is, each with a sound of its own (noise with its octave
+    spectrum, :func:`acoustic_spaces.demos.rail.point_sound`) at its own sound power,
+    along the trajectory with Doppler. The source's directivity is its own (the
+    examples' tram.csv and train.csv are Schall 03's, round the track)."""
+
+    method: Literal["schall-03"] = Field(
+        description="the method that gives the source's sound power: schall-03, Germany's "
+        "for railways and tramways"
+    )
+    train: RailTrain = Field(
+        description="the train: s_bahn (an S-Bahn, a four-car electric multiple unit), "
+        "regional (an electric locomotive and five coaches), intercity (a locomotive and "
+        "twelve coaches), freight (a locomotive and 24 wagons with composite blocks, 5 of "
+        "them tank wagons) or tram (a low-floor tram with air conditioning)"
+    )
+    track: RailTrack = Field(
+        default="ballast",
+        description="the track it runs on, for Schall 03's corrections to its sound power: "
+        "a train's ballast (sleepers in ballast), slab, slab_absorber (slab track with "
+        "absorbers) or level_crossing (Tabelle 7); a tram's ballast, street (set in the "
+        "street), grass_low or grass_high (grassed track, the grass low or up to the rail "
+        "top; Tabelle 15)",
+    )
+    height: RailHeight = Field(
+        default="rail_top",
+        description="the train's sources the source is: those at the rail top (0 m), on "
+        "its roof (4 m up) or its pantograph's head (5 m up)",
+    )
+
+    needs: ClassVar[str | None] = (
+        "Schall 03 gives a train's sound power as it runs, at one steady speed"
+    )
+    steady: ClassVar[bool] = True
+
+    @model_validator(mode="after")
+    def _a_track_and_a_height_it_has(self) -> RailVehicleModel:
+        from acoustic_spaces.demos.rail import REFERENCE_SPEED_KMH, TRACKS, TRAINS, TRAM_TRACKS
+
+        train = TRAINS[self.train]
+        tram = train.units[0].kind.tram
+        tracks = TRAM_TRACKS if tram else TRACKS
+        if self.track not in tracks:
+            raise ValueError(
+                f"Schall 03 has tracks {', '.join(tracks)} for {'trams' if tram else 'trains'}, "
+                f"not {self.track}"
+            )
+        from acoustic_spaces.demos.rail import train_points
+
+        heights = {p.height_m for p in train_points(train, REFERENCE_SPEED_KMH, self.track)}
+        if RAIL_HEIGHTS_M[self.height] not in heights:
+            has = [name for name, m in RAIL_HEIGHTS_M.items() if m in heights]
+            raise ValueError(
+                f"Schall 03 gives {self.train} no sources at the height {self.height}; it has "
+                f"them at {' and '.join(has)}"
+            )
+        return self
+
+    def points(self, speed_m_s: float):
+        """The train's points at its height at ``speed_m_s``, from the front
+        (:class:`acoustic_spaces.demos.rail.Point`)."""
+        from acoustic_spaces.demos.rail import TRAINS, train_points
+
+        height = RAIL_HEIGHTS_M[self.height]
+        every = train_points(TRAINS[self.train], 3.6 * float(speed_m_s), self.track)
+        return [p for p in every if p.height_m == height]
+
+    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+        """The sound power per octave band (dB re 1 pW) of its first point at
+        ``speed_m_s``; Schall 03 takes no air."""
+        if speed_m_s is None:
+            raise ValueError(f"{self.needs}: give the source a trajectory")
+        return [round(float(v), 6) for v in self.points(speed_m_s)[0].power_db]
+
+
+#: The models a source's sound power and made sound can come from (``model``), by their
+#: method.
+SourceModel = Annotated[
+    RoadVehicleModel | SirenModel | HornModel | RailVehicleModel, Field(discriminator="method")
+]
 
 
 class Source(_Model):
@@ -1818,7 +2025,9 @@ class Source(_Model):
             "a standard method that gives the source's sound power in place of level_db, "
             "and a sound made to it that a demo of the scene plays unless signal or channel "
             "gives another: cnossos-eu (a road vehicle, at the speed of its trajectory, in "
-            "the scene's air)"
+            "the scene's air), siren (a vehicle's siren), horn (a vehicle's horn in blasts) "
+            "or schall-03 (a train or a tram, its sources at one height, at the speed of its "
+            "trajectory)"
         ),
     )
     gain_db: float = Field(
@@ -1966,7 +2175,7 @@ class Source(_Model):
             raise ValueError("model gives the source's sound power per band: it does not talk")
         if self.extended:
             raise ValueError("a model's source is a point, not a line or a surface")
-        if self.trajectory is None:
+        if self.model.needs is not None and self.trajectory is None:
             raise ValueError(f"{self.model.needs}: give the source a trajectory")
         self.__dict__["level_db"] = self.model_level_db()
         return self
@@ -1982,19 +2191,23 @@ class Source(_Model):
 
     def model_level_db(self) -> list[float]:
         """The sound power per octave band its :attr:`model` gives it (dB re 1 pW): at
-        the speed of its trajectory, in the scene's air (20 °C until a scene gives it
-        its own)."""
-        if self.model is None or self.trajectory is None:
-            raise ValueError(f"{self.name!r} has no model with a trajectory")
-        speed = steady_speed_m_s(self.position, self.trajectory, self.model.needs)
+        the speed of its trajectory where the method takes one, in the scene's air (20
+        °C until a scene gives it its own)."""
+        if self.model is None:
+            raise ValueError(f"{self.name!r} has no model")
+        speed = None
+        if self.model.needs is not None:
+            if self.trajectory is None:
+                raise ValueError(f"{self.model.needs}: give the source a trajectory")
+            speed = steady_speed_m_s(self.position, self.trajectory, self.model.needs)
         return self.model.power_db(speed, self._air_c)
 
     def model_copy(self, *, update=None, deep: bool = False) -> Source:
-        """A copy, with ``update``; a source with a model gets its sound power anew at
-        its trajectory's speed (:meth:`model_level_db`), so that a run that sets another
-        speed sets the power with it."""
+        """A copy, with ``update``; a source with a model gets its sound power anew
+        (:meth:`model_level_db`), so that a run that sets another speed, or another
+        pattern of a siren, sets the power with it."""
         copy = super().model_copy(update=update, deep=deep)
-        if copy.model is not None and copy.trajectory is not None:
+        if copy.model is not None and (copy.model.needs is None or copy.trajectory is not None):
             copy.__dict__["level_db"] = copy.model_level_db()
         return copy
 

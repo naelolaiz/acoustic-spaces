@@ -787,15 +787,30 @@ def test_the_railway_demo_sounds_the_trains_horn(tmp_path, monkeypatch) -> None:
     assert told > 5.0 and over == pytest.approx(told, abs=1.5)
 
 
+def _a_energy(x: np.ndarray) -> float:
+    """The A-weighted energy of the mono ``x`` at RATE, by its spectrum, per sample."""
+    from acoustic_spaces.demos.audio import a_gain
+
+    f = np.fft.rfftfreq(len(x), 1.0 / RATE)
+    return float(np.sum(np.abs(np.fft.rfft(x) * a_gain(f)) ** 2)) / len(x)
+
+
 def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
-    """--vehicle tram in the street: its four bogies at the rail top and its roof's two
-    halves, on a track set in the street."""
+    """--vehicle tram in the street: the tram's sources of a Schall 03 model, its four
+    bogies at the rail top and its roof's two halves on a track set in the street, each
+    point behind the first played as far behind it as it is, and heard so in the
+    pass's levels: the bogies, of one sound power, each that of the first, give the
+    pass's sound exposure that of the first's four times over, as their sounds give the
+    mix."""
     pytest.importorskip("PIL")
     import shutil
 
     import yaml
 
-    from acoustic_spaces.demos import load, pipeline
+    from acoustic_spaces.demos import load, models, pipeline, scene_demo
+    from acoustic_spaces.demos.audio import read
+    from acoustic_spaces.room import Room
+    from acoustic_spaces.walkthrough import render_movement, simulate_movement
 
     folder = tmp_path / "street"
     shutil.copytree(Path(example_path("street")).parent, folder)
@@ -814,14 +829,50 @@ def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     demo = load(folder / "passby_demo.py").at(folder)
     run = ["all", "--vehicle", "tram", "--step", "4", "--no-mp4"]
-    assert demo.moving(demo.resolved(demo.parser().parse_args(run))) == ["tram", "tram_roof"]
+    args = demo.resolved(demo.parser().parse_args(run))
+    assert demo.moving(args) == ["tram", "tram_roof"]
     assert demo.main(run) == 0
-    work = demo.run_folder(demo.parser().parse_args(run))
-    info = pipeline.read_json(work / "tram" / "tram.json")
-    assert info["train"] == "tram" and info["track"] == "street"
-    assert [len(info["parts"][p]) for p in ("tram", "tram_roof")] == [4, 2]
-    facts = pipeline.read_json(work / "walk" / "walk.json")
-    assert facts["about"].startswith("A low-floor tram, 30 m long, at 50 km/h on track set")
+    feeds = scene_demo.feeds_folder(args)
+    table = pipeline.read_json(feeds / scene_demo.FEEDS)["sources"]
+    assert [table[name]["behind"] for name in ("tram", "tram_roof")] == [3, 1]
+    assert table["tram"]["brief"].startswith("noise at its 4 bogies at the rail top")
+    behind_x, _ = read(feeds / scene_demo.BEHIND / "tram.wav")
+    first, _ = read(feeds / "tram.wav")
+    first = np.asarray(first).reshape(len(first), -1)[:, 0]
+    assert behind_x.shape == (len(first), 3)
+    # Each bogie's own noise, as loud as the first's.
+    rms = np.sqrt(np.mean(np.column_stack([first, behind_x]) ** 2, axis=0))
+    np.testing.assert_allclose(rms, rms[0], rtol=0.02)
+    assert abs(np.corrcoef(first, behind_x[:, 0])[0, 1]) < 0.05
+    seats = pipeline.read_json(demo.run_folder(args) / scene_demo.MOVING / pipeline.SEATS)
+    heard = seats["movement"]["passes"]["pavement"]
+    assert "Sound power of tram at 50 km/h" in heard["about"]
+    assert "(Schall 03, its 4 bogies at the rail top)" in heard["about"]
+    assert "(Schall 03, 2 points on its roof, 4 m up)" in heard["about"]
+    # The last bogie, 25.5 m behind the front, passes the trajectory's end 1.8 s after it.
+    assert heard["heard_s"][-1] > 40.0 / 13.89 + 25.5 / 13.89
+    # The bogies against the first alone, in the pass's levels and in its sound.
+    scene = scene_demo.moving_scene(args)
+    room = Room.from_scene(scene)
+    movement = simulate_movement(room)
+    (tram,) = [s for s in scene.sources if s.name == "tram"]
+    c = room.speed_of_sound()
+
+    def passing():
+        return scene_demo.passes_of(movement, [tram], ["pavement"], c, 20.0)["pavement"]
+
+    every = passing()
+    lead, behind = models.trail(tram)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(models, "trail", lambda source: (0.0, ()))
+        alone = passing()
+    assert every["sel_a_db"] - alone["sel_a_db"] == pytest.approx(10.0 * math.log10(4), abs=0.01)
+    x = (first, RATE)
+    points = {"tram": [(lag, (behind_x[:, k], RATE)) for k, (lag, _) in enumerate(behind)]}
+    heard_every = render_movement(movement, {"tram": x}, followers=points, leads={"tram": lead})
+    heard_alone = render_movement(movement, {"tram": x})
+    ratio = _a_energy(heard_every["pavement"][:, 0]) / _a_energy(heard_alone["pavement"][:, 0])
+    assert 10.0 * math.log10(ratio) == pytest.approx(10.0 * math.log10(4), abs=0.1)
 
 
 def test_the_lines_on_a_trains_stills_fit_them() -> None:

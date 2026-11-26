@@ -264,11 +264,25 @@ def listener_names(text: str | None) -> list[str] | None:
     return given_names(text)
 
 
+#: What joins names ``--sources`` gives into one part where they play in turn
+#: (``car+car_horn``).
+JOINED = "+"
+
+
+def joined_names(name: str) -> list[str]:
+    """The names ``name`` (one of ``--sources``) joins with :data:`JOINED`, or itself."""
+    return [part.strip() for part in str(name).split(JOINED) if part.strip()]
+
+
 def source_matches(source: Source, name: str) -> bool:
     """Whether ``--sources`` picks ``source`` by ``name``: its own, its group's
-    (``PA/Mains``) or that of a group its group is in (``PA``)."""
+    (``PA/Mains``) or that of a group its group is in (``PA``); or by one of the names
+    ``name`` joins (``car+car_horn``, :func:`joined_names`)."""
     group = source.group or ""
-    return name == source.name or bool(group) and (group == name or group.startswith(name + "/"))
+    return any(
+        part == source.name or bool(group) and (group == part or group.startswith(part + "/"))
+        for part in joined_names(name)
+    )
 
 
 def playing(args: argparse.Namespace, names: Sequence[str]) -> list[str]:
@@ -695,7 +709,8 @@ def sources_options(
         Option(
             "sources_play",
             f"{TOGETHER}: the picked sources in one mix; {IN_TURN}: each name --sources "
-            "gives (a group as one), or without it each top group of the demo's own pick, "
+            f"gives (a group as one, names joined with {JOINED} as one), or without it each "
+            "top group of the demo's own pick, "
             "alone, one after another in one video, each after a title card (a run with one "
             "of them plays as one together)",
             play,
@@ -816,6 +831,23 @@ def common_options(work: str = "demo") -> list[Option]:
     ]
 
 
+class _ReadsOld(argparse.ArgumentParser):
+    """A demo's parser, whose arguments come back with the flags of its script before
+    it became a preset folded into the demo's options (:attr:`Demo.reads_old`), or an
+    error that says what is wrong with them."""
+
+    def __init__(self, *args, reads_old=None, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.reads_old = reads_old
+
+    def parse_known_args(self, args=None, namespace=None):  # type: ignore[override]
+        parsed, extras = super().parse_known_args(args, namespace)
+        problem = None if self.reads_old is None else self.reads_old(parsed)
+        if problem:
+            self.error(problem)
+        return parsed, extras
+
+
 @dataclass
 class Demo:
     """A demo: its steps in order (with :data:`SIMULATE` where the simulation goes),
@@ -897,6 +929,16 @@ class Demo:
     #: How the sources a run plays count in its name (:data:`NAMINGS`): ``plays``, always
     #: (the airport's ``departure``); ``changed``, when they are not the demo's own pick.
     sources_named: str = "changed"
+    #: Flags an example's script took that read together with others, before the script
+    #: became a preset of the demo of any scene: each flag and the keywords of its
+    #: argument (its own ``dest``), which a command line still takes and
+    #: :attr:`reads_old` folds into the demo's own options (the street's ``--vehicle``
+    #: with ``--police-car siren``, which together pick the police car's siren alone).
+    old_flags: tuple[tuple[str, dict[str, Any]], ...] = ()
+    #: How :attr:`old_flags` given on a command line set the demo's own options, in the
+    #: arguments as parsed (and without those flags' own keys after it): what is wrong
+    #: with them, or None.
+    reads_old: Callable[[argparse.Namespace], str | None] | None = None
     _folder: Path | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -1095,18 +1137,17 @@ class Demo:
         return dim
 
     def idle(self, args: argparse.Namespace) -> set[str]:
-        """The options (by name) that change nothing in a run with ``args`` and stand at
-        their defaults (:attr:`Option.moot`): what the editor leaves out of view, as a
-        song's stems beside a free recording; none where the arguments cannot be read."""
+        """The options (by name) that change nothing in a run with ``args``, whatever
+        they are set to (:attr:`Option.moot`): what the editor leaves out of view and out
+        of the command, keeping what they are set to for when they matter again, as a
+        song's stems beside a free recording, or ``--siren yelp`` once the police car is
+        unticked (the command line refuses one given there); none where the arguments
+        cannot be read."""
         out: set[str] = set()
         try:
             single = self._single(args)
             for option in self.options:
-                if option.moot is None:
-                    continue
-                if getattr(args, option.name, None) not in (None, option.default):
-                    continue
-                if option.moot(single) is not None:
+                if option.moot is not None and option.moot(single) is not None:
                     out.add(option.name)
         except Exception:  # what is wrong, the check says
             return set()
@@ -1132,7 +1173,8 @@ class Demo:
 
     def _turns(self, args: argparse.Namespace) -> list[str]:
         """The sources a run with ``args`` (paths resolved) plays in turn: each name
-        ``--sources`` gives (a group plays as one part); without it, each top group of
+        ``--sources`` gives (a group plays as one part, and so do names joined with
+        :data:`JOINED`); without it, each top group of
         the demo's own pick (``PA`` for ``PA/Mains`` and ``PA/Fills``), a source of no
         group by its name."""
         given = given_names(getattr(args, "sources", None))
@@ -1363,8 +1405,16 @@ class Demo:
         if series:  # what several values come to in the parts, those that changed nothing one
             for name, value in list(values.items()):
                 if isinstance(value, tuple):
-                    held = list(dict.fromkeys(getattr(part, name, None) for part in series))
-                    values[name] = held[0] if len(held) == 1 else tuple(held)
+                    # A part the option changes nothing for (the police car itself, for
+                    # --siren) takes none of them.
+                    held = list(
+                        dict.fromkeys(
+                            v
+                            for v in (getattr(part, name, None) for part in series)
+                            if v is not None
+                        )
+                    )
+                    values[name] = (held[0] if held else None) if len(held) < 2 else tuple(held)
         changed: list[tuple[str, str]] = []
         for option in self.options:
             naming = option.naming
@@ -1584,7 +1634,10 @@ class Demo:
     # -- arguments ------------------------------------------------------------------
 
     def parser(self) -> argparse.ArgumentParser:
-        parser = argparse.ArgumentParser(description=self.description)
+        """The demo's command line: its step, its options and the flags of its script
+        before it became a preset (:attr:`old_flags`), which the parsed arguments come
+        back folded into its options by (:attr:`reads_old`)."""
+        parser = _ReadsOld(description=self.description, reads_old=self.reads_old)
         choices = [s.name for s in self.steps] + ["all"]
         choices += list(dict.fromkeys(alias for s in self.steps for alias in s.aliases))
         parser.add_argument(
@@ -1595,6 +1648,12 @@ class Demo:
         )
         for option in self.options:
             option.add_to(parser)
+        for flag, kwargs in self.old_flags:
+            parser.add_argument(
+                flag,
+                default=argparse.SUPPRESS,
+                **({"help": "as the example's script took it before"} | kwargs),
+            )
         return parser
 
     def defaults(self) -> argparse.Namespace:
@@ -1746,15 +1805,19 @@ class Demo:
                     return f"{option.option} {name}: not one of {', '.join(option.choices)}"
                 if not Path(file).is_file():
                     return f"{option.option} {name}: no {file}"
+        # The demo's own first, which may say more of a name --sources gives (the
+        # stadium's helicopter, left out of the concert's simulation).
         if self.problems is not None:
             problem = self.problems(self, args)
             if problem:
                 return problem
-        return self._sources_problem(resolved) or self._listeners_problem(args, resolved)
+        return self.sources_problem(resolved) or self._listeners_problem(args, resolved)
 
-    def _sources_problem(self, resolved: argparse.Namespace) -> str | None:
-        """What is wrong with the sources ``--sources`` names: none at all, or one that is
-        neither a source of the demo nor a group of them (when it can tell)."""
+    def sources_problem(self, resolved: argparse.Namespace) -> str | None:
+        """What is wrong with the sources ``--sources`` names (``resolved``, the run's
+        arguments resolved): none at all, or one that is neither a source of the demo nor
+        a group of them (when it can tell); a demo's own problems (:attr:`problems`) may
+        say it before what the run would then lack."""
         names = given_names(getattr(resolved, "sources", None))
         if names is None or self.sources is None:
             return None
@@ -1763,7 +1826,7 @@ class Demo:
         known = self.source_list(resolved)
         if not known:
             return None
-        for name in names:
+        for name in (part for given in names for part in joined_names(given)):
             if not any(source_matches(source, name) for source in known):
                 groups = sorted({s.group for s in known if s.group})
                 have = ", ".join([s.name for s in known] + groups)
@@ -2094,6 +2157,7 @@ __all__ = [
     "ADVANCED",
     "DONE",
     "IN_TURN",
+    "JOINED",
     "LISTENERS_DIM",
     "RESOLVED_ONLY",
     "SOURCES_DIM",
@@ -2121,6 +2185,7 @@ __all__ = [
     "common_options",
     "digest",
     "input_option",
+    "joined_names",
     "joined_name",
     "mix_stem",
     "name_part",

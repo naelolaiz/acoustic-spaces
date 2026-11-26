@@ -48,7 +48,9 @@ the vibration's velocity at each moment.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -57,6 +59,9 @@ from acoustic_spaces.facade import HOUSE, Facade
 
 #: What ``--indoors`` hears without a house: the pass outdoors, as before.
 OFF = "off"
+#: What a demo of any scene calls what comes in through a house's window: the airborne
+#: sound (EN ISO 12354-3), its ``--indoors`` choices :func:`choices` of it.
+AIRBORNE = "airborne"
 #: The rumble's name among a pass's parts.
 RUMBLE = "rumble"
 #: The house the pass-by demos put at each listener (the railway's vibration.py's
@@ -610,6 +615,164 @@ class StillHouses:
         return out
 
 
+@dataclass(frozen=True)
+class Shaking:
+    """What of a scene where something moves shakes the ground: a train's (or a tram's)
+    ``wheels`` along ``path`` (:class:`~acoustic_spaces.walkthrough.Knots` of its
+    front, from when it sets off)."""
+
+    wheels: Wheels
+    path: object
+
+
+@dataclass
+class MovingHouses:
+    """The listeners of a scene where something moves past (a demo of any scene), each
+    in a house or outdoors: at a listener that stands in front of a building's wall
+    (``inside``, the house each stands in front of, :func:`facing`), what ``--indoors``
+    asks (``house`` and its ``choice``; None: every listener outdoors): the sound
+    through the house's window, the rumble the ground's vibration makes in its room, or
+    both; at the others what moves outdoors. ``passes`` gives the pass outdoors at a
+    listener (:class:`~acoustic_spaces.walkthrough.PassBy`, every source that plays
+    together), by its name, and at the point 2 m in front of the wall of each of
+    ``fronts`` (by :func:`front_name`), where its room takes its level outdoors. What
+    shakes the ground is ``shaking`` (the trains' wheels, :class:`Shaking`), worked
+    out at the times ``grid`` (s on the run's clock): the greatest of their levels at
+    each. ``listeners`` are the listeners' positions, ``loudest_db`` the sound power of
+    the loudest source that plays (dB re 1 pW), ``fmt`` the mixes' format."""
+
+    house: House | None
+    choice: str
+    inside: dict[str, Facing | None]
+    listeners: dict[str, tuple[float, float, float]]
+    passes: Callable[[str], Any]
+    fronts: frozenset[str]
+    shaking: tuple[Shaking, ...]
+    grid: np.ndarray
+    loudest_db: float
+    fmt: Any
+
+    def house_of(self, listener: str) -> Facing | None:
+        """The house ``listener`` is heard in, or None outdoors."""
+        return None if self.house is None else self.inside.get(listener)
+
+    def felt_vdb(self, listener: str) -> np.ndarray:
+        """(N,) how hard the floor of ``listener``'s house shakes at :attr:`grid`, or
+        the ground under it outdoors (VdB); -inf where nothing shakes it."""
+        where = self.house_of(listener)
+        out = np.full(len(self.grid), -np.inf)
+        for each in self.shaking:
+            if where is not None and self.house is not None:
+                level = self.house.ground_vdb(each.wheels, each.path, where, self.grid)
+                level = level + self.house.indoor_vdb
+            else:
+                level = ground_vdb(each.wheels, each.path, self.listeners[listener], self.grid)
+            out = np.maximum(out, level)
+        return out
+
+    def rumble_a_db(self, listener: str) -> np.ndarray:
+        """(N,) the rumble in ``listener``'s house at :attr:`grid` (dB(A))."""
+        assert self.house is not None
+        return self.house.rumble_a_db(self.felt_vdb(listener) - self.house.indoor_vdb)
+
+    def room(self, listener: str):
+        """The pass in the room behind ``listener`` (a
+        :class:`~acoustic_spaces.walkthrough.PassBy`): through its window, from the level
+        2 m in front of its wall (:meth:`House.through`), and its rumble
+        (:meth:`House.rumble_pass`), as ``--indoors`` asks; outdoors, the pass there."""
+        from acoustic_spaces.demos.passby import heard_together
+
+        outside = self.passes(listener)
+        if self.house_of(listener) is None:
+            return outside
+        assert self.house is not None
+        parts = []
+        if self.house.airborne:
+            front = front_name(listener) if listener in self.fronts else listener
+            parts.append(self.house.through(self.passes(front)))
+        if self.house.rumble:
+            rumble = self.rumble_a_db(listener)
+            parts.append(self.house.rumble_pass(RUMBLE, listener, self.grid, rumble))
+        return heard_together(parts)
+
+    def heard(self, listener: str, x: np.ndarray, rate: int, seed: int = 0) -> np.ndarray:
+        """``x`` (samples, channels), the mix outdoors at ``listener`` in the engine's
+        units, as the room behind it hears it: through its window, changed band by band
+        at each moment by as much as the level 2 m in front of its wall is over the
+        listener's (:meth:`House.heard`), or none of it for the rumble alone; and the
+        rumble, as loud as the ground's vibration makes it at each moment
+        (:meth:`House.rumble_sound`), in every channel as a pressure
+        (:func:`pressure_gains`). Outdoors ``x`` as it is; either way as long as the last
+        wheels' vibration lasts, at least."""
+        if self.house_of(listener) is None:
+            return x
+        assert self.house is not None
+        x = np.atleast_2d(np.asarray(x, dtype=float).T).T
+        n = max(len(x), int(math.ceil(float(self.grid[-1]) * rate)))
+        x = np.concatenate([x, np.zeros((n - len(x), x.shape[1]))])
+        out = np.zeros_like(x)
+        if self.house.airborne:
+            if listener in self.fronts:
+                outside = self.passes(listener)
+                shift = front_shift_db(outside, self.passes(front_name(listener)))
+                out = self.house.heard(x, rate, shift, outside.times)
+            else:
+                out = self.house.heard(x, rate)
+        if self.house.rumble:
+            level = self.rumble_a_db(listener)
+            sound = self.house.rumble_sound(self.grid, level, rate, n, self.loudest_db, seed)
+            out = out + sound[:, None] * pressure_gains(self.fmt)[None, :]
+        return out
+
+    def shaker(self, listener: str, rate: int, n: int, seed: int = 0) -> np.ndarray:
+        """(n,) what is felt at ``listener`` over ``n`` samples at ``rate``
+        (:func:`shaker_sound`, m/s)."""
+        return shaker_sound(self.grid, self.felt_vdb(listener), rate, n, PEAK, seed)
+
+    def info(self, listener: str) -> dict:
+        """What ``listener``'s mix keeps of where it is heard: in a house, how the mix was
+        made (``post``), the house (``inside``) and the stills' words of it (``about``);
+        where something shakes the ground, how hard at most (``vibration_vdb``), of the
+        floor or the ground (``shaking``), and in a house with the rumble its loudest
+        (``rumble_a_db``)."""
+        facing = self.house_of(listener)
+        out: dict = {}
+        if facing is not None and self.house is not None:
+            out |= {
+                "post": f"indoors {self.choice}",
+                "inside": facing.name,
+                "about": self.house.words(facing.name),
+            }
+        if self.shaking:
+            felt = float(np.max(self.felt_vdb(listener)))
+            out |= {"vibration_vdb": round(felt, 2), "shaking": "floor" if facing else "ground"}
+            if facing is not None and self.house is not None and self.house.rumble:
+                out["rumble_a_db"] = round(float(np.max(self.rumble_a_db(listener))), 2)
+        return out
+
+
+def moving_pictures(seats: dict) -> dict:
+    """What the stills of a run where something moves say of each listener's house and
+    of what shakes the ground there (:class:`~acoustic_spaces.demos.scene_pictures.
+    Pictures`'s ``indoors``), from its mixes' seats.json (:meth:`MovingHouses.info`): for
+    those in a house, what is heard there (``airborne``, ``about``) and the rumble's
+    loudest; for every listener where something shakes the ground, how hard at most.
+    The passes the stills give hold the rumble itself."""
+    heard = seats.get("seats", {})
+    posts = {str(v["post"]) for v in heard.values() if v.get("post")}
+    choice = next(iter(posts), OFF).removeprefix("indoors ")
+    house = House.of(choice, AIRBORNE) if choice in choices(AIRBORNE) else None
+    out: dict = {"airborne": house is None or house.airborne, "about": {}}
+    for name, seat in heard.items():
+        if "about" in seat:
+            out["about"][name] = seat["about"]
+        if "vibration_vdb" in seat:
+            out.setdefault("vibration_vdb", {})[name] = seat["vibration_vdb"]
+        if "rumble_a_db" in seat:
+            out.setdefault("rumble_a_db", {})[name] = seat["rumble_a_db"]
+    return out
+
+
 #: The name of what is felt among a listener's files: ``<its mix's name>.shaker.wav``.
 SHAKER = "shaker"
 
@@ -760,6 +923,7 @@ def grid(end_s: float) -> np.ndarray:
 
 
 __all__ = [
+    "AIRBORNE",
     "BUILDING",
     "FACADE_M",
     "FACADE_TOLERANCE_M",
@@ -771,7 +935,9 @@ __all__ = [
     "SHAKER",
     "Facing",
     "House",
+    "MovingHouses",
     "Plant",
+    "Shaking",
     "StillHouses",
     "Wheels",
     "a_mean_square",
@@ -787,6 +953,7 @@ __all__ = [
     "ground_vdb",
     "help_of",
     "mean_square",
+    "moving_pictures",
     "plain_mean_square",
     "pressure_gains",
     "shaker_sound",

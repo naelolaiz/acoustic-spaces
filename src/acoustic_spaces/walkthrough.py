@@ -43,9 +43,10 @@ it moves between). Several listeners and sources may move at once, each on its o
 trajectory, all on one clock: :func:`simulate_movement` simulates them together, every mover
 as a copy at each place it takes, in one simulation; :func:`render_movement` plays the
 signals through it as heard at every listener in use, still or moving; and
-:func:`save_movement` writes one WAV per listener. A trajectory with Doppler moves alone, there
-as in a trajectory of its own: every listener hears each early path through its changing
-delay. ``trajectory.enabled: false`` keeps a trajectory
+:func:`save_movement` writes one WAV per listener. A trajectory with Doppler plays as in a
+trajectory of its own: every listener hears each early path through its changing delay. A
+listener's moves alone; sources' move together, beside other sources that move, while no
+listener moves (:func:`doppler_clash`). ``trajectory.enabled: false`` keeps a trajectory
 but leaves its mover standing still, and :func:`with_moving` picks which trajectories are on
 for one run, so that one scene serves both still and moving.
 
@@ -66,6 +67,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -668,13 +670,16 @@ class Movement:
     copies: dict[tuple[str, str], tuple[str, ...]]
     #: How many of the movers' places have a late part of their own; the others mix theirs.
     late_places: int = 0
-    #: Whether the mover, then alone, moves with Doppler (``trajectory.doppler``): each pair it
-    #: is part of plays its early paths through delays that change as it goes.
+    #: Whether a mover moves with Doppler (``trajectory.doppler``): each pair it is part of
+    #: plays its early paths through delays that change as it goes.
     doppler: bool = False
     #: The listeners heard through the head tracker, each with the knots it turns along:
     #: simulated facing ahead (yaw, pitch and roll 0) at each position it takes, its
     #: field turned against the head as it faces then (:func:`render_movement`).
     turning: Mapping[str, Knots] = dataclasses.field(default_factory=dict)
+    #: The movers ((``"listeners"`` or ``"sources"``, name)) that move with Doppler; when
+    #: :attr:`doppler` is set and this is empty, the one mover.
+    with_doppler: frozenset[tuple[str, str]] = frozenset()
 
     @property
     def duration_s(self) -> float:
@@ -695,6 +700,17 @@ class Movement:
         """Whether either of the pair moves."""
         return ("sources", source) in self.copies or ("listeners", listener) in self.copies
 
+    def moves_with_doppler(self, source: str, listener: str) -> bool:
+        """Whether either of the pair moves with Doppler (:attr:`with_doppler`)."""
+        if not self.doppler:
+            return False
+        if not self.with_doppler:
+            return self.moves(source, listener)
+        return ("sources", source) in self.with_doppler or (
+            "listeners",
+            listener,
+        ) in self.with_doppler
+
 
 def turns_on_the_spot(item) -> bool:
     """Whether ``item``'s trajectory (a scene listener or source) turns somewhere without
@@ -709,6 +725,27 @@ def stays_in_place(item) -> bool:
     """Whether ``item``'s trajectory (a scene listener or source) never leaves the place
     it starts at: it turns there, if it moves at all."""
     return bool(np.all(np.ptp(knots(item).positions, axis=0) < 1e-9))
+
+
+def doppler_clash(moving: Sequence[tuple[str, Any]]) -> tuple[str, str, list[str]] | None:
+    """The first mover of ``moving`` ((kind, item) pairs, as :func:`movers` gives them)
+    that moves with Doppler and cannot beside the others, why in words, and the movers
+    that would have to stand for it to; None when they can all move. A listener with
+    Doppler moves alone; a source with Doppler moves beside other sources, with Doppler
+    or without (each pair then has one mover, whose delays change), but beside no
+    listener that moves (a pair whose two ends both move)."""
+    for kind, item in moving:
+        if not item.trajectory.doppler:
+            continue
+        if kind == "listeners":
+            others = [other.name for _, other in moving if other is not item]
+            why = "a listener does alone"
+        else:
+            others = [other.name for k, other in moving if k == "listeners"]
+            why = "no listener that moves hears"
+        if others:
+            return item.name, why, others
+    return None
 
 
 def head_turners(scene, fmt=None) -> list[str]:
@@ -748,8 +785,10 @@ def simulate_movement(
     each mover's trajectory, and barriers and buildings have the paths over their edges, as in
     :func:`simulate_trajectory`.
 
-    Every mover goes slower than sound. A trajectory with Doppler moves alone: with another
-    mover it is refused. It goes without the wave solver, as in :func:`simulate_trajectory`.
+    Every mover goes slower than sound. A listener's trajectory with Doppler moves alone,
+    and sources' with Doppler move beside other sources but no listener that moves
+    (:func:`doppler_clash`): the rest is refused. They go without the wave solver, as in
+    :func:`simulate_trajectory`.
 
     The listeners ``head_tracked`` names (moving listeners, without Doppler; by
     :func:`head_turners` those that turn on the spot) are heard through the head tracker:
@@ -778,19 +817,19 @@ def simulate_movement(
     if tracked and progress is not None:
         names = ", ".join(sorted(tracked))
         progress(f"{names}: the head turned through Ambisonics of order {HEAD_ORDER}")
-    doppler = next((item for _, item in moving if item.trajectory.doppler), None)
-    if doppler is not None:
-        if len(moving) > 1:
-            others = ", ".join(item.name for _, item in moving if item is not doppler)
-            raise ValueError(
-                f"{doppler.name!r} moves with Doppler, which moves alone: leave {others} "
-                f"standing (turn their trajectories off), or turn its doppler off"
-            )
+    with_doppler = frozenset((kind, item.name) for kind, item in moving if item.trajectory.doppler)
+    clash = doppler_clash(moving)
+    if clash is not None:
+        name, why, others = clash
+        raise ValueError(
+            f"{name!r} moves with Doppler, which {why}: leave {', '.join(others)} standing "
+            "(turn their trajectories off), or turn its doppler off"
+        )
+    if with_doppler:
         _check_doppler(room, settings)
-        if doppler.name in tracked:
-            raise ValueError(
-                f"{doppler.name!r} moves with Doppler: the head tracker does not hear it"
-            )
+        for kind, name in sorted(with_doppler):
+            if kind == "listeners" and name in tracked:
+                raise ValueError(f"{name!r} moves with Doppler: the head tracker does not hear it")
     times = np.unique(
         np.concatenate(
             [
@@ -865,7 +904,9 @@ def simulate_movement(
         share_waves=[copy.name for copy in added["sources"]],
     )
     turning = {name: paths[name] for name in sorted(tracked)}
-    return Movement(room, times, result, copies, late_places, doppler is not None, turning)
+    return Movement(
+        room, times, result, copies, late_places, bool(with_doppler), turning, with_doppler
+    )
 
 
 def render_movement(
@@ -877,9 +918,14 @@ def render_movement(
     sample_rate: int | None = None,
     seed: int | None = None,
     equal_power: bool = False,
+    followers: Mapping[str, Sequence[tuple[float, np.ndarray | tuple[np.ndarray, float]]]]
+    | None = None,
+    leads: Mapping[str, float] | None = None,
+    listeners: Sequence[str] | None = None,
 ) -> dict[str, np.ndarray]:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
-    pair) played through the movement, as heard at every listener in use: each as
+    pair) played through the movement, as heard at every listener in use (those of
+    ``listeners`` alone, when given): each as
     (samples, channels) in format ``fmt`` (default mono; mono through each listener's
     microphone when it has a pattern) at ``sample_rate`` (default: the simulation's), all
     of one length and, as in :func:`render_trajectory`, each signal scaled by its source's
@@ -890,6 +936,11 @@ def render_movement(
     through its one response. A source that moves with Doppler, or that a listener
     passes with it, may send an :class:`~acoustic_spaces.emission.Emission` at
     ``sample_rate``, the sound it sends each way, as :func:`render_trajectory` plays it.
+    A source that moves with Doppler at every listener may be heard ``leads`` seconds
+    (by its name) after its trajectory has it at each place, its ``followers`` (by its
+    name: each a (lag_s, signal), as :func:`render_trajectory`'s) that much later and
+    ``lag_s`` more, each scaled as its own signal is: the points of a train behind its
+    front. The mixes are long enough for the last of them.
 
     A listener the movement hears through the head tracker (:attr:`Movement.turning`;
     ``fmt`` binaural) is heard in Ambisonics of :data:`HEAD_ORDER` at each place, facing
@@ -918,16 +969,50 @@ def render_movement(
     unknown = sorted(set(signals) - sources)
     if unknown:
         raise ValueError(f"no source {unknown[0]!r}; the scene has {', '.join(sorted(sources))}")
-    listeners = [lis.name for lis in scene.listeners if lis.in_use]
+    in_use = [lis.name for lis in scene.listeners if lis.in_use]
+    if listeners is not None:
+        unheard = [name for name in listeners if name not in in_use]
+        if unheard:
+            raise ValueError(f"no listener {unheard[0]!r} in use to hear the movement")
+        in_use = list(listeners)
+    listeners = in_use
     if not listeners:
         raise ValueError("no listener in use to hear the movement")
     gains = {} if equal_power else power_gains(scene.sources, signals)
-    each_way = set()
-    if movement.doppler:
-        each_way = {s for s in signals if all(movement.moves(s, lis) for lis in listeners)}
+    each_way = {s for s in signals if all(movement.moves_with_doppler(s, lis) for lis in listeners)}
     dry = _dry(signals, gains, rate, each_way)
+    followers, leads = followers or {}, leads or {}
+    behind: dict[str, list[tuple[int, np.ndarray]]] = {}
+    shifts: dict[str, int] = {}
+    for source in {*followers, *leads}:
+        if source not in dry:
+            raise ValueError(f"sounds follow {source!r}, which plays nothing here")
+        if source not in each_way or not all(
+            movement.moves_with_doppler(source, lis) for lis in listeners
+        ):
+            raise ValueError(
+                f"sounds follow {source!r} along its trajectory with Doppler, which it does "
+                "not move with at every listener"
+            )
+        if isinstance(dry[source], Emission):
+            raise ValueError("sounds follow a moving source that sends one sound every way")
+        lead = float(leads.get(source, 0.0))
+        if not math.isfinite(lead) or lead < 0.0:
+            raise ValueError(f"a source plays 0 s or more behind its trajectory, not {lead}")
+        shifts[source] = int(round(lead * rate))
+        behind[source] = []
+        for lag_s, value in followers.get(source, ()):
+            if not math.isfinite(lag_s) or lag_s < 0.0:
+                raise ValueError(
+                    f"a sound follows the moving source 0 s or more behind it, not {lag_s}"
+                )
+            (follower,) = _dry({source: value}, gains, rate, set()).values()
+            assert isinstance(follower, np.ndarray)
+            behind[source].append((int(round(lag_s * rate)), follower))
     taps = int(math.ceil(max(r.length_s for r in result) * rate))
-    length = max(_samples(x) for x in dry.values()) + taps - 1
+    ends = [_samples(x) + shifts.get(name, 0) for name, x in dry.items()]
+    ends += [shifts[name] + lag + len(x) for name, more in behind.items() for lag, x in more]
+    length = max(ends) + taps - 1
     # Outdoors in turbulence the early paths flicker as the eddies drift past, the same
     # eddies all along.
     turbulent = [r for r in result if flickers(r)]
@@ -956,7 +1041,8 @@ def render_movement(
         out = np.zeros((length, heard.channels))
         for source, signal in dry.items():
             keys = [movement.key(source, listener, k) for k in range(len(times))]
-            if len(set(keys)) == 1 and not (movement.doppler and movement.moves(source, listener)):
+            doppler = movement.moves_with_doppler(source, listener)
+            if len(set(keys)) == 1 and not doppler:
                 # The pair stays where it is (a head that turns on the spot, too): one place.
                 key = keys[0]
                 if flickers(result[key]):
@@ -968,22 +1054,25 @@ def render_movement(
                     wet = convolve(signal, response(key, heard))
                     out[: len(wet)] += wet
                 continue
-            if movement.doppler:
+            if doppler:
                 walks = ("sources", source) in movement.copies
                 positions = np.array([places[key[0] if walks else key[1]] for key in keys])
+                # Heard that much after its trajectory has it there: a view of the mix
+                # from then on, which it adds to.
                 _doppler(
                     result,
                     keys,
                     times,
                     positions,
                     signal,
-                    out,
+                    out[shifts.get(source, 0) :],
                     heard,
                     rate,
                     seed,
                     gusts,
                     source_moves=walks,
                     crossfade_s=crossfade_s,
+                    followers=behind.get(source, ()),
                 )
                 continue
 
@@ -1538,6 +1627,7 @@ __all__ = [
     "TrajectoryResponses",
     "at_speed",
     "crossfade_weights",
+    "doppler_clash",
     "facing_name",
     "facing_of",
     "head_turners",

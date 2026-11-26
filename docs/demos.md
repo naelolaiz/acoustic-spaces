@@ -423,29 +423,59 @@ at each time in seconds. Binaurally, a listener who turns on the spot is heard t
 the head tracker ([several movers at once](spatial-audio.md#several-movers-at-once)).
 `--moving` picks the trajectories of a run without changing the scene: `--moving
 visitor,guide` moves those two and leaves every other mover standing where it starts,
-`--moving none` keeps them all still, so one scene serves both. A trajectory with
-Doppler (a car, a train) moves alone: every listener hears each early path through its
-own delay as it changes, so the pitch shifts as it passes, and the late sound crossfaded
-from place to place ([moving sources and
-Doppler](spatial-audio.md#moving-sources-and-doppler)), all from the one simulation of
-the moving run, as the editor's **Render movement…** plays it. With other trajectories
-on as well, the demo says to leave them standing.
+`--moving none` keeps them all still, so one scene serves both. Sources' trajectories
+with Doppler (a car, a train, a police car and its siren) move together while no
+listener moves: every listener hears each early path through its own delay as it
+changes, so the pitch shifts as it passes, and the late sound crossfaded from place to
+place ([moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)), all
+from the one simulation of the moving run, as the editor's **Render movement…** plays
+it. A listener's trajectory with Doppler moves alone; with a listener moving beside
+them, the demo says which to leave standing.
 
 **Vehicles with a model.** A source whose sound power a [model](scenes.md#sources-and-directivity)
-gives (a road vehicle of CNOSSOS-EU) plays, without a `signal` or a `channel` of its own,
-a sound made to that power at the speed of its trajectory: tyre noise and the firing of
-its engine (`--rpm` turns every such engine faster or slower), silent until it sets off,
-faded in and out over the first and last second of its pass and silent after it
-(as in [vehicles passing by](#vehicles-passing-by), **their sound**). A run at another
-`--speed` or `--rpm` makes its sounds again, into feeds of its own. Such a vehicle does
-not stand: the demo refuses a run whose trajectory for it is off (in the scene, or by
-`--moving`). Where a source moves past a listener who stands, the stills give the pass
+gives (a road vehicle of CNOSSOS-EU, a siren, a horn, or a train or a tram of Schall
+03) plays, without a `signal` or a `channel` of its own, a sound made to that power:
+a road vehicle's tyre noise and the firing of its engine at the speed of its trajectory
+(`--rpm` turns every such engine faster or slower), a siren's square wave in its
+pattern (`--siren` sets every siren's), a horn's blasts (`--horn` sets every train
+horn's), a train's noise with the octave spectrum of its sound power. It is silent until
+its trajectory sets off and after it ends, and faded in and out over the first and last
+second of its pass, but for a horn's blasts, which rise and fall of themselves (as in
+[vehicles passing by](#vehicles-passing-by), **their sound**). A train's or a tram's
+source is its front: every point of the train at the source's height (a tram's four
+bogies at the rail top, the two halves of its roof) plays a noise of its own at its own
+sound power, as far behind the front as it is, each heard through the early paths of
+the place it is at, with its own Doppler, so the train goes by as long as it is; the
+feeds keep what the points behind the first play in `feeds/behind/`, a column each. A
+recording of yours (`--input`) plays at every point, each from another place in it on.
+A run at another `--speed` or `--rpm` makes its sounds again, into feeds of its own.
+Such a source does not stand: its sound plays along its pass, and a road vehicle's or
+a train's sound power is that of its speed, so the demo refuses a run whose trajectory
+for it is off (in the scene, or by `--moving`), but for a siren or a horn that plays a
+recording of yours. Where a source moves past a listener who stands, the stills give the pass
 as a pass-by is measured, each place's level as if the source stood there at the time it
 is heard: the level at that moment, the loudest (L_Amax) and when, the sound exposure
 level (SEL), how close it comes and how far the pitch of its direct sound falls, with
 the level over the pass drawn under the plan; and, for a vehicle with a model, its
 speed and sound power. In **Run demo** the Trajectories box ticks what the run takes in
 (`--sources`), and says how each mover goes in the run, at `--speed` too.
+
+**Indoors.** `--indoors` hears what moves past in the room behind each listener of an
+outdoor scene that stands 0.5 to 2 m in front of a building's wall, where ISO 1996-2
+measures in front of a façade; the other listeners hear it outdoors. `airborne` plays
+it through the room's closed window, from the level 2 m in front of the wall;
+`rumble`, the rumble the ground's vibration makes in the room, which a train's or a
+tram's wheels make (a Schall 03 source at the rail top, by the FTA's general method);
+`airborne_and_rumble`, the two. The room, its window and the rumble are those of
+[trains passing by](#trains-passing-by) (**indoors**): for a listener nearer the wall
+than 2 m, the point 2 m in front of it, square to the wall, is simulated as one more
+listener. Each listener's stills give the room it hears in and how hard its floor, or
+outdoors the ground under it, shakes (VdB), and wherever something shakes the ground
+the run writes a track for a bass shaker beside each mix (`.shaker.wav`) and the
+tour's beside the video. The demo refuses `--indoors` in a run where nothing moves or
+none of whose listeners stands in front of a wall, and the rumble where nothing that
+plays shakes the ground; the Run demo window leaves it out of view where no listener
+stands so.
 
 Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds in
 `feeds/`, the scene as a run changes it in `scenes/`, the results in
@@ -981,49 +1011,52 @@ another (`--recording`).
 
 `passby_demo.py` comes with two outdoor examples, `roadside` and `street`: a vehicle
 drives past and each listener hears one pass in turn, its pitch falling as it goes by.
-In the roadside it is [the demo of its scene](#a-demo-of-any-scene) with the car taken
-in: the car and the truck have a CNOSSOS-EU `model` in the scene, and that demo makes
-their sound and gives their passes (**vehicles with a model**). The script's command
-lines still work there: `--vehicle truck` reads as `--sources truck`, `--vehicle
-car,truck` plays each in a part of its own, `--from` as `--scene`, and its `sound`,
-`scene` and `walk` steps run as `feeds`, `simulate` and `render`; its runs are named as
-that demo names them (`demo/passby_binaural`, `demo/passby_truck_binaural`), and what
-follows of the demo's own scene (`scene_demo.yaml`) and of `--siren` is the street's.
-The video follows the vehicle on the plan, with the level heard over the pass drawn
-under it. `--vehicle` picks what goes past: in the roadside a passenger car (`car`) or
-an articulated truck (`truck`), in the street the car (with `car_horn`, its horn, when
-`--sources` picks it), a city bus (`bus`), a motorcycle (`motorcycle`), a police car with its
-siren on (`police_car`, the car itself, and `police_car_siren`), a fire engine with its
-siren on and its air horn in blasts (`fire_engine`, the vehicle itself,
-`fire_engine_siren` and `fire_engine_horn`) or a tram (`tram`, see [trains passing
-by](#trains-passing-by)).
+In both it is [the demo of its scene](#a-demo-of-any-scene) with the car taken in: the
+vehicles are the scene's sources with a model, left out of the scene's own simulations
+until picked, and that demo makes their sound and gives their passes (**vehicles with
+a model**). The scripts' command lines still work: `--vehicle truck` reads as
+`--sources truck`, `--vehicle car,truck` plays each in a part of its own, `--from` as
+`--scene`, and the `sound`, `scene` and `walk` steps run as `feeds`, `simulate` and
+`render`; in the street, `--car car_and_horn`, `--police-car siren` and `--fire-engine
+truck_and_siren` pick what the car, the police car and the fire engine play, and
+`--indoors tram` and `tram_and_rumble` read as `airborne` and `airborne_and_rumble`.
+The runs are named as that demo names them (`demo/passby_binaural`,
+`demo/passby_truck_binaural`). The video follows the vehicle on the plan, with the
+level heard over the pass drawn under it. `--sources` (or `--vehicle`) picks what goes
+past: in the roadside a passenger car (`car`) or an articulated truck (`truck`); in
+the street the car (`car`, or the group `Passenger car`, the car with `car_horn`, its
+horn), a city bus (`bus`), a motorcycle (`motorcycle`), a police car with its siren on
+(`Police car`: `police_car`, the car itself, and `police_car_siren`), a fire engine
+with its siren on and its air horn in blasts (`Fire engine`: `fire_engine`, the vehicle
+itself, `fire_engine_siren` and `fire_engine_horn`) or a tram (`Tram`: `tram`, at the
+rail top, and `tram_roof`; see [trains passing by](#trains-passing-by)). Each name or
+group goes past in a part of its own, one after another in one video; names joined
+with `+` go past together (`--sources car+car_horn`, the car sounding its horn;
+`fire_engine+fire_engine_siren`, the fire engine without its horn; `police_car_siren`
+alone, the siren without the car).
 
 ```sh
 acoustic-spaces examples --copy . roadside && cd roadside   # or street
-python passby_demo.py all --vehicle truck   # or sound, scene, walk, video one at a time
+python passby_demo.py all --sources truck   # or feeds, simulate, render, video one at a time
 ```
 
-Options: `--vehicle car` what goes past (the car by default), `--speed 70` how fast it
-drives (km/h; without it, the speed of its trajectory in the example's scene: 70 km/h
-for the truck, 50 km/h for the others), `--rpm 2000` how fast its engine turns, for its
-made sound (by default its own: the car's four cylinders at 2000 rpm, the truck's six at
-1200, the bus's and the fire engine's six at 1500 and the motorcycle's two at 4000),
-`--siren wail` the police car's siren (`wail`, `yelp` or `two_tone`), `--sources` which
-of the vehicle's sources play, by name (in the street `police_car_siren` alone, the
-police car's siren without the car; `fire_engine,fire_engine_siren` the fire engine
-without its horn; `car,car_horn` the car with its horn, `car_horn` the horn alone; by
-default every source of the vehicle but the car's horn; `--sources-play in-turn` plays
-them one after another, see [running a demo](#running-a-demo)), `--step 1` how far apart
-the vehicle is simulated along its trajectory (m), `--hrtf me.sofa` a measured head,
-`--input NAME=WAV` a dry recording of yours for the vehicle NAME (`police_car_siren=WAV`
-for the police car's siren, `fire_engine_horn=WAV` for the fire engine's horn,
-`car_horn=WAV` for the car's), `--listeners verge,yard_25m` the listeners it is
-simulated and heard at (every one in use by default), in that order. The vehicle drives
-the length of its trajectory at that speed, so the pass lasts the length divided by the
-speed: the 150 m of the roadside take 10.8 s at 50 km/h, 7.7 s at 70 km/h. The **Run
-demo** window gives the three under its options as they change, and ticks the vehicle
-(the police car's two sources, the fire engine's three, the car's with its horn) in its
-Trajectories box.
+Options: `--speed 70` how fast it drives (km/h; without it, the speed of its trajectory
+in the example's scene: 70 km/h for the truck, 50 km/h for the others), `--rpm 2000`
+how fast its engine turns, for its made sound (by default its own: the car's four
+cylinders at 2000 rpm, the truck's six at 1200, the bus's and the fire engine's six at
+1500 and the motorcycle's two at 4000), `--siren wail` the police car's siren (`wail`,
+`yelp` or `two_tone`; the fire engine's sounds `two_tone` alone), `--step 1` how far
+apart the vehicle is simulated along its trajectory (m), `--hrtf me.sofa` a measured
+head, `--input NAME=WAV` a dry recording of yours for the source NAME
+(`police_car_siren=WAV` for the police car's siren, `fire_engine_horn=WAV` for the fire
+engine's horn, `car_horn=WAV` for the car's), `--listeners verge,yard_25m` the
+listeners it is simulated and heard at (every one in use by default), in that order,
+and in the street `--indoors airborne` the pass in the rooms behind the pavement and
+the balcony (**indoors**, in [a demo of any scene](#a-demo-of-any-scene)). The vehicle
+drives the length of its trajectory at that speed, so the pass lasts the length
+divided by the speed: the 150 m of the roadside take 10.8 s at 50 km/h, 7.7 s at 70
+km/h. The **Run demo** window ticks the vehicle's sources in its Trajectories box (the
+police car's two, the fire engine's three, the tram's two) and says how each goes.
 
 - **The road vehicles** are the example's sources of their names: point sources 0.05 m
   above the road, where CNOSSOS-EU puts a vehicle's sound, each with a trajectory along
@@ -1032,8 +1065,8 @@ Trajectories box.
   or through keyframes timed for one steady speed, since CNOSSOS-EU gives a vehicle's
   sound at a steady speed: keyframes that speed up or slow down by more than 1 % are
   refused, unless `--speed` drives the vehicle through their places at one speed. The
-  demo's scene (`scene_demo.yaml` in the run's folder) has the vehicle alone along its
-  trajectory at that speed, with CNOSSOS-EU's sound power of its category at that speed
+  scene as the run plays it (in `demo/scenes/`) has the vehicle along its trajectory at
+  that speed, with CNOSSOS-EU's sound power of its category at that speed
   on the method's reference road surface, level (the method's corrections for road
   gradients, other surfaces and studded tyres are left out), in the scene's air
   temperature: rolling noise A_R + B_R lg(v/70) + K (20 - t) and propulsion noise A_P +
@@ -1073,11 +1106,10 @@ Trajectories box.
   (`police_car`), a passenger car 0.05 m above the road with CNOSSOS-EU's sound power
   and a sound made as the car's (its engine four cylinders at 2000 rpm, `--rpm`), and
   its siren (`police_car_siren`), the trajectory's points at the height of its roof, 1.5
-  m up, facing the way it drives (its trajectory's `face_forward`). Each is simulated
-  along the trajectory alone, and the two are heard together: their sounds added, each
-  at its own sound power, and the energies of their levels band by band. The demo
-  refuses a siren whose trajectory goes elsewhere in plan or at other times than the
-  car's. `--sources police_car_siren` plays the siren alone. The siren has the level and
+  m up, facing the way it drives (its trajectory's `face_forward`). The two move
+  together in one simulation of the moving scene, each heard through its own paths at
+  its own sound power, and the stills add the energies of their levels band by band.
+  `--sources police_car_siren` plays the siren alone. The siren has the level and
   the directivity of a commercial 100 W electronic siren the National Bureau of
   Standards measured in an anechoic room (NBS Special Publication 480-28, 1978): 3 m
   away, its yelp averaged over 20 s, 118 dB(A) on its axis, 112 dB(A) 50 degrees off it
@@ -1139,7 +1171,7 @@ Trajectories box.
   dB(A) 7 m in front of the vehicle, 0.5 to 1.5 m up (the rule: 93 at least), and, on
   its bench, 110.2 dB(A) between 1800 and 3550 Hz (the rule: 105 at least), its loudest
   component there 6.0 dB over any above 3550 Hz (the rule: over).
-- **The car's horn** (in the street, `--sources car,car_horn`, or `car_horn` alone) is a
+- **The car's horn** (in the street, `--sources car+car_horn`, or `car_horn` alone) is a
   pair of disc horns behind the car's front bumper (`car_horn`), 0.5 m up along the
   car's trajectory, facing the way it drives, with the siren's directivity, in two
   blasts of 0.25 s, 0.15 s apart, every 3 s from the start of the pass, each at its
@@ -1211,7 +1243,7 @@ Trajectories box.
   and adds 0.7 dB to it (113.0 dB(A), the siren alone 112.3). The balcony hears the fire
   engine nearly as loud as the pavement does, as its siren, 3.0 m up in the lane on the
   offices' side, passes 7.6 m from the balcony and 6.2 m from the pavement. With its
-  horn (`--sources car,car_horn`) the car peaks at 97.0 dB(A) on the pavement, 93.9 on the
+  horn (`--sources car+car_horn`) the car peaks at 97.0 dB(A) on the pavement, 93.9 on the
   balcony and 80.5 in the garden, its horn's loudest blast 17.5 to 19.7 dB over the
   car's own loudest.
 
@@ -1242,9 +1274,10 @@ Trajectories box.
 ## Trains passing by
 
 `passby_demo.py` comes with the `railway` example too, and runs a train past its
-listeners; in the street it runs a tram down the middle of the street (`--vehicle
-tram`). Each listener hears one pass in turn, its pitch falling as it goes by, and the
-video follows the train on the plan, with the level heard over the pass drawn under it.
+listeners; in the street it runs a tram down the middle of the street (`--sources
+Tram`, or `--vehicle tram`). Each listener hears one pass in turn, its pitch falling as
+it goes by, and the video follows the train on the plan, with the level heard over the
+pass drawn under it.
 
 ```sh
 acoustic-spaces examples --copy . railway && cd railway
@@ -1265,9 +1298,11 @@ adds its warning horn, see below), `--horn blasts` how the horn sounds (`blasts`
 `chord`), `--indoors off` where it is heard (see below), `--step 1` how far apart the
 train is simulated along its trajectory (m), `--hrtf me.sofa` a measured head, `--input
 train=WAV` a dry recording of yours (`train_roof=WAV` and `train_pantograph=WAV` for the
-sources up on the train, `train_horn=WAV` for its horn). The tram has no options of its
-own but `--indoors`: a low-floor tram with air conditioning, 30 m long, on its track set
-in the street, at the speed of its trajectory (50 km/h) unless `--speed` says.
+sources up on the train, `train_horn=WAV` for its horn). The tram is the street's
+sources `tram` and `tram_roof`, each with a Schall 03 model (`method: schall-03, train:
+tram, track: street`, the roof's at `height: roof`), in the demo of the street's scene:
+a low-floor tram with air conditioning, 30 m long, on its track set in the street, at
+the speed of its trajectory (50 km/h) unless `--speed` says.
 
 - **Their sound power** is that of Schall 03 (Germany's method for the noise of railways
   and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`): for
@@ -1337,8 +1372,10 @@ in the street, at the speed of its trajectory (50 km/h) unless `--speed` says.
   stands 2 m in front of a house 20 m from the track; the street's pavement and balcony
   stand in front of its houses and its offices. `train_and_rumble` plays the train
   through the room's closed window and the rumble the ground's vibration makes in it,
-  `train` the train alone, `rumble` the rumble alone (`tram_and_rumble` and `tram` for
-  the tram). The room is EN ISO 12354-3's, not the building's geometry: AGC's 4-16-4
+  `train` the train alone, `rumble` the rumble alone; in the street, the demo of its
+  scene, `airborne_and_rumble`, `airborne` and `rumble` (**indoors**, in [a demo of any
+  scene](#a-demo-of-any-scene)), with the script's `tram_and_rumble` and `tram` read as
+  the first two. The room is EN ISO 12354-3's, not the building's geometry: AGC's 4-16-4
   double glazing as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82 m² of
   it into a room of 50 m³. Each octave band in the room is the simulated level 2 m in
   front of the wall, the façade's reflection in it (EN ISO 12354-3's L_1,2m), less
@@ -1367,9 +1404,10 @@ in the street, at the speed of its trajectory (50 km/h) unless `--speed` says.
   manual's threshold of perception). Outdoors nothing rumbles: the manual counts
   ground-borne noise only inside buildings. Each listener's vibration is also a track
   for a bass shaker, `.shaker.wav` beside its mix in the run's `walk/` folder, and the
-  tour's beside the video (`passby_regional_binaural_shaker.wav`):
-  noise in the third octave at 25 Hz whose RMS is the vibration's velocity, every
-  listener at one gain, its full scale in `walk.json` (`shaker`).
+  tour's beside the video (`passby_regional_binaural_shaker.wav`): noise in the third
+  octave at 25 Hz whose RMS is the vibration's velocity, every listener at one gain, its
+  full scale in `walk.json` (`shaker`); in the street, the demo of its scene, in
+  `moving/` and its `seats.json`.
 - **Against Schall 03's own sum** (`validation/rail_sources.py`): in a free field, the
   engine's pass of the S-Bahn at 80 km/h and of the regional train at 160 km/h, 7.5 m
   from the track 1.2 m above the rail top and 25 m away 3.5 m above it, gives the same

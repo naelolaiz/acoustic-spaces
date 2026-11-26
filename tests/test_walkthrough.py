@@ -402,8 +402,16 @@ def test_several_movers_on_one_clock() -> None:
     with pytest.raises(ValueError, match="nothing moves"):
         simulate_movement(stills)
     fast = {**sources[0], "trajectory": {**sources[0]["trajectory"], "doppler": True}}
-    with pytest.raises(ValueError, match="'s' moves with Doppler, which moves alone: leave w"):
+    with pytest.raises(
+        ValueError, match="'s' moves with Doppler, which no listener that moves hears: leave w "
+    ):
         simulate_movement(Room.from_scene(_scene(sources=[fast, sources[1]], listeners=listeners)))
+    # A listener with Doppler moves alone.
+    driven = [{**listeners[0], "trajectory": {"to": [[6.0, 4.0, 1.5]], "doppler": True}}]
+    with pytest.raises(
+        ValueError, match="'w' moves with Doppler, which a listener does alone: leave s standing"
+    ):
+        simulate_movement(Room.from_scene(_scene(sources=sources, listeners=driven)))
     leaves = r"the trajectory of 'w' leaves the room at \(8\.\d\d, 1\.00, 1\.50\) m, \d+\.\d\d s in"
     with pytest.raises(ValueError, match=leaves):
         gone = [_walker({"to": [[9.0, 1.0, 1.5]]}), *listeners[1:]]
@@ -492,6 +500,66 @@ def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
     supersonic = {**car, "trajectory": {**car["trajectory"], "speed_m_s": 400.0}}
     with pytest.raises(ValueError, match="as fast as sound"):
         simulate_movement(Room.from_scene(_scene(sources=[supersonic], listeners=[seat])))
+
+
+def test_sources_with_doppler_move_together_each_as_alone() -> None:
+    """Sources with Doppler move together, beside a source that moves without (a police
+    car and its siren, a train's points): each pair has one mover, and every listener
+    hears each source through the movement's responses as in a trajectory of its own,
+    its early paths through their changing delays, the one without crossfaded from place
+    to place; no listener may move beside them (:func:`doppler_clash`)."""
+    from acoustic_spaces.walkthrough import doppler_clash
+
+    trip = {"speed_m_s": 20.0, "doppler": True}
+    car = {
+        "name": "car",
+        "position": [1.0, 4.0, 1.0],
+        "trajectory": {"to": [[7.0, 4.0, 1.0]], **trip},
+    }
+    bus = {
+        "name": "bus",
+        "position": [7.0, 2.0, 1.5],
+        "trajectory": {"to": [[1.0, 2.0, 1.5]], **trip},
+    }
+    seat = {"name": "seat", "position": [4.0, 1.0, 1.2], "orientation": {"yaw": 90.0}}
+    rate = int(_scene(sources=[car], listeners=[seat]).simulation.sample_rate)
+    rng = np.random.default_rng(5)
+    signals = {name: rng.standard_normal(int(0.3 * rate)) for name in ("car", "bus")}
+
+    def as_alone(movement, room, name: str) -> np.ndarray:
+        """``name``'s sound at the seat as a trajectory of its own, through the responses
+        the movement has for it at its moments (the same, to the last bit of a float)."""
+        own = simulate_trajectory(room, name, step_m=0.5)
+        np.testing.assert_allclose(own.points.times, movement.times, atol=1e-12)
+        walked = dataclasses.replace(
+            own,
+            points=dataclasses.replace(own.points, times=np.asarray(movement.times)),
+            names=movement.copies["sources", name],
+            result=movement.result,
+        )
+        return render_trajectory(walked, {name: signals[name]}, Mono())
+
+    room = Room.from_scene(_scene(sources=[car, bus], listeners=[seat]))
+    assert doppler_clash(movers(room.scene)) is None
+    movement = simulate_movement(room, step_m=0.5)
+    assert movement.doppler and movement.with_doppler == {("sources", "car"), ("sources", "bus")}
+    assert movement.moves_with_doppler("car", "seat") and movement.moves_with_doppler("bus", "seat")
+    both = render_movement(movement, signals, Mono(), equal_power=True)["seat"]
+    alone = [as_alone(movement, room, name) for name in signals]
+    np.testing.assert_allclose(both, alone[0] + alone[1], atol=1e-12)
+    # Beside a source that moves without Doppler, which crossfades as it does alone.
+    slow = {**bus, "trajectory": {**bus["trajectory"], "doppler": False}}
+    room = Room.from_scene(_scene(sources=[car, slow], listeners=[seat]))
+    movement = simulate_movement(room, step_m=0.5)
+    assert movement.with_doppler == {("sources", "car")}
+    assert not movement.moves_with_doppler("bus", "seat")
+    both = render_movement(movement, signals, Mono(), equal_power=True)["seat"]
+    alone = [as_alone(movement, room, name) for name in signals]
+    np.testing.assert_allclose(both, alone[0] + alone[1], atol=1e-12)
+    # A listener that moves hears none of them.
+    walking = {**seat, "trajectory": {"to": [[4.0, 2.0, 1.2]]}}
+    clash = doppler_clash(movers(_scene(sources=[car, bus], listeners=[walking])))
+    assert clash == ("car", "no listener that moves hears", ["seat"])
 
 
 def test_doppler_through_a_microphone_whose_pattern_changes_with_frequency() -> None:

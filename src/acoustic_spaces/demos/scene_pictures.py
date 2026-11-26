@@ -570,18 +570,22 @@ class Pictures:
         ``t`` when something moves; in stop ``k``, of those that play in it, each at the
         level it plays at there (:meth:`levels_of`: over the stop, the equivalent level,
         where nothing moves). A source whose sound does not reach the listener (None)
-        adds nothing, and None when nothing of them is heard."""
+        adds nothing, and None when nothing of them is heard. In a house heard with its
+        rumble (``indoors``), the rumble too: steady where nothing moves, in the pass
+        where something does; with the rumble alone, the rumble alone."""
         values: list[float | None] = list(self.levels_of(listener, t, k).values())
-        if t is not None and listener in self.passes:  # the pass's, as it is heard then
+        passing = t is not None and listener in self.passes
+        if passing:  # the pass's, as it is heard then
             moving = {name for kind, name in self.paths if kind == "sources"}
             others = self.levels_of(listener, t, k)
             values = [v for name, v in others.items() if name not in moving]
             values.append(self.heard_at(listener, t))
         rumble = self.indoors.get("rumble_a_db", {}).get(listener)
         if listener in self.indoors.get("about", {}) and not self.indoors.get("airborne", True):
-            values = []  # in the house, the rumble alone
+            # In the house, the rumble alone: the pass's own, where something moves.
+            values = [self.heard_at(listener, t)] if passing else []
         energy = sum(10.0 ** (v / 10.0) for v in values if v is not None)
-        if rumble is not None:
+        if rumble is not None and not passing:  # a pass holds its rumble already
             energy += 10.0 ** (rumble / 10.0)
         return 10.0 * math.log10(energy) if energy > 0.0 else None
 

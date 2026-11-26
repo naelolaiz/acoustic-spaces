@@ -546,16 +546,18 @@ def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path, monke
 
 
 def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, monkeypatch) -> None:
-    """--indoors tram at the street's balcony, 1 m in front of the offices: each part of
-    the tram is simulated once more at the point 2 m in front of their wall, at the
-    balcony's height, and the room's levels are that point's less the façade's level
-    difference (EN ISO 12354-3's L_1,2m - D_2m,nT), not the balcony's own; its sound is
-    the balcony's, changed band by band at each moment by how much louder it is there."""
+    """--indoors tram at the street's balcony, 1 m in front of the offices (the script's
+    flag, the demo's --indoors airborne): the tram's movement is simulated at the point
+    2 m in front of their wall too, at the balcony's height, and the room's levels are
+    that point's less the façade's level difference (EN ISO 12354-3's L_1,2m -
+    D_2m,nT), not the balcony's own; its sound is the balcony's, changed band by band at
+    each moment by how much louder it is there. What the wheels shake is felt at the
+    balcony too, the offices' floor, on a track for a bass shaker."""
     import yaml
     from test_works import _street
 
     from acoustic_spaces import walkthrough
-    from acoustic_spaces.demos import load, pipeline
+    from acoustic_spaces.demos import load, pipeline, scene_demo
 
     folder = _street(tmp_path)
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
@@ -566,12 +568,11 @@ def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, mo
             each["trajectory"]["to"] = [[20, 0, z]]
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     simulated, outside = [], []
-    real_walk, real_through = walkthrough.simulate_trajectory, indoors.House.through
+    real_movement, real_through = walkthrough.simulate_movement, indoors.House.through
 
-    def simulate_trajectory(room, name, **kwargs):
-        at = next(lis for lis in room.scene.listeners if lis.name == kwargs["listener"])
-        simulated.append((name, at.name, at.position))
-        return real_walk(room, name, **kwargs)
+    def simulate_movement(room, **kwargs):
+        simulated.extend((lis.name, lis.position) for lis in room.scene.listeners if lis.in_use)
+        return real_movement(room, **kwargs)
 
     def through(self, passing):
         outside.append(passing)
@@ -583,48 +584,77 @@ def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, mo
         shifts.append((shift_db, times))
         return real_heard(self, wet, rate, shift_db, times)
 
-    monkeypatch.setattr(walkthrough, "simulate_trajectory", simulate_trajectory)
+    monkeypatch.setattr(walkthrough, "simulate_movement", simulate_movement)
     monkeypatch.setattr(indoors.House, "through", through)
     monkeypatch.setattr(indoors.House, "heard", heard_in)
     demo = load(folder / "passby_demo.py").at(folder)
     common = ["--vehicle", "tram", "--step", "4", "--format", "mono", "--listeners", "balcony"]
     common += ["--indoors", "tram"]
+    args = demo.resolved(demo.parser().parse_args(["all", *common]))
+    assert args.indoors == "airborne"
     assert demo.main(["sound", *common]) == 0 and demo.main(["scene", *common]) == 0
     assert demo.main(["walk", *common]) == 0
-    assert [(part, at) for part, at, _ in simulated] == [
-        ("tram", "balcony"),
-        ("tram", "balcony_2m"),
-        ("tram_roof", "balcony"),
-        ("tram_roof", "balcony_2m"),
-    ]
-    for _, at, position in simulated:
-        wanted = (5.0, -4.0, 10.0) if at == "balcony_2m" else (5.0, -5.0, 10.0)
-        assert position == pytest.approx(wanted, abs=1e-12)
-    heard = pipeline.read_json(run_of(demo, *common) / "walk" / "walk.json")["listeners"]["balcony"]
-    assert heard["inside"] == "offices"
-    for part, passing in zip(("tram", "tram_roof"), outside, strict=True):
-        assert passing.listener == "balcony_2m"
-        room = real_through(indoors.House(airborne=True, rumble=False), passing)
-        np.testing.assert_allclose(room.levels, passing.levels + facade.HOUSE.indoor_db())
-        assert heard["parts"][part]["sel_a_db"] == pytest.approx(room.exposure_a, abs=0.01)
+    where = dict(simulated)
+    assert where["balcony"] == pytest.approx((5.0, -5.0, 10.0), abs=1e-12)
+    assert where["balcony_2m"] == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
+    seats = pipeline.read_json(demo.run_folder(args) / scene_demo.MOVING / pipeline.SEATS)
+    seat = seats["seats"]["balcony"]
+    assert seat["inside"] == "offices" and seat["post"] == "indoors airborne"
+    assert seat["shaking"] == "floor" and seat["vibration_vdb"] > 0.0
+    assert "rumble_a_db" not in seat and seats["shaker"]["hz"] > 0.0
+    assert (demo.run_folder(args) / scene_demo.MOVING / "balcony.shaker.wav").exists()
+    # The room's pass: the tram and its roof together 2 m in front of the wall, through it.
+    (passing,) = outside
+    assert passing.listener == "balcony_2m"
+    room = real_through(indoors.House(airborne=True, rumble=False), passing)
+    np.testing.assert_allclose(room.levels, passing.levels + facade.HOUSE.indoor_db())
+    heard = seats["movement"]["passes"]["balcony"]
+    assert heard["sel_a_db"] == pytest.approx(room.exposure_a, abs=0.01)
     # The balcony's own sound comes in, each octave band changed at each moment by as much
     # as it is louder 2 m out, which the wall's reflection makes differ at 63 to 250 Hz.
-    assert len(shifts) == 2
-    for shift, times in shifts:
-        assert shift is not None and times is not None
-        assert np.shape(shift) == (len(times), 8)
-        assert np.max(np.abs(np.asarray(shift)[:, :3])) > 0.5
+    ((shift, times),) = shifts
+    assert shift is not None and times is not None
+    assert np.shape(shift) == (len(times), 8)
+    assert np.max(np.abs(np.asarray(shift)[:, :3])) > 0.5
 
 
-def test_the_tram_has_indoors_and_the_street_s_other_vehicles_not() -> None:
-    """In the street demo --indoors is the tram's alone."""
+def test_the_street_demo_hears_indoors_whatever_goes_past_and_the_tram_s_rumble(
+    tmp_path,
+) -> None:
+    """In the street demo --indoors hears in the room behind a listener in front of a
+    wall whatever goes past, the rumble only where a train's or a tram's wheels shake the
+    ground; the script's values for the tram read as the demo's, and a run it would
+    change nothing in, or whose rumble nothing makes, is refused."""
     from acoustic_spaces.demos import load
     from acoustic_spaces.examples import example_path
 
     demo = load(Path(example_path("street")).parent / "passby_demo.py")
     option = demo.option("indoors")
-    assert option.only == ("vehicle", ("tram",))
-    assert option.choices == indoors.choices("tram")
+    assert option.only is None and option.default == indoors.OFF
+    assert option.choices == indoors.choices(indoors.AIRBORNE)
+    assert option.choices == (indoors.OFF, "airborne_and_rumble", "airborne", "rumble")
+
+    def parsed(*argv: str):
+        return demo.parser().parse_args(["all", *argv])
+
+    for old, new in (("tram", "airborne"), ("tram_and_rumble", "airborne_and_rumble")):
+        args = parsed("--vehicle", "tram", "--indoors", old)
+        assert args.indoors == new and demo.check(args) is None
+    for choice in ("airborne", "rumble", "airborne_and_rumble"):
+        assert demo.check(parsed("--vehicle", "tram", "--indoors", choice)) is None
+    assert demo.check(parsed("--vehicle", "bus", "--indoors", "airborne")) is None
+    for choice in ("rumble", "airborne_and_rumble"):
+        refused = demo.check(parsed("--vehicle", "bus", "--indoors", choice))
+        assert refused is not None and "nothing that plays shakes it (bus;" in refused
+        assert refused.endswith("try --indoors airborne")
+    refused = demo.check(parsed("--indoors", "airborne", "--listeners", "garden"))
+    assert refused is not None and refused.endswith("no listener of this run does")
+    from acoustic_spaces.audio import write_wav
+
+    write_wav(tmp_path / "traffic.wav", np.zeros(4800), 48000)
+    standing = ("--sources", "traffic", "--input", f"traffic={tmp_path / 'traffic.wav'}")
+    refused = demo.check(parsed(*standing, "--indoors", "airborne"))
+    assert refused is not None and refused.endswith("nothing moves in this run")
 
 
 def test_listeners_in_turn_hear_indoors_only_at_a_house() -> None:

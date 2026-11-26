@@ -388,9 +388,11 @@ acoustic-spaces walkthrough scene.yaml band=song.wav speaker=talk.wav --all --ou
   does; a still pair plays through its one response. `--video` draws every
   mover along its path with an arrow the way it faces, and the still sources and
   listeners where they stand; an MP4 carries the sound when one listener is rendered.
-- A trajectory with Doppler moves alone: `--all` plays it when it is the only trajectory
-  that is on, every listener hearing each early path through its own changing delay as
-  `--mover` does, from one simulation, and refuses it beside another mover. `--levels`
+- Sources' trajectories with Doppler move together, beside other sources that move,
+  while no listener moves: `--all` plays them, every listener hearing each early path of
+  each through its own changing delay as `--mover` does, from one simulation. A
+  listener's trajectory with Doppler moves alone, and `--all` refuses a listener that
+  moves beside a source with Doppler. `--levels`
   is for one trajectory (`--mover`). The demo of any scene and the editor's **Render
   movement…** play a trajectory with Doppler the same way
   ([demos](demos.md#a-demo-of-any-scene)).
@@ -403,7 +405,10 @@ acoustic-spaces walkthrough scene.yaml band=song.wav speaker=talk.wav --all --ou
   mover alone (`--mover`) crossfades its places as above.
 
 From Python: `simulate_movement(room)`, `render_movement(movement, signals, fmt)` (a
-dict of each listener's sound), `save_movement(rendered, "heard.wav", rate, fmt)` and
+dict of each listener's sound; `followers` plays more signals along a source's
+trajectory that many seconds behind it, as the points of a train behind its front,
+each with its own Doppler, and `leads` has a source heard that much after its
+trajectory is at each place), `save_movement(rendered, "heard.wav", rate, fmt)` and
 `animate_movement(room, movement, "heard.mp4")`. In the editor, the Movement panel
 edits the keyframes, previews every mover along one timeline and renders the movement
 in the background (see [Graphical editor](editor.md)).

@@ -3173,15 +3173,140 @@ msgstr "un enregistrament multipista"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"The standard method that gives the source's sound power in place of the one "
-"you give, and the sound a demo of the scene plays for it (model: in the "
-"scene file): a road vehicle's of CNOSSOS-EU, at the speed of its trajectory, "
-"in the scene's air"
+"The method that gives the source's sound power in place of the one you give, "
+"and the sound a demo of the scene plays for it (model: in the scene file): a "
+"road vehicle's by CNOSSOS-EU, at the speed of its trajectory, in the scene's "
+"air; a siren's, that of the 100 W electronic siren NBS measured; a horn's, "
+"its blasts as loud as its rule or its maker gives them, averaged over its "
+"blasts and pauses; a train's or a tram's by Schall 03, at the speed of its "
+"trajectory, that of the first of its points at one height, a demo playing "
+"those behind it too"
 msgstr ""
-"El mètode normalitzat que dona la potència acústica de la font en lloc de la "
-"que hi poseu, i el so que hi reprodueix una demostració de l'escena (model: "
-"al fitxer de l'escena): la d'un vehicle de carretera de CNOSSOS-EU, a la "
-"velocitat de la seva trajectòria, en l'aire de l'escena"
+"El mètode que dona la potència acústica de la font en lloc de la que hi "
+"poseu, i el so que hi reprodueix una demostració de l'escena (model: al "
+"fitxer de l'escena): la d'un vehicle de carretera segons CNOSSOS-EU, a la "
+"velocitat de la seva trajectòria, en l'aire de l'escena; la d'una sirena, la "
+"de la sirena electrònica de 100 W que va mesurar el NBS; la d'una botzina, "
+"amb els tocs tan forts com els dona la seva norma o el seu fabricant, en "
+"mitjana sobre els tocs i les pauses; la d'un tren o un tramvia segons Schall "
+"03, a la velocitat de la seva trajectòria, la del primer dels seus punts a "
+"una alçada, i una demostració també reprodueix els que van darrere"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the "
+"100 W electronic siren NBS measured"
+msgstr ""
+"Sirena: sona {pattern} (pot sonar {patterns}), amb la potència acústica de "
+"la sirena electrònica de 100 W que va mesurar el NBS"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the "
+"100 W electronic siren NBS measured, {gain} dB"
+msgstr ""
+"Sirena: sona {pattern} (pot sonar {patterns}), amb la potència acústica de "
+"la sirena electrònica de 100 W que va mesurar el NBS, {gain} dB"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Horn: {kind}, {tones} Hz {how}, in blasts, {level} dB({weighting}) {at} m "
+"ahead"
+msgstr ""
+"Botzina: {kind}, {tones} Hz {how}, en tocs, {level} dB({weighting}) a {at} m "
+"al davant"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an air horn"
+msgstr "una botzina d'aire"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a pair of disc horns"
+msgstr "un parell de botzines de disc"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a train horn"
+msgstr "una botzina de tren"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "in turn"
+msgstr "per torns"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "together"
+msgstr "alhora"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Schall 03: {train} on {track}; its sources {height}, the sound power the "
+"first's, the others played behind it"
+msgstr ""
+"Schall 03: {train} sobre {track}; les seves fonts {height}, amb la potència "
+"acústica de la primera, i les altres reproduïdes darrere"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an S-Bahn"
+msgstr "un S-Bahn"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a regional train"
+msgstr "un tren regional"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an intercity train"
+msgstr "un tren intercity"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a freight train"
+msgstr "un tren de mercaderies"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a low-floor tram"
+msgstr "un tramvia de pis baix"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "sleepers in ballast"
+msgstr "travesses sobre balast"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "slab track"
+msgstr "via en placa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "slab track with absorbers"
+msgstr "via en placa amb absorbents"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a level crossing"
+msgstr "un pas a nivell"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "track set in the street"
+msgstr "via encastada al carrer"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grassed track, the grass low"
+msgstr "via amb gespa, la gespa baixa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grassed track, the grass up to the rail top"
+msgstr "via amb gespa, la gespa fins a dalt del carril"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "at the rail top (its bogies)"
+msgstr "a dalt del carril (els seus bogis)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "on its roof, 4 m up"
+msgstr "al seu sostre, a 4 m d'alçada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "at its pantograph's head, 5 m up"
+msgstr "al cap del seu pantògraf, a 5 m d'alçada"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "light motor vehicles"
@@ -5658,6 +5783,12 @@ msgstr "{tip}. La dona el model, a la velocitat de la trajectòria"
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid "{tip}. Given by the model"
+msgstr "{tip}. La dona el model"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "{tip}. Given by the vocal effort"
 msgstr "{tip}. La fixa l'esforç vocal"
 
@@ -6954,14 +7085,15 @@ msgstr "Doppler"
 msgid ""
 "Tick for a vehicle or an aircraft: the early sound goes through delays that "
 "change as it goes, so its pitch shifts as it passes (doppler in the scene "
-"file). A trajectory with Doppler moves alone: Render movement… and the demos "
-"play it while every other trajectory is off"
+"file). Sources with Doppler move together, beside other sources that move, "
+"while no listener moves; a listener with Doppler moves alone: Render "
+"movement… and the demos play them so"
 msgstr ""
 "Marca-ho per a un vehicle o un avió: el so primerenc passa per retards que "
 "canvien mentre avança, de manera que el to canvia quan passa (doppler al "
-"fitxer d'escena). Un recorregut amb Doppler es mou sol: Renderitza el "
-"moviment… i les demos el reprodueixen mentre tots els altres recorreguts "
-"estan desactivats"
+"fitxer d'escena). Les fonts amb Doppler es mouen juntes, al costat d'altres "
+"fonts que es mouen, mentre cap receptor no es mou; un receptor amb Doppler "
+"es mou sol: Renderitza el moviment… i les demos els reprodueixen així"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""

@@ -1010,22 +1010,23 @@ class SourcesField(QWidget):
         self._selected()
 
     def set_sources(self, sources: list[Source]) -> None:
-        """The rows: ``sources``, in their groups, ticked as picked before; the demo's own
-        pick where what was picked names none of them (another vehicle's sources, or
-        none). The same sources in the same groups keep their rows: a tick that takes a
-        source in or leaves it out changes what the demo picks, while the tick is still
-        being made on its row."""
+        """The rows: ``sources``, in their groups, ticked as picked before. The same
+        sources in the same groups keep their rows and what was picked, none too: a tick
+        that takes a source in or leaves it out changes what the demo picks, while the
+        tick is still being made on its row (the street's police car unticked, its siren
+        alone ticked before, leaves none). Other sources take the demo's own pick where
+        what was picked names none of them (another vehicle's sources, or none)."""
         sources = list(sources)
         if sources == self.sources:
             return
         rows = {(source.name, source.group) for source in self.sources}
         same = bool(rows) and rows == {(source.name, source.group) for source in sources}
         self.sources = sources
-        if self.names_none_of(sources):
-            self.picked = None
         if same:
             self._show_ticks()
             return
+        if self.names_none_of(sources):
+            self.picked = None
         self._build_tree()
 
     def _build_tree(self) -> None:
@@ -1142,17 +1143,28 @@ class SourcesField(QWidget):
         self._selected()
 
     def _names(self) -> list[str]:
-        """The ticks as names: a group wholly ticked by its path, else its ticked ones."""
+        """The ticks as names: a group whose sources are all ticked by its path, else its
+        ticked ones. Read from the sources' own ticks, not from a group's: while a group's
+        tick is still being passed on to its sources (one at a time, each change heard),
+        the group's says what its sources will be, not what they are."""
         out: list[str] = []
+
+        def ticks(item: QTreeWidgetItem) -> list[bool]:
+            kind = item.data(0, Qt.ItemDataRole.UserRole)[0]
+            if kind == "source":
+                return [item.checkState(0) == Qt.CheckState.Checked]
+            if kind == "always":
+                return []
+            return [tick for k in range(item.childCount()) for tick in ticks(item.child(k))]
 
         def walk(item: QTreeWidgetItem) -> None:
             kind, name = item.data(0, Qt.ItemDataRole.UserRole)
-            state = item.checkState(0)
-            if kind == "always":
+            under = ticks(item)
+            if not any(under):
                 return
-            if state == Qt.CheckState.Checked:
+            if all(under):
                 out.append(name)
-            elif kind == "group" and state == Qt.CheckState.PartiallyChecked:
+            elif kind == "group":
                 for k in range(item.childCount()):
                     walk(item.child(k))
 
@@ -1205,7 +1217,18 @@ class SourcesField(QWidget):
             return
         if column != self.SOURCE:
             return
-        self.picked = None if self.ticked() == self.own_pick else self._names()
+        # A group's tick is passed on to its sources one at a time, each change heard,
+        # with the group's auto-tristate flag off meanwhile: heard once, from the group,
+        # after its sources; and a source's tick once, not again from its groups.
+        parent = item.parent()
+        while parent is not None:
+            if not parent.flags() & Qt.ItemFlag.ItemIsAutoTristate:
+                return
+            parent = parent.parent()
+        picked = None if self.ticked() == self.own_pick else self._names()
+        if picked == self.picked:
+            return
+        self.picked = picked
         self.changed.emit()
 
     def _double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
@@ -2515,7 +2538,7 @@ class DemoDialog(QDialog):
         # An option that matters only with another's values (the police car's --siren
         # with --vehicle police_car) shows only then.
         values, moved = vars(args), False
-        idle = demo.idle(args)  # what changes nothing here, at its default: out of view
+        idle = demo.idle(args)  # what changes nothing here: out of view
         for name, form_rows in self._rows.items():
             widget = self.fields[name]
             shown = demo.option(name).applies(values) and name not in idle
@@ -2831,13 +2854,16 @@ class DemoDialog(QDialog):
 
     def arguments(self) -> argparse.Namespace:
         """The options as the fields hold them, those that do not matter with the
-        others (hidden, :attr:`Option.only`) at their defaults."""
+        others (hidden, :attr:`Option.only`) or change nothing in the run (hidden too,
+        :meth:`~acoustic_spaces.demos.Demo.idle`) at their defaults."""
         demo = self.shown or self.demo  # whose fields they are, while another is picked
         values = {name: value_of(demo.option(name), w) for name, w in self.fields.items()}
         for name in values:
             option = demo.option(name)
             if not option.applies(values):
                 values[name] = option.default
+        for name in demo.idle(argparse.Namespace(**values)) & set(values):
+            values[name] = demo.option(name).default
         return argparse.Namespace(**values)
 
     def chosen(self) -> tuple[Demo, str, argparse.Namespace]:

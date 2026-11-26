@@ -173,8 +173,8 @@ def test_a_demo_of_any_scene_mixes_the_sources_picked_alone(tmp_path: Path, monk
 
 def test_a_source_left_out_stands_where_it_starts(tmp_path: Path) -> None:
     """Without ``--moving``, a source ``--sources`` leaves out does not move, as it plays
-    nothing: it moves no mix, and its trajectory with Doppler, which plays alone, no longer
-    keeps the others from walking; ``--moving`` still moves what it names."""
+    nothing: it moves no mix, and its trajectory with Doppler, beside which no listener
+    walks, no longer keeps the others from walking; ``--moving`` still moves what it names."""
     scene = _grouped(tmp_path)
     data = yaml.safe_load(scene.read_text(encoding="utf-8"))
     data["listeners"][1]["trajectory"] = {
@@ -188,7 +188,9 @@ def test_a_source_left_out_stands_where_it_starts(tmp_path: Path) -> None:
     demo = DEMO.at(scene.parent)
     args, resolved = _run(scene)
     assert scene_demo.moving_of(resolved) == ["seat-b", "radio"]
-    assert demo.check(args).startswith("radio moves with Doppler, which plays alone")
+    assert demo.check(args).startswith(
+        "radio moves with Doppler, which no listener that moves hears: leave seat-b"
+    )
     args, resolved = _run(scene, "--sources", "talker")
     assert demo.check(args) is None
     assert scene_demo.moving_of(resolved) == ["seat-b"]

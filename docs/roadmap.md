@@ -628,7 +628,7 @@ Movement:
   database for construction sites, and a demo that plays them; checked against Defra's
   rows, the EU's limits for outdoor machines and SAE J994.
 - [x] Car horns: the street's car with a pair of disc horns (`passby_demo.py --sources
-  car,car_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
+  car+car_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
   rule for vehicles' horns; a horn's levels in the captions follow its blasts.
 - [x] A train's warning horn (`train_horn` in the railway's `passby_demo.py --sources`):
   the TSI's two notes in turn (or together, `--horn chord`), as loud as EN 15153-2

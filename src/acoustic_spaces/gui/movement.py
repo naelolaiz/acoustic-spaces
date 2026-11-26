@@ -223,8 +223,9 @@ class MovementPanel(QWidget):
             _(
                 "Tick for a vehicle or an aircraft: the early sound goes through delays that "
                 "change as it goes, so its pitch shifts as it passes (doppler in the scene "
-                "file). A trajectory with Doppler moves alone: Render movement… and the demos play "
-                "it while every other trajectory is off"
+                "file). Sources with Doppler move together, beside other sources that move, "
+                "while no listener moves; a listener with Doppler moves alone: Render "
+                "movement… and the demos play them so"
             )
         )
         self.doppler.toggled.connect(self._doppler)
