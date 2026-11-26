@@ -3196,7 +3196,8 @@ msgid ""
 "trajectory, that of the first of its points at one height, a demo playing "
 "those behind it too; construction plant's, Defra's row for the machine plus "
 "28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its beeps and "
-"pauses"
+"pauses; a helicopter's, its rotors' sound in level flight at its speed "
+"through the air, its directivity too"
 msgstr ""
 "Il metodo che dà la potenza sonora della sorgente al posto di quella che "
 "indicate, e il suono che una demo della scena le fa suonare (model: nel file "
@@ -3209,7 +3210,8 @@ msgstr ""
 "un'altezza, e una demo suona anche quelli che lo seguono; quella di una "
 "macchina da cantiere, la riga di Defra per la macchina più 28 dB; quella di "
 "un cicalino di retromarcia, quella del tipo B della SAE J994, mediata su "
-"segnali e pause"
+"segnali e pause; quella di un elicottero, il suono dei suoi rotori in volo "
+"livellato alla sua velocità rispetto all'aria, e anche la sua direttività"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -3257,6 +3259,32 @@ msgstr "a turno"
 #: acoustic_spaces/gui/inspector.py
 msgid "together"
 msgstr "insieme"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Helicopter: {helicopter}, its rotors in level flight at {speed} m/s through "
+"the air, their broadband noise by {broadband}; its directivity too"
+msgstr ""
+"Elicottero: {helicopter}, i suoi rotori in volo livellato a {speed} m/s "
+"rispetto all'aria, il loro rumore a banda larga secondo {broadband}; anche "
+"la sua direttività"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an Airbus Helicopters AS350 B3 at 2,250 kg"
+msgstr "un Airbus Helicopters AS350 B3 da 2250 kg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Pegg's method"
+msgstr "il metodo di Pegg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Brooks, Pope and Marcolini's airfoil self-noise"
+msgstr "il rumore proprio del profilo alare di Brooks, Pope e Marcolini"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "given by its model"
+msgstr "data dal suo modello"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format

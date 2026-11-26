@@ -3180,7 +3180,8 @@ msgid ""
 "trajectory, that of the first of its points at one height, a demo playing "
 "those behind it too; construction plant's, Defra's row for the machine plus "
 "28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its beeps and "
-"pauses"
+"pauses; a helicopter's, its rotors' sound in level flight at its speed "
+"through the air, its directivity too"
 msgstr ""
 "De methode die het geluidsvermogen van de bron geeft in plaats van het "
 "vermogen dat u opgeeft, en het geluid dat een demo van de scène ervoor "
@@ -3193,7 +3194,9 @@ msgstr ""
 "eerste van zijn punten op één hoogte, terwijl een demo ook de punten "
 "erachter speelt; dat van bouwmaterieel, de rij van Defra voor de machine "
 "plus 28 dB; dat van een achteruitrijalarm, dat van type B van SAE J994, "
-"gemiddeld over piepen en pauzes"
+"gemiddeld over piepen en pauzes; dat van een helikopter, het geluid van zijn "
+"rotoren in horizontale vlucht bij zijn snelheid ten opzichte van de lucht, "
+"ook zijn richtingskarakteristiek"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -3241,6 +3244,33 @@ msgstr "om beurten"
 #: acoustic_spaces/gui/inspector.py
 msgid "together"
 msgstr "samen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Helicopter: {helicopter}, its rotors in level flight at {speed} m/s through "
+"the air, their broadband noise by {broadband}; its directivity too"
+msgstr ""
+"Helikopter: {helicopter}, zijn rotoren in horizontale vlucht bij {speed} m/s "
+"ten opzichte van de lucht, hun breedbandgeluid volgens {broadband}; ook zijn "
+"richtingskarakteristiek"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an Airbus Helicopters AS350 B3 at 2,250 kg"
+msgstr "een Airbus Helicopters AS350 B3 van 2250 kg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Pegg's method"
+msgstr "de methode van Pegg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Brooks, Pope and Marcolini's airfoil self-noise"
+msgstr ""
+"het eigengeluid van het vleugelprofiel volgens Brooks, Pope en Marcolini"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "given by its model"
+msgstr "door zijn model gegeven"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format

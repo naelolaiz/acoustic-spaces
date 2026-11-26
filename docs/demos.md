@@ -96,10 +96,10 @@ mono), and with `listeners` in it makes each listener a part of its own (otherwi
 tour of each part visits them); the run's name then says the order (`series-format-vehicle`).
 `--hrtf` with no binaural part is refused, as for one run.
 
-**The sources a run plays.** Every demo but the airport's flight and the helicopter
-flyover lists the sources it can play, in the groups its scene gives them, and plays
-its own pick of them by default; those two play one source each, the vehicle
-(`--vehicle` picks which, where there are several), and take no `--sources`. Elsewhere `--sources` names others, by name or by group, comma separated:
+**The sources a run plays.** Every demo but the airport's flight lists the sources it
+can play, in the groups its scene gives them, and plays its own pick of them by
+default; the flight plays one source, the aircraft (`--vehicle` picks which), and takes
+no `--sources`. Elsewhere `--sources` names others, by name or by group, comma separated:
 `--sources PA` plays every source of the groups under `PA` (`PA/Mains`,
 `PA/Fills`...), `--sources PA,Band` those of both. `--sources-play together` (the
 default) plays them in one mix; `--sources-play in-turn` plays each name given (a group
@@ -1468,51 +1468,52 @@ scene with the train taken in, `walk` the mixes), `--from` names the scene, and 
 
 `flyover_demo.py` comes with the outdoor example `helicopter_flyover`: an Airbus
 Helicopters AS350 B3 flies over a meadow 150 m up at 63 m/s, against a light wind, and
-each listener hears one pass in turn: right under its track, 1.2 m above the grass,
-where the microphone of its noise certification stands, and 150 m to its left and to
-its right. It is the [road vehicles' demo](#vehicles-passing-by) with the helicopter in
-the car's place (`acoustic_spaces.demos.helicopter`): the same steps, options and video,
-but for the car's sound.
+each listener hears its pass: right under its track, 1.2 m above the grass, where the
+microphone of its noise certification stands, and 150 m to its left and to its right. It
+is the [demo of the scene](#a-demo-of-any-scene) (This scene in the editor), a preset of
+it that keeps the script's command lines.
 
 ```sh
 acoustic-spaces examples --copy . helicopter_flyover && cd helicopter_flyover
-python flyover_demo.py all   # or helicopter, scene, walk, video one at a time
+python flyover_demo.py all   # or feeds, simulate, render, video one at a time
 ```
 
 Options: `--speed 200` how fast it flies over the ground (km/h; without it, the speed of
 its trajectory, 226.8 km/h), `--broadband bpm` its rotors' broadband noise from each
 blade section's own noise instead of Pegg's method
-([Helicopters](outdoor.md#helicopters)), `--step 4` how far apart it is simulated along
-its trajectory (m), `--hrtf me.sofa` a measured head, `--input helicopter=WAV` a dry
-recording of yours, `--listeners under_track` the listeners it is simulated and heard
-at. Its 900 m of flight take 14.3 s at 63 m/s.
+([Helicopters](outdoor.md#helicopters)), `--step 8` how far apart it is simulated along
+its trajectory (m; the scene's 4 m), `--hrtf me.sofa` a measured head, `--input
+helicopter=WAV` a dry recording of yours, `--listeners under_track` the listeners it is
+simulated and heard at. The script's steps run as the ones that took them over:
+`helicopter` the feeds, `scene` the simulation, `walk` the mixes; `--from` names the
+scene. Its 900 m of flight take 14.3 s at 63 m/s.
 
 - **The helicopter** is the example's source `helicopter`, a point at the main rotor's
-  hub, with a trajectory 150 m up with Doppler, facing the way it flies. Its rotors are
-  trimmed for level flight ([Helicopters](outdoor.md#helicopters)), so a trajectory that
-  climbs or descends by more than 0.5 m is refused. They are trimmed at its airspeed:
-  its speed over the ground less the wind of the scene's own weather at its height, as
-  vectors, in the scene's air. In the example the wind blows against it at 4.5 m/s
-  150 m up (3 m/s at 10 m), so it flies through the air at 67.5 m/s. It faces along
-  its trajectory, so it does not turn into a wind from the side, as a helicopter flying
-  crabwise would: a wind along its track, or none, suits it best. The demo's scene
-  (`scene_demo.yaml` in the run's folder) has the helicopter alone with the sound power per octave band and
-  the directivity of its rotors' sound at that airspeed, the directivity in a table
-  beside it (`scene_demo_helicopter.csv`): 137.7 dB, 132.9 dB(A) in the example, which
-  its own scene has too.
+  hub with a trajectory 150 m up with Doppler, facing the way it flies, of a rotorcraft
+  model ([sources](scenes.md#sources-and-directivity)). Its rotors are trimmed for level
+  flight ([Helicopters](outdoor.md#helicopters)), so a trajectory that climbs or
+  descends by more than 0.5 m is refused. They are trimmed at its airspeed: its speed
+  over the ground less the wind of the scene's own weather at its height, as vectors, in
+  the scene's air. In the example the wind blows against it at 4.5 m/s 150 m up (3 m/s
+  at 10 m), so it flies through the air at 67.5 m/s. It faces along its trajectory, so
+  it does not turn into a wind from the side, as a helicopter flying crabwise would: a
+  wind along its track, or none, suits it best. The model gives it the sound power per
+  octave band and the directivity of its rotors' sound at that airspeed: 137.7 dB, 132.9
+  dB(A) in the example.
 - **Its sound** is what the rotors send each way: each harmonic of each rotor's blade
   passing frequency with a pattern and a phase of its own, and broadband noise. Each
   early path plays what is sent the way it leaves the helicopter, at the time it leaves
   ([the sound sent each way](spatial-audio.md#moving-sources-and-doppler)); a late
   sound, which the meadow alone does not give, plays it averaged over the directions. It
-  fades in and out over its first and
-  last second. `helicopter/below.wav` in the run's folder is what they send straight down, dry, to
-  listen to. `--input helicopter=WAV` plays a dry recording instead, mixed down to mono,
-  at least as long as the pass, sent every way with the rotors' directivity; the
-  captions still give the rotors' model.
-- **The pass**: the helicopter every 4 m along its trajectory, simulated at each
-  listener in turn, as the car's. From 150 m up, places 4 m apart follow the exact field
-  of a flyover to within 55 dB at 4 kHz, more closely than the car's places 1 m apart
+  fades in and out over its first and last second, as loud for its sound power as any
+  sound a demo makes for a source's model, so it mixes with the others at their
+  levels. Its feed (`helicopter.wav` in the run's feeds) is what the rotors send
+  straight down, dry, to listen to. `--input helicopter=WAV` plays a dry recording
+  instead, mixed down to mono, sent every way with the rotors' directivity; the stills
+  still give the rotors' model.
+- **The pass**: the helicopter every 4 m along its trajectory, on one clock with every
+  listener. From 150 m up, places 4 m apart follow the exact field of a flyover to
+  within 55 dB at 4 kHz, more closely than a car's places 1 m apart
   ([validation](validation.md#moving-sources-against-the-exact-field)). Over the grass
   the bands up to 500 Hz come from the wide-angle parabolic equation where the sound
   comes in at 34° from the horizontal or flatter (`parabolic_equation: wide_angle`, as
@@ -1522,7 +1523,11 @@ at. Its 900 m of flight take 14.3 s at 63 m/s.
   simulation bends sound](outdoor.md#how-the-simulation-bends-sound)). The wind bends
   the sound the helicopter sends ahead up and the sound it leaves behind down, and the
   eddies (`moderate` at 2 m, weaker higher up) make it flicker in the bands the rays
-  give.
+  give. The stills give the level heard at each moment, the loudest (L_Amax) and the
+  sound exposure level (SEL) of the pass, as simulated: those add the direct sound's
+  and the grass's reflection's energies band by band, where the mix adds their
+  pressures, so in the octaves up to 1 kHz, where the rotors' tones and the comb of the
+  two are few to the band, the mix's levels may lie a dB or more from them.
 
 What it leaves out: the rotors' model is louder than the helicopter's noise certificate.
 Flown over the microphone as the certification does, it gives a sound exposure level of

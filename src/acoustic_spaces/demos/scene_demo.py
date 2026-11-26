@@ -133,6 +133,7 @@ from acoustic_spaces.scene.model import (
     CHANNELS,
     RAIL_TRACKS,
     RAIL_TRAINS,
+    ROTORCRAFT_BROADBAND,
     SIREN_PATTERNS,
 )
 
@@ -546,6 +547,7 @@ MODEL_OPTIONS: dict[str, tuple[str, str]] = {
     "blows": ("defra", "blows_per_minute"),
     "train": ("schall-03", "train"),
     "track": ("schall-03", "track"),
+    "broadband": ("rotorcraft", "broadband"),
 }
 #: The model options that change what a source is, not only its made sound: set only
 #: in the sources in use, the model so changed checked (a tram's track is no train's).
@@ -1111,13 +1113,20 @@ def made_of(args: argparse.Namespace, scene: Scene) -> dict[str, tuple[Path, Sou
     run = {s.name: s for s in played.sources}
     rate, warmth = int(scene.simulation.sample_rate), scene.air.temperature_c
     folder = work_of(args) / MADE
+    for name in wanted:
+        if models.sends_each_way(run[name]) and models.stands(run[name]):
+            raise SystemExit(
+                f"error: {name} is a helicopter in level flight (a rotorcraft model): its sound "
+                "is that of its flight, so its trajectory moves in every run"
+            )
     standing = any(models.stands(run[name]) for name in wanted)
     length = run_length_s(args, played) if standing else None
     out: dict[str, tuple[Path, Source, float | None]] = {}
+    kpa = scene.air.pressure_kpa
     for name in wanted:
         source = run[name]
         each = length if models.stands(source) else None
-        out[name] = (models.made_file(folder, source, rate, warmth, each), source, each)
+        out[name] = (models.made_file(folder, source, rate, warmth, each, kpa), source, each)
     return out
 
 
@@ -1240,6 +1249,31 @@ def trains_of(args: argparse.Namespace) -> list[str]:
         for s in scene.sources
         if s.in_use and s.model is not None and s.model.method == "schall-03"
     ]
+
+
+def helicopters_of(args: argparse.Namespace) -> list[str]:
+    """The helicopters of the run (its sources in use with a rotorcraft model, whose
+    broadband noise ``--broadband`` sets), by name."""
+    found = _current(getattr(args, "scene", None))
+    if found is None:
+        return []
+    try:
+        scene = taken_in(args, found)
+    except ValueError:
+        return []
+    return [
+        s.name
+        for s in scene.sources
+        if s.in_use and s.model is not None and s.model.method == "rotorcraft"
+    ]
+
+
+def helicopters_moot(args: argparse.Namespace) -> str | None:
+    """Why ``--broadband`` changes nothing in the run, or None: no helicopter flies (a
+    source with a rotorcraft model)."""
+    if unread(args) or helicopters_of(args):
+        return None
+    return "no helicopter flies (a source with a rotorcraft model)"
 
 
 def trains_moot(args: argparse.Namespace) -> str | None:
@@ -1984,7 +2018,10 @@ def feeds(args: argparse.Namespace, demo: Demo | None = None) -> None:
         signal, channel = played
         if name in made and not signal.exists():
             _, source, made_s = made[name]
-            write(signal, models.made_sound(source, rate, scene.air.temperature_c, made_s), rate)
+            made_x = models.made_sound(
+                source, rate, scene.air.temperature_c, made_s, scene.air.pressure_kpa
+            )
+            write(signal, made_x, rate)
         if not signal.exists():
             if free is not None and signal == recordings.file_of(free, piece=piece):
                 raise SystemExit(
@@ -2042,6 +2079,7 @@ def feeds(args: argparse.Namespace, demo: Demo | None = None) -> None:
                 "brief": models.made_brief(source),
             }
             table[name] |= {} if source.model.steady else {"now_and_then": True}
+            table[name] |= {"each_way": True} if models.sends_each_way(source) else {}
             print(f"{name:>20}: {models.made_words(source)}")
             continue
         which = "" if channel is None else f", {channel_words(channel)}"
@@ -2514,7 +2552,18 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
             (lag, (lasting(y[:, k], r, over + FADE_OUT_S) if made else y[:, k], r))
             for k, (lag, _offset) in enumerate(behind)
         ]
+    each_way = {}
+    for source in sounding:
+        if table["sources"][source.name].get("each_way"):
+            # A helicopter's rotors' sound, sent each way down each early path.
+            from acoustic_spaces.demos.helicopter import flight_emission
+
+            each_way[source.name] = flight_emission(
+                source, rate, scene.air.temperature_c, scene.air.pressure_kpa
+            )
     for name, (x, r) in list(feeds.items()):
+        if name in each_way:
+            continue
         if table["sources"][name].get("made"):  # a made sound: silent after its pass
             feeds[name] = (lasting(x, r, over + FADE_OUT_S), r)
         elif len(x) and len(x) < (over + FADE_OUT_S) * r:
@@ -2527,7 +2576,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     print(f"mixing {len(names)} listeners through {len(movement.times)} moments{with_doppler}")
     mixes = render_movement(
         movement,
-        feeds,
+        feeds | each_way,
         fmt,
         sample_rate=rate,
         followers=followers,
@@ -3621,6 +3670,21 @@ DEMO = Demo(
             steps=("simulate", "feeds", "render", "video"),
             unset="each source's own",
             moot=trains_moot,
+        ),
+        Option(
+            "broadband",
+            "how the rotors' broadband noise of every helicopter of the run (a source with a "
+            "rotorcraft model) is found: pegg, Pegg's fit to measured rotors' noise (NASA "
+            "TM-80200), or bpm, each blade section's own noise in the flow past it (Brooks, "
+            "Pope and Marcolini's airfoil self-noise) summed round the turn; in the "
+            "certification's flyover pegg comes out over the AS350 B3's certified level and "
+            "bpm under it; the scene so changed is simulated once (default: each source's own)",
+            None,
+            "choice",
+            ROTORCRAFT_BROADBAND,
+            steps=("simulate", "feeds", "render", "video"),
+            unset="each source's own",
+            moot=helicopters_moot,
         ),
         Option(
             "blows",

@@ -24,6 +24,7 @@ emission in pascals 1 m away, its sound power (:meth:`Emission.sound_power_db`).
   in every direction, which keeps a long trajectory's emission small.
 - :class:`Sum` sends several emissions at once, such as a helicopter's two rotors.
 - :class:`Faded` fades one in and out, so that it does not start or stop at once.
+- :class:`Delayed` sends one later, from a time on a run's clock.
 """
 
 from __future__ import annotations
@@ -435,4 +436,45 @@ class Faded(Emission):
         return self.part._powers(bands, directions)
 
 
-__all__ = ["Emission", "Faded", "Mixture", "Periodic", "Sum"]
+@dataclass(frozen=True)
+class Delayed(Emission):
+    """An emission sent ``delay`` samples later, nothing before, as a source that sets
+    off on its trajectory some time into a run sends its sound on the run's clock. Its
+    bands and its directivity are the emission's own."""
+
+    part: Emission = dataclasses.field(repr=False)
+    #: How many samples later it is sent.
+    delay: int = 0
+
+    def __post_init__(self) -> None:
+        if self.delay < 0:
+            raise ValueError(f"an emission is sent 0 samples later or more, not {self.delay}")
+
+    @property
+    def sample_rate(self) -> int:  # type: ignore[override]
+        return self.part.sample_rate
+
+    @property
+    def length(self) -> int:
+        return self.delay + self.part.length
+
+    def sent(self, start: int, stop: int, directions: np.ndarray) -> np.ndarray:
+        out = np.zeros(stop - start)
+        lo = max(start, self.delay)
+        if lo < stop:
+            out[lo - start :] = self.part.sent(
+                lo - self.delay, stop - self.delay, directions[lo - start :]
+            )
+        return out
+
+    def averaged(self) -> np.ndarray:
+        return np.concatenate([np.zeros(self.delay), self.part.averaged()])
+
+    def scaled(self, gain: float) -> Delayed:
+        return Delayed(self.part.scaled(gain), self.delay)
+
+    def _powers(self, bands: Resolution, directions: np.ndarray) -> np.ndarray:
+        return self.part._powers(bands, directions)
+
+
+__all__ = ["Delayed", "Emission", "Faded", "Mixture", "Periodic", "Sum"]

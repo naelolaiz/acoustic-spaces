@@ -45,6 +45,7 @@ folder.
 
 from __future__ import annotations
 
+import contextvars
 import difflib
 import functools
 import math
@@ -1746,7 +1747,9 @@ class RoadVehicleModel(_Model):
     #: average over its sounding and its pauses).
     steady: ClassVar[bool] = True
 
-    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+    def power_db(
+        self, speed_m_s: float | None, temperature_c: float, pressure_kpa: float = 101.325
+    ) -> list[float]:
         """The sound power per octave band (dB re 1 pW) at ``speed_m_s`` in air at
         ``temperature_c``."""
         from acoustic_spaces.demos.road import vehicle_power
@@ -1806,7 +1809,9 @@ class SirenModel(_Model):
             )
         return self
 
-    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+    def power_db(
+        self, speed_m_s: float | None, temperature_c: float, pressure_kpa: float = 101.325
+    ) -> list[float]:
         """The sound power per octave band (dB re 1 pW): its pattern's
         (:data:`acoustic_spaces.demos.siren.POWER_DB`), ``gain_db`` up; it takes no speed
         or air."""
@@ -1851,7 +1856,9 @@ class HornModel(_Model):
             raise ValueError(f"a chord is a train horn's notes together; {self.kind} has none")
         return self
 
-    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+    def power_db(
+        self, speed_m_s: float | None, temperature_c: float, pressure_kpa: float = 101.325
+    ) -> list[float]:
         """The sound power per octave band (dB re 1 pW): the average of its blasts and
         pauses (:data:`acoustic_spaces.demos.horn.POWER_DB`); it takes no speed or air."""
         from acoustic_spaces.demos.horn import POWER_DB
@@ -1950,7 +1957,9 @@ class RailVehicleModel(_Model):
         every = train_points(TRAINS[self.train], 3.6 * float(speed_m_s), self.track)
         return [p for p in every if p.height_m == height]
 
-    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+    def power_db(
+        self, speed_m_s: float | None, temperature_c: float, pressure_kpa: float = 101.325
+    ) -> list[float]:
         """The sound power per octave band (dB re 1 pW) of its first point at
         ``speed_m_s``; Schall 03 takes no air."""
         if speed_m_s is None:
@@ -1998,7 +2007,9 @@ class PlantModel(_Model):
             raise ValueError(f"a {self.machine} strikes no blows: blows_per_minute is a breaker's")
         return self
 
-    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+    def power_db(
+        self, speed_m_s: float | None, temperature_c: float, pressure_kpa: float = 101.325
+    ) -> list[float]:
         """The sound power per octave band (dB re 1 pW): the row's level 10 m away plus
         28 dB; it takes no speed or air."""
         from acoustic_spaces.demos.plant import MACHINES
@@ -2022,7 +2033,9 @@ class AlarmModel(_Model):
     needs: ClassVar[str | None] = None
     steady: ClassVar[bool] = False
 
-    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+    def power_db(
+        self, speed_m_s: float | None, temperature_c: float, pressure_kpa: float = 101.325
+    ) -> list[float]:
         """The sound power per octave band (dB re 1 pW), averaged over its beeps and
         pauses (:func:`acoustic_spaces.demos.plant.alarm_power` at 48 kHz); it takes no
         speed or air."""
@@ -2031,17 +2044,151 @@ class AlarmModel(_Model):
         return [round(float(v), 6) for v in alarm_power(48000)]
 
 
+#: The air (an :class:`Air`) and the atmosphere (an :class:`Atmosphere` or None) of the
+#: scene whose sources are being validated, so that a source's model finds its sound
+#: power once, in that air (:meth:`Scene._in_its_air`); None outside a scene.
+_SCENE_AIR: contextvars.ContextVar[tuple | None] = contextvars.ContextVar("scene_air", default=None)
+
+
+def wind_at(atmosphere, z: float) -> tuple[float, float, float]:
+    """The wind of ``atmosphere`` (an :class:`Atmosphere`, or None for still air) at
+    height ``z`` (m), as a vector (m/s): its own, not its zones'."""
+    if atmosphere is None:
+        return (0.0, 0.0, 0.0)
+    speed = float(atmosphere.wind_speed(np.array([z]))[0])
+    if speed == 0.0:
+        return (0.0, 0.0, 0.0)
+    way = math.radians(atmosphere.wind.direction_deg) if atmosphere.wind else 0.0
+    return (speed * math.cos(way), speed * math.sin(way), 0.0)
+
+
+#: The helicopters a rotorcraft model flies (:data:`acoustic_spaces.demos.helicopter.HELICOPTERS`).
+RotorcraftName = Literal["as350_b3"]
+#: How a rotorcraft model's broadband noise is found (a demo's --broadband).
+RotorcraftBroadband = Literal["pegg", "bpm"]
+ROTORCRAFT_BROADBAND: tuple[str, ...] = get_args(RotorcraftBroadband)
+#: How far the points of a rotorcraft model's trajectory may differ in height and still
+#: be level flight (m).
+LEVEL_FLIGHT_M = 0.5
+
+
+class RotorcraftModel(_Model):
+    """A helicopter in steady level flight (:mod:`acoustic_spaces.rotorcraft`):
+    ``helicopter`` (an Airbus Helicopters AS350 B3 at its maximum mass) trimmed for its
+    airspeed, the speed of its trajectory over the ground less the wind of the scene's
+    own atmosphere at its height, in the scene's air. Its sound power per octave band and
+    its directivity are those of the sound its two rotors send
+    (:func:`acoustic_spaces.rotorcraft.emission`): each harmonic of each rotor's blade
+    passing frequency, from the blades' steady lift, drag and thickness (Ffowcs Williams
+    and Hawkings), and broadband noise by ``broadband``. The source is the main rotor's
+    hub; it faces the way it flies, with Doppler, and its trajectory keeps one height.
+    A demo of the scene plays down each early path what the rotors send the way the path
+    leaves the helicopter, at the time it leaves. Finding the rotors' sound takes some
+    seconds, once for each flight in a run of the tool."""
+
+    method: Literal["rotorcraft"] = Field(
+        description="the method that gives the source's sound power and directivity: "
+        "rotorcraft, a helicopter's rotors in level flight"
+    )
+    helicopter: RotorcraftName = Field(
+        default="as350_b3",
+        description="the helicopter: as350_b3, an Airbus Helicopters AS350 B3 at its maximum "
+        "mass of 2,250 kg",
+    )
+    broadband: RotorcraftBroadband = Field(
+        default="pegg",
+        description="how the rotors' broadband noise is found: pegg, Pegg's fit to measured "
+        "rotors' noise (NASA TM-80200), or bpm, each blade section's own noise in the flow "
+        "past it (Brooks, Pope and Marcolini's airfoil self-noise) summed round the turn",
+    )
+
+    needs: ClassVar[str | None] = (
+        "the rotorcraft model trims a helicopter for level flight at one steady speed"
+    )
+    steady: ClassVar[bool] = True
+    #: Whether the speed it takes is through the air (the trajectory's less the wind).
+    through_air: ClassVar[bool] = True
+    #: Whether it gives the source's directivity too.
+    radiates: ClassVar[bool] = True
+
+    def problem(self, source: Source) -> str | None:
+        """What keeps ``source`` from flying as the model has it: a trajectory that does
+        not face the way it goes, has no Doppler or does not keep one height."""
+        from acoustic_spaces.walkthrough import knots
+
+        trajectory = source.trajectory
+        if trajectory is None:
+            return f"{self.needs}: give the source a trajectory"
+        if trajectory.keyframes is not None or not trajectory.face_forward:
+            return (
+                "a helicopter's rotors send their sound in its own frame, which faces the way "
+                "it flies: give its trajectory to and speed_m_s, facing forward (not "
+                "face_forward: false, nor keyframes, which set how it faces)"
+            )
+        if not trajectory.doppler:
+            return (
+                "a helicopter's rotors send their sound each way, down each path with its "
+                "changing delay: give its trajectory doppler: true"
+            )
+        heights = knots(source).positions[:, 2]
+        if float(np.ptp(heights)) > LEVEL_FLIGHT_M:
+            return (
+                f"the rotorcraft model trims a helicopter for level flight, but its trajectory "
+                f"goes from {heights.min():.1f} to {heights.max():.1f} m up: give its points "
+                "one height"
+            )
+        return None
+
+    def power_db(
+        self, speed_m_s: float | None, temperature_c: float, pressure_kpa: float = 101.325
+    ) -> list[float]:
+        """The sound power per octave band (dB re 1 pW) of what its rotors send at the
+        airspeed ``speed_m_s`` in air at ``temperature_c`` and ``pressure_kpa``
+        (:func:`acoustic_spaces.demos.helicopter.flight_sound`)."""
+        from acoustic_spaces.demos.helicopter import flight_sound
+
+        if speed_m_s is None:
+            raise ValueError(f"{self.needs}: give the source a trajectory")
+        power, _ = flight_sound(
+            self.helicopter, self.broadband, float(speed_m_s), temperature_c, pressure_kpa
+        )
+        return list(power)
+
+    def directivity(self, speed_m_s: float, temperature_c: float, pressure_kpa: float):
+        """The directivity of what its rotors send at the airspeed ``speed_m_s``, in its
+        frame (:class:`~acoustic_spaces.directivity.Balloon`)."""
+        from acoustic_spaces.demos.helicopter import flight_sound
+
+        _, balloon = flight_sound(
+            self.helicopter, self.broadband, float(speed_m_s), temperature_c, pressure_kpa
+        )
+        return balloon
+
+
 #: The models a source's sound power and made sound can come from (``model``), by their
 #: method.
 SourceModel = Annotated[
-    RoadVehicleModel | SirenModel | HornModel | RailVehicleModel | PlantModel | AlarmModel,
+    RoadVehicleModel
+    | SirenModel
+    | HornModel
+    | RailVehicleModel
+    | PlantModel
+    | AlarmModel
+    | RotorcraftModel,
     Field(discriminator="method"),
 ]
 
 
 class Source(_Model):
-    #: The scene's air temperature (°C), which a model's sound power may take.
+    #: The scene's air (its temperature, °C, and pressure, kPa) and the wind of its own
+    #: atmosphere at the source's height (m/s, a vector), which a model's sound power
+    #: may take.
     _air_c: float = PrivateAttr(default=20.0)
+    _air_kpa: float = PrivateAttr(default=101.325)
+    _wind: tuple[float, float, float] = PrivateAttr(default=(0.0, 0.0, 0.0))
+    #: The speed its model last took (m/s, :meth:`model_speed_m_s`), which a copy of it
+    #: standing at a place of its trajectory keeps.
+    _speed_m_s: float | None = PrivateAttr(default=None)
 
     name: str
     group: str | None = _group_field()
@@ -2104,7 +2251,9 @@ class Source(_Model):
             "gives another: cnossos-eu (a road vehicle, at the speed of its trajectory, in "
             "the scene's air), siren (a vehicle's siren), horn (a vehicle's horn in blasts), "
             "schall-03 (a train or a tram, its sources at one height, at the speed of its "
-            "trajectory), defra (construction plant) or sae-j994 (a reversing alarm)"
+            "trajectory), defra (construction plant), sae-j994 (a reversing alarm) or "
+            "rotorcraft (a helicopter in level flight, its directivity too, at its speed "
+            "through the air)"
         ),
     )
     gain_db: float = Field(
@@ -2254,30 +2403,75 @@ class Source(_Model):
             raise ValueError("a model's source is a point, not a line or a surface")
         if self.model.needs is not None and self.trajectory is None:
             raise ValueError(f"{self.model.needs}: give the source a trajectory")
+        if getattr(self.model, "radiates", False) and "directivity" in self.model_fields_set:
+            raise ValueError(
+                f"the {self.model.method} model gives the source's directivity: give it or "
+                "directivity, not both"
+            )
+        problem = getattr(self.model, "problem", None)
+        said = problem(self) if problem is not None else None
+        if said:
+            raise ValueError(said)
+        scene_air = _SCENE_AIR.get()
+        if scene_air is not None:  # in a scene: its air, not the default's
+            air, atmosphere = scene_air
+            self._air_c, self._air_kpa = air.temperature_c, air.pressure_kpa
+            self._wind = wind_at(atmosphere, float(self.position[2]))
         self.__dict__["level_db"] = self.model_level_db()
         return self
 
     @model_serializer(mode="wrap")
     def _without_a_given_level(self, handler: SerializerFunctionWrapHandler):
-        """Its fields, but the sound power where the vocal effort or the model gives it: as
-        it was given, so that what is written reads again."""
+        """Its fields, but the sound power where the vocal effort or the model gives it, and
+        the directivity where the model gives that: as it was given, so that what is
+        written reads again."""
         data = handler(self)
         if isinstance(data, dict) and (self.vocal_effort is not None or self.model is not None):
             data.pop("level_db", None)
+            if getattr(self.model, "radiates", False):
+                data.pop("directivity", None)
         return data
+
+    def model_speed_m_s(self) -> float | None:
+        """The speed its :attr:`model` takes (m/s): that of its trajectory, over the
+        ground, or through the air for a method that takes that (the trajectory's
+        velocity along its first leg less the wind at its height, as vectors); None for
+        a method that takes no speed. A copy of it standing at a place of its trajectory
+        (a moment of a walkthrough) keeps the speed it took there."""
+        if self.model is None:
+            raise ValueError(f"{self.name!r} has no model")
+        if self.model.needs is None:
+            return None
+        if self.trajectory is None:
+            if self._speed_m_s is not None:
+                return self._speed_m_s
+            raise ValueError(f"{self.model.needs}: give the source a trajectory")
+        speed = steady_speed_m_s(self.position, self.trajectory, self.model.needs)
+        if not getattr(self.model, "through_air", False):
+            return speed
+        from acoustic_spaces.walkthrough import knots
+
+        path = knots(self).positions
+        leg = path[1] - path[0]
+        heading = leg / max(math.hypot(*leg), 1e-12)
+        # Rounded, so that the same flight finds the same sound.
+        return round(math.hypot(*(speed * heading - np.asarray(self._wind))), 4)
 
     def model_level_db(self) -> list[float]:
         """The sound power per octave band its :attr:`model` gives it (dB re 1 pW): at
-        the speed of its trajectory where the method takes one, in the scene's air (20
-        °C until a scene gives it its own)."""
+        the speed it takes where the method takes one (:meth:`model_speed_m_s`), in the
+        scene's air (20 °C and 101.325 kPa, no wind, until a scene gives it its own)."""
         if self.model is None:
             raise ValueError(f"{self.name!r} has no model")
-        speed = None
-        if self.model.needs is not None:
-            if self.trajectory is None:
-                raise ValueError(f"{self.model.needs}: give the source a trajectory")
-            speed = steady_speed_m_s(self.position, self.trajectory, self.model.needs)
-        return self.model.power_db(speed, self._air_c)
+        self._speed_m_s = self.model_speed_m_s()
+        return self.model.power_db(self._speed_m_s, self._air_c, self._air_kpa)
+
+    def model_directivity(self):
+        """The directivity its :attr:`model` gives it, for a method that gives one
+        (:class:`~acoustic_spaces.directivity.Balloon`); None for any other."""
+        if self.model is None or not getattr(self.model, "radiates", False):
+            return None
+        return self.model.directivity(self.model_speed_m_s(), self._air_c, self._air_kpa)
 
     def model_copy(self, *, update=None, deep: bool = False) -> Source:
         """A copy, with ``update``; a source with a model gets its sound power anew
@@ -3786,12 +3980,40 @@ class Scene(_Model):
 
     @model_validator(mode="after")
     def _model_powers(self) -> Scene:
-        """Each source with a model gets its sound power in the scene's air."""
+        """Each source with a model gets its sound power in the scene's air, and the
+        wind of the scene's own atmosphere at its height."""
         for source in self.sources:
-            if source.model is not None and source._air_c != self.air.temperature_c:
-                source._air_c = self.air.temperature_c
+            if source.model is None:
+                continue
+            wind = wind_at(self.atmosphere, float(source.position[2]))
+            air = (self.air.temperature_c, self.air.pressure_kpa, wind)
+            if (source._air_c, source._air_kpa, source._wind) != air:
+                source._air_c, source._air_kpa, source._wind = air
                 source.__dict__["level_db"] = source.model_level_db()
         return self
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _in_its_air(cls, data, handler):
+        """Its sources validated in its air and atmosphere (``_SCENE_AIR``), so that a
+        source's model finds its sound power in them at once, not first in the
+        default's: a helicopter's takes some seconds."""
+        scene_air = None
+        if isinstance(data, dict) and any(
+            isinstance(s, dict) and s.get("model") for s in data.get("sources") or []
+        ):
+            try:
+                air = Air.model_validate(data.get("air") or {})
+                given = data.get("atmosphere")
+                atmosphere = None if given is None else Atmosphere.model_validate(given)
+                scene_air = (air, atmosphere)
+            except (ValueError, TypeError):
+                scene_air = None  # the scene's own validation says what is wrong
+        token = _SCENE_AIR.set(scene_air)
+        try:
+            return handler(data)
+        finally:
+            _SCENE_AIR.reset(token)
 
     @model_validator(mode="after")
     def _check_fitted_walls(self) -> Scene:

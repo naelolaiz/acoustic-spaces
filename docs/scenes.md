@@ -812,10 +812,22 @@ sources:
   room ([road works](demos.md#road-works-in-the-street)). With `method: sae-j994` it is a
   reversing alarm, 1200 Hz beeps 1.5 times a second, 107 dB(A) 1.2 m in front of it
   (SAE J994 Type B), its sound power the average over its beeps and pauses. Plant and
-  alarms need no trajectory: standing, a demo plays their sound all through the run. A
-  siren's, a horn's, an alarm's and a train's directivity is the source's own (the
-  examples' `siren.csv`, `train.csv` and `tram.csv`; see
-  [demos](demos.md#vehicles-passing-by)). The editor shows the model on
+  alarms need no trajectory: standing, a demo plays their sound all through the run.
+  With `method: rotorcraft` it is a `helicopter` (`as350_b3`, an Airbus Helicopters
+  AS350 B3 at its maximum mass) in steady level flight, the source its main rotor's
+  hub: its rotors trimmed at its airspeed, the speed of its trajectory less the wind of
+  the scene's own atmosphere at its height, as vectors, in the scene's air
+  ([helicopters](outdoor.md#helicopters)), give it the sound power and the directivity
+  of what they send, its broadband noise by `broadband` (`pegg`, Pegg's method, or
+  `bpm`, each blade section's own noise; a demo's `--broadband`). So it gives the
+  source's directivity too, which is refused beside it, and needs a trajectory through
+  `to` at one speed, facing forward, with Doppler, that keeps one height (within 0.5
+  m); finding its rotors' sound takes some seconds, once for each flight in a run of the
+  tool. A demo of the scene plays down each early path what the rotors send the way the
+  path leaves the helicopter, at the time it leaves ([a helicopter flying
+  over](demos.md#a-helicopter-flying-over)). A siren's, a horn's, an alarm's and a
+  train's directivity is the source's own (the examples' `siren.csv`, `train.csv` and
+  `tram.csv`; see [demos](demos.md#vehicles-passing-by)). The editor shows the model on
   the source's page (**Model**), with the sound power it gives.
 - `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
   the sound power and on the impulse responses, so a mix made with `auralize` hears

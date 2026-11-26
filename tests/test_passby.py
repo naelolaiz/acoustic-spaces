@@ -1114,7 +1114,6 @@ def _passby(example: str):
     ("example", "name", "playing"),
     [
         ("airport", "flight_departure_binaural", None),
-        ("helicopter_flyover", "flyover_binaural", None),
     ],
 )
 def test_a_pass_by_run_by_default_is_named_and_plays_as_before(example, name, playing) -> None:

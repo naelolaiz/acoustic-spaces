@@ -3211,7 +3211,8 @@ msgid ""
 "trajectory, that of the first of its points at one height, a demo playing "
 "those behind it too; construction plant's, Defra's row for the machine plus "
 "28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its beeps and "
-"pauses"
+"pauses; a helicopter's, its rotors' sound in level flight at its speed "
+"through the air, its directivity too"
 msgstr ""
 "Das Verfahren, das die Schallleistung der Quelle statt der von Ihnen "
 "angegebenen liefert, und den Klang, den eine Demo der Szene für sie spielt "
@@ -3224,7 +3225,9 @@ msgstr ""
 "des ersten seiner Punkte in einer Höhe, wobei eine Demo auch die Punkte "
 "dahinter spielt; die einer Baumaschine, die Zeile von Defra für die Maschine "
 "plus 28 dB; die eines Rückfahrwarners, die des Typs B nach SAE J994, "
-"gemittelt über Pieptöne und Pausen"
+"gemittelt über Pieptöne und Pausen; die eines Hubschraubers, der Schall "
+"seiner Rotoren im Horizontalflug bei seiner Geschwindigkeit gegenüber der "
+"Luft, auch seine Richtcharakteristik"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -3272,6 +3275,32 @@ msgstr "nacheinander"
 #: acoustic_spaces/gui/inspector.py
 msgid "together"
 msgstr "zusammen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Helicopter: {helicopter}, its rotors in level flight at {speed} m/s through "
+"the air, their broadband noise by {broadband}; its directivity too"
+msgstr ""
+"Hubschrauber: {helicopter}, seine Rotoren im Horizontalflug bei {speed} m/s "
+"gegenüber der Luft, ihr Breitbandgeräusch nach {broadband}; auch seine "
+"Richtcharakteristik"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an Airbus Helicopters AS350 B3 at 2,250 kg"
+msgstr "ein Airbus Helicopters AS350 B3 mit 2250 kg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Pegg's method"
+msgstr "dem Verfahren von Pegg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Brooks, Pope and Marcolini's airfoil self-noise"
+msgstr "dem Profil-Eigengeräusch nach Brooks, Pope und Marcolini"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "given by its model"
+msgstr "durch ihr Modell gegeben"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format

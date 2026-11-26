@@ -17,111 +17,260 @@ import yaml
 from acoustic_spaces import rotorcraft as rc
 from acoustic_spaces.demos import audio, pipeline
 from acoustic_spaces.demos import helicopter as helicopter_module
-from acoustic_spaces.demos.helicopter import HELICOPTER_VEHICLE, POWER_S, airspeed
+from acoustic_spaces.demos.helicopter import HELICOPTER_VEHICLE, POWER_RATE, POWER_S, airspeed
 from acoustic_spaces.directivity import read_directivity_csv
 from acoustic_spaces.examples import example_path
 from acoustic_spaces.scene import Scene
 
 
-def test_the_examples_helicopter_is_its_rotors_model() -> None:
-    """The helicopter of the helicopter_flyover example flies level 150 m up at 63 m/s,
-    against the wind: its sound power and its directivity (helicopter.csv) are those of
-    its rotors' sound at its airspeed, its speed over the ground and the wind's at its
-    height."""
+def test_the_examples_helicopter_is_a_rotorcraft_model() -> None:
+    """The helicopter of the helicopter_flyover example flies level 150 m up at 63 m/s
+    against the wind, of a rotorcraft model: its sound power and its directivity are
+    those of its rotors' sound at its airspeed (its speed over the ground and the wind's
+    at its height), in the scene's air, as the example had them written; each blade
+    section's own noise (bpm) is quieter than Pegg's fit to measured rotors."""
+    from acoustic_spaces.parameters import a_weighted
+    from acoustic_spaces.room import Room
+
     path = Path(example_path("helicopter_flyover"))
     scene = Scene.from_yaml(path)
     (helicopter,) = scene.sources
-    assert helicopter.in_use and helicopter.trajectory.doppler and helicopter.position[2] == 150.0
-    assert (
-        helicopter.trajectory.speed_m_s == 63.0 and HELICOPTER_VEHICLE.problem(helicopter) is None
-    )
+    model = helicopter.model
+    assert (model.method, model.helicopter, model.broadband) == ("rotorcraft", "as350_b3", "pegg")
+    flight = helicopter.trajectory
+    assert helicopter.in_use and helicopter.position[2] == 150.0
+    assert flight.doppler and flight.face_forward and flight.speed_m_s == 63.0
+    assert flight.step_m == 4.0
     wind = float(scene.atmosphere.wind_speed(np.array([150.0]))[0])
-    assert airspeed(helicopter, scene, 63.0) == pytest.approx(63.0 + wind)
-    (broadband,) = HELICOPTER_VEHICLE.options()
-    assert broadband.default == "pegg" and broadband.choices == ("bpm", "pegg")
-    args = argparse.Namespace(speed=None, broadband=broadband.default)
-    info = HELICOPTER_VEHICLE.info(args, scene, 63.0 * 3.6)
-    assert info["airspeed_m_s"] == pytest.approx(63.0 + wind, abs=1e-4)
-    trim, sent = HELICOPTER_VEHICLE.emission(info, POWER_S)
+    airspeed = helicopter.model_speed_m_s()
+    assert airspeed == pytest.approx(63.0 + wind, abs=1e-4)
+    air = scene.air
+    n = round(POWER_S * POWER_RATE)
+    trim, sent = helicopter_module._sent(
+        airspeed, air.temperature_c, air.pressure_kpa, POWER_RATE, n, "pegg"
+    )
     level = sent.sound_power_db(trim.density, trim.sound_speed)
-    assert helicopter.level_db == pytest.approx(level, abs=0.051)
-    table = read_directivity_csv(path.parent / "helicopter.csv")
-    np.testing.assert_allclose(table.table, sent.directivity().table, rtol=2e-3)
-    # Each blade section's own noise is quieter than Pegg's fit to measured rotors:
-    # 123.83 dB(A) of sound power in the IEC octaves against 132.95, the tones in both.
-    args.broadband = "bpm"
-    by_sections = HELICOPTER_VEHICLE.info(args, scene, 63.0 * 3.6)
-    assert by_sections["sound_power_a_db"] == pytest.approx(123.83, abs=0.05)
-    assert info["sound_power_a_db"] == pytest.approx(132.95, abs=0.05)
-    facts = HELICOPTER_VEHICLE.facts(args, by_sections)
-    assert "Brooks, Pope and Marcolini" in HELICOPTER_VEHICLE.credit(facts)
+    np.testing.assert_allclose(helicopter.level_db, level, atol=1e-5)
+    # The example's own numbers, written before the model gave them.
+    written = [130.7, 130.5, 131.4, 130.4, 127.0, 125.2, 122.0, 120.2]
+    np.testing.assert_allclose(helicopter.level_db, written, atol=0.051)
+    (directivity,) = Room.from_scene(scene).directivities
+    np.testing.assert_array_equal(directivity.table, sent.directivity().table)
+    # 123.83 dB(A) of sound power in the IEC octaves by BPM against 132.95 by Pegg's
+    # method, the tones in both.
+    bpm = helicopter.model_copy(update={"model": model.model_copy(update={"broadband": "bpm"})})
+    assert bpm.model_speed_m_s() == airspeed
+    assert a_weighted(np.asarray(bpm.level_db)) == pytest.approx(123.83, abs=0.05)
+    assert a_weighted(np.asarray(helicopter.level_db)) == pytest.approx(132.95, abs=0.05)
+
+
+def test_a_rotorcraft_models_scene_reads_again_as_written() -> None:
+    """The scene written again (as the editor saves it) leaves out the sound power and
+    the directivity the model gives, so that it reads again, the same."""
+    scene = Scene.from_yaml(Path(example_path("helicopter_flyover")))
+    data = scene.to_data()
+    (written,) = data["sources"]
+    assert "level_db" not in written and "directivity" not in written
+    again = Scene.model_validate(data)
+    assert again.sources[0].level_db == scene.sources[0].level_db
+    assert again.sources[0].model == scene.sources[0].model
+
+
+@pytest.mark.parametrize(
+    ("change", "said"),
+    [
+        (
+            {
+                "trajectory": {
+                    "to": [[450, 0, 160]],
+                    "speed_m_s": 63,
+                    "doppler": True,
+                    "face_forward": True,
+                }
+            },
+            "the rotorcraft model trims a helicopter for level flight, but its trajectory goes "
+            "from 150.0 to 160.0 m up: give its points one height",
+        ),
+        (
+            {"trajectory": {"to": [[450, 0, 150]], "doppler": True, "face_forward": False}},
+            "a helicopter's rotors send their sound in its own frame, which faces the way it "
+            "flies: give its trajectory to and speed_m_s, facing forward (not face_forward: "
+            "false, nor keyframes, which set how it faces)",
+        ),
+        (
+            {
+                "trajectory": {
+                    "keyframes": [{"time_s": 14.0, "position": [450, 0, 150]}],
+                    "doppler": True,
+                }
+            },
+            "facing forward (not face_forward: false, nor keyframes, which set how it faces)",
+        ),
+        (
+            {"trajectory": {"to": [[450, 0, 150]], "speed_m_s": 63, "face_forward": True}},
+            "a helicopter's rotors send their sound each way, down each path with its changing "
+            "delay: give its trajectory doppler: true",
+        ),
+        (
+            {"trajectory": None},
+            "the rotorcraft model trims a helicopter for level flight at one steady speed: give "
+            "the source a trajectory",
+        ),
+        (
+            {"directivity": "omni"},
+            "the rotorcraft model gives the source's directivity: give it or directivity, not both",
+        ),
+        (
+            {"level_db": 120.0},
+            "model sets the source's sound power: give it or level_db, not both",
+        ),
+    ],
+)
+def test_a_rotorcraft_model_flies_level_facing_its_way(change, said) -> None:
+    """A helicopter of a rotorcraft model flies level, facing the way it flies, with
+    Doppler, and its model gives its sound power and its directivity: each else is
+    refused, saying why."""
+    import re
+
+    from pydantic import ValidationError
+
+    from acoustic_spaces.scene import Source
+
+    given = {
+        "name": "helicopter",
+        "position": [-450, 0, 150],
+        "model": {"method": "rotorcraft"},
+        "trajectory": {
+            "to": [[450, 0, 150]],
+            "speed_m_s": 63,
+            "doppler": True,
+            "face_forward": True,
+        },
+    }
+    given |= change
+    if given["trajectory"] is None:
+        del given["trajectory"]
+    with pytest.raises(ValidationError, match=re.escape(said)):
+        Source.model_validate(given)
 
 
 def _flyover(tmp_path: Path) -> Path:
     """The helicopter_flyover example, quick: 40 m of its flight right over the listener
-    under its track, 16 kHz. The copy's folder is named apart from the example's: demo
-    scripts are imported under their folder's name, so a copy named as the example would
-    stand in for it in later tests."""
+    under its track, heard there and 150 m to its left, 16 kHz. The copy's folder is
+    named apart from the example's: demo scripts are imported under their folder's name,
+    so a copy named as the example would stand in for it in later tests."""
     folder = tmp_path / "flyover_copy"
     shutil.copytree(Path(example_path("helicopter_flyover")).parent, folder)
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     (helicopter,) = data["sources"]
     helicopter["position"] = [-20, 0, 150]
     helicopter["trajectory"]["to"] = [[20, 0, 150]]
-    data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "under_track"]
-    data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.7})
+    data["listeners"] = [
+        lis for lis in data["listeners"] if lis["name"] in ("under_track", "left_150m")
+    ]
+    data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.7, "seed": 7})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return folder
 
 
 def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
-    """A walk that climbs is refused (the rotors are trimmed for level flight). Every
-    step on the quick flyover: its rotors' sound straight down, the scene with the
-    helicopter's sound power and directivity at its airspeed, facing the way it flies,
-    the pass (the pitch falling) and the tour."""
+    """Every step on the quick flyover, the script's command line: its rotors' sound
+    sent each way, its feed what it sends straight down; the scene with the helicopter's
+    sound power at its airspeed, found at 48 kHz whatever the simulation's rate; the
+    pass (the pitch falling) and the stills; what it sends each way as loud, for its
+    sound power, as any made sound is; and in the mixes each listener as far under the
+    other as the pass's levels say, the rotors' pattern as their directivity has it.
+    On a seed, so that the late part's rays are the same in the mixes and in the
+    simulation the test makes again."""
     pytest.importorskip("PIL")
-    from acoustic_spaces.demos import load
+    from acoustic_spaces.demos import load, models, scene_demo
+    from acoustic_spaces.demos.helicopter import flight_emission
+    from acoustic_spaces.directivity import sphere_mean
+    from acoustic_spaces.room import Room
+    from acoustic_spaces.walkthrough import simulate_movement
 
     folder = _flyover(tmp_path)
     demo = load(folder / "flyover_demo.py").at(folder)
-    path = folder / "scene.yaml"
-    level = path.read_text(encoding="utf-8")
-    data = yaml.safe_load(level)
-    data["sources"][0]["trajectory"]["to"] = [[20, 0, 160]]
-    path.write_text(yaml.safe_dump(data), encoding="utf-8")
-    assert demo.check(demo.defaults()).endswith(
-        "the helicopter flies level, its rotors trimmed for it, but its trajectory goes from "
-        "150.0 to 160.0 m up: give its points one height"
+    run = ["all", "--step", "8", "--format", "mono", "--no-mp4"]
+    args = demo.resolved(demo.parser().parse_args(run))
+    assert demo.check(args) is None and demo.run_name(args) == "flyover_step-8_mono"
+    assert demo.plays(args)["helicopter"].startswith(
+        "an AS350 B3's two rotors at 67.5 m/s through the air, their tones from the blades' "
+        "steady loads (Ffowcs Williams and Hawkings) and their broadband noise by Pegg's method"
     )
-    path.write_text(level, encoding="utf-8")
-    assert demo.main(["all", "--step", "8", "--no-mp4"]) == 0
-    work = demo.run_folder(demo.parser().parse_args(["all", "--step", "8"]))
-    assert work == folder / "demo" / "flyover_step-8_binaural"
-    info = pipeline.read_json(work / "helicopter" / "helicopter.json")
-    assert info["helicopter"] == "AS350 B3" and info["speed_kmh"] == pytest.approx(226.8)
-    assert info["duration_s"] == pytest.approx(40.0 / 63.0, abs=1e-6)
-    x, rate = audio.read(work / "helicopter" / "below.wav")
-    assert rate == 16_000 and len(x) == round(info["duration_s"] * rate)
-    assert np.abs(x).max() == pytest.approx(0.5, rel=1e-3)
-    scene = Scene.from_yaml(work / "scene_demo.yaml")
+    assert demo.main(run) == 0
+    feeds = scene_demo.feeds_folder(args)
+    fed = pipeline.read_json(feeds / scene_demo.FEEDS)["sources"]["helicopter"]
+    assert fed["made"] and fed["each_way"]
+    below, rate = audio.read(feeds / "helicopter.wav")
+    assert rate == 16_000 and len(below) == round(40.0 / 63.0 * rate)
+    scene = scene_demo.moving_scene(args)
     (helicopter,) = scene.sources
-    assert helicopter.level_db == pytest.approx(info["level_db"])
-    assert helicopter.trajectory.face_forward and helicopter.trajectory.doppler
-    # The example's at 48 kHz: at 16 kHz the 8 kHz band is half above the sound's top.
-    table = read_directivity_csv(work / "scene_demo_helicopter.csv").table[..., :7]
-    full = read_directivity_csv(folder / "helicopter.csv").table[..., :7]
-    np.testing.assert_allclose(table, full, rtol=2e-3)
-    facts = pipeline.read_json(work / "walk" / "walk.json")
-    assert facts["source"] == "helicopter" and facts["about"].startswith("An AS350 B3 at 226.8")
-    under = facts["listeners"]["under_track"]
+    example = Scene.from_yaml(Path(example_path("helicopter_flyover"))).sources[0]
+    assert helicopter.model_speed_m_s() == example.model_speed_m_s()
+    assert helicopter.level_db == example.level_db
+    seats = pipeline.read_json(demo.run_folder(args) / scene_demo.MOVING / pipeline.SEATS)
+    passes = seats["movement"]["passes"]
+    under = passes["under_track"]
     assert under["closest_m"] == pytest.approx(math.hypot(4.0, 148.8), abs=0.01)  # x = ±4 m
-    c = facts["speed_of_sound"]
+    assert "(its rotors' model, 67.5 m/s through the air)" in under["about"]
+    c = 331.3 * math.sqrt(1.0 + scene.air.temperature_c / 273.15)
     towards = 63.0 * 20.0 / math.hypot(20.0, 148.8)
     falls = 12.0 * math.log2((c + towards) / (c - towards))
-    assert under["pitch_semitones"] == pytest.approx(falls, abs=1e-3)
-    assert work.with_name(work.name + ".wav").exists()
-    assert (work / "stills" / "00_under_track.png").exists()
+    assert under["pitch_semitones"] == pytest.approx(falls, abs=0.02)
+    assert (demo.run_folder(args) / "stills" / "00_under_track.png").exists()
+    # What it sends in the IEC octaves, over the sphere, is a made sound's SOUND_RMS for
+    # its sound power: at 48 kHz, where every band is under half the rate.
+    air = scene.air
+    sent = flight_emission(helicopter, 48_000, air.temperature_c, air.pressure_kpa)
+    in_bands = float(np.sum(sphere_mean(sent._grid_powers("octave"))))
+    assert in_bands == pytest.approx(models.SOUND_RMS**2, rel=1e-6)
+    # The two listeners in the mixes, one gain for both, against the pass's levels.
+    # Those add the direct sound's and the grass's reflection's energies band by band,
+    # where the mixes add their pressures: the comb of the two, 1.2 m over the grass,
+    # and the rotors' tones in it leave the low octaves up to 3 dB apart, 0.26 dB in
+    # all (A-weighted); at 2 and 4 kHz the comb's teeth are many to the octave, and there
+    # what the rotors send each way is heard as their directivity has it.
+    energy, octaves = {}, {}
+    moving = demo.run_folder(args) / scene_demo.MOVING
+    for name in ("under_track", "left_150m"):
+        x, _ = audio.read(pipeline.mix_path(moving, seats, name))
+        x = np.asarray(x).reshape(len(x), -1)[:, 0]
+        energy[name] = _a_energy(x, rate)
+        power = np.abs(np.fft.rfft(x)) ** 2
+        f = np.fft.rfftfreq(len(x), 1.0 / rate)
+        octaves[name] = [
+            float(np.sum(power[(f >= c / math.sqrt(2.0)) & (f < c * math.sqrt(2.0))]))
+            for c in (2000.0, 4000.0)
+        ]
+    told = passes["under_track"]["sel_a_db"] - passes["left_150m"]["sel_a_db"]
+    heard = 10.0 * math.log10(energy["under_track"] / energy["left_150m"])
+    assert told > 2.0 and heard == pytest.approx(told, abs=0.5)
+    room = Room.from_scene(scene)
+    movement = simulate_movement(room)
+    power = helicopter.power_db("octave")
+    simulated = {}
+    for name in ("under_track", "left_150m"):
+        bands = np.array(
+            [
+                movement.result[movement.key("helicopter", name, k)].levels_or_held(power)
+                for k in range(len(movement.times))
+            ]
+        )
+        simulated[name] = 10.0 * np.log10(np.sum(10.0 ** (bands[:, 5:7] / 10.0), axis=0))
+    for k in range(2):
+        told = simulated["under_track"][k] - simulated["left_150m"][k]
+        heard = 10.0 * math.log10(octaves["under_track"][k] / octaves["left_150m"][k])
+        assert heard == pytest.approx(told, abs=0.2), k
+
+
+def _a_energy(x: np.ndarray, rate: int) -> float:
+    """The A-weighted energy of the mono ``x`` at ``rate``, by its spectrum."""
+    from acoustic_spaces.demos.audio import a_gain
+
+    f = np.fft.rfftfreq(len(x), 1.0 / rate)
+    return float(np.sum(np.abs(np.fft.rfft(x) * a_gain(f)) ** 2))
 
 
 def test_the_stadiums_helicopter_is_its_rotors_model() -> None:

@@ -601,7 +601,9 @@ Movement:
   sections' own, which leaves out the blades cutting through the wake of those ahead
   and through turbulence.
 - [x] A helicopter flying over a meadow: the `helicopter_flyover` example and its
-  flyover demo, the rotors trimmed at the helicopter's airspeed against the wind.
+  flyover demo, the rotors trimmed at the helicopter's airspeed against the wind; a
+  scene's source of a rotorcraft model (`model: {method: rotorcraft}`) has their sound
+  power and directivity.
 - [x] A helicopter crossing over the stadium concert: `helicopter_demo.py`, its pass
   added to the concert's mixes at their simulated levels, 150 m up halfway through the
   song, or 330 m as the rules of the air ask over a crowd without leave. The helicopter

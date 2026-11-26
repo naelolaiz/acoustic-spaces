@@ -21,18 +21,21 @@ atmosphere:
   wind: {speed_m_s: 3, direction_deg: 180}
   turbulence: {preset: moderate, height_m: 2}  # weaker higher up
 sources:
-  # An Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, the sound of its
-  # rotors from acoustic_spaces.rotorcraft at its airspeed (its 63 m/s over the ground
-  # and the wind against it): the sound power per octave band and the directivity
-  # (helicopter.csv) of what they send, which flyover_demo.py plays down each path.
+  # An Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, a rotorcraft model:
+  # the sound of its rotors from acoustic_spaces.rotorcraft at its airspeed (its 63 m/s
+  # over the ground and the wind against it) gives it its sound power per octave band and
+  # its directivity, and flyover_demo.py plays what they send down each path. Places 4 m
+  # apart, 150 m up, follow the exact field of a flyover more closely than a car's 1 m
+  # apart do the car's (validation/doppler.py).
   - name: helicopter
     position: [-450, 0, 150]
-    level_db: [130.7, 130.5, 131.4, 130.4, 127.0, 125.2, 122.0, 120.2]
-    directivity: {file: helicopter.csv}
+    model: {method: rotorcraft, helicopter: as350_b3, broadband: pegg}
     trajectory:
       to: [[450, 0, 150]]
       speed_m_s: 63
       doppler: true
+      face_forward: true
+      step_m: 4
 listeners:
   - name: under_track
     position: [0, 0, 1.2]

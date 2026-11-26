@@ -55,6 +55,16 @@
   `--train` and `--track` set every train's or tram's, `--train` at its own speed, and
   what goes along with it, unless `--speed` says; a train on a track Schall 03 does not
   give it, or with no sources at a height that plays, is refused, saying why.
+- Added: a source's `model` may be a helicopter's rotors (`rotorcraft`: its
+  `helicopter`, the AS350 B3, and its `broadband` noise by Pegg's method or BPM),
+  trimmed for level flight at its airspeed (its trajectory's speed less the wind at its
+  height) in the scene's air: the model gives its sound power and its directivity, and
+  the demo of any scene plays what its rotors send each way (`emission.Delayed`). Its
+  trajectory faces the way it flies, with Doppler, at one height, or it is refused,
+  saying why; `--broadband` sets every helicopter's.
+- Changed: the helicopter flyover's `flyover_demo.py` is the demo of its scene, its
+  helicopter of a rotorcraft model in place of its `level_db`, `directivity` and
+  `helicopter.csv`; its options, steps and runs' names before 4.4.0 still work.
 - Changed: an option that changes nothing in a run is refused naming it (`--rpm changes
   nothing: no road vehicle plays a made sound`), and `--rpm` and `--blows` are refused
   unless positive.
@@ -163,8 +173,8 @@
   what plays or how it sounds, and `--format`, take several values (`--vehicle
   departure,arrival`, `--speed 50,80`), each value a run of its own played after a title
   card, in the order `--series` sets; `--sources` picks the sources a demo plays, by
-  name or group (all but the airport's flight and the helicopter flyover, which play
-  one vehicle, `--vehicle` picking which where there are several),
+  name or group (all but the airport's flight, which plays one aircraft, `--vehicle`
+  picking which),
   and `--sources-play in-turn` plays them one after another; `--series listeners`
   gives each listener a part. In Run demo, **Several…** turns a choice into a list to
   tick and drag, the sources' tree says what each plays and takes your WAV, and the

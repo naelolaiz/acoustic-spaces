@@ -14,6 +14,10 @@
   sound power (:func:`acoustic_spaces.demos.rail.point_sound`), a column each: the
   first the source's own sound, the others those of the points behind it
   (:func:`trail`), each at its sound power against the first's.
+- A helicopter (:class:`~acoustic_spaces.scene.RotorcraftModel`) sends its rotors' sound
+  each way (:func:`acoustic_spaces.demos.helicopter.flight_emission`), which a demo plays
+  down each early path; its feed is what it sends straight down
+  (:func:`acoustic_spaces.demos.helicopter.below_sound`), to hear.
 
 The sound is silent until the source's trajectory sets off and after it ends, and
 plays along its pass at an RMS of 0.1, which the feeds take as its sound power: over
@@ -45,6 +49,7 @@ METHOD_WORDS = {
     "schall-03": "a rail vehicle",
     "defra": "construction plant",
     "sae-j994": "a reversing alarm",
+    "rotorcraft": "a helicopter",
 }
 #: Each rail model's height, for the seeds of its points' noise: the old pass-by demo's
 #: order of a train's sources.
@@ -144,11 +149,18 @@ def pass_times(source, length_s: float | None = None) -> tuple[float, float]:
     return start, float(knots(source).duration_s)
 
 
-def made_key(source, rate: int, temperature_c: float, length_s: float | None = None) -> str:
+def made_key(
+    source,
+    rate: int,
+    temperature_c: float,
+    length_s: float | None = None,
+    pressure_kpa: float = 101.325,
+) -> str:
     """What the sound ``source`` makes hangs on, as a short digest: its model (as the run
     sets it), its speed where the method takes one, its pass on the run's clock (all of
     the run, ``length_s`` long, for one that stands), the air's temperature and the
-    sample rate."""
+    sample rate; for a method that takes the speed through the air (a helicopter's),
+    that speed and the air's pressure too."""
     speed = speed_kmh(source)
     start, end = pass_times(source, length_s)
     what = {
@@ -158,16 +170,29 @@ def made_key(source, rate: int, temperature_c: float, length_s: float | None = N
         "temperature_c": float(temperature_c),
         "rate": int(rate),
     }
+    if getattr(source.model, "through_air", False):
+        what |= {"airspeed_m_s": source.model_speed_m_s(), "pressure_kpa": float(pressure_kpa)}
     return hashlib.sha256(json.dumps(what, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def made_file(
-    folder: Path, source, rate: int, temperature_c: float, length_s: float | None = None
+    folder: Path,
+    source,
+    rate: int,
+    temperature_c: float,
+    length_s: float | None = None,
+    pressure_kpa: float = 101.325,
 ) -> Path:
     """Where the sound ``source`` makes is kept in ``folder``, named after it and
     :func:`made_key`."""
-    key = made_key(source, rate, temperature_c, length_s)
+    key = made_key(source, rate, temperature_c, length_s, pressure_kpa)
     return Path(folder) / f"{source.name}_{key}.wav"
+
+
+def sends_each_way(source) -> bool:
+    """Whether the sound ``source`` (a scene source with a model) makes is sent each way
+    (a helicopter's rotors'), which a demo plays down each early path, not one feed."""
+    return source.model.method == "rotorcraft"
 
 
 def horn_kind(model):
@@ -188,17 +213,30 @@ def fade_s(model) -> float:
 
 
 def made_sound(
-    source, rate: int, temperature_c: float, length_s: float | None = None
+    source,
+    rate: int,
+    temperature_c: float,
+    length_s: float | None = None,
+    pressure_kpa: float = 101.325,
 ) -> np.ndarray:
     """The sound ``source`` (a scene source with a model, its trajectory and model as the
     run plays them) makes on the run's clock at ``rate``: silent until its trajectory
     sets off, then its model's sound along the pass at an RMS of SOUND_RMS, faded in and
     out (:func:`fade_s`); for one that stands, all along the run, ``length_s`` long;
     mono, but for a rail model of several points, a column each (its first the source's,
-    :func:`trail`), each faded so, the others at their sound power against the first's."""
+    :func:`trail`), each faded so, the others at their sound power against the first's.
+    A helicopter's is what it sends straight down, in the units in which what it sends
+    each way plays (:func:`acoustic_spaces.demos.helicopter.below_sound`), in air at
+    ``pressure_kpa`` too."""
     from acoustic_spaces.demos.passby import faded
 
     model = source.model
+    if model.method == "rotorcraft":
+        from acoustic_spaces.demos.helicopter import below_sound
+
+        if stands(source):
+            raise ValueError(f"{source.name} flies: its sound is that of its flight")
+        return below_sound(source, int(rate), temperature_c, pressure_kpa)
     start, end = pass_times(source, length_s)
     duration = end - start
     if model.method == "cnossos-eu":
@@ -304,6 +342,10 @@ def made_words(source) -> str:
         return f"{_machine(model)}, made to Defra's sound power ({_machine_sound(model)})"
     if model.method == "sae-j994":
         return f"a reversing alarm's beeps, made to {_alarm_loudness()}"
+    if model.method == "rotorcraft":
+        return (
+            f"{_rotors(source)}, sent each way down each path; straight down in its feed, to hear"
+        )
     kind = CATEGORIES[model.category].name
     return (
         f"CNOSSOS-EU {kind}{_speed_words(source)}, made to the method's sound power (tyres "
@@ -332,6 +374,9 @@ def model_line(source, temperature_c: float) -> str:
         kmh = driven_kmh(source)
         power = vehicle_power(model.category, kmh, temperature_c).sound_power_a_db
         what = "CNOSSOS-EU"
+    elif model.method == "rotorcraft":
+        power = a_weighted(np.asarray(source.level_db, dtype=float))
+        what = f"its rotors' model, {source.model_speed_m_s():.1f} m/s through the air"
     else:
         power = a_weighted(np.asarray(model.power_db(None, temperature_c), dtype=float))
         if model.method == "siren":
@@ -382,6 +427,11 @@ def made_credit(source) -> str:
         return (
             f"Sound made up for {source.name}: a reversing alarm's {ALARM_HZ:g} Hz beeps, "
             f"{ALARM_PER_S:g} a second, {_alarm_loudness()}"
+        )
+    if model.method == "rotorcraft":
+        return (
+            f"Sound made up for {source.name}: {_rotors(source)}; faded in and out over "
+            f"{FADE_S:g} s"
         )
     kind = CATEGORIES[model.category]
     cylinders = CYLINDER_WORDS.get(model.cylinders, str(model.cylinders))
@@ -441,6 +491,8 @@ def made_brief(source) -> str:
         return (
             f"a reversing alarm's {ALARM_HZ:g} Hz beeps, {ALARM_PER_S:g} a second (SAE J994 Type B)"
         )
+    if model.method == "rotorcraft":
+        return _rotors(source)
     kind = CATEGORIES[model.category]
     tyres = "tyres and " if kind.rolling_a is not None else ""
     cylinders = CYLINDER_WORDS.get(model.cylinders, str(model.cylinders))
@@ -463,6 +515,21 @@ def made_credits(made: list[tuple[str, str, bool]]) -> str:
     elif unfaded:
         fade = ""
     return f"Sounds made up for {said}{fade}"
+
+
+def _rotors(source) -> str:
+    """A rotorcraft model's sound in words: "an AS350 B3's two rotors at 66.0 m/s through
+    the air, their tones from the blades' steady loads (Ffowcs Williams and Hawkings) and
+    their broadband noise by Pegg's method (NASA TM-80200)"."""
+    from acoustic_spaces.demos.helicopter import BROADBAND, helicopters
+
+    model = source.model
+    name = helicopters()[model.helicopter].name
+    return (
+        f"an {name}'s two rotors at {source.model_speed_m_s():.1f} m/s through the air, their "
+        "tones from the blades' steady loads (Ffowcs Williams and Hawkings) and their "
+        f"broadband noise by {BROADBAND[model.broadband]}"
+    )
 
 
 def _rail_train(source) -> str:

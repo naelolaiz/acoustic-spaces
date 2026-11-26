@@ -1519,15 +1519,14 @@ and which Pegg's fit to measured rotors holds.
 A scene's source carries the sound power and the directivity of what the rotors send,
 for the levels the simulation and the pass-by report and for the late part:
 `sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band and
-`sent.directivity()` the other, which
-`acoustic_spaces.directivity.write_directivity_csv` writes as a table a scene reads
-(`directivity: {file: helicopter.csv}`). Both are in IEC octaves, so the main rotor's
-tones at its blade passing frequency and at twice it (19.7 and 39.4 Hz for the AS350
-B3), below the 63 Hz octave, are in no band ([the sound sent each
-way](spatial-audio.md#moving-sources-and-doppler)). The `helicopter_flyover` example has
-them for an AS350 B3 150 m up at 63 m/s against a light wind, and its [flyover
-demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors trimmed at
-its airspeed: its speed over the ground less the wind at its height.
+`sent.directivity()` the other. A source's `model: {method: rotorcraft}` gives it both,
+of one second of the sound at 48 kHz, at its airspeed: its speed over the ground less
+the wind at its height ([sources](scenes.md#sources-and-directivity)). Both are in IEC octaves, so the
+main rotor's tones at its blade passing frequency and at twice it (19.7 and 39.4 Hz for
+the AS350 B3), below the 63 Hz octave, are in no band ([the sound sent each
+way](spatial-audio.md#moving-sources-and-doppler)). The `helicopter_flyover` example's
+AS350 B3 flies 150 m up at 63 m/s against a light wind, and its [flyover
+demo](demos.md#a-helicopter-flying-over) flies it over a meadow.
 
 What it leaves out: loads that change round the turn (in forward flight the
 advancing blade carries less lift than the retreating one, and the blades flap), the

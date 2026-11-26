@@ -252,7 +252,8 @@ MODEL_TIP = N_(
     "Schall 03, at the speed of its trajectory, that of the first of its points at one "
     "height, a demo playing those behind it too; construction plant's, Defra's row for "
     "the machine plus 28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its "
-    "beeps and pauses"
+    "beeps and pauses; a helicopter's, its rotors' sound in level flight at its speed "
+    "through the air, its directivity too"
 )
 #: A siren model on its page, as loud as the siren NBS measured, or louder or quieter.
 SIREN_TEXT = N_(
@@ -271,6 +272,19 @@ HORN_KINDS = {
     "train_horn": N_("a train horn"),
 }
 HORN_HOW = {True: N_("in turn"), False: N_("together")}
+#: A rotorcraft model on its page: the helicopter, its speed through the air and its
+#: broadband noise's method.
+ROTORCRAFT_TEXT = N_(
+    "Helicopter: {helicopter}, its rotors in level flight at {speed} m/s through the air, "
+    "their broadband noise by {broadband}; its directivity too"
+)
+ROTORCRAFT_HELICOPTERS = {"as350_b3": N_("an Airbus Helicopters AS350 B3 at 2,250 kg")}
+ROTORCRAFT_BROADBAND = {
+    "pegg": N_("Pegg's method"),
+    "bpm": N_("Brooks, Pope and Marcolini's airfoil self-noise"),
+}
+#: The directivity list's choice for a source whose model gives its directivity.
+MODEL_DIRECTIVITY = N_("given by its model")
 #: A rail model on its page: the train, its track and the height of its sources.
 RAIL_TEXT = N_(
     "Schall 03: {train} on {track}; its sources {height}, the sound power the first's, "
@@ -3399,7 +3413,7 @@ def plays_text(scene, item) -> str:
     return _("the scene's recording: {what}").format(what=what)
 
 
-def model_text(model) -> str:
+def model_text(model, speed_m_s: float | None = None) -> str:
     """A source's model (``model``) in words, on its page: none; a road vehicle's
     method, its category and the engine of its made sound; a siren's pattern, those it
     can sound and how loud it is; a horn's kind, its notes and how loud they sound; a
@@ -3407,6 +3421,12 @@ def model_text(model) -> str:
     plant's row of Defra's database (a breaker's blows); an alarm's beeps."""
     if model is None:
         return _("none")
+    if model.method == "rotorcraft":
+        return _(ROTORCRAFT_TEXT).format(
+            helicopter=_(ROTORCRAFT_HELICOPTERS[model.helicopter]),
+            speed=f"{speed_m_s:.1f}",
+            broadband=_(ROTORCRAFT_BROADBAND[model.broadband]),
+        )
     if model.method == "defra":
         from acoustic_spaces.demos.plant import BLOWS_PER_MINUTE
 
@@ -3939,13 +3959,18 @@ class PointPage(Page):
             label.setToolTip(tip)
         if self.kind == "sources":
             self.directivity.clear()
-            _fill(self.directivity, DIRECTIVITIES)
-            if isinstance(item.directivity, str):
-                _choose(self.directivity, item.directivity)
+            radiates = item.model is not None and getattr(item.model, "radiates", False)
+            if radiates:  # a helicopter's: its rotors' sound's, at its airspeed
+                self.directivity.addItem(_(MODEL_DIRECTIVITY), "")
             else:
-                self.directivity.addItem(_directivity_label(item.directivity), "")
-                self.directivity.setCurrentIndex(len(DIRECTIVITIES))
-            self.directivity.addItem(_(MEASURED), MEASURED)
+                _fill(self.directivity, DIRECTIVITIES)
+                if isinstance(item.directivity, str):
+                    _choose(self.directivity, item.directivity)
+                else:
+                    self.directivity.addItem(_directivity_label(item.directivity), "")
+                    self.directivity.setCurrentIndex(len(DIRECTIVITIES))
+                self.directivity.addItem(_(MEASURED), MEASURED)
+            self.directivity.setEnabled(not radiates)
             # Translators: the directivity list's tip, then the choice it shows.
             tip = _("{tip}. Now: {choice}").format(
                 tip=_(DIRECTIVITY_TIP), choice=self.directivity.currentText()
@@ -3974,7 +3999,9 @@ class PointPage(Page):
             talking = item.vocal_effort is not None
             modelled = item.model is not None
             per_band = isinstance(item.level_db, list) and not talking and not modelled
-            self.model.setText(model_text(item.model))
+            through_air = modelled and getattr(item.model, "through_air", False)
+            speed = item.model_speed_m_s() if through_air else None
+            self.model.setText(model_text(item.model, speed))
             self.level.setValue(item.sound_power_db)
             self.level.setEnabled(not per_band and not talking and not modelled)
             tip = _(LEVEL_TIP)

@@ -500,11 +500,12 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   amplitude per direction; `Periodic` one of a sound that repeats, one period of it in
   each direction, which may turn with a rotor and be sent from off the source's place (a
   helicopter's tones, see [Helicopters](outdoor.md#helicopters)); `Sum` adds emissions
-  up. The directivity and the sound power still give the band levels the simulation and
-  the pass-by report, so give the source the emission's own: its `directivity()`
-  (written for a scene file by `acoustic_spaces.directivity.write_directivity_csv`) and
-  its `sound_power_db(density, sound_speed)`, which the flyover demo does ([a helicopter
-  flying over](demos.md#a-helicopter-flying-over)). Both are in IEC 61260-1's octaves
+  up; `Faded` fades one in and out, `Delayed` sends one later. The directivity and the
+  sound power still give the band levels the simulation and the pass-by report, so give
+  the source the emission's own: its `directivity()` (written for a scene file by
+  `acoustic_spaces.directivity.write_directivity_csv`) and its `sound_power_db(density,
+  sound_speed)`, as a rotorcraft model does ([a helicopter flying
+  over](demos.md#a-helicopter-flying-over)). Both are in IEC 61260-1's octaves
   (or third octaves), taken as ideal filters between their band edges: what is sent
   below the 63 Hz octave's 44.7 Hz or above the 8 kHz octave's 11.2 kHz plays, but is in
   no band. A tone sent louder ahead (1 + 0.8 cos θ in amplitude) and turned in phase
