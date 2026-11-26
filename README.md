@@ -39,7 +39,7 @@ loudspeaker formats.
   sound card, head-tracked on headphones, or heard along a trajectory through the room:
   [spatial audio and listening](docs/spatial-audio.md).
 - **Demos**, binaural for headphones: an orchestra in the concert hall, a choir and an
-  organ in the church, a band in the stadium and across a lake, a trajectory through the
+  organ in the church, a band in the stadium and across a lake, a walk through the
   gallery, road vehicles with sirens and horns, trains and a tram passing by, road works
   in a street, a helicopter over a meadow and over the stadium, and a jet taking off and
   landing; any scene makes a demo of its own: [demos](docs/demos.md), and videos in one
