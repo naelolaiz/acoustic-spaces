@@ -1538,14 +1538,19 @@ class EdgeFade:
         faces = np.flatnonzero(np.isin(model.face_plane, self._in_place(plane)))
         faces = faces[~model.transparent[faces]]
         faces = faces[_facing(model, faces, np.broadcast_to(before, (len(faces), 3)))]
-        corners = local(model.room.mesh.triangles[faces])[..., :2]  # (f, 3, 2)
+        triangles, beyond = self._held(plane, faces, before, 4.0 * reach)
+        corners = local(triangles)[..., :2]  # (f, 3, 2)
         near = np.all(corners.min(axis=1) <= reach, axis=1)
         near &= np.all(corners.max(axis=1) >= -reach, axis=1)
-        held = np.clip(share(corners[near]), 0.0, 1.0)
+        held = share(corners[near])
+        if len(beyond):
+            held = held + share(local(beyond)[..., :2])
+        held = np.clip(held, 0.0, 1.0)
         # Past the edges themselves, beside them, in the plane of their face.
         strips = []
         geometric = model.geometric_plane[plane]
-        for e in np.unique(own).tolist():
+        own = np.unique(own)
+        for e in own[self._bounds(own, plane, before)].tolist():
             for side in (0, 1):
                 if self._edge_plane[e, side] != geometric:
                     continue
@@ -1559,6 +1564,64 @@ class EdgeFade:
         past = share(np.array(strips)) if strips else 0.0
         out = np.clip(held - past, 0.0, 1.0)
         return np.where(usable, out, float(inside))
+
+    def _bounds(self, edge: np.ndarray, plane: int, side: np.ndarray) -> np.ndarray:
+        """Whether each of ``edge`` bounds a face of it in the place of ``plane`` that a
+        path from the side of ``side`` reflects off: ``side`` lies in front of that face
+        (as :meth:`_stopping` takes it) and on the edge's open side, not in the inside
+        corner of two faces that meet at it (two walls of a channel), where each face
+        goes on as the other's image."""
+        edge = np.asarray(edge, dtype=np.int64)
+        if len(edge) == 0:
+            return np.zeros(0, dtype=bool)
+        geometric = self.model.geometric_plane[plane]
+        _, _, phi, open_side = self.edges.frame(edge, np.broadcast_to(side, (len(edge), 3)))
+        n = self.edges.wedge[edge]
+        front = ((self._edge_plane[edge, 0] == geometric) & (phi < np.pi)) | (
+            (self._edge_plane[edge, 1] == geometric) & (phi > (n - 1.0) * np.pi)
+        )
+        return front & open_side
+
+    def _held(self, plane: int, faces: np.ndarray, side: np.ndarray, far: float):
+        """The triangles (f, 3, 3) of ``faces`` (in the place of ``plane``, that a path
+        from the side of ``side`` reflects off) and the strips (s, 4, 3) ``far`` m wide
+        past each side of them that no other shares and no edge bounds
+        (:meth:`_bounds`): an inside corner, where the face goes on as the image of the
+        face it meets, a wall's foot on the floor or the side of a closing wall, and the
+        seam of faces in the plane whose corners do not meet."""
+        triangles = self.model.room.mesh.triangles[faces]
+        if len(faces) == 0:
+            return triangles, np.zeros((0, 4, 3))
+        p = np.concatenate([triangles[:, i] for i in (0, 1, 2)])
+        q = np.concatenate([triangles[:, j] for j in (1, 2, 0)])
+        r = np.concatenate([triangles[:, k] for k in (2, 0, 1)])
+        ends = np.round(np.stack([p, q], axis=1) / self.tolerance).astype(np.int64)
+        ends = np.sort(ends.view([("x", np.int64), ("y", np.int64), ("z", np.int64)]), axis=1)
+        _, which, count = np.unique(
+            ends.view(np.int64).reshape(len(p), 6), axis=0, return_inverse=True, return_counts=True
+        )
+        lone = np.flatnonzero(count[which.ravel()] == 1)
+        p, q, r = p[lone], q[lone], r[lone]
+        _, edge = self._of_planes(np.array([plane]))
+        edge = edge[self._bounds(edge, plane, side)]
+        bounded = np.zeros(len(p), dtype=bool)
+        edges = self.edges
+        for e in edge.tolist():
+            on = np.ones(len(p), dtype=bool)
+            for end in (p, q):
+                t, rho = edges.distances(np.full(len(end), e), end)
+                on &= (rho <= self.tolerance) & (t >= -self.tolerance)
+                on &= t <= edges.length[e] + self.tolerance
+            bounded |= on
+        p, q, r = p[~bounded], q[~bounded], r[~bounded]
+        along = q - p
+        inward = r - p
+        inward -= (np.einsum("ij,ij->i", inward, along) / np.einsum("ij,ij->i", along, along))[
+            :, None
+        ] * along
+        out = -inward / np.maximum(np.linalg.norm(inward, axis=1), 1e-300)[:, None]
+        strips = np.stack([p, q, q + far * out, p + far * out], axis=1)
+        return triangles, strips
 
     def _leg_shares(self, points, faces, seqs, edge, wavelength) -> np.ndarray:
         """(F,) the share of the Fresnel zones of the legs of a path over two edges (see
