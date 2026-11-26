@@ -1523,8 +1523,8 @@ class Refraction(Section):
         a few Fresnel zones inside an end both are 1; past a barrier's top the share goes
         to 0 continuously. An end that does not fade
         (:func:`~acoustic_spaces.engine.diffraction.end_fades`: the edge goes on there,
-        in another edge, at a box's corner or as its image in the ground) cuts nothing
-        off: a point moved past it counts as at it, so that the copies stop where the
+        in another edge or as its image in the ground, or a face across it closes it)
+        cuts nothing off: a point moved past it counts as at it, so that the copies stop where the
         paths round the edge stop, where those in still air do."""
         from acoustic_spaces.engine.diffraction import _fade_reach, along_edge, end_fades
 
