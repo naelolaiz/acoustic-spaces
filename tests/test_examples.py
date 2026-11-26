@@ -752,11 +752,11 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     sources = {source.name: source for source in room.scene.sources}
     band = [name for name, source in sources.items() if source.group == demo.BAND]
     assert band == list(demo.BAND_MIX) and all(sources[name].in_use for name in band)
-    # The band is the concert's, left out of its own simulations: the editor shows it.
+    # The band is the concert's, in its own simulations, each playing its stem.
     concert = {s.name: s for s in Scene.from_yaml(example_path("stadium_concert")).sources}
     for name in band:
-        assert not concert[name].in_use
-        assert concert[name].model_copy(update={"enabled": None}) == sources[name]
+        assert concert[name].in_use and concert[name] == sources[name]
+    assert [concert[name].channel for name in band] == ["drums", "vocal", "guitar"]
     scene = demo.scene_of(args)
     roles = {source["name"]: demo.role(source) for source in scene["sources"]}
     assert roles["main_right"] == "left" and roles["main_left"] == "right"
