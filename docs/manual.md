@@ -302,8 +302,9 @@ works shake a building, in [Vibration through the ground](outdoor.md#vibration-t
 `acoustic-spaces demo my_room/scene.yaml` (or **Simulation > Run demo…**) has each
 source play its recording, mixes what every listener hears and makes a video that tours
 them ([A demo of any scene](demos.md#a-demo-of-any-scene)). Several examples come with
-demos of their own, run step by step ([Running a demo](demos.md#running-a-demo)); each
-shows one space and one kind of sound, not the simulator as a whole.
+demos of their own, presets of the demo of their scene that keep their scripts' command
+lines, run step by step ([Running a demo](demos.md#running-a-demo)); each shows one
+space and one kind of sound, not the simulator as a whole.
 
 ### Measuring a real room and fitting its model
 

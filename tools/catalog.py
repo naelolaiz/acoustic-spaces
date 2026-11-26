@@ -12,8 +12,9 @@ menu shortcut (&) as the English. It needs only Python's standard library.
 Text is marked with ``_("...")``, ``N_("...")``, ``ngettext("...", "...", n)`` and
 ``pgettext("context", "...")`` (see acoustic_spaces.i18n). A comment starting with
 ``Translators:`` on the lines just above goes into the catalog for the translator.
-The example scenes' titles and descriptions (examples/*/scene.yaml) are collected too,
-in the context ``example``.
+The examples' scripts (examples/*/*.py) are read for marked text as the package is (a
+demo preset's title), and the example scenes' titles and descriptions
+(examples/*/scene.yaml) are collected too, in the context ``example``.
 """
 
 from __future__ import annotations
@@ -370,8 +371,9 @@ def extract_examples(folder: Path = EXAMPLES) -> list[Entry]:
 
 
 def marked_text() -> list[Entry]:
-    """Everything the catalogs translate: the code's marked text, then the examples'."""
-    return extract() + extract_examples()
+    """Everything the catalogs translate: the code's marked text, the examples' scripts',
+    then the example scenes' titles and descriptions."""
+    return extract() + extract(EXAMPLES) + extract_examples()
 
 
 def catalogs() -> list[Path]:

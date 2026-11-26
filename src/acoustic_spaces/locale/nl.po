@@ -175,6 +175,10 @@ msgstr "Scène van de vlucht"
 msgid "Stadium's scene"
 msgstr "Scène van het stadion"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Start time"
+msgstr "Starttijd"
+
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
 msgid "Height"
 msgstr "Hoogte"
@@ -2073,12 +2077,24 @@ msgid "Back to one of them, the first ticked"
 msgstr "Terug naar één ervan, de eerste aangevinkte"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "File…"
+msgstr "Bestand…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours in place of one of the choices"
+msgstr "Een eigen bestand in plaats van een van de keuzes"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every one: the run plays them one after another"
 msgstr "Vink ze allemaal aan: de uitvoering speelt ze na elkaar"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every one, to tick those to play"
 msgstr "Vink ze allemaal uit, om aan te vinken wat moet spelen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours"
+msgstr "Een eigen bestand"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every source"
@@ -9230,6 +9246,54 @@ msgstr "niveau {number}, vloer op ongeveer {height:.1f} m"
 #, python-brace-format
 msgid "{source}: {title}, {count} points {spacing:g} m apart"
 msgstr "{source}: {title}, {count} punten met {spacing:g} m tussenafstand"
+
+#: examples/airport/flight_demo.py
+msgid "A jet taking off and landing"
+msgstr "Een straalvliegtuig dat opstijgt en landt"
+
+#: examples/church/church_demo.py
+msgid "A choir and an organ in the church"
+msgstr "Een koor en een orgel in de kerk"
+
+#: examples/gallery/walk_demo.py
+msgid "A walk through the gallery"
+msgstr "Een wandeling door de galerie"
+
+#: examples/helicopter_flyover/flyover_demo.py
+msgid "A helicopter flying over"
+msgstr "Een overvliegende helikopter"
+
+#: examples/lakeside_concert/lakeside_demo.py
+msgid "A concert across a lake"
+msgstr "Een concert over een meer"
+
+#: examples/orchestra/orchestra_demo.py
+msgid "Beethoven's 8th in the concert hall"
+msgstr "Beethovens Achtste in de concertzaal"
+
+#: examples/railway/passby_demo.py
+msgid "A train running past"
+msgstr "Een passerende trein"
+
+#: examples/roadside/passby_demo.py
+msgid "A car or a truck passing the meadow"
+msgstr "Een auto of een vrachtwagen langs de weide"
+
+#: examples/stadium_concert/helicopter_demo.py
+msgid "A helicopter over the stadium concert"
+msgstr "Een helikopter boven het stadionconcert"
+
+#: examples/stadium_concert/stadium_demo.py
+msgid "A band in the stadium"
+msgstr "Een band in het stadion"
+
+#: examples/street/passby_demo.py
+msgid "A vehicle driving down the street"
+msgstr "Een voertuig dat door de straat rijdt"
+
+#: examples/street/works_demo.py
+msgid "Road works in the street"
+msgstr "Wegwerkzaamheden in de straat"
 
 #: examples/airport/scene.yaml
 msgctxt "example"

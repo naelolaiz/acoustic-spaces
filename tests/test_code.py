@@ -259,7 +259,7 @@ LIBRARY_SUMS = {
     "calibration.py": 2,
     # The demos' pictures and sounds: band weights, 2- and 3-vectors, a 2 ms smoothing.
     "demos/audio.py": 2,
-    "demos/helicopter.py": 2,
+    "demos/helicopter.py": 1,
     "demos/indoors.py": 1,
     "demos/passby.py": 3,
     "demos/pipeline.py": 1,

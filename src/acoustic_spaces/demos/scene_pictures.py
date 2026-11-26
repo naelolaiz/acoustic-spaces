@@ -7,7 +7,9 @@ along its trajectory."""
 
 from __future__ import annotations
 
+import dataclasses
 import math
+import re
 from collections.abc import Mapping, Sequence
 
 import numpy as np
@@ -62,8 +64,21 @@ GRID_S = 2.0
 #: them (a long pass, an aircraft's), they come every 5, 10, 20, 50... s instead.
 LABEL_GAP_PX = 60.0
 #: What a still can leave out (``--hide``): the view from the side, the wind and the
-#: weather zones, and the ground's materials with what stands on it, from above.
-HIDDEN = ("side", "wind", "ground")
+#: weather zones, the ground's materials with what stands on it, from above, and the
+#: audience (:func:`audiences`).
+HIDDEN = ("side", "wind", "ground", "audience")
+#: How far apart (m) the dots that stand for an audience are drawn where one person is
+#: on each square metre; closer where more are, so each dot is some ten people.
+DOT_SPACING_M = 3.2
+#: An empty stand's rows of seats are this many times farther apart than the seats
+#: along them are drawn.
+ROW_RATIO = 1.6
+#: People on each square metre of an audience whose material's preset does not say
+#: (``audience_1.5_m2``).
+AUDIENCE_PER_M2 = 2.0
+#: The colours of the audience's people and of empty seats.
+PERSON = (190, 176, 150)
+SEAT = (82, 92, 122)
 #: The octave bands the reverberation time is averaged over (Hz).
 MID_BANDS = (500, 1000)
 #: The blocks a source's signal is weighed in over a stop (s): its mean square in each
@@ -283,6 +298,162 @@ def source_labels(
     return out
 
 
+def _inside(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Which of the points (n, 2) lie in any of the triangles (t, 3, 2)."""
+    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+    v0, v1 = b - a, c - a
+    det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
+    keep = np.abs(det) > 1e-9
+    a, v0, v1, det = a[keep], v0[keep], v1[keep], det[keep]
+    d = points[:, None, :] - a[None]
+    u = (d[..., 0] * v1[:, 1] - d[..., 1] * v1[:, 0]) / det
+    v = (v0[:, 0] * d[..., 1] - v0[:, 1] * d[..., 0]) / det
+    return np.any((u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9), axis=1)
+
+
+@dataclasses.dataclass(frozen=True)
+class Audience:
+    """Where a scene's audience is, or seats no one sits in (:func:`audiences`):
+    ``kind`` standing (on a zone of the ground), seated (on the model) or seats (no
+    one in them), its material's name, how many people on each square metre, how much
+    of the sound at 1 kHz the material takes up, its triangles on plan ((t, 3, 2), m),
+    whether its rows run along x (the longer side of its plan), and how many people."""
+
+    kind: str
+    material: str
+    per_m2: float
+    absorbs: float
+    triangles: np.ndarray
+    along_x: bool
+    people: int
+
+    def dots(self, seed: int) -> np.ndarray:
+        """Where its dots are drawn (n, 2): people every DOT_SPACING_M or closer, in a
+        loose grid, or seats in rows."""
+        corners = self.triangles.reshape(-1, 2)
+        (x0, y0), (x1, y1) = corners.min(axis=0), corners.max(axis=0)
+        per = DOT_SPACING_M**2 / max(self.per_m2, 1.0)  # m² per dot
+        if self.kind == "standing":
+            step = math.sqrt(per)
+            xs, ys = np.meshgrid(np.arange(x0, x1, step), np.arange(y0, y1, step))
+            ys = ys + (np.arange(ys.shape[1]) % 2)[None, :] * step / 2
+            points = np.column_stack([xs.ravel(), ys.ravel()])
+            points += np.random.default_rng(seed).uniform(-0.3, 0.3, points.shape) * step
+        else:
+            along = math.sqrt(per / ROW_RATIO)
+            across = along * ROW_RATIO
+            sx, sy = (along, across) if self.along_x else (across, along)
+            xs, ys = np.meshgrid(np.arange(x0 + sx / 2, x1, sx), np.arange(y0 + sy / 2, y1, sy))
+            points = np.column_stack([xs.ravel(), ys.ravel()])
+        return points[_inside(points, self.triangles)] if len(points) else points
+
+
+def _within(xy: tuple[float, float], area: tuple[float, float, float, float]) -> bool:
+    left, top, right, bottom = area
+    return left <= xy[0] <= right and top <= xy[1] <= bottom
+
+
+def per_m2_of(entry) -> float:
+    """How many people (or seats) are on each square metre of a material of the
+    database's ``entry`` (:class:`~acoustic_spaces.materials.database.MaterialEntry`),
+    as its description says (``1.5 persons / m2``, ``1 per m2``, ``1.5 m2 per person``,
+    chairs ``0,85 m × 0,63 m``), else its category (``2 persons per m2``, ``2 seats per
+    m2``); AUDIENCE_PER_M2 where neither does."""
+    words = entry.description.replace(",", ".")
+    if found := re.search(r"([\d.]+)\s*m2 per person", words):
+        return 1.0 / float(found.group(1))
+    if found := re.search(r"([\d.]+)\s*(?:persons?\s*/\s*m2|per m2)", words):
+        return float(found.group(1))
+    if found := re.search(r"([\d.]+)\s*m\s*×\s*([\d.]+)\s*m", words):
+        return 1.0 / (float(found.group(1)) * float(found.group(2)))
+    if found := re.search(r"([\d.]+)\s*(?:persons|seats) per m2", entry.category):
+        return float(found.group(1))
+    return AUDIENCE_PER_M2
+
+
+def audience_of(material) -> tuple[str, object] | None:
+    """Whether ``material`` (a :class:`~acoustic_spaces.scene.Material`) is an audience:
+    ("people", its database entry or None) where it is of the database's audiences
+    (``audience_1.5_m2``, ``audience_upholstered_chairs_1``) or an audience of its own
+    (``audience: true``, of no preset of seats), ("seats", its entry) where it is of the
+    database's seating (``chairs_unoccupied_plastic``); None where it is neither."""
+    from acoustic_spaces.materials.database import builtin_database
+
+    try:
+        entry = builtin_database().get(str(material.preset)) if material.preset else None
+    except KeyError:
+        entry = None
+    category = entry.category if entry is not None else ""
+    if category.startswith("Seating"):
+        return ("seats", entry)
+    if category.startswith("Audience") or material.audience:
+        return ("people", entry)
+    return None
+
+
+def audiences(room) -> list[Audience]:
+    """The audience of ``room``'s scene (a :class:`~acoustic_spaces.room.Room`), by the
+    materials of its faces, each part labelled alike (a group of the model, a zone of
+    the ground): people where the material is of the database's audiences
+    (``audience_1.5_m2``, ``audience_upholstered_chairs_1``) or an audience of its own
+    (``audience: true``, of no preset of seats), standing on a zone of the ground or
+    seated on the model, as many on each square metre as the preset says
+    (:func:`per_m2_of`); seats no one sits in where it is of the database's seating
+    (``chairs_unoccupied_plastic``)."""
+    mesh, scene = room.mesh, room.scene
+    areas = np.asarray(mesh.face_areas())
+    out = []
+    for k, label in enumerate(mesh.labels):
+        faces = np.flatnonzero(mesh.face_labels == k)
+        if not len(faces):
+            continue
+        index = int(room.face_materials[faces[0]])
+        if index < 0:
+            continue
+        name = room.material_names[index]
+        material = scene.materials.get(name)
+        if material is None:
+            continue
+        found = audience_of(material)
+        if found is None:
+            continue
+        what, entry = found
+        kind = "seats" if what == "seats" else "standing" if "zones" in label else "seated"
+        per_m2 = per_m2_of(entry) if entry is not None else AUDIENCE_PER_M2
+        triangles = np.asarray(mesh.vertices, dtype=float)[np.asarray(mesh.faces)[faces]][..., :2]
+        (x0, y0), (x1, y1) = triangles.reshape(-1, 2).min(0), triangles.reshape(-1, 2).max(0)
+        surface = float(areas[faces].sum())
+        absorbs = float(material.coefficients("octave")[0][4])  # 1 kHz
+        people = 0 if kind == "seats" else round(surface * per_m2)
+        out.append(Audience(kind, name, per_m2, absorbs, triangles, x1 - x0 >= y1 - y0, people))
+    return out
+
+
+def about(people: int) -> str:
+    """``people``, as many as a still says: to the hundred from a thousand, to ten from
+    a hundred."""
+    step = -2 if people >= 1000 else -1 if people >= 100 else 0
+    return f"{round(people, step):,.0f}"
+
+
+def audience_lines(found: Sequence[Audience]) -> list[str]:
+    """What a still says of the audience ``found``: how many stand and sit and the
+    seats no one sits in, then how much of the sound at 1 kHz each takes up; none where
+    there is none."""
+    words, takes = [], []
+    for kind, called in (("standing", "standing"), ("seated", "seated"), ("seats", "empty seats")):
+        of = [a for a in found if a.kind == kind]
+        if not of:
+            continue
+        people = sum(a.people for a in of)
+        words.append(called if kind == "seats" else f"{about(people)} {called}")
+        share = "/".join(f"{a:.0%}" for a in sorted({round(a.absorbs, 2) for a in of}))
+        takes.append(f"{called} {share}")
+    if not words:
+        return []
+    return ["Audience: " + ", ".join(words), "Absorbing at 1 kHz: " + ", ".join(takes)]
+
+
 class Pictures:
     """One still per stop of the tour (:meth:`still`) and a :meth:`thumbnail`.
 
@@ -334,6 +505,7 @@ class Pictures:
         hide: Sequence[str] = (),
         sections: Sequence[tuple[float, str]] = (),
         played: Mapping[str, np.ndarray] | None = None,
+        frame: tuple[float, float, float, float] | None = None,
     ):
         self.scene, self.report, self.seats, self.stops = scene, report, seats, list(stops)
         #: The parts of the music the recording has in time (when each starts, s, and
@@ -347,6 +519,10 @@ class Pictures:
             from acoustic_spaces.demos.outdoor_pictures import Outdoors
 
             self.outdoors = Outdoors(room)
+        #: Where the scene's audience stands or sits, and seats no one sits in.
+        self.audiences = audiences(room) if room is not None and "audience" not in self.hide else []
+        #: The audience drawn once, see-through, by the plan it was drawn on.
+        self._crowd: tuple | None = None
         #: Whether the scene is a room (no ground), where ISO 3382-1's parameters hold.
         self.indoor = "ground" not in (scene.get("geometry") or {})
         # The mixes of a listener in still air (audience.still): its name, its results.
@@ -403,6 +579,12 @@ class Pictures:
         points += [path.positions[:, :2] for path in self.paths.values()]
         xy = np.concatenate([p for p in points if len(p)])
         (x0, y0), (x1, y1) = xy.min(axis=0), xy.max(axis=0)
+        #: Whether what the plan shows is cut to its panel, the scene reaching past the
+        #: part of it ``frame`` gives (what moves drawn at the panel's edge while it is
+        #: past it: :meth:`draw_beyond`).
+        self.framed = frame is not None
+        if frame is not None:
+            x0, y0, x1, y1 = (float(v) for v in frame)
         pad = max(0.05 * max(x1 - x0, y1 - y0), 1.0)
         self.box = (float(x0 - pad), float(y0 - pad), float(x1 + pad), float(y1 + pad))
 
@@ -505,11 +687,17 @@ class Pictures:
         key, current = current, self.where.get(current, current)
         sources = [self.placed("sources", s, t) for s in self.sources]
         listeners = {name: self.placed("listeners", lis, t) for name, lis in self.listeners.items()}
+        target, area = img, self.clip_of(plan)
+        if self.framed:  # drawn apart, then cut to the panel
+            img = Image.new("RGBA", target.size, (0, 0, 0, 0))
         if self.outdoors is not None and "ground" not in self.hide:
             self.outdoors.ground(img, plan)
         draw = ImageDraw.Draw(img)
         for (xa, ya), (xb, yb) in self.outline:
             draw.line([plan(xa, ya), plan(xb, yb)], fill=LINE, width=2)
+        if self.audiences:
+            self.draw_audience(img, plan)
+            draw = ImageDraw.Draw(img)
         if self.outdoors is not None and "wind" not in self.hide:
             clear = [s["position"][:2] for s in sources]
             clear += [lis["position"][:2] for lis in listeners.values()]
@@ -530,10 +718,13 @@ class Pictures:
                 lambda _n: SOURCE,
             )
             draw = ImageDraw.Draw(img)
-        marks = []
+        marks, beyond = [], []
         for source, given in zip(sources, self.sources, strict=True):
             x, y = plan(*source["position"])
             colour = SOURCE if given["name"] in playing else MUTED
+            if self.framed and not _within((x, y), area):
+                beyond.append((source, colour))
+                continue
             rs = max(4.0, r * 0.55)
             draw.ellipse([x - rs, y - rs, x + rs, y + rs], fill=colour, outline=colour)
             marks.append(((x, y), rs, source["name"], given.get("group")))
@@ -552,7 +743,17 @@ class Pictures:
             labels.append(((x - r, y - r, x + r, y + r), name, LISTENER_SIDES))
         for box, words in source_labels(draw, marks, label):
             labels.append((box, words, self.source_sides))
-        for xy, anchor, words in laid_out(draw, labels, label, taken, plan.area):
+        within = plan.area
+        if self.framed:  # cut to the panel; the labels on it, those of what is past it too
+            box = tuple(int(round(v)) for v in area)
+            target.alpha_composite(img.crop(box), dest=box[:2])
+            img, within = target, area
+            draw = ImageDraw.Draw(img)
+            here = listeners.get(current) if current is not None else None
+            for mark, words, sides in self.draw_beyond(draw, plan, area, beyond, here):
+                taken.append(mark)
+                labels.append((mark, words, sides))
+        for xy, anchor, words in laid_out(draw, labels, label, taken, within):
             text(draw, xy, words, label, MUTED, anchor)
         if current is not None and current in listeners:
             lis = listeners[current]
@@ -562,6 +763,35 @@ class Pictures:
         metres = nice_length(self.box[2] - self.box[0])
         unit = f"{metres:g} m"
         scale_bar(draw, plan.left + 12, plan.top + plan.size[1] - 14, metres * plan.s, unit)
+
+    def draw_audience(self, img: Image.Image, plan: Plan) -> None:
+        """A dot for every few people where the audience stands or sits, closer where
+        more are on a square metre, and dashes along the rows of seats no one sits in;
+        see-through, so the lines to the listener and the marks stay in sight."""
+        key = (plan.left, plan.top, plan.s, img.size)
+        if self._crowd is None or self._crowd[0] != key:
+            layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(layer)
+            r = min(max(0.32 * plan.s, 1.0), 2.6)
+            for k, area in enumerate(self.audiences):
+                for x, y in area.dots(seed=k):
+                    px, py = plan(x, y)
+                    if area.kind == "seats":
+                        w = 0.6 * plan.s
+                        ends = (
+                            [(px - w, py), (px + w, py)]
+                            if area.along_x
+                            else [
+                                (px, py - w),
+                                (px, py + w),
+                            ]
+                        )
+                        draw.line(ends, fill=SEAT + (255,), width=2)
+                    else:
+                        alpha = 170 if area.kind == "standing" else 120
+                        draw.ellipse([px - r, py - r, px + r, py + r], fill=PERSON + (alpha,))
+            self._crowd = (key, layer)
+        img.alpha_composite(self._crowd[1])
 
     # -- words ---------------------------------------------------------------------------
 
@@ -718,6 +948,7 @@ class Pictures:
         if t is not None and self.paths:
             walking = ", ".join(name.replace("_", " ") for _kind, name in self.paths)
             lines.append((f"Moving along their trajectories: {walking}", MUTED))
+        lines += [(line, MUTED) for line in audience_lines(self.audiences)]
         if self.fmt == "binaural":
             lines.append(("L and R mark your ears", MUTED))
         return lines
@@ -752,6 +983,61 @@ class Pictures:
         return out
 
     # -- the pictures ------------------------------------------------------------------
+
+    def clip_of(self, plan: Plan) -> tuple[float, float, float, float]:
+        """Where on the picture ``plan`` is drawn (left, top, right, bottom): its panel,
+        or the scene's box on it where it has none."""
+        if plan.area is not None:
+            return plan.area
+        w, h = plan.size
+        return (plan.left, plan.top, plan.left + w, plan.top + h)
+
+    def draw_beyond(
+        self, draw, plan: Plan, area: Box, beyond, listener: dict | None
+    ) -> list[tuple[Box, str, Sequence[str]]]:
+        """Each source of ``beyond`` (scene data where it is then, and its colour),
+        past the panel ``area``, as an arrowhead on its edge pointing to it; its label
+        for :func:`laid_out`: the box the arrowhead takes, its name and how far it is
+        from ``listener`` (scene data), when one is heard, and the sides it may take,
+        those towards the panel first."""
+        left, top, right, bottom = area
+        cx, cy = (left + right) / 2, (top + bottom) / 2
+        inset, size = 14.0, 11.0
+        out = []
+        for source, colour in beyond:
+            x, y = plan(*source["position"])
+            dx, dy = x - cx, y - cy
+            # Where the line from the panel's middle to it leaves the panel, inset.
+            reach = min(
+                ((right - inset - cx) / dx if dx > 0 else (left + inset - cx) / dx)
+                if abs(dx) > 1e-9
+                else math.inf,
+                ((bottom - inset - cy) / dy if dy > 0 else (top + inset - cy) / dy)
+                if abs(dy) > 1e-9
+                else math.inf,
+            )
+            ex, ey = cx + reach * dx, cy + reach * dy
+            ux, uy = dx / math.hypot(dx, dy), dy / math.hypot(dx, dy)
+            back = (ex - ux * size, ey - uy * size)
+            wing = (-uy * size * 0.6, ux * size * 0.6)
+            draw.polygon(
+                [
+                    (ex + ux * size * 0.4, ey + uy * size * 0.4),
+                    (back[0] + wing[0], back[1] + wing[1]),
+                    (back[0] - wing[0], back[1] - wing[1]),
+                ],
+                fill=colour,
+            )
+            words = source["name"]
+            if listener is not None:
+                away = math.dist(source["position"], listener["position"])
+                words = f"{words}, {away:,.0f} m away"
+            inward = ["left" if ux > 0.5 else "right" if ux < -0.5 else ""]
+            inward += ["above" if uy > 0.5 else "below" if uy < -0.5 else ""]
+            sides = [side for side in inward if side]
+            sides += [side for side in SOURCE_SIDES if side not in sides]
+            out.append(((ex - size, ey - size, ex + size, ey + size), words, sides))
+        return out
 
     def still(self, k: int, t: float | None = None) -> Image.Image:
         """The still of stop ``k``; at ``t`` of the tour, with every mover where it is
@@ -991,12 +1277,17 @@ __all__ = [
     "LISTENER_SIDES",
     "MID_BANDS",
     "PLAN_BOX",
+    "Audience",
     "Pictures",
     "SOURCE_SIDES",
+    "audience_lines",
+    "audience_of",
+    "audiences",
     "counted",
     "label_at",
     "laid_out",
     "nice_length",
+    "per_m2_of",
     "source_labels",
     "wrapped",
     "wrapped_line",

@@ -331,14 +331,32 @@ def place(
     return y + size + 14 + 50
 
 
-def facts(draw, x: float, y: float, lines: Sequence, size: int = 24, step: int = 36) -> float:
-    """Lines of facts under the stop's name, each a string or (string, colour); returns
-    the y under them."""
+def facts(
+    draw,
+    x: float,
+    y: float,
+    lines: Sequence,
+    size: int = 24,
+    step: int = 36,
+    right: float = RIGHT,
+) -> float:
+    """Lines of facts under the stop's name, each a string or (string, colour), one
+    longer than reaches ``right`` going on on the next, between words; returns the y
+    under them."""
     for line in lines:
         s, colour = line if isinstance(line, tuple) else (line, TEXT)
         weight = "SemiBold" if colour == LISTENER else "Regular"
-        text(draw, (x, y), s, font(weight, size), colour)
-        y += step
+        f = font(weight, size)
+        rows: list[str] = []
+        for word in s.split(" "):
+            longer = f"{rows[-1]} {word}" if rows else word
+            if rows and draw.textlength(longer, font=f) > right - x:
+                rows.append(word)
+            else:
+                rows[-1:] = [longer]
+        for row in rows:
+            text(draw, (x, y), row, f, colour)
+            y += step
     return y
 
 

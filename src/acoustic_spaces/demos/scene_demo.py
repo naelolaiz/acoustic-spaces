@@ -248,7 +248,7 @@ def feeds_folder(args: argparse.Namespace) -> Path:
     name += f"_{plays}" if plays else ""
     name += f"_{name_part(piece)}" if piece else ""
     if scene is not None and made_of(args, scene):
-        for option in ("speed", *MODEL_OPTIONS):
+        for option in ("speed", "start", "height", *MODEL_OPTIONS):
             value = getattr(args, option, None)
             if value is not None:
                 name += f"_{option}-{option_text(value)}"
@@ -276,9 +276,26 @@ def _scene_at(path: str, _changed: int) -> Scene | None:
 
 
 def hidden(args: argparse.Namespace) -> list[str]:
-    """What ``--hide`` leaves out of the stills, by name."""
+    """What ``--hide`` leaves out of the stills, by name; nothing for ``none``, which
+    shows what a demo leaves out by default (the stadium's view from the side)."""
     given = getattr(args, "hide", None) or ""
-    return [part.strip() for part in str(given).split(",") if part.strip()]
+    parts = [part.strip() for part in str(given).split(",") if part.strip()]
+    return [] if parts == ["none"] else parts
+
+
+#: Why a scene has no audience for its stills to draw (:func:`has_audience`).
+NO_AUDIENCE = (
+    "the scene has no audience or seats (a material of the database's audiences or "
+    "seating, or with audience: true)"
+)
+
+
+def has_audience(scene: Scene) -> bool:
+    """Whether a material of ``scene`` is an audience or seats, which its stills draw
+    (:func:`~acoustic_spaces.demos.scene_pictures.audience_of`)."""
+    from acoustic_spaces.demos.scene_pictures import audience_of
+
+    return any(audience_of(material) is not None for material in scene.materials.values())
 
 
 def scene_pictures_hidden() -> tuple[str, ...]:
@@ -492,11 +509,18 @@ def changed(args: argparse.Namespace, scene: Scene) -> Scene:
     ``--vocal-effort``, every talker in use (a source with a speech spectrum) talking so
     (:meth:`~acoustic_spaces.scene.Source.talking`); with ``--rpm``, ``--siren`` and
     ``--horn``, what they set in the sources' models (:func:`with_models`); with
+    ``--height``, every helicopter flying at that height (:func:`flying_at`); with
     ``--atmosphere still``, in
     still air (:func:`still_air`); its tour the one it gives for the recording the run
-    plays (:func:`toured_for`). ValueError for a ``--stand`` or a ``--turn`` that does
-    not read, or names a listener the scene does not have."""
+    plays (:func:`toured_for`); each source of a model with its sound power in the air
+    and the wind it is in so (:meth:`~acoustic_spaces.scene.Scene.in_its_air`);
+    outdoors, its ground and its sky as wide as the trajectories in use take
+    (:func:`in_open_air`). ValueError for a ``--stand`` or a
+    ``--turn`` that does not read, or names a listener the scene does not have."""
     scene = with_models(args, taken_in(args, toured_for(scene, getattr(args, "recording", None))))
+    height = getattr(args, "height", None)
+    if height is not None:
+        scene = flying_at(scene, float(height))
     names = [lis.name for lis in scene.listeners]
     stand, turn = getattr(args, "stand", None), getattr(args, "turn", None)
     if stand is not None:
@@ -518,7 +542,7 @@ def changed(args: argparse.Namespace, scene: Scene) -> Scene:
     name = getattr(args, "recording", None)
     effort = getattr(args, "vocal_effort", None)
     if name is None and effort is None:
-        return scene
+        return in_open_air(scene.in_its_air())
     free = recordings.named(name) if isinstance(name, str) else None  # else a file of yours
     inputs = getattr(args, "inputs", None) or {}
     sources = []
@@ -535,7 +559,161 @@ def changed(args: argparse.Namespace, scene: Scene) -> Scene:
     update: dict = {"sources": sources}
     if name is not None:
         update["recording"] = free.name if free is not None else Path(name)
-    return scene.model_copy(update=update)
+    return in_open_air(scene.model_copy(update=update).in_its_air())
+
+
+#: How far an outdoor run's ground reaches past every place of the trajectories in use,
+#: and its sky above the highest of them (m), where the scene's do not hold them
+#: (:func:`in_open_air`).
+GROUND_PAST_M, SKY_ABOVE_M = 50.0, 40.0
+
+
+def is_helicopter(source: SceneSource) -> bool:
+    """Whether ``source`` (a scene source) is a helicopter: of a rotorcraft model."""
+    return source.model is not None and source.model.method == "rotorcraft"
+
+
+def flying_at(scene: Scene, height_m: float) -> Scene:
+    """``scene`` with every helicopter in use (:func:`is_helicopter`) ``height_m`` up
+    (z, m) at every place of its trajectory: where it starts, each point it flies to and
+    each keyframe's place."""
+
+    def up(place) -> tuple[float, float, float]:
+        return (float(place[0]), float(place[1]), float(height_m))
+
+    sources = []
+    for source in scene.sources:
+        if source.in_use and is_helicopter(source):
+            update: dict = {"position": up(source.position)}
+            trajectory = source.trajectory
+            if trajectory is not None:
+                moved: dict = {}
+                if trajectory.to is not None:
+                    moved["to"] = [up(place) for place in trajectory.to]
+                if trajectory.keyframes is not None:
+                    moved["keyframes"] = [
+                        frame.model_copy(update={"position": up(frame.position)})
+                        for frame in trajectory.keyframes
+                    ]
+                update["trajectory"] = trajectory.model_copy(update=moved)
+            source = source.model_copy(update=update)
+        sources.append(source)
+    return scene.model_copy(update={"sources": sources})
+
+
+def trajectory_places(item) -> np.ndarray:
+    """(n, 3) where ``item`` (a scene source or listener) is and goes: its position, then
+    each point its trajectory goes to or each keyframe's place."""
+    trajectory = item.trajectory
+    places = [item.position]
+    if trajectory is not None:
+        places += list(trajectory.to or [])
+        places += [frame.position for frame in trajectory.keyframes or []]
+    return np.asarray(places, dtype=float)
+
+
+@functools.lru_cache(maxsize=4)
+def _model_triangles(file: str, units: str | None, up_axis: str | None, stamp: float) -> np.ndarray:
+    """The triangles (T, 3, 3), m, of an outdoor scene's model file, as read at ``stamp``
+    (its modification time)."""
+    from acoustic_spaces.geometry import load_mesh
+
+    mesh = load_mesh(file, units=units, up_axis=up_axis)
+    return np.asarray(mesh.vertices, dtype=float)[np.asarray(mesh.faces)]
+
+
+def flies_into(scene: Scene) -> tuple[str, float] | None:
+    """The first helicopter in use of ``scene`` (:func:`is_helicopter`) that flies into
+    or under its model (the buildings of an outdoor scene's file), every half metre of
+    its trajectory: its name and how high the model is (m, z) at its highest under or
+    over those of its places it reaches; None where every one flies over it, or there
+    is no model."""
+    from acoustic_spaces.walkthrough import knots
+
+    geometry = scene.geometry
+    if geometry.ground is None or geometry.file is None or not Path(geometry.file).exists():
+        return None
+    triangles = _model_triangles(
+        str(geometry.file), geometry.units, geometry.up_axis, Path(geometry.file).stat().st_mtime
+    )
+    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+    # Each triangle's plan, for the barycentric coordinates of a point in it.
+    e1, e2 = b[:, :2] - a[:, :2], c[:, :2] - a[:, :2]
+    det = e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]
+    flat = np.abs(det) > 1e-9  # a wall, a line from above, holds no point
+    a, b, c, e1, e2, det = a[flat], b[flat], c[flat], e1[flat], e2[flat], det[flat]
+    for source in scene.sources:
+        if not (source.in_use and is_helicopter(source) and source.trajectory is not None):
+            continue
+        path = knots(source)  # every half metre along it
+        count = max(2, int(math.ceil(path.length_m / 0.5)) + 1)
+        places = path.at(np.linspace(0.0, path.duration_s, count))[0]
+        for chunk in np.array_split(places, max(1, len(places) // 256)):
+            d = chunk[:, None, :2] - a[None, :, :2]  # (K, T, 2)
+            u = (d[..., 0] * e2[None, :, 1] - d[..., 1] * e2[None, :, 0]) / det[None, :]
+            v = (e1[None, :, 0] * d[..., 1] - e1[None, :, 1] * d[..., 0]) / det[None, :]
+            inside = (u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9)
+            z = (
+                a[None, :, 2]
+                + u * (b[None, :, 2] - a[None, :, 2])
+                + v * (c[None, :, 2] - a[None, :, 2])
+            )
+            hit = inside & (z >= chunk[:, None, 2])
+            if hit.any():
+                return source.name, float(np.max(np.where(inside, z, -np.inf)[hit.any(axis=1)]))
+    return None
+
+
+def in_open_air(scene: Scene) -> Scene:
+    """``scene``, outdoors on flat ground of an extent and a sky it gives, with that
+    extent widened to GROUND_PAST_M past, and that sky raised to SKY_ABOVE_M above, every
+    place of the trajectories in use (:func:`trajectory_places`, its sources' and its
+    listeners') where one of them is past the ground's edge or above its sky, so that
+    what moves stays in the open air the simulation hears (a helicopter flying over a
+    stadium from far off); as it is otherwise, its simulation refusing what is out of
+    the open air (on a terrain, or a ground whose extent or sky the scene leaves to its
+    buildings)."""
+    geometry = scene.geometry
+    ground = getattr(geometry, "ground", None)
+    if ground is None or ground.terrain is not None or ground.extent is None or ground.sky is None:
+        return scene
+    items = [
+        item
+        for item in [*scene.sources, *scene.listeners]
+        if item.in_use and item.trajectory is not None
+    ]
+    if not items:
+        return scene
+    places = np.vstack([trajectory_places(item) for item in items])
+    (x0, y0), (x1, y1) = ground.extent
+    top = float(ground.height) + float(ground.sky)
+    low, high = places[:, :2].min(axis=0), places[:, :2].max(axis=0)
+    if low[0] >= x0 and low[1] >= y0 and high[0] <= x1 and high[1] <= y1:
+        if float(places[:, 2].max()) < top:
+            return scene
+    low, high = low - GROUND_PAST_M, high + GROUND_PAST_M
+    extent = (
+        (min(float(x0), float(low[0])), min(float(y0), float(low[1]))),
+        (max(float(x1), float(high[0])), max(float(y1), float(high[1]))),
+    )
+    sky = max(float(ground.sky), float(places[:, 2].max()) - float(ground.height) + SKY_ABOVE_M)
+    widened = ground.model_copy(update={"extent": extent, "sky": sky})
+    return scene.model_copy(update={"geometry": geometry.model_copy(update={"ground": widened})})
+
+
+def frame_of(args: argparse.Namespace, scene: Scene) -> tuple[float, float, float, float] | None:
+    """The part of ``scene`` (as the run plays it) that the run's stills show from above
+    (x0, y0, x1, y1, m): the ground's extent as the scene has it, where the run widened
+    it to take what moves (:func:`in_open_air`), so that a helicopter flying in from far
+    off leaves the stadium its size, drawn at the edge while it is past it; None, all of
+    it, otherwise."""
+    found = _current(args.scene) or Scene.from_yaml(args.scene)
+    written = getattr(found.geometry, "ground", None)
+    run = getattr(scene.geometry, "ground", None)
+    if written is None or run is None or written.extent is None or run.extent == written.extent:
+        return None
+    (x0, y0), (x1, y1) = written.extent
+    return (float(x0), float(y0), float(x1), float(y1))
 
 
 #: The run options that set what a source's model leaves to a run, by option: the
@@ -900,7 +1078,13 @@ def run_scene_file(args: argparse.Namespace) -> Path:
     still = run.still and not found.still
     longer = run.simulation.ir_length_s != found.simulation.ir_length_s
     taken = taken_names(found, run)
-    if not levelled and not moved and not still and not taken and not longer:
+    flown = [
+        s
+        for s in run.sources
+        if (s.position, s.trajectory) != (before[s.name].position, before[s.name].trajectory)
+    ]
+    widened = run.geometry != found.geometry
+    if not (levelled or moved or still or taken or longer or flown or widened):
         return path
     effort = getattr(args, "vocal_effort", None)
     parts = [] if not taken else [taken_name(taken)]
@@ -915,6 +1099,10 @@ def run_scene_file(args: argparse.Namespace) -> Path:
     spoken = sorted({s.talker for s in levelled if s.spectrum != before[s.name].spectrum})
     parts += [f"{talker}-speech" for talker in spoken]
     parts += [name_part(f"{lis.name}-at-{lis.position[0]:g}-{lis.position[1]:g}") for lis in moved]
+    height = getattr(args, "height", None)
+    parts += [name_part(f"height-{float(height):g}")] if flown and height is not None else []
+    # The open air widened for what is taken in or flies higher says nothing more.
+    parts += ["open-air"] if widened and not (taken or flown) else []
     out = work_of(args) / SCENES / f"{name_part(path.stem)}_{'_'.join(parts)}{path.suffix}"
     # What the run sets in a model that leaves its sound power as it is (--rpm, --blows:
     # the made sound alone) is no change to what is simulated: the scene's own model.
@@ -1490,16 +1678,20 @@ def run_trajectories(args: argparse.Namespace, scene: Scene) -> Scene:
     """``scene`` with each trajectory that moves at the run's ``--speed`` (km/h; along
     keyframes, through their places at that speed:
     :func:`~acoustic_spaces.walkthrough.at_speed`), or without it, a train ``--train``
-    gives at its own (:func:`own_speeds`), and its places ``--step`` apart (m), where
-    the run gives them; as it is otherwise."""
+    gives at its own (:func:`own_speeds`), its places ``--step`` apart (m), and setting
+    off ``--start`` s into the run, the first of them then and each other as much later
+    as the scene has it, where the run gives them; as it is otherwise."""
     from acoustic_spaces.walkthrough import at_speed, movers
 
     speed = getattr(args, "speed", None)
     step = getattr(args, "step_m", None)
+    start = getattr(args, "start", None)
     own = own_speeds(args, scene) if speed is None else {}
-    if speed is None and step is None and not own:
+    if speed is None and step is None and start is None and not own:
         return scene
     moving = {(kind, item.name) for kind, item in movers(scene)}
+    first = min((item.trajectory.start_s for _, item in movers(scene)), default=0.0)
+    later = 0.0 if start is None else float(start) - float(first)
     update = {}
     for kind in ("listeners", "sources"):
         items = []
@@ -1512,6 +1704,10 @@ def run_trajectories(args: argparse.Namespace, scene: Scene) -> Scene:
                     item = at_speed(item, own[item.name])
                 if step is not None:
                     trajectory = item.trajectory.model_copy(update={"step_m": float(step)})
+                    item = item.model_copy(update={"trajectory": trajectory})
+                if start is not None:
+                    at = round(float(item.trajectory.start_s) + later, 6)
+                    trajectory = item.trajectory.model_copy(update={"start_s": max(at, 0.0)})
                     item = item.model_copy(update={"trajectory": trajectory})
             items.append(item)
         update[kind] = items
@@ -1660,10 +1856,13 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     ``--sources`` picks must play something."""
     if not getattr(args, "scene", None):
         return "give the scene to demo (--scene)"
-    for name in ("seconds", "speed", "step_m", "bpm", "rpm", "blows"):
+    for name in ("seconds", "speed", "step_m", "bpm", "rpm", "blows", "height"):
         value = getattr(args, name, None)
-        if value is not None and not float(value) > 0.0:
+        if value is not None and not (math.isfinite(float(value)) and float(value) > 0.0):
             return f"{demo.option(name).option} is a positive number, not {value!r}"
+    start = getattr(args, "start", None)
+    if start is not None and not (math.isfinite(float(start)) and float(start) >= 0.0):
+        return f"--start is a time on the run's clock (s), 0 or more, not {start!r}"
     if getattr(args, "downbeat", None) is not None and getattr(args, "bpm", None) is None:
         return "--downbeat is for a recording of yours, with its tempo (--bpm)"
     last = getattr(args, "last_stop", None)
@@ -1674,7 +1873,15 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
             return f"--last-stop: {exc}: give phrases (2), seconds (12s) or end"
     unknown = [part for part in hidden(args) if part not in scene_pictures_hidden()]
     if unknown:
-        return f"--hide {unknown[0]}: give one or more of {', '.join(scene_pictures_hidden())}"
+        given = ", ".join(scene_pictures_hidden())
+        return f"--hide {unknown[0]}: give none, or one or more of {given}"
+    found = _current(getattr(args, "scene", None))
+    if found is not None:
+        for part in hidden(args):
+            if part != "audience" and found.geometry.ground is None:
+                return f"--hide {part} changes nothing: the scene is a room, not outdoors"
+            if part == "audience" and not has_audience(found):
+                return f"--hide audience changes nothing: {NO_AUDIENCE}"
     resolved = demo.resolved(args)
     path = Path(resolved.scene)
     if not path.exists():
@@ -1689,6 +1896,15 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
         scene = changed(resolved, scene)
     except ValueError as exc:
         return str(exc)
+    into = flies_into(scene)
+    if into is not None:
+        name, top = into
+        given = getattr(resolved, "height", None)
+        how = f"--height {float(given):g} flies" if given is not None else "the scene flies"
+        return (
+            f"{how} {name} into the model, {top:.3g} m up under its trajectory: "
+            f"give --height more than {top:.3g}"
+        )
     length = getattr(resolved, "ir_length", None)
     if length is not None and not length > 0.0:
         return f"--ir-length is how long the responses run, s, more than 0, not {length:g}"
@@ -2835,7 +3051,7 @@ def tour_given(args: argparse.Namespace, scene: Scene) -> list[TourStop] | None:
     names = listener_names(getattr(args, "listeners", None))
     if names is not None and given:
         stops = [stop for stop in stops if stop.listener in names]
-    elif names is not None:
+    elif names:  # none named is refused (Demo.check)
         # A tour that ends back where it began ends at the first listener named; one
         # whose last stop runs to the end of the recording still does, the stop that
         # did so elsewhere in the order lasting as long as a stop does by default.
@@ -3003,9 +3219,11 @@ def tour_of(
         timed = timed_tour(stops, length_s, tempo, seconds, share)
         keys = list(dict.fromkeys(key for key, _, _ in timed))
         pipeline.missing_mixes(seats, keys, (demo or DEMO).command("render", args))
+        # The mixes' folder: of the moving mixes, where something moves.
+        mixes = run_folder(args) / (MOVING if seats.get("moving") else "seats")
         if share and free is not None and free.cut == "quiet":
-            timed = quiet_cuts(timed, stops, seats, run_folder(args) / "seats")
-        timed = ringing_out(timed, seats, length_s, run_folder(args) / "seats")
+            timed = quiet_cuts(timed, stops, seats, mixes)
+        timed = ringing_out(timed, seats, length_s, mixes)
         gains = stops_gains(seats, keys) if tour is not None else pipeline.gains_of(seats, keys)
         gains = levelled(args, gains)
         return [pipeline.TourStop(key, a, a, b, gains[key]) for key, a, b in timed]
@@ -3227,6 +3445,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         hide=hidden(args),
         sections=sections_heard(table, free_of(scene), fed, piece_of(args, scene)),
         played=played_signals(args, fed, seats.get("movement")),
+        frame=frame_of(args, scene),
     )
     pictures.save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     if moving:
@@ -3390,6 +3609,7 @@ DEMO = Demo(
             "choice",
             choices=recordings.NAMES,
             or_file=True,
+            filter=AUDIO_FILTER,
             steps=("recording", "feeds", "simulate", "render", "video"),
             unset="the scene's",
             named="plays",
@@ -3543,17 +3763,19 @@ DEMO = Demo(
         ),
         Option(
             "hide",
-            "what the stills of an outdoor scene leave out, comma-separated: side, the view "
+            "what the stills leave out, comma-separated: outdoors, side, the view "
             "from the side through the source heard loudest and you, with the sound's rays; "
             "wind, the wind and the weather zones from above; ground, the ground's materials "
-            "and what stands on it, from above (default: none, they show it all)",
+            "and what stands on it, from above; outdoors and in a room, audience, the "
+            "audience and the empty seats; none, nothing (default: none, they show it all)",
             None,
             steps=("video",),
             unset="nothing",
             moot=lambda args: (
-                "the scene is a room"
+                f"the scene is a room, and {NO_AUDIENCE}"
                 if (found := _current(getattr(args, "scene", None))) is not None
                 and found.geometry.ground is None
+                and not has_audience(found)
                 else None
             ),
         ),
@@ -3655,6 +3877,30 @@ DEMO = Demo(
             unit="m",
             unset="each trajectory's own",
             moot=lambda args: None if unread(args) or moving_of(args) else "nothing moves",
+        ),
+        Option(
+            "start",
+            "when what moves sets off in this run, on the run's clock (s): the first "
+            "trajectory to set off then, and each other as much later as the scene has it "
+            "(default: as in the scene, each trajectory's start_s)",
+            None,
+            "float",
+            steps=("feeds", "render", "video"),
+            unit="s",
+            unset="as in the scene",
+            moot=lambda args: None if unread(args) or moving_of(args) else "nothing moves",
+        ),
+        Option(
+            "height",
+            "how high every helicopter of the run flies (a source with a rotorcraft model), "
+            "m up (z) at every place of its trajectory; the scene so changed is simulated "
+            "once (default: as in the scene)",
+            None,
+            "float",
+            steps=("simulate", "feeds", "render", "video"),
+            unit="m",
+            unset="as in the scene",
+            moot=helicopters_moot,
         ),
         Option(
             "rpm",
@@ -3806,9 +4052,11 @@ def preset(
     steps: dict[str, tuple[str, ...]] | None = None,
     old_flags: tuple[tuple[str, dict], ...] = (),
     reads_old=None,
+    builds_on: str | None = None,
 ) -> Demo:
     """An example's script as a preset of the demo of any scene: :data:`DEMO` on the
-    example's own scene (``scene.yaml`` beside the script), with the defaults the script
+    example's own scene (``scene.yaml`` beside the script), writing into ``demo`` beside
+    the script as the script did, with the defaults the script
     has (``defaults``, by option), its flags read as this demo's (``renamed``, by option:
     each old flag and what a value of it is in that option's,
     :attr:`~acoustic_spaces.demos.Option.renamed`) and its steps run as the ones that
@@ -3816,7 +4064,8 @@ def preset(
     read together (``old_flags``, folded into this demo's options by ``reads_old``:
     :attr:`~acoustic_spaces.demos.Demo.old_flags`), so that the command lines written
     for the script keep working; its runs are named after it (``church_binaural``), by
-    what differs from its own defaults."""
+    what differs from its own defaults. ``builds_on``: the example's own demo, where
+    this one plays more of its scene (:attr:`~acoustic_spaces.demos.Demo.builds_on`)."""
     defaults, renamed, steps = defaults or {}, renamed or {}, steps or {}
     unknown = sorted(
         ({*defaults, *renamed} - {o.name for o in DEMO.options})
@@ -3829,6 +4078,13 @@ def preset(
         changes: dict = {}
         if given.name == "scene":
             changes["default"] = Path("scene.yaml")
+        if given.name == "work":
+            # The script's ./demo, counted from its folder as its other paths are: run
+            # away from it (an installed example's, in the editor), a path in full there.
+            changes["default"] = Path("demo")
+            changes["help"] = (
+                "folder for everything the demo writes (default: demo beside the script)"
+            )
         if given.name in defaults:
             changes["default"] = defaults[given.name]
         if given.name in renamed:
@@ -3855,6 +4111,7 @@ def preset(
         module=None,
         old_flags=tuple(old_flags),
         reads_old=reads_old,
+        builds_on=builds_on,
     )
 
 

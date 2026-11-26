@@ -4515,42 +4515,43 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
         for name, w in dialog.fields.items()
         if isinstance(w, QWidget) and isinstance(box := dialog.section_of(name), QGroupBox)
     }
-    assert sections == {
-        "song": "Recording",
-        "music": "Recording",
-        "stems": "Recording",
+    shown = [name for name in sections if name in dialog._rows and dialog.row_shown(name)]
+    assert {name: sections[name] for name in shown} == {
+        "recording": "Recording",
+        "seconds": "Listeners",
+        "timeline": "Listeners",
+        "listeners": "Listeners",
+        "levels": "Video",
         "sources": "Sources",
         "sources_play": "Sources",
-        "listeners": "Listeners",
-        "series": "Video",
         "format": "Output",
         "hrtf": "Output",
+        "series": "Video",
     }
+    assert sections["stems"] == "Recording" and sections["height"] == "Trajectories"
     labels = {
         name: label.text()
-        for name in sections
+        for name in shown
         if (label := dialog._rows[name].labelForField(dialog.fields[name])) is not None
     }
     assert labels == {
-        "song": "Song",
-        "music": "Your own song",
-        "stems": "Stems",
+        "seconds": "Time per listener",
+        "timeline": "Timeline",
+        "levels": "Levels between listeners",
         "sources_play": "Sources play",
         "format": "Format",
         "hrtf": "HRTFs",
     }
-    # Every row shows: the concert's sources ticked play together or in turn, and its
-    # listeners can each be a part of their own, in the Video box; the files the sources
-    # play instead are given in the sources' tree.
+    # The concert's sources ticked play together or in turn, and its listeners can each
+    # be a part of their own, in the Video box; the files the sources play instead are
+    # given in the sources' tree.
     assert isinstance(dialog.fields["sources"], SourcesField)
     assert isinstance(dialog.fields["series"], SeriesField)
     assert isinstance(dialog.fields["inputs"], SourceInputs)
-    for name in sections:
-        assert dialog.row_shown(name), name
-    assert dialog.parts.text() == "This run makes one video, stadium_spicy_funk_cake_binaural.mp4."
-    assert "(--song)" in dialog._rows["song"].labelForField(dialog.fields["song"]).toolTip()
+    assert dialog.parts.text() == "This run makes one video, stadium_binaural.mp4."
+    assert "(--recording)" in dialog.fields["recording"].toolTip()
     assert "(--sources)" in dialog.fields["sources"].toolTip()
-    for name in ("work", "results", "source", "scene", "tour", "bpm", "again"):
+    for name in ("work", "scene", "tour", "bpm", "again"):
         assert dialog.advanced.isAncestorOf(dialog.fields[name]), name
     assert dialog.advanced.isAncestorOf(dialog.step) and dialog.advanced.isAncestorOf(
         dialog.command
@@ -4576,16 +4577,17 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     dialog.more.setChecked(False)
     assert dialog.advanced.isHidden()
 
-    # A field that differs shows in the command, and the song is a list of the songs.
-    song = dialog.fields["song"]
-    assert isinstance(song, ChoicesField)
-    assert song.names == list(demo.option("song").choices)
-    assert song.value() == "spicy_funk_cake"
+    # A field that differs shows in the command, and the recording is a list of the
+    # free ones, the scene's own first.
+    song = dialog.fields["recording"]
+    assert isinstance(song, ChoicesField) and song.file is not None
+    assert song.names == list(demo.option("recording").choices)
+    assert song.value() is None and song.combo.itemText(0) == "the scene's"
     song.pick("francium")
     dialog.step.setCurrentText("render")
-    assert dialog.command.text() == "python stadium_demo.py render --song francium"
+    assert dialog.command.text() == "python stadium_demo.py render --recording francium"
     assert dialog.about_step.text().startswith("render: ")
-    assert dialog.chosen()[2].song == "francium"
+    assert dialog.chosen()[2].recording == "francium"
 
     # What cannot be run says why, and Run waits for it to be put right.
     ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
@@ -4622,7 +4624,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert tree.choose.isEnabled() and not tree.default.isEnabled()
     mine = example_path("stadium_concert").parent / "box.csv"  # any file that is there
     row.setText(tree.FILE, str(mine))
-    assert dialog.command.text().endswith(" --input subs=box.csv")  # from the folder
+    assert " --input subs=box.csv " in dialog.command.text()  # from the folder
     assert dialog.chosen()[2].inputs == {"subs": mine} and ok.isEnabled()
     row = {item.text(tree.SOURCE): item for item in tree._items()}["subs"]
     row.setText(tree.FILE, str(mine.with_name("none.wav")))
@@ -4638,34 +4640,36 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert [head.text(c) for c in range(3)] == ["Source", "Plays", "Your WAV"]
     assert all(head.toolTip(c) for c in range(3))
 
-    # A song of your own: --music, its tempo typed as a number, and a table of the stems
-    # with a file each; the options for it are refused without --music.
+    # A song of your own: a file in place of the free ones (File…), its tempo typed as a
+    # number, and a table of the stems with a file each; the tempo is refused for a
+    # free song, which has its own.
     stems = dialog.fields["stems"]
     assert isinstance(stems, InputsField) and stems.PLAYS is None
     rows = [stems.table.item(r, stems.SOURCE).text() for r in range(stems.table.rowCount())]
-    assert rows == list(demo.option("stems").choices) and "vocal" in rows
+    assert rows == ["drums", "bass", "guitar", "keys", "brass", "vocal", "backing"]
     heads = [stems.table.horizontalHeaderItem(c) for c in range(stems.table.columnCount())]
     assert [head.text() for head in heads] == ["Name", "File"] and all(h.toolTip() for h in heads)
     bpm = dialog.fields["bpm"]
-    assert isinstance(bpm, NumbersField) and bpm.edit.placeholderText() == ""
+    assert isinstance(bpm, NumbersField) and bpm.edit.placeholderText() == "the recording's"
     bpm.edit.setText("fast")
     assert "--bpm: a number, not 'fast'" in dialog.problem.text() and not ok.isEnabled()
     bpm.edit.setText("120")
-    assert "--bpm: for a song of your own, with --music" in dialog.problem.text()
+    assert "--bpm is for a recording of yours: francium has its own" in dialog.problem.text()
     song_file = tmp_path / "mine.wav"
     write_wav(song_file, np.zeros((100, 2)), 8000)
-    dialog.fields["music"].set_value(str(song_file))
+    song.pick(str(song_file))
     assert dialog.problem.text() == "" and ok.isEnabled()
     stems.table.item(rows.index("vocal"), stems.FILE).setText(str(song_file))
-    assert f"--music {song_file} --bpm 120.0 --stem vocal={song_file}" in dialog.command.text()
+    assert f"--recording {song_file} --bpm 120.0 --stem vocal={song_file}" in dialog.command.text()
     chosen = dialog.chosen()[2]
     assert chosen.bpm == 120.0 and chosen.stems == {"vocal": song_file}
+    assert chosen.recording == str(song_file)
     stems.table.item(rows.index("vocal"), stems.FILE).setText(str(tmp_path / "none.wav"))
     assert "--stem vocal: no " in dialog.problem.text()
-    dialog.fields["music"].set_value(None)
+    song.pick(None)
     bpm.edit.setText("")
     stems.table.item(rows.index("vocal"), stems.FILE).setText("")
-    assert dialog.problem.text() == "" and "--music" not in dialog.command.text()
+    assert dialog.problem.text() == "" and "--recording" not in dialog.command.text()
 
     # This scene: the sounds its sources play, the channels of the stadium's free song,
     # which the run downloads first.
@@ -4673,7 +4677,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert dialog.command.text() == "acoustic-spaces demo scene.yaml all"
     steps = [step.name for step in dialog.demo.steps]
     assert steps == ["recording", "feeds", "simulate", "render", "video"]
-    assert "song" not in dialog.fields and "seconds" in dialog.fields
+    assert "seconds" in dialog.fields
     assert dialog.problem.text() == "" and ok.isEnabled()
     assert '"Spicy Funk Cake"' in dialog.downloads.text() and "61 MB" in dialog.downloads.text()
     # A choice that the scene makes unless given lists that first, which gives none.
@@ -5056,12 +5060,12 @@ def test_demo_dialog_plays_several_of_a_choice_one_after_another(qapp, monkeypat
 
 def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
     """Sources lists what the demo can play in the scene's groups, the demo's own pick
-    ticked, the plain command: the stadium's PA, monitors and band, its helicopter left
-    to the crossing. A group unticked leaves it out, the groups wholly ticked named by
-    their names (--sources); None cannot run, and The demo's pick ticks the demo's own
-    again. Sources play shows where the run would play more than one part in turn: in
-    turn plays each top group in a part of its own. In the street, the police car's
-    siren alone plays without the car."""
+    ticked, the plain command: the stadium's PA, monitors and band, its helicopter
+    (which the crossing flies over them) unticked. A group unticked leaves it out, the
+    groups wholly ticked named by their names (--sources); None cannot run, and The
+    demo's pick ticks the demo's own again. Sources play shows where the run would play
+    more than one part in turn: in turn plays each top group in a part of its own. In
+    the street, the police car's siren alone plays without the car."""
     from PySide6.QtWidgets import QDialogButtonBox
 
     from acoustic_spaces import examples
@@ -5076,7 +5080,8 @@ def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
     assert "(--sources)" in sources.toolTip()
     tree = sources.tree
     groups = [tree.topLevelItem(k) for k in range(tree.topLevelItemCount())]
-    assert [group.text(0) for group in groups] == ["PA", "Monitors", "Band"]
+    assert [group.text(0) for group in groups] == ["PA", "Monitors", "Band", "Helicopter"]
+    assert groups[3].checkState(0) == Qt.CheckState.Unchecked
     assert [groups[0].child(k).text(0) for k in range(groups[0].childCount())] == [
         "Mains",
         "Subwoofers",
@@ -5089,8 +5094,8 @@ def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
         "singer_voice",
         "guitar_amp",
     ]
-    names = [source.name for source in sources.sources]
-    assert len(names) == 22 and "helicopter" not in names
+    names = [source.name for source in sources.sources if source.name != "helicopter"]
+    assert len(names) == 22 and len(sources.sources) == 23
     assert sources.ticked() == names and sources.value() is None
     assert dialog.command.text() == "python stadium_demo.py all"
 
@@ -5374,7 +5379,7 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     dialog = DemoDialog(scene=stadium)
     assert dialog.picker.currentData() == "stadium" and dialog.kept.isHidden()
     fields = dialog.fields
-    fields["song"].pick("francium")
+    fields["recording"].pick("francium")
     fields["hrtf"].set_value(str(sofa))
     fields["again"].setChecked(True)  # under Advanced: the line names it all the same
     fields["work"].set_value(str(tmp_path / "elsewhere"))  # follows the scene: not kept
@@ -5394,16 +5399,16 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     series.list.model().moveRow(QModelIndex(), 1, QModelIndex(), 0)  # now outermost
     assert not dialog.kept.isHidden()
     assert dialog.kept.text() == (
-        "Changed from the defaults and kept for next time: Song, HRTFs, Mix again, "
-        "Listeners, Sources, Sources play, Order of the parts. Defaults puts them back."
+        "Changed from the defaults and kept for next time: Recording, Listeners, Sources, "
+        "Sources play, HRTFs, Mix again, Order of the parts. Defaults puts them back."
     )
     # Another demo picked keeps the one left, and picked again shows it as left.
     dialog.picker.setCurrentIndex(dialog.picker.findData("crossing"))
     assert dialog.fields["speed"].value() is None and dialog.kept.isHidden()
     dialog.picker.setCurrentIndex(dialog.picker.findData("stadium"))
     left = (
-        f"python stadium_demo.py all --song francium --hrtf {sofa} --again "
-        "--listeners mix_position,east_stand --sources PA,Monitors --sources-play in-turn "
+        "python stadium_demo.py all --recording francium --listeners mix_position,east_stand "
+        f"--sources PA,Monitors --sources-play in-turn --hrtf {sofa} --again "
         "--series listeners,sources"
     )
     assert dialog.command.text() == left
@@ -5419,31 +5424,31 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     assert again.fields["speed"].value() == 120.0
     again.picker.setCurrentIndex(again.picker.findData("stadium"))
     fields = again.fields
-    assert fields["song"].value() == "francium" and fields["again"].isChecked()
+    assert fields["recording"].value() == "francium" and fields["again"].isChecked()
     assert fields["hrtf"].value() == sofa
     assert fields["listeners"].ticked() == ["mix_position", "east_stand"]
     assert fields["sources"].value() == "PA,Monitors"
     assert "drum_kit" not in fields["sources"].ticked()
     assert fields["series"].value() == "listeners,sources" and fields["series"].split
-    assert fields["work"].value() == again.demo.folder / "demo"
+    assert fields["work"].value() == stadium.resolve().parent / "demo"  # its own: not kept
     assert again.command.text() == left
     assert again.kept.text().startswith(
-        "Changed from the defaults and kept for next time: Song, HRTFs, Mix again, Listeners, "
-        "Sources, Sources play, Order of the parts."
+        "Changed from the defaults and kept for next time: Recording, Listeners, Sources, "
+        "Sources play, HRTFs, Mix again, Order of the parts."
     )
     # Two songs, changed just before Run, which keeps them.
-    fields["song"].pick(("spicy_funk_cake", "rubidium"))
+    fields["recording"].pick(("spicy_funk_cake", "rubidium"))
     fields["no_mp4"].setChecked(True)
     again.buttons.button(QDialogButtonBox.StandardButton.Ok).click()
     assert again.result() == int(QDialog.DialogCode.Accepted)
     again.deleteLater()
     run = DemoDialog(scene=stadium)
-    assert run.fields["song"].value() == ("spicy_funk_cake", "rubidium")
-    assert "--song spicy_funk_cake,rubidium" in run.command.text()
+    assert run.fields["recording"].value() == ("spicy_funk_cake", "rubidium")
+    assert "--recording spicy_funk_cake,rubidium" in run.command.text()
     assert run.fields["no_mp4"].isChecked()
     play = run.fields["sources_play"]
     assert play.currentData() == "in-turn"
-    run.fields["song"].pick("francium")
+    run.fields["recording"].pick("francium")
     run.fields["no_mp4"].setChecked(False)
     play.setCurrentIndex(play.findData("together"))
     run.reject()
@@ -5458,11 +5463,11 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     other = DemoDialog(scene=copy)
     assert other.picker.currentData() == "stadium"
     fields = other.fields
-    assert fields["song"].value() == "francium" and fields["hrtf"].value() == sofa
+    assert fields["recording"].value() == "francium" and fields["hrtf"].value() == sofa
     assert fields["listeners"].ticked() == fields["listeners"].names
     assert fields["sources"].value() is None and fields["series"].value() is None
     assert other.kept.text().startswith(
-        "Changed from the defaults and kept for next time: Song, HRTFs, Mix again."
+        "Changed from the defaults and kept for next time: Recording, HRTFs, Mix again."
     )
     other.deleteLater()
 
@@ -5471,7 +5476,7 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     assert last.picker.currentData() == "stadium"
     last.defaults.click()
     fields = last.fields
-    assert fields["song"].value() == "spicy_funk_cake" and not fields["again"].isChecked()
+    assert fields["recording"].value() is None and not fields["again"].isChecked()
     assert fields["hrtf"].value() is None
     assert fields["listeners"].ticked() == fields["listeners"].names
     assert fields["sources"].value() is None and fields["series"].value() is None
@@ -5514,7 +5519,7 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
         {
             "demos": {
                 "stadium_concert/stadium": {
-                    "song": "a song no longer offered",
+                    "recording": "a song no longer offered",
                     "again": "yes",
                     "downbeat": "soon",
                     "hrtf": str(gone),
@@ -5527,9 +5532,9 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     dialog = DemoDialog(scene=stadium)
     assert dialog.picker.currentData() == "stadium"
     fields = dialog.fields
-    assert fields["song"].value() == "spicy_funk_cake" and not fields["again"].isChecked()
-    assert fields["downbeat"].value() == 0.0
-    assert fields["work"].value() == dialog.demo.folder / "demo"
+    assert fields["recording"].value() is None and not fields["again"].isChecked()
+    assert fields["downbeat"].value() is None
+    assert fields["work"].value() == stadium.resolve().parent / "demo"  # its own
     assert fields["hrtf"].value() == gone
     assert dialog.problem.text() == f"Cannot run: --hrtf: no {gone}"
     gone.write_bytes(b"")  # put back and chosen again: the run can go
@@ -5556,7 +5561,7 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     )
     dialog = DemoDialog(scene=stadium)
     assert dialog.fields["stems"].value() == {"vocal": stem}
-    assert dialog.fields["downbeat"].value() == 0.0
+    assert dialog.fields["downbeat"].value() is None
     assert "not one of" not in dialog.problem.text()  # refused for no --music only
     dialog.deleteLater()
     vibration = DemoDialog(scene=example_path("railway"), start="vibration")
@@ -5597,12 +5602,12 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
         i18n.save_setting(
             DEMO_SETTING,
             {
-                "demos": {"stadium_concert/stadium": {"song": ["francium", "no such song"]}},
+                "demos": {"stadium_concert/stadium": {"recording": ["francium", "no such song"]}},
                 "scenes": {key: {"demos": {"stadium_concert/stadium": {"sources": kept_sources}}}},
             },
         )
         dialog = DemoDialog(scene=stadium)
-        assert dialog.fields["song"].value() == "spicy_funk_cake"
+        assert dialog.fields["recording"].value() is None
         assert dialog.fields["sources"].value() == value and dialog.problem.text() == ""
         assert dialog.kept.isHidden() == (value is None)
         dialog.deleteLater()
@@ -5700,7 +5705,7 @@ def test_demo_dialog_keeps_the_hrtfs_whatever_the_scene(qapp, monkeypatch, tmp_p
     song = tmp_path / "song.wav"
     write_wav(song, np.zeros((100, 2)), 8000)
     dialog = DemoDialog(scene=stadium)
-    dialog.fields["music"].set_value(str(song))
+    dialog.fields["recording"].pick(str(song))
     dialog.fields["bpm"].edit.setText("120")
     dialog.fields["credit"].setText("My band, CC BY 4.0")
     dialog.reject()
@@ -5709,7 +5714,8 @@ def test_demo_dialog_keeps_the_hrtfs_whatever_the_scene(qapp, monkeypatch, tmp_p
     copy.parent.mkdir()
     copy.write_text(stadium.read_text(encoding="utf-8"), encoding="utf-8")
     other = DemoDialog(scene=copy)
-    assert other.fields["music"].value() == song and other.fields["bpm"].value() == 120.0
+    assert other.fields["recording"].value() == str(song)
+    assert other.fields["bpm"].value() == 120.0
     assert other.fields["bpm"].edit.text() == "120"
     assert other.fields["credit"].text() == "My band, CC BY 4.0"
     other.deleteLater()
@@ -5782,12 +5788,13 @@ def test_demo_dialog_says_what_a_run_downloads(qapp, tmp_path: Path) -> None:
     dialog.deleteLater()
     concert = DemoDialog(scene=stadium)
     assert concert.picker.currentData() == "stadium"
-    assert concert.downloads.text().startswith(
-        "This run downloads the master and the 7 stems of spicy_funk_cake ("
+    assert concert.downloads.text() == (
+        'This run downloads "Spicy Funk Cake", Rhythmussportgruppe (CC BY 4.0, 61 MB) and its '
+        "7 stems (249 MB), kept for every scene."
     )
     song = tmp_path / "song.wav"
     song.touch()
-    concert.fields["music"].set_value(song)
+    concert.fields["recording"].pick(str(song))
     assert concert.downloads.isHidden()
     concert.deleteLater()
 
@@ -6490,18 +6497,7 @@ def test_a_demo_of_an_installed_example_runs_under_the_home_folder(
     there = home / HOME_FOLDER / "stadium_concert"
     assert demo.folder == there
     assert demo.command("all", args) == "python " + shell_line(
-        [
-            str(demo.script),
-            "all",
-            "--from",
-            str(stadium.resolve()),
-            "--scene",
-            str(there / "scene_band.yaml"),
-            "--results",
-            str(there / "results_band"),
-            "--work",
-            str(there / "demo"),
-        ]
+        [str(demo.script), "all", "--scene", str(stadium.resolve()), "--work", str(there / "demo")]
     )
 
 
@@ -6562,20 +6558,19 @@ def test_a_demo_run_away_from_its_script_reads_and_writes_where_the_editor_says(
         assert (
             theirs.run_folder.name
             == {
-                "stadium": "stadium_spicy_funk_cake_binaural",
+                "stadium": "stadium_binaural",
                 "crossing": "crossing_binaural",
             }[demo.name]
         )
-        own = demo.option("scene").in_run is not None
-        assert theirs.scene.parent == (theirs.run_folder if own else there)
+        assert theirs.scene == stadium.resolve()  # the installed copy's, read in place
         assert theirs.work == demo.work_folder(args) == there / "demo"
     # A path left empty is the demo's default, in that folder too; a file it reads that
     # the folder has no copy of, the example's, as the window starts it, not a missing one.
     demo, args = moved[0]
-    args.work = args.source = None
+    args.work = args.scene = None
     theirs = as_run(demo, args)
     assert theirs.work == there / "demo" and not (there / "scene.yaml").exists()
-    assert theirs.source == stadium.resolve() == starting_arguments(demo).source
+    assert theirs.scene == stadium.resolve() == starting_arguments(demo).scene
 
     # A copy saved as scene.yaml (Save As's name) in a folder of its own, where its
     # --from is the demo's default: the demo reads the copy, not the example's scene.

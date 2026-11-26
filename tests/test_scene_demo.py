@@ -348,6 +348,56 @@ def test_a_run_s_speed_and_step_go_to_the_trajectories_that_move(tmp_path: Path)
         assert DEMO.at(scene.parent).check(args) == f"{flag} is a positive number, not 0.0"
 
 
+def test_a_run_s_start_sets_off_what_moves_and_the_open_air_holds_it(tmp_path: Path) -> None:
+    """``--start`` (s) sets off the first trajectory that moves then and each other as
+    much later as the scene has it, and is kept in the run's name; nothing moving, it
+    changes nothing, and a time before the clock's start is refused. Outdoors a
+    trajectory in use past the ground's edge or above its sky widens them to hold it,
+    50 m past and 40 m above, in the scene the run simulates; ``--height`` is moot where
+    no helicopter flies."""
+    walker = {
+        "name": "walker",
+        "position": [5, 5, 1.5],
+        "trajectory": {"to": [[20, 5, 1.5]], "start_s": 2.0},
+    }
+    runner = {
+        "name": "runner",
+        "position": [5, -5, 1.5],
+        "trajectory": {"to": [[20, -5, 1.5]], "start_s": 5.0, "speed_m_s": 3.0},
+    }
+    scene = _outdoors(tmp_path / "field")
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["listeners"] += [walker, runner]
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    demo = DEMO.at(scene.parent)
+    args, resolved = _run(scene, "--start", "10")
+    assert demo.check(args) is None and run_folder(resolved).name.endswith("_start-10_binaural")
+    moved = {lis.name: lis for lis in scene_demo.moving_scene(resolved).listeners}
+    assert moved["walker"].trajectory.start_s == 10.0 and moved["runner"].trajectory.start_s == 13.0
+    assert scene_demo.moving_scene(_run(scene)[1]).listeners == Scene.from_yaml(scene).listeners
+    assert demo.check(_run(scene, "--start", "-1")[0]) == (
+        "--start is a time on the run's clock (s), 0 or more, not -1.0"
+    )
+    assert demo.check(_run(scene, "--start", "3", "--moving", "none")[0]) == (
+        "--start changes nothing: nothing moves"
+    )
+    assert demo.check(_run(scene, "--height", "100")[0]) == (
+        "--height changes nothing: no helicopter flies (a source with a rotorcraft model)"
+    )
+    # Within the open air: the scene as it is.
+    assert scene_demo.run_scene_file(resolved) == scene
+    # A walk past the ground's edge, 30 m up at its end (the sky is 20 m): the run's
+    # scene holds it, and is simulated as such.
+    data["listeners"][2]["trajectory"]["to"] = [[90, 5, 30]]
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    resolved = _run(scene)[1]
+    ground = scene_demo.scene_of(resolved).geometry.ground
+    assert ground.extent == ((-45.0, -55.0), (140.0, 55.0)) and ground.sky == 70.0
+    path = scene_demo.run_scene_file(resolved)
+    assert path == scene.parent / "demo" / "scenes" / "scene_open-air.yaml"
+    assert Scene.from_yaml(path).geometry.ground.extent == ground.extent
+
+
 def test_a_silent_walker_walks_unless_sources_leaves_it_out(tmp_path: Path) -> None:
     """A source the scene keeps silent walks in a default run, as before ``--sources``
     was there (the default pick leaves it out, but names no source); a ``--sources``

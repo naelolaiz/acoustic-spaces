@@ -532,8 +532,8 @@ Examples:
   a lawn concert's line arrays and subwoofers, in the evening's weather and in still
   air, and the orchestra in the concert hall, its four seats toured through three
   movements; each downloads its recordings, mixes them at every listener and makes a
-  video that tours them. The stadium's pictures show where the crowd stands and sits,
-  the empty seats, and how much each takes up.
+  video that tours them. The stills show where the crowd stands and sits, the empty
+  seats, and how much each takes up, in any scene with an audience.
 - [x] Everything a demo plays in its example's scene, left out of the example's own
   simulations until ticked, so the editor shows it: the stadium's band and the singer's
   microphone, the church's choir, organ pipes and toured places, the lakeside's sound
@@ -602,11 +602,11 @@ Movement:
   flyover demo, the rotors trimmed at the helicopter's airspeed against the wind; a
   scene's source of a rotorcraft model (`model: {method: rotorcraft}`) has their sound
   power and directivity.
-- [x] A helicopter crossing over the stadium concert: `helicopter_demo.py`, its pass
-  added to the concert's mixes at their simulated levels, 150 m up halfway through the
-  song, or 330 m as the rules of the air ask over a crowd without leave. The helicopter
-  and its walk are in the stadium's scene, left out of the concert's simulations, to
-  see and change in the editor.
+- [x] A helicopter crossing over the stadium concert: `helicopter_demo.py`, heard with
+  the concert at their simulated levels, 150 m up halfway through the song, or 330 m as
+  the rules of the air ask over a crowd without leave. The helicopter, of a rotorcraft
+  model, and its trajectory are in the stadium's scene, left out of the concert's
+  simulations, to see and change in the editor.
 - [x] Trucks, buses, motorcycles and a police car with its siren on, in the pass-by
   demos as the car is (`--vehicle`): CNOSSOS-EU's sound power of their category, and the
   siren's level and directivity as measured, checked against California's and the

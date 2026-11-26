@@ -2596,13 +2596,10 @@ class Source(_Model):
         speed = steady_speed_m_s(self.position, self.trajectory, self.model.needs)
         if not getattr(self.model, "through_air", False):
             return speed
-        from acoustic_spaces.walkthrough import knots
+        from acoustic_spaces.walkthrough import heading
 
-        path = knots(self).positions
-        leg = path[1] - path[0]
-        heading = leg / max(math.hypot(*leg), 1e-12)
         # Rounded, so that the same flight finds the same sound.
-        return round(math.hypot(*(speed * heading - np.asarray(self._wind))), 4)
+        return round(math.hypot(*(speed * heading(self) - np.asarray(self._wind))), 4)
 
     def model_level_db(self) -> list[float]:
         """The sound power per octave band its :attr:`model` gives it (dB re 1 pW): at
@@ -2635,6 +2632,24 @@ class Source(_Model):
         if self.model is None or not getattr(self.model, "radiates", False):
             return None
         return self.model.directivity(self.model_speed_m_s(), self._air_c, self._air_kpa)
+
+    def in_air(self, air: Air, atmosphere: Atmosphere | None) -> Source:
+        """This source in ``air`` and the wind of ``atmosphere`` at its height, as a scene
+        gives them to its sources when it is read: itself where it has them already or
+        has no model, else a copy with its model's sound power found in them
+        (:meth:`model_level_db`), for a scene changed after it was read (left in still
+        air, a helicopter flying higher)."""
+        wind = wind_at(atmosphere, float(self.position[2]))
+        given = (air.temperature_c, air.pressure_kpa, wind, air.humidity_percent)
+        if self.model is None or (self._air_c, self._air_kpa, self._wind, self._air_rh) == given:
+            return self
+        copy = super().model_copy()
+        copy._air_c, copy._air_kpa, copy._wind, copy._air_rh = given
+        if copy.model is not None and (copy.model.needs is None or copy.trajectory is not None):
+            if getattr(copy.model, "flies", False) and copy.trajectory is not None:
+                copy._fly()
+            copy.__dict__["level_db"] = copy.model_level_db()
+        return copy
 
     def model_copy(self, *, update=None, deep: bool = False) -> Source:
         """A copy, with ``update``; a source with a model gets its sound power anew
@@ -4142,6 +4157,15 @@ class Scene(_Model):
         if problem is not None:
             raise ValueError(problem)
         return self
+
+    def in_its_air(self) -> Scene:
+        """This scene with each source of a model in its air and the wind of its
+        atmosphere at the source's height (:meth:`Source.in_air`), as it is read: itself
+        where they have them already, for a scene changed after it was read."""
+        sources = [source.in_air(self.air, self.atmosphere) for source in self.sources]
+        if all(a is b for a, b in zip(sources, self.sources, strict=True)):
+            return self
+        return self.model_copy(update={"sources": sources})
 
     @model_validator(mode="after")
     def _model_powers(self) -> Scene:

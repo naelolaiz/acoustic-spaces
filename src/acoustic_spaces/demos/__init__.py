@@ -199,6 +199,7 @@ LABELS = {
     "--blows": N_("Blows a minute"),
     "--flight": N_("Flight's scene"),
     "--stadium": N_("Stadium's scene"),
+    "--start": N_("Start time"),
     "--height": N_("Height"),
     "--at": N_("Overhead at"),
     "--band": N_("Band's scene"),
@@ -907,9 +908,9 @@ class Demo:
     #: form that follows the options (how far and how fast the pass-by demos' car drives,
     #: and so for how long); None to say nothing.
     summary: Callable[[argparse.Namespace], str | None] | None = None
-    #: The demo of the same example whose work this one plays (``stadium``, for the
-    #: helicopter over its concert), to run first in the same work folder; None for the
-    #: example's own demo, the one :func:`demo_for` gives.
+    #: The demo of the same example that this one plays more of (``stadium``, for the
+    #: helicopter over its concert), listed before it; None for the example's own demo,
+    #: the one :func:`demo_for` gives.
     builds_on: str | None = None
     #: Whether it is a script of one step, run without naming it (an example's script
     #: that is no demo, :func:`script_demo`).

@@ -237,8 +237,7 @@ listener. Sources and listeners left out of simulations (`enabled: false`) get n
   order (`--listeners` picks them). A run with other settings goes to a folder and a
   video of its own; several values of an option (`--format binaural,mono`), or
   `--sources-play in-turn`, play one after another in one video. An example's own
-  demo writes its scene and simulation beside its script (the stadium's
-  `scene_band.yaml` and `results_band/`) and the rest into `demo/` there
+  demo, a preset of the demo of its scene, writes into `demo/` beside its script too
   ([Demos](demos.md#running-a-demo)).
 - The editor runs a demo in the open scene's folder, where the command line runs it,
   but for the examples of an installed copy (opened from **File > Open example**) and a

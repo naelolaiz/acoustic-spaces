@@ -287,6 +287,18 @@ def knots(item) -> Knots:
     )
 
 
+def heading(item) -> np.ndarray:
+    """The way ``item`` (a scene listener or source with a trajectory) sets off, a unit
+    vector: along the first leg of its trajectory that goes somewhere, from where it
+    starts (not where it stands before ``start_s``)."""
+    path = _knots(item).positions
+    for leg in np.diff(path, axis=0):
+        length = math.hypot(*leg)
+        if length > 1e-12:
+            return leg / length
+    raise ValueError(f"{item.name!r}: its trajectory goes nowhere")
+
+
 def _knots(item) -> Knots:
     """The knots of ``item``'s trajectory from the moment it sets off (:func:`knots`)."""
     trajectory = item.trajectory

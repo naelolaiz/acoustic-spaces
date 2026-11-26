@@ -238,10 +238,11 @@ def keeps(demo: Demo, option: Option) -> bool:
 def per_scene(demo: Demo, option: Option) -> bool:
     """Whether the window keeps ``option`` of ``demo`` per scene file: one of a kind
     that names something in a scene (:data:`SCENE_KINDS`), except the credit line of a
-    song of the user's (``--credit`` beside ``--music``), which goes with the song."""
+    recording of the user's (``--credit`` beside ``--recording``), which goes with the
+    recording."""
     if option.kind not in SCENE_KINDS:
         return False
-    return not (option.name == "credit" and any(o.name == "music" for o in demo.options))
+    return not (option.name == "credit" and any(o.name == "recording" for o in demo.options))
 
 
 def saved_value(demo: Demo, option: Option, value: Any) -> Any:
@@ -261,8 +262,8 @@ def saved_value(demo: Demo, option: Option, value: Any) -> Any:
 def restored(option: Option, data: Any) -> Any:
     """The value of ``option`` that ``data`` (kept as :func:`saved_value` writes it) gives,
     or :data:`NOT_TAKEN` for one the option does not take: a song or a stem no longer
-    offered, a number of the wrong kind or more than its field holds, a settings file
-    edited by hand."""
+    offered, a file of yours in place of a choice no longer there, a number of the wrong
+    kind or more than its field holds, a settings file edited by hand."""
     kind = option.kind
     if option.varies and isinstance(data, list):  # several values
         values = [restored(replace(option, several=False), each) for each in data]
@@ -282,7 +283,12 @@ def restored(option: Option, data: Any) -> Any:
             data = {name: file for name, file in data.items() if name in option.choices}
         return {name: Path(file) for name, file in data.items()} or NOT_TAKEN
     if option.choices:  # a list to pick from, which always holds a value
-        return data if isinstance(data, str) and data in option.choices else NOT_TAKEN
+        if isinstance(data, str) and data in option.choices:
+            return data
+        # A file of yours in place of a choice (--recording song.wav), while it is there.
+        if option.or_file and isinstance(data, str) and data and Path(data).is_file():
+            return data
+        return NOT_TAKEN
     if kind in ("int", "float"):
         if data is None:  # given none: its unset text, or an empty field
             return None if option.unset or option.default is None else NOT_TAKEN
@@ -762,7 +768,9 @@ class ChoicesField(ListenersField):
     the choices of an option that lists none (the formats); a value given that is none
     of them joins them where it ``takes_others`` (a scene's own output, ``binaural-me``).
     An option with no default and an :attr:`~acoustic_spaces.demos.Option.unset` text
-    ("as in the scene") lists that first, which gives the run none of the choices."""
+    ("as in the scene") lists that first, which gives the run none of the choices. One
+    that takes a file in place of a choice (:attr:`~acoustic_spaces.demos.Option.or_file`,
+    ``--recording``) has a File… button beside, the file chosen joining the choices."""
 
     def __init__(
         self,
@@ -798,6 +806,15 @@ class ChoicesField(ListenersField):
         top = QHBoxLayout()
         top.addWidget(self.combo, 1)
         top.addWidget(self.several)
+        #: The File… button of a choice that takes a file (``--recording song.wav``).
+        self.file: QToolButton | None = None
+        if option.or_file:
+            self.takes_others = True
+            self.file = QToolButton()
+            self.file.setText(_("File…"))
+            self.file.setToolTip(_("A file of yours in place of one of the choices"))
+            self.file.clicked.connect(self._choose_file)
+            top.addWidget(self.file)
         layout = self.layout()
         assert isinstance(layout, QVBoxLayout)
         layout.insertLayout(0, top)
@@ -882,6 +899,14 @@ class ChoicesField(ListenersField):
         """Pick ``value`` (one choice, or several in their order) alone, as a click would."""
         self.set_value(value)
         self.changed.emit()
+
+    def _choose_file(self) -> None:
+        """File… pressed: the file chosen picked, joining the choices."""
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self, _("A file of yours"), str(Path.home()), self.option.filter or _("All files (*)")
+        )
+        if chosen:
+            self.pick(chosen)
 
     def _picked(self) -> None:
         """Another choice picked in the list: the run's alone (none, the unset entry)."""
@@ -1803,7 +1828,7 @@ SECTION_OF = {
         ("--listeners", "--seconds", "--timeline", "--tour", "--last-stop", "--indoors"),
         "listeners",
     ),
-    **dict.fromkeys(("--speed", "--step", "--height", "--at"), "trajectories"),
+    **dict.fromkeys(("--speed", "--step", "--start", "--height", "--at"), "trajectories"),
     **dict.fromkeys(("--series", "--levels", "--atmosphere"), "video"),
     **dict.fromkeys(("--format", "--hrtf"), "output"),
 }

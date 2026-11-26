@@ -278,21 +278,25 @@ sources:
     orientation: {yaw: 90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
-  # An Airbus Helicopters AS350 B3 crossing the stadium 150 m up at 63 m/s, 1200 m along
-  # its long axis from behind the stage to past the east stand: the sound power per
-  # octave band and the directivity (helicopter.csv) of its rotors' sound in the still
-  # air (acoustic_spaces.rotorcraft). It is left out of the concert's simulations until
-  # ticked; helicopter_demo.py flies it over the concert.
+  # An Airbus Helicopters AS350 B3 at its maximum mass, a rotorcraft model, crossing the
+  # stadium 150 m up at 63 m/s, 1200 m along its long axis from behind the stage to past
+  # the east stand: the sound of its rotors in the still air (acoustic_spaces.rotorcraft)
+  # gives it its sound power per octave band and its directivity. It sets off 87.976 s
+  # into the run, so that it is over the centre spot 97.5 s in, halfway through "Spicy
+  # Funk Cake". It is left out of the concert's simulations until ticked;
+  # helicopter_demo.py flies it over the concert, simulated every 4 m.
   - name: helicopter
     group: Helicopter
     enabled: false
     position: [-600, 0, 150]
-    level_db: [129.8, 129.5, 130.8, 130.2, 126.9, 125.1, 122.0, 120.1]
-    directivity: {file: helicopter.csv}
+    model: {method: rotorcraft, helicopter: as350_b3}
     trajectory:
       to: [[600, 0, 150]]
       speed_m_s: 63
       doppler: true
+      face_forward: true
+      step_m: 4
+      start_s: 87.976
   # The band's own sound on the stage: the sound power (dB re 1 pW) of a rock drum kit,
   # of a singer singing loud, just in front of the singer's head, and of a guitar
   # amplifier turned up, each playing its stem in a demo of the scene. feedback.py takes

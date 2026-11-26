@@ -51,12 +51,9 @@ def airspeed(source, scene, speed_m_s: float) -> float:
     """The airspeed of ``source`` (the helicopter, a scene source with a trajectory) in
     ``scene`` flying at ``speed_m_s`` over the ground along its first leg: that, less
     the wind of the scene's own atmosphere at its height, both as vectors."""
-    from acoustic_spaces.walkthrough import knots
+    from acoustic_spaces.walkthrough import heading
 
-    path = knots(source)
-    leg = np.diff(path.positions[:2], axis=0)[0]
-    heading = leg / max(float(np.linalg.norm(leg)), 1e-12)
-    ground = speed_m_s * heading
+    ground = speed_m_s * heading(source)
     atmosphere = scene.atmosphere
     wind = np.zeros(3)
     if atmosphere is not None:

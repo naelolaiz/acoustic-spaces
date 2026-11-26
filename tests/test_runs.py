@@ -101,13 +101,17 @@ def test_a_song_of_your_own_names_the_run_in_place_of_the_preset(tmp_path: Path)
 
 def test_a_run_plays_the_slow_work_of_the_run_up_to_it() -> None:
     """The run up to a step (Demo.upstream) has the options that matter to none of the
-    steps up to it at their defaults: another --at mixes the passes of the same walk."""
+    steps up to it at their defaults: another --hide draws the stills of the same mixes,
+    and the helicopter setting off later (--start) plays the same recording."""
     crossing = _demo("crossing", "stadium_concert")
-    args = crossing.resolved(argparse.Namespace(**vars(crossing.defaults()) | {"at": 5.0}))
-    assert run_folder(args).name == "crossing_at-5_binaural"
-    up = crossing.upstream(args, "walk")
-    assert run_folder(up).name == "crossing_binaural" and up.at is None
-    assert crossing.upstream(args, "mix").at == 5.0
+    args = crossing.resolved(
+        argparse.Namespace(**vars(crossing.defaults()) | {"start": 5.0, "hide": "none"})
+    )
+    assert run_folder(args).name == "crossing_hide-none_start-5_binaural"
+    up = crossing.upstream(args, "render")
+    assert run_folder(up).name == "crossing_start-5_binaural" and up.hide == "side"
+    assert run_folder(crossing.upstream(args, "recording")).name == "crossing_binaural"
+    assert crossing.upstream(args, "video").hide == "none"
 
 
 def test_a_written_scene_names_the_scene_it_is_made_from(tmp_path: Path) -> None:
@@ -337,7 +341,7 @@ def test_a_pick_is_named_by_how_it_differs_from_the_demos_own(tmp_path: Path) ->
     assert name("subs,helicopter") == "toy_subs+helicopter"
     railway = _demo("passby", "railway")
     stadium = _demo("stadium", "stadium_concert")
-    song = "stadium_spicy_funk_cake"
+    song = "stadium"
     train = "train,train_roof,train_pantograph"  # the railway's own pick
     for demo_, sources, named in (
         (railway, train + ",train_horn", "passby_with-train_horn"),

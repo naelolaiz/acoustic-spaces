@@ -1532,8 +1532,8 @@ What it leaves out: loads that change round the turn (in forward flight the
 advancing blade carries less lift than the retreating one, and the blades flap), the
 blades meeting the tip vortices of those ahead (blade-vortex interaction, the slap
 of a descent or a turn), the engine and the gearbox, and the fuselage's reflection and
-shadow. `trim` takes the airspeed it is given, through still air: the flyover demo
-gives it the speed over the ground less the wind.
+shadow. `trim` takes the airspeed it is given, through still air: a source's
+rotorcraft model gives it the speed over the ground less the wind at its height.
 
 ## Aircraft by ECAC Doc 29
 

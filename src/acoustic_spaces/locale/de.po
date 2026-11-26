@@ -175,6 +175,10 @@ msgstr "Szene des Flugs"
 msgid "Stadium's scene"
 msgstr "Szene des Stadions"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Start time"
+msgstr "Startzeit"
+
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
 msgid "Height"
 msgstr "Höhe"
@@ -2094,12 +2098,24 @@ msgid "Back to one of them, the first ticked"
 msgstr "Zurück zu einem davon, dem ersten angehakten"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "File…"
+msgstr "Datei…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours in place of one of the choices"
+msgstr "Eine eigene Datei statt einer der Auswahlmöglichkeiten"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every one: the run plays them one after another"
 msgstr "Alle anhaken: der Lauf spielt sie nacheinander"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every one, to tick those to play"
 msgstr "Alle abhaken, um die anzuhaken, die spielen sollen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours"
+msgstr "Eine eigene Datei"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every source"
@@ -9277,6 +9293,54 @@ msgstr "Ebene {number}, Boden bei etwa {height:.1f} m"
 #, python-brace-format
 msgid "{source}: {title}, {count} points {spacing:g} m apart"
 msgstr "{source}: {title}, {count} Punkte mit {spacing:g} m Abstand"
+
+#: examples/airport/flight_demo.py
+msgid "A jet taking off and landing"
+msgstr "Ein Düsenflugzeug bei Start und Landung"
+
+#: examples/church/church_demo.py
+msgid "A choir and an organ in the church"
+msgstr "Ein Chor und eine Orgel in der Kirche"
+
+#: examples/gallery/walk_demo.py
+msgid "A walk through the gallery"
+msgstr "Ein Gang durch die Galerie"
+
+#: examples/helicopter_flyover/flyover_demo.py
+msgid "A helicopter flying over"
+msgstr "Ein Hubschrauber im Überflug"
+
+#: examples/lakeside_concert/lakeside_demo.py
+msgid "A concert across a lake"
+msgstr "Ein Konzert über einen See hinweg"
+
+#: examples/orchestra/orchestra_demo.py
+msgid "Beethoven's 8th in the concert hall"
+msgstr "Beethovens Achte im Konzertsaal"
+
+#: examples/railway/passby_demo.py
+msgid "A train running past"
+msgstr "Ein vorbeifahrender Zug"
+
+#: examples/roadside/passby_demo.py
+msgid "A car or a truck passing the meadow"
+msgstr "Ein Auto oder ein Lkw an der Wiese vorbei"
+
+#: examples/stadium_concert/helicopter_demo.py
+msgid "A helicopter over the stadium concert"
+msgstr "Ein Hubschrauber über dem Stadionkonzert"
+
+#: examples/stadium_concert/stadium_demo.py
+msgid "A band in the stadium"
+msgstr "Eine Band im Stadion"
+
+#: examples/street/passby_demo.py
+msgid "A vehicle driving down the street"
+msgstr "Ein Fahrzeug fährt die Straße entlang"
+
+#: examples/street/works_demo.py
+msgid "Road works in the street"
+msgstr "Bauarbeiten auf der Straße"
 
 #: examples/airport/scene.yaml
 msgctxt "example"

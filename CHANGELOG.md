@@ -77,6 +77,34 @@
   model in place of `jetw.csv` and the flight the script wrote into its scene; its
   options and steps before 4.4.0 still work (`--vehicle` as `--sources`), and its runs
   are named as the demo of any scene's (`flight_arrival_binaural`).
+- Changed: the stadium's `stadium_demo.py` is the demo of its scene, which plays the
+  scene's band and sound system as it has them; its options and steps before 4.4.0
+  still work (`--song` and `--music` as `--recording`, `music` as `recording`, `band`
+  as `simulate`) but `--scene` and `--results` (the scenes and results go to the work
+  folder), and its runs are named as the demo of any scene's (`stadium_francium_binaural`).
+- Changed: the stadium's `helicopter_demo.py` is the demo of its scene with the
+  helicopter taken in, of a rotorcraft model in place of its `level_db`, `directivity`
+  and `helicopter.csv`, on one clock with the concert: it needs no run of the stadium
+  demo first. Its options and steps before 4.4.0 still work (`--at` as `--start`) but
+  `--stadium`, `--band`, `--results` and `--flight`; it is over the centre spot halfway
+  through "Spicy Funk Cake", by its trajectory's `start_s`, and another song's halfway
+  takes `--at`.
+- Added: the demo of any scene's `--start` (when what moves sets off) and `--height`
+  (how high every helicopter flies); outdoors the scene a run simulates has its ground
+  and its sky widened to hold every trajectory in use that goes past them. A source of a
+  model takes its sound power in the wind it is in once a run changes its height or its
+  air.
+- Added: a demo's stills draw the scene's audience where its materials are the
+  database's audiences or seating: people standing on the ground's zones or seated on
+  the model, a dot for every ten, and empty seats in rows, with how many stand and sit
+  and how much each takes up at 1 kHz. A source that moves past the scene's ground is
+  drawn at the plan's edge with how far it is. `--hide audience` leaves the audience
+  out and `--hide none` draws all; the stadium's own stills, with their stage close-up,
+  are gone. A still's lines wrap where they would run past its edge.
+- Added: a run that flies a helicopter into the scene's model is refused, naming how
+  high the model is under its trajectory (`--height 30`).
+- Added: in the Run demo window, **File…** beside the recording picks a file of yours,
+  which the window keeps for the next time.
 - Changed: an option that changes nothing in a run is refused naming it (`--rpm changes
   nothing: no road vehicle plays a made sound`), and `--rpm` and `--blows` are refused
   unless positive.

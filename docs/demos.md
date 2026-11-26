@@ -164,7 +164,8 @@ format and the HRTFs); a section shows where the demo has an option of it, and a
 that changes nothing for the scene stays out of view while at its default (a song's
 stems where none plays, **Pieces** for a recording of one piece, **Speed** where nothing
 moves). A choice, and **Format**, is a list to pick from, which **Several…** turns into
-a list to tick, dragged into the order its parts play; a number takes several comma
+a list to tick, dragged into the order its parts play, and **File…** beside one that
+also takes a file of yours (the recording) picks that file; a number takes several comma
 separated. The sources are a tree of the scene's groups to tick (a table where the demo
 takes no `--sources`), which says what each plays and takes a WAV of yours for it
 (**Choose WAV…**, or a double click), with how they play: together, or each in a part of
@@ -368,8 +369,18 @@ acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
   show the wind's component along the plane in each weather, and the air is tinted
   blue where a weather is cooler at the ground. In still air the rays are the direct
   sound and its reflection off the ground. Over a terrain the view draws its profile
-  and the line of sight. `--hide side,wind,ground` leaves the view from the side, the
-  wind or the ground's colours out.
+  and the line of sight. Where the scene has an audience (a surface of one of the
+  material database's audience or seating materials, or `audience: true`), the plan
+  draws it: a dot for every ten people (every 10 m² where fewer than one is on a square
+  metre) standing on a zone of the ground or seated on the model, as many on a square
+  metre as the material's description says (two where it does not), and empty seats in
+  rows; a line under the plan gives how many stand and
+  sit, and how much of the sound at 1 kHz each part takes up. A source that moves past
+  the edge of the scene's ground, which the run widened to take it, is drawn at the
+  plan's edge, pointing to it, with how far it is from the listener. `--hide
+  side,wind,ground,audience` leaves the view from the side, the wind, the ground's
+  colours or the audience out, and `--hide none` draws them all where a preset leaves
+  one out (the stadium's stills leave out the view from the side).
   `--credit` puts a line about the recordings on the stills (who made them, their
   licence); without it the line gives the free recording's credit, when one plays, and
   says which source plays which other file.
@@ -416,8 +427,15 @@ hears its listener where the clock has it then: from the start on the `per-liste
 timeline, and on a `shared` one as the tour reaches it. A trajectory sets off at its
 `start_s` and is simulated every `step_m` along it
 ([trajectories](scenes.md#trajectories)); `--speed 5` moves every trajectory of the run
-at 5 km/h (along keyframes, through their places in turn) and `--step 0.5` simulates
-them 0.5 m apart, without changing the scene. `--stand seat=6,2` stands a listener
+at 5 km/h (along keyframes, through their places in turn), `--step 0.5` simulates
+them 0.5 m apart and `--start 30` sets off the first of them 30 s into the run, each
+other as much later as the scene has it, without changing the scene. `--height 330`
+flies every helicopter (a source of a rotorcraft model) 330 m up at every place of its
+trajectory, its sound power that of its airspeed in the wind up there (the scene so
+changed is simulated once). Outdoors on flat ground, where a trajectory in use goes
+past the edge of the ground's `extent` or above its `sky`, the scene the run simulates
+has them widened to hold it, 50 m past it and 40 m above (the stadium's helicopter
+flying in from 600 m out). `--stand seat=6,2` stands a listener
 elsewhere in a run, facing the nearest source in use, its trajectory moved with it (the
 scene so changed is simulated once), and `--turn seat=0:0,4:0,10:90` turns it on the
 spot in place of its trajectory: the yaw in degrees, turning left from the way it faces,
@@ -705,53 +723,55 @@ Singing Dataset, the ESMUC Choir Dataset and Cantoría are all for non-commercia
 
 `stadium_demo.py` plays a song by a band on the stage of the `stadium_concert` example,
 through its sound system and stage monitors, and mixes it at each of its 12 listeners.
-The video plays the song once while the listener moves, on phrase boundaries, from the
-mix position to the front of the pitch, onto the stage (singer, drummer, guitarist),
-round the stands to the far end and back. It plays one of three songs (`--song`): "Spicy
-Funk Cake", funk by a nine-piece band (3:15, ten of the listeners, as the song has eleven
-phrases), or "Francium" (4:54, all twelve) or "Rubidium" (3:52), electronic songs by
-Software-Entwicklungskit released with their stems.
+It is the [demo of the stadium's scene](#a-demo-of-any-scene) (`acoustic-spaces demo
+scene.yaml`, This scene in the editor), a preset of it that keeps the script's command
+lines. The video plays the song once while the listener moves, on phrase boundaries, on
+the scene's [tour](scenes.md#tour-of-a-demo) for the song: from the mix position to the
+front of the pitch, onto the stage (singer, drummer, guitarist), round the stands to the
+far end and back. It plays one of three songs of the recordings catalogue, each with its
+stems: "Spicy Funk Cake", funk by a nine-piece band (3:15, ten of the listeners, as the
+song has eleven phrases), or `--recording francium` (4:54, all twelve) or `rubidium`
+(3:52), electronic songs by Software-Entwicklungskit.
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
-python stadium_demo.py music     # the reference mix and 7 stems (WAV, 313 MB to download)
-python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
-acoustic-spaces simulate scene_band.yaml --out results_band/binaural --output binaural   # ~2.5 min on 4 cores
-python stadium_demo.py feeds     # demo/feeds/<song>: one WAV per loudspeaker and player
-python stadium_demo.py render    # demo/stadium_spicy_funk_cake_binaural/seats: one mix per listener (~30 s each)
-python stadium_demo.py video     # demo/stadium_spicy_funk_cake_binaural.mp4, its sound, stills and thumbnail
+python stadium_demo.py all        # every step, into demo/ beside the scene
+python stadium_demo.py recording  # the master and its 7 stems (WAV, 310 MB to download)
+python stadium_demo.py simulate   # the stadium with its band, binaural
+python stadium_demo.py feeds      # one signal per loudspeaker and player
+python stadium_demo.py render     # every listener, with one gain for all
+python stadium_demo.py video      # demo/stadium_binaural.mp4, its sound, stills and thumbnail
 ```
 
-Options: `--song francium` or `rubidium` for `music` and `feeds` (each song's feeds and
-runs have folders of their own), `--tour mix_position:1,singer:0.5,east_stand:1`
-(listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners
-mix_position,east_stand` (those listeners alone, in that order, in `render` and
-`video`), `--sources PA` (by the scene's groups, `PA/Mains`, `PA/Subwoofers`,
-`PA/Fills`, `PA/Delays`, `Monitors` and `Band`, or by name; the helicopter is the
-crossing's), `--format`
-for another output the simulation wrote (the tour [decodes it to two
-ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `all` runs every
-step in turn, leaving out what is there already (the music, the scene, the simulation).
+Its options are the demo of any scene's. `--recording song.wav --bpm 120` plays a song
+of your own (a stereo master, WAV or anything ffmpeg decodes, and its tempo, which the
+tour's phrases of 8 bars go by; nothing is downloaded), with `--stem vocal=vox.wav`,
+once per stem (drums, bass, guitar, keys, brass, vocal, backing), for the stems the
+monitors' mixes and the band's players draw on (a mix none of whose stems is given
+plays nothing, which the Run demo window's sources say), `--downbeat 0.5` the time of
+its first downbeat, so that the cuts stay on the beat, and `--credit` the line the
+stills give. `--tour mix_position:1,singer:0.5,east_stand:end` gives a tour of your own
+(listener:phrases of 8 bars, 0.5 for 4), `--listeners mix_position,east_stand` mixes
+those listeners alone and tours them in that order, `--sources PA` picks the sources by
+the scene's groups (`PA/Mains`, `PA/Subwoofers`, `PA/Fills`, `PA/Delays`, `Monitors`
+and `Band`) or by name, and `--sources-play in-turn` plays the sound system, the
+monitors and the band one after another, each alone; `--format` takes another output
+(the tour [decodes it to two ears](#running-a-demo)), `--no-mp4` the audio and stills
+only. Each run has a folder of its own in `demo/`, named after what it changes
+(`demo/stadium_francium_binaural/`). The script's own command lines still work: `--song`
+and `--music` are `--recording`, its `--tour` (listener:phrases, the last stop to the
+end of the song whatever it says) reads as the demo's, `--from` is `--scene`, and its
+steps `music` (the recording) and `band` (the simulation) run as the ones that took them
+over.
 
-A song of your own plays in place of the presets: `--music song.wav --bpm 120` for
-`music` and `feeds` (and `all`), the master as a stereo file (WAV, or anything ffmpeg
-decodes) and its tempo, which the tour's phrases of 8 bars go by. `--stem vocal=vox.wav
---stem drums=drums.wav`, once per stem (drums, bass, guitar, keys, brass, vocal,
-backing), gives the stems the monitors' mixes and the band's players draw on; a mix
-none of whose stems is given plays nothing, so without stems the monitors and the band
-are silent, which `feeds` and the Run demo window's table say. `--downbeat 0.5` is the
-time of the first downbeat, so that the cuts stay on the beat; `--credit "Music: …"`
-the line the video shows, the file's name unless given. Nothing is downloaded; the
-music goes to `demo/music/<file name>`, a folder of its own beside the presets', and
-`--input` goes on working on top of it.
-
-- **The band.** The players are the example's sources on the stage, in its Band group,
-  which the concert's own simulations leave out until it is ticked; `band` takes them
-  in: a drum kit beside the drummer (116 dB sound power, omni) playing the drums, the
-  singer's voice (98 dB, subcardioid, facing the audience) playing the
-  vocal, and an amplifier behind the guitarist (112 dB, cardioid, tilted up) playing the
-  guitar, each from its own stem. On stage and near it the players
-  are heard from where they stand; further out the sound system covers them.
+- **The band.** The players are the example's sources on the stage, in its Band group:
+  a drum kit beside the drummer (116 dB sound power, omni) playing the drums, the
+  singer's voice (98 dB, subcardioid, facing the audience) playing the vocal, and an
+  amplifier behind the guitarist (112 dB, cardioid, tilted up) playing the guitar, each
+  from its own stem. On stage and near it the players are heard from where they stand;
+  further out the sound system covers them. The scene's helicopter, in its own group,
+  is left out: it flies over the concert in [the stadium's other
+  demo](#a-helicopter-over-the-stadium-concert).
 - **Who plays what.** The sound system plays the song's stereo master: the arrays, fills,
   towers and delays on the audience's left (-y) take the left channel, those on its right
   (+y; the scene's `*_left`, named from the stage) the right one, the subwoofers both.
@@ -760,14 +780,15 @@ music goes to `demo/music/<file name>`, a folder of its own beside the presets',
   and bass with the vocal, guitar and keys under them; the side fills a stage mix with
   the vocal 3 dB up and the drums 20 dB down (the kit is loud on stage by itself). A stem
   a song does not have (brass, hand percussion) is left out of the mixes that name it.
-- **How loud.** `feeds` brings every signal to the same gated RMS and then scales it by
-  its `level_db` against the loudest's: the main arrays 0 dB, subwoofers and towers -2,
-  delays -4 and -6, out-fills -4, in-fills -10, side fills -12, front fills -18, wedges
-  and drum fill -19. So the feed files are what each loudspeaker plays, and `render` runs `auralize`
-  with `--equal-power`, so that the levels are applied once.
+- **How loud.** `feeds` brings every signal to one gated RMS (the master's left and
+  right sharing one gain, a monitor's mix of stems as a whole), and each plays at its
+  sound power in the scene: the main arrays 134 dB, the subwoofers and the towers 132,
+  the out-fills and the north and south delays 130, the east delays 128, the in-fills
+  124, the side fills 122, the front fills 116, the wedges and the drum fill 115. So the
+  balance between them is the scene's.
 - **One gain for all listeners, then each stop turned up.** `render` scales the 12 mixes
-  by one gain (the loudest peak at -1 dBFS), so the level differences between places in
-  the run's `seats` are the simulation's: on stage, between the monitors and beside the drum
+  by one gain (the loudest peak at -1 dBFS), so the level differences between them are
+  the simulation's: on stage, between the monitors and beside the drum
   kit, it is 6 to 18 dB(A) louder than in the audience, and the mix position is
   16 dB(A) below the singer's place. That is too much to hear both in one video, so the
   tour turns each stop up to the loudness of the loudest one and its caption gives the
@@ -783,13 +804,15 @@ music goes to `demo/music/<file name>`, a folder of its own beside the presets',
   a beat into a bar and its intro is a bar short, so its phrases run from 14.8 s and the
   first stop takes the intro as well; it has nineteen phrases and a half, so five stops,
   each at a section's start, last two.
-- **The pictures.** The stadium from above, with the loudspeakers as dots and cones the
-  way they point, lines from each to the listener of the moment (brighter where louder),
-  and the crowd where the scene has its audience: a dot for every ten or so people
-  standing on the pitch (two on a square metre) and sitting in the stands (one and a
-  half), and the empty stand behind the stage as rows of seats. A line under the plan
-  gives how many stand and sit and how much of the sound at 1 kHz the crowd, the empty
-  seats and the concrete take up, as the scene's materials have it.
+- **The pictures** are the demo of any scene's: the stadium from above, with the
+  loudspeakers the way they point, a ray from each that plays to the listener of the
+  moment, and the crowd where the scene has its audience: a dot for every ten people
+  standing on the pitch (two on a square metre) and sitting in the stands, and the empty
+  stand behind the stage as rows of seats; under the plan, how many stand and sit and
+  how much of the sound at 1 kHz the standing and seated crowd and the empty seats take
+  up, as the scene's materials have it. They leave out the view from the side that the
+  stills of an outdoor scene have (`--hide none` draws it, `--hide side,audience` leaves
+  the crowd out too).
 
 **Limits.** The band is three point sources at typical sound powers, not measured
 instruments; the bass, keys and brass on stage come only through the monitors and the
@@ -804,23 +827,22 @@ the example puts numbers on it).
 funk band (guitar, drums, bass, keys, saxophone, two trumpets, trombone and voice;
 composed by Niklas Dahlheimer, sung by Juliane Blum; 110 BPM, 3:15), recorded in 2017
 for the sound database of the DEGA (German Acoustical Society) at Hochschule
-Düsseldorf's studio, <https://doi.org/10.5281/zenodo.3601032>, **CC BY 4.0**. `music`
-reads the reference mix and the seven processed stems (drums, bass, guitar, keys, brass,
+Düsseldorf's studio, <https://doi.org/10.5281/zenodo.3601032>, **CC BY 4.0**.
+`recording` reads the reference mix and the seven processed stems (drums, bass, guitar, keys, brass,
 vocal, shouts; stereo WAV, 24-bit, 48 kHz) out of the release's 3.5 GB archive by HTTP
-range requests, so only those are downloaded: 313 MB (450 MB unpacked). The stems
-start 58 ms before the reference mix; `feeds` lines them up with it by
-cross-correlation.
+range requests, so only those are downloaded: 310 MB.
 
 "Francium" (127.75 BPM, 4:54) and "Rubidium" (132 BPM, 3:52) by Software-Entwicklungskit,
 from the album *Everything is Free*, <https://github.com/ichbinsoftware/everythingisfree>,
-**CC0 1.0**: electronic songs released with their stems. `music --song francium` downloads
-the master and the 26 stems (M4A, 42 MB in all; "Rubidium" has 9, 43 MB) from the
+**CC0 1.0**: electronic songs released with their stems. `recording --recording
+francium` downloads the master and the 26 stems (M4A, 42 MB in all; "Rubidium" has 9, 43 MB) from the
 album's repository at a fixed commit, decodes them with ffmpeg and sums the stems into
 the groups the mixes use: drums, bass, guitar (the synth lead, which the guitarist's
 amplifier plays), keys, vocal and backing vocals.
 
-Either way the master plays through the sound system, the stems through the monitors
-and the band, and the credit goes to `demo/music/<song>/SOURCES.txt`.
+Either way the master plays through the sound system and the stems through the monitors
+and the band; they are kept with the [free recordings](#a-demo-of-any-scene), for every
+scene, and the stills credit them.
 
 Whoever shares a render has to credit the musicians (and the DEGA), link the licence
 and say what was changed, for example:
@@ -1545,75 +1567,68 @@ through them, and they are checked for sources up to 10 m up, not 150 m.
 
 `helicopter_demo.py`, the stadium example's second demo, flies the [flyover's
 helicopter](#a-helicopter-flying-over) over the [stadium
-concert](#a-concert-in-the-stadium) halfway through the song, and adds its pass to each
-listener's mix of the concert, both at their simulated levels. The helicopter is in the
-stadium's scene, left out of the concert's own simulations: the editor shows its
-trajectory, the Run demo window lists it as what the demo moves, and what Edit movement…
-changes there the demo flies. It builds on the stadium demo: run that one first, in the
-same work folder, up to its `render` step, with its default song and the `--format`, the
-`--hrtf`, the `--listeners` (or no `--listeners`, every listener's mixes serving any
-choice of them) and the `--sources` this one gets.
+concert](#a-concert-in-the-stadium) halfway through the song, heard at each listener
+over the band and the sound system, both at their simulated levels. It is the demo of
+the stadium's scene with the helicopter taken in, on one clock with the concert: a
+preset of it that keeps the script's command lines. The helicopter is the scene's
+source `helicopter`, of a rotorcraft model, in a group of its own that the concert's own
+simulations leave out: the editor shows its trajectory, and what Edit movement…
+changes there the demo flies. It needs no run of the stadium demo first: the concert
+and the helicopter are simulated and mixed together.
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
-python stadium_demo.py all        # the concert first (see above)
-python helicopter_demo.py all     # or flight, helicopter, scene, walk, mix, video one at a time
+python helicopter_demo.py all     # or recording, simulate, feeds, render, video one at a time
 ```
 
 Options: `--height 330` how high it flies (m, at every place of its trajectory; by
-default as the scene has it), `--at 180` when it is over the centre spot, in seconds
-into the song as the sound system plays it (by default halfway through); `--speed`,
-`--broadband`, `--step` and `--input helicopter=WAV` as in the flyover demo, and
-`--tour` and `--listeners` as in the stadium demo (the helicopter is then simulated at
-those listeners alone, over the concert's mixes there). At the mix position the
-trajectory takes 2 minutes on 4 cores, half of it playing the 301 places through with
-Doppler, so some 25 for the 12 listeners.
+default as the scene has it; a height that flies it into the stadium's roof is refused,
+naming how high the roof is under it), `--start 60` when it sets off (s into the run;
+as the scene has it, it is over the centre spot 97.5 s in, halfway through "Spicy Funk
+Cake"), or the script's `--at 180`, when it is over the centre spot, in seconds into
+the song as the sound system plays it; `--speed`, `--broadband`, `--step` and `--input
+helicopter=WAV` as in the flyover demo; the stadium demo's `--recording`, `--tour`,
+`--listeners` and `--sources` (`--sources PA` flies it over the sound system alone; the
+helicopter always plays). Each run has a folder of its own in `demo/`, named after what
+it changes (`demo/crossing_height-330_binaural/`). The script's steps run as the ones
+that took them over: `flight` and `scene` the simulation, `helicopter` the feeds,
+`walk` and `mix` the mixes; `--from` names the scene. Its `--stadium`, `--band`,
+`--results` and `--flight` (the scenes and the simulation it read and wrote) are no
+longer taken: the scenes a run simulates go to the work folder.
 
-- **The flight.** The stadium's scene has the helicopter, left out of the concert's own
-  simulations, flying 1200 m along the stadium's long axis at 63 m/s, from behind the
-  stage over the centre spot to past the east stand, with its rotors' sound power and
-  directivity (`helicopter.csv`) at that speed through still air. `flight` writes
-  `scene_flight.yaml` in the run's folder: the stadium's scene with the helicopter at `--height` when that
-  is given. As the scene has it, it flies 150 m up, as a police or a television helicopter
-  given leave may. Without leave the EU's rules of the air keep a flight by sight (VFR)
-  over an open-air assembly of persons 300 m above the highest obstacle within 600 m
-  (SERA.5005(f)), here the stadium's roof, 30 m up: `--height 330`. The ground and the
-  sky are widened to take the flight; the responses run the scene's 2.0 s past the
-  latest direct sound, as every outdoor response does (4.0 s in all, against the
-  concert's 2.7 s), so each keeps the stadium's decay after the helicopter's sound
-  arrives.
-- **The helicopter and its pass** are the flyover demo's steps on that scene:
-  `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`,
-  in the run's folder)
-  with the sound power and the directivity of its rotors at 63 m/s through still air
-  (137.1 dB, 132.8 dB(A)), and `walk` the helicopter every 4 m along its flight at
-  each of the 12 listeners, with Doppler. At the mix position it peaks between 81 and
-  82 dB(A) (about 74 from 330 m), where the sound system's loudspeakers, simulated at
-  their sound power, give 97 dB(A): it is some 15 dB under the music, heard most in the
-  song's quiet passages. High in the north stand, under the roof, it peaks 10 to 12 dB
-  lower (four runs): the sound there is almost all late sound, which a few rays can lift
-  by several decibels at one place.
-- **The mix.** `mix` adds the helicopter's pass at each listener to the concert's mix
-  there (the stadium run's `seats`), the helicopter over the centre spot at `--at`. The feeds stand
-  for the loudspeakers' sound power, a gated RMS of 0.1 for the loudest one's (the main
-  arrays', 134 dB), and the helicopter's sound is in pascals 1 m from its hub, so the
-  mix scales it by 0.1 over the pressure 1 m from a source of the main arrays' sound
-  power, in the scene's air. The mixes get one gain for all (the loudest peak at
-  -1 dBFS), into the run's `seats` (`demo/crossing_binaural/seats`), and the feeds'
-  table goes to its `feeds` with the song lasting until the helicopter has gone.
-- **The video** is the stadium demo's, made from those mixes (`demo/crossing_binaural.mp4`): the
-  same tour, each stop turned up to the loudness of the loudest, the helicopter named
-  in the title and in the credit. The tour goes on as the stadium demo's does: halfway
-  through each of the three songs it is in the north stand, at its far seats and then
-  at its top row, under the roof, where the helicopter is quietest. `--at 10` brings
-  the helicopter over during the first stop, at the mix position.
+- **The flight.** The scene's helicopter, an Airbus Helicopters AS350 B3 at its maximum
+  mass, flies level at 63 m/s, 1200 m along the stadium's long axis, from behind the
+  stage over the centre spot to past the east stand, 150 m up, as a police or a
+  television helicopter given leave may. Without leave the EU's rules of the air keep a
+  flight by sight (VFR) over an open-air assembly of persons 300 m above the highest
+  obstacle within 600 m (SERA.5005(f)), here the stadium's roof, 30 m up: `--height
+  330`. Its model gives it the sound power and the directivity of its rotors' sound at
+  that speed through the stadium's still air: 137.1 dB, 132.8 dB(A). The scene the run
+  simulates has its ground and sky widened to take the flight; the responses run 2.0 s
+  past the latest direct sound, as every outdoor response does, so each keeps the
+  stadium's decay after the helicopter's sound arrives.
+- **The pass**: the helicopter every 4 m along its flight at each of the 12 listeners,
+  with Doppler, its sound what its rotors send each way down each early path, as in the
+  flyover. At the mix position it peaks between 81 and 82 dB(A) (about 74 from 330 m),
+  where the sound system's loudspeakers, simulated at their sound power, give 97 dB(A):
+  it is some 15 dB under the music, heard most in the song's quiet passages. High in the
+  north stand, under the roof, it peaks 10 to 12 dB lower (four runs): the sound there
+  is almost all late sound, which a few rays can lift by several decibels at one place.
+- **The video** is the stadium demo's (`demo/crossing_binaural.mp4`): the same tour,
+  each stop turned up to the loudness of the loudest, the mixes keeping one gain for
+  all. The tour goes on as the stadium demo's does: halfway through each of the three
+  songs it is in the north stand, at its far seats and then at its top row, under the
+  roof, where the helicopter is quietest. `--at 10` brings the helicopter over during
+  the first stop, at the mix position. The stills draw the stadium as the stadium
+  demo's do, the helicopter at their edge, with how far it is, while it is past the
+  stadium.
 
 What it leaves out: the stadium's air is still, so no wind or eddies bend the
 helicopter's sound. The rotors' downwash does not reach the crowd: flying past at this
 speed, their wake trails behind them and sinks a few metres a second (1.6 m/s through
-the main rotor's disc in its trim). The rotors' model is 3.4 dB louder than the
-helicopter's noise certificate, as in the flyover. The stills draw the stadium as the
-stadium demo's do, without the helicopter.
+the main rotor's disc in its trim). With Pegg's broadband noise, the default, the
+rotors' model is louder than the helicopter's noise certificate, and with `--broadband
+bpm` quieter, as in the flyover.
 
 ## Road works in the street
 

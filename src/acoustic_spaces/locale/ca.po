@@ -175,6 +175,10 @@ msgstr "Escena del vol"
 msgid "Stadium's scene"
 msgstr "Escena de l'estadi"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Start time"
+msgstr "Temps d'inici"
+
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
 msgid "Height"
 msgstr "Alçada"
@@ -2071,12 +2075,24 @@ msgid "Back to one of them, the first ticked"
 msgstr "Torna a un de sol, el primer marcat"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "File…"
+msgstr "Fitxer…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours in place of one of the choices"
+msgstr "Un fitxer teu en lloc d'una de les opcions"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every one: the run plays them one after another"
 msgstr "Marca'ls tots: l'execució els reprodueix un darrere l'altre"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every one, to tick those to play"
 msgstr "Desmarca'ls tots, per marcar els que han de sonar"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours"
+msgstr "Un fitxer teu"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every source"
@@ -9222,6 +9238,54 @@ msgstr "nivell {number}, terra aproximadament a {height:.1f} m"
 #, python-brace-format
 msgid "{source}: {title}, {count} points {spacing:g} m apart"
 msgstr "{source}: {title}, {count} punts separats {spacing:g} m"
+
+#: examples/airport/flight_demo.py
+msgid "A jet taking off and landing"
+msgstr "Un avió de reacció enlairant-se i aterrant"
+
+#: examples/church/church_demo.py
+msgid "A choir and an organ in the church"
+msgstr "Un cor i un orgue a l'església"
+
+#: examples/gallery/walk_demo.py
+msgid "A walk through the gallery"
+msgstr "Un passeig per la galeria"
+
+#: examples/helicopter_flyover/flyover_demo.py
+msgid "A helicopter flying over"
+msgstr "Un helicòpter que passa per sobre"
+
+#: examples/lakeside_concert/lakeside_demo.py
+msgid "A concert across a lake"
+msgstr "Un concert a l'altra banda d'un llac"
+
+#: examples/orchestra/orchestra_demo.py
+msgid "Beethoven's 8th in the concert hall"
+msgstr "La 8a de Beethoven a la sala de concerts"
+
+#: examples/railway/passby_demo.py
+msgid "A train running past"
+msgstr "Un tren que passa"
+
+#: examples/roadside/passby_demo.py
+msgid "A car or a truck passing the meadow"
+msgstr "Un cotxe o un camió que passa pel prat"
+
+#: examples/stadium_concert/helicopter_demo.py
+msgid "A helicopter over the stadium concert"
+msgstr "Un helicòpter sobre el concert de l'estadi"
+
+#: examples/stadium_concert/stadium_demo.py
+msgid "A band in the stadium"
+msgstr "Un grup a l'estadi"
+
+#: examples/street/passby_demo.py
+msgid "A vehicle driving down the street"
+msgstr "Un vehicle que circula pel carrer"
+
+#: examples/street/works_demo.py
+msgid "Road works in the street"
+msgstr "Obres al carrer"
 
 #: examples/airport/scene.yaml
 msgctxt "example"

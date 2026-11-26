@@ -248,4 +248,13 @@ def test_hide_names_what_a_still_leaves_out(tmp_path) -> None:
         return demo.check(demo.parser().parse_args(["video", "--scene", "scene.yaml", *argv]))
 
     assert "--hide" not in (check("--hide", "side,wind") or "")
-    assert check("--hide", "sky") == "--hide sky: give one or more of side, wind, ground"
+    assert "--hide" not in (check("--hide", "none") or "")
+    assert check("--hide", "sky") == (
+        "--hide sky: give none, or one or more of side, wind, ground, audience"
+    )
+    assert check("--hide", "none,side").startswith("--hide none: give none, or one or more")
+    # The audience, outdoors and in a room, where the scene has one.
+    assert check("--hide", "audience") == (
+        "--hide audience changes nothing: the scene has no audience or seats (a material "
+        "of the database's audiences or seating, or with audience: true)"
+    )
