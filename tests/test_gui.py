@@ -6684,7 +6684,7 @@ def test_particle_export_settings(window, monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
     monkeypatch.setattr(ParticleDialog, "exec", choose)
     assert window.export_blender(particles=True)
-    assert "50 particles from stage, 300 ms of sound over 3 s" in window.messages.toPlainText()
+    assert "50 particles from main_left, 300 ms of sound over 3 s" in window.messages.toPlainText()
     target.unlink()
     monkeypatch.setattr(ParticleDialog, "exec", lambda dialog: int(QDialog.DialogCode.Rejected))
     assert not window.export_blender(particles=True) and not target.exists()

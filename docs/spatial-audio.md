@@ -359,6 +359,7 @@ sound = render_trajectory(responses, {"guide": (speech, 44_100)}, Binaural())  #
 animate_trajectory(room, responses, "walk.gif")
 ```
 
+(several-movers-at-once)=
 #### Several movers at once
 
 When more than one listener or source has a trajectory, `walkthrough --all` plays them

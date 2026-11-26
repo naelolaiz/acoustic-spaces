@@ -302,6 +302,8 @@ class Outdoors:
     def _label_at(self, k: int) -> tuple[float, float] | None:
         """Where weather ``k``'s label goes: near the top of where it holds, in the
         middle across."""
+        if self.air is None:
+            return None
         x0, y0, x1, y1 = self.layout.extent
         xs = np.linspace(x0, x1, 41)[1:-1]
         ys = np.linspace(y1, y0, 41)[1:-1]
@@ -416,7 +418,7 @@ class Outdoors:
                 t = t + way * step * np.cos(theta)
                 z = z + step * np.sin(theta)
                 low = going & (z < 0.0)
-                for j in np.flatnonzero(low):
+                for j in np.flatnonzero(low).tolist():
                     energy[j] *= self._bounce(origin + t[j] * direction, -theta[j])
                 z = np.where(low, -z, z)
                 theta = np.where(low, -theta, theta)
@@ -425,10 +427,10 @@ class Outdoors:
                 energies.append(energy.copy())
                 alive.append(going.copy())
                 going &= (z < top) & (t > t0) & (t < t1) & (energy > FAINTEST)
-            ts, zs, energies, alive = (np.array(a) for a in (ts, zs, energies, alive))
+            t_at, z_at, energy_at, alive_at = (np.array(a) for a in (ts, zs, energies, alive))
             for j in range(n):
-                kept = alive[:, j]
-                out.append((np.column_stack([ts[kept, j], zs[kept, j]]), energies[kept, j]))
+                kept = alive_at[:, j]
+                out.append((np.column_stack([t_at[kept, j], z_at[kept, j]]), energy_at[kept, j]))
         return out
 
     def _bounce(self, point, grazing: float) -> float:
@@ -597,6 +599,8 @@ class Outdoors:
         """The weather under the plane from ``t0`` to ``t1`` m along it: (weather, from,
         to) for each stretch of one."""
         ts = np.linspace(t0, t1, 801)
+        if self.air is None:
+            return [(0, float(t0), float(t1))]
         zone = self.air.zone_at(np.asarray(start)[None, :] + ts[:, None] * direction[None, :])
         cuts = np.flatnonzero(np.diff(zone)) + 1
         bounds = [0, *cuts.tolist(), len(ts) - 1]
@@ -616,7 +620,7 @@ class Outdoors:
             heights = self.layout.ground_at(points) - self.ground_z
         zone = self.layout.zone_at(points) + 1
         for j in range(len(ts) - 1):
-            colour = GROUNDS[self.kinds[int(zone[j])]]
+            colour: tuple[int, ...] = GROUNDS[self.kinds[int(zone[j])]]
             colour = (
                 WATER_EDGE if colour == WATER else tuple(min(255, int(c * 1.6)) for c in colour)
             )
@@ -626,12 +630,12 @@ class Outdoors:
             inside_plant = plant.inside(
                 np.column_stack([points, np.full(len(points), 0.5 * (plant.low + plant.high))])
             )
-            for j in np.flatnonzero(inside_plant):
+            for i in np.flatnonzero(inside_plant).tolist():
                 draw.rectangle(
                     view.rect(
-                        ts[j],
+                        ts[i],
                         plant.high - self.ground_z,
-                        ts[min(j + 1, len(ts) - 1)],
+                        ts[min(i + 1, len(ts) - 1)],
                         plant.low - self.ground_z,
                     ),
                     fill=PLANTS + (110,),
@@ -687,7 +691,7 @@ class Outdoors:
         for k, (a, b) in sorted(longest.items()):
             weather = self.weathers[k]
             along = products.dot(weather.to_wind(), np.asarray(direction, dtype=float))
-            heights = []
+            heights: list[float] = []
             for h in MAST_M:  # those under the top, far enough apart to tell
                 if h <= 0.85 * view.top and (
                     not heights or view(0.0, heights[-1])[1] - view(0.0, h)[1] >= 18

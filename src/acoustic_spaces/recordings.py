@@ -377,7 +377,10 @@ def lined_up(
     if not stems:
         return {}, 0
     head = rate * 90
-    together = sum(mono(x)[:head] for x in stems.values())
+    heads = [mono(x)[:head] for x in stems.values()]
+    together = np.zeros(max(len(x) for x in heads))
+    for x in heads:
+        together[: len(x)] += x
     lag = onset_lag(together, mono(master)[:head], rate, STEMS_LAG_S)
     return {name: shifted(x, lag, len(master)) for name, x in stems.items()}, lag
 
