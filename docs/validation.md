@@ -4037,17 +4037,17 @@ x = 10 m:
 
 | rows | cases | march alone | the solver | simulation, `second_order` | simulation, `first_order` |
 |---|---|---|---|---|---|
-| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.64 | -21.72 to +14.16, or no sound |
-| free space, 22° down to the listener | 8 | -2.26 to -0.88 | -0.16 to +0.14 | -20.57 to +1.09 | -1.22 to +8.42 |
-| roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -11.79 to +7.99 |
-| the same, 13 to 24° up from the source | 8 | -2.70 to -1.43 | -0.74 to +0.41 | -6.22 to +7.86 | -0.93 to +9.05, or no sound |
-| the same, 42° down to the listener | 12 | -5.29 to -2.19 | -0.71 to +1.24 | -4.69 to +7.35 | -1.94 to +8.21, or no sound |
-| three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.27 to +2.21 | -3.35 to +5.66 |
-| three screens on a ground, 24° | 2 | -6.19 to -2.90 | -2.55 to -0.30 | -1.97 to +4.59 | +3.53 to +6.51, or no sound |
-| three screens on a ground, 42° | 3 | -9.20 to -4.06 | -3.42 to -0.09 | -2.65 to +4.57 | +2.01 to +7.61, or no sound |
+| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.53 | -21.72 to +14.16, or no sound |
+| free space, 22° down to the listener | 8 | -2.26 to -0.88 | -0.16 to +0.14 | -20.57 to +0.14 | -1.58 to +7.63 |
+| roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -11.79 to +7.68 |
+| the same, 13 to 24° up from the source | 8 | -2.70 to -1.43 | -0.74 to +0.41 | -6.22 to +5.37 | -0.93 to +7.73, or no sound |
+| the same, 42° down to the listener | 12 | -5.29 to -2.19 | -0.71 to +1.24 | -4.69 to +7.35 | -1.94 to +7.77, or no sound |
+| three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.21 to +2.48 | -3.27 to +5.63 |
+| three screens on a ground, 24° | 2 | -6.19 to -2.90 | -2.55 to -0.30 | -1.97 to +3.86 | +3.76 to +5.81, or no sound |
+| three screens on a ground, 42° | 3 | -9.20 to -4.06 | -3.42 to -0.09 | -2.65 to +4.15 | +2.39 to +7.45, or no sound |
 | a roof under the source, to its edge | 8 | -2.16 to +0.81 | -0.18 to +0.05 | -0.10 to +0.23 | -0.10 to +0.23 |
-| the same, a parapet 1.1 m high on the edge | 8 | -9.90 to +0.33 | -0.82 to +0.48 | -1.10 to +1.13 | -1.12 to +1.17 |
-| the same, the parapet 0.1 or 0.3 m high | 16 | -5.75 to +1.02 | -1.13 to +1.13 | -1.06 to +1.95 | -0.98 to +1.56 |
+| the same, a parapet 1.1 m high on the edge | 8 | -9.90 to +0.33 | -0.82 to +0.48 | -1.12 to +1.17 | -1.12 to +1.17 |
+| the same, the parapet 0.1 or 0.3 m high | 16 | -5.75 to +1.02 | -1.13 to +1.13 | -0.98 to +1.56 | -0.98 to +1.56 |
 | a screen 1.1 m high on a roof under both ends | 4 | -8.75 to +0.88 | -0.05 to +0.42 | -3.43 to +2.68 | -3.43 to +2.68 |
 | the same, the screen 0.1 or 0.3 m high | 8 | -4.85 to +0.93 | -0.13 to +0.50 | -2.91 to +1.38 | -2.91 to +1.38 |
 
@@ -4086,9 +4086,9 @@ the edges alone:
 |---|---|---|---|
 | one screen | 9 | -0.15 to +0.47 | -0.87 to +0.54 |
 | one roof 10 m wide | 9 | -0.16 to +0.14 | -3.81 to +3.37 |
-| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +5.87 |
-| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +8.03 |
-| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.85 |
+| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +4.42 |
+| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +7.35 |
+| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.15 |
 
 The simulation gives the solver the early paths' eight frequencies in each octave band,
 as the solver's own check does. Against 72 in a band, at nine places behind one screen 3
