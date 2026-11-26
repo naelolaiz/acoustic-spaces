@@ -1158,6 +1158,47 @@ def near_fading_end(fades, t_k, length, r1, r2, sin_beta, k_min: float):
     return near, reach
 
 
+def beyond_fading_end(
+    edges: Edges, edge, source_side, listener_side, t_k, fades, reach, tolerance: float
+) -> np.ndarray:
+    """(C, 3) for each path over edge ``edge`` (C,) that touches its line at ``t_k`` (C,),
+    whether the way of each wave of its terms (the incident wave and the reflections off
+    face 0 and face n) passes the line beyond an end that fades (``fades``, C, 2) and that
+    the path touches the line within ``reach`` (C, :func:`near_fading_end`) of, or the
+    path touches that end itself. The ways run from ``source_side`` to ``listener_side``
+    (C, 3, as the path has them, in the images of the planes it reflects off before and
+    after the edge): the incident wave's where it passes closest to the line, a
+    reflection's where it crosses its face's plane. There a term counts whether its path
+    is found or not: past the end it fades out, and the end's own edge takes the path
+    round it (end_fades). A wave that another edge cuts off, as a reflection whose point
+    leaves the face across the face's far edge, is that edge's."""
+    t_s, w_s = edges._across(edge, source_side)
+    t_l, w_l = edges._across(edge, listener_side)
+    along, normal = edges.along[edge], edges.normal[edge]
+    turn = np.pi * edges.wedge[edge][:, None]
+    # Across the edge, in the plane of face 0's direction and normal; face n's normal.
+    flat_s = np.stack([np.sum(w_s * along, axis=1), np.sum(w_s * normal, axis=1)], axis=1)
+    flat_l = np.stack([np.sum(w_l * along, axis=1), np.sum(w_l * normal, axis=1)], axis=1)
+    normal_n = np.hstack([np.sin(turn), -np.cos(turn)])
+    step = flat_l - flat_s
+    closest = -np.sum(flat_s * step, axis=1) / np.maximum(np.sum(step * step, axis=1), 1e-300)
+    fractions = [closest]
+    for height_s, height_l in (
+        (flat_s[:, 1], flat_l[:, 1]),
+        (np.sum(flat_s * normal_n, axis=1), np.sum(flat_l * normal_n, axis=1)),
+    ):
+        total = height_s + height_l
+        fractions.append(np.where(total > 0.0, height_s / np.where(total > 0.0, total, 1.0), 0.5))
+    way = t_s[:, None] + np.clip(np.stack(fractions, axis=1), 0.0, 1.0) * (t_l - t_s)[:, None]
+    length = edges.length[edge]
+    first = (fades[:, 0] > 0.0) & (t_k < reach)
+    last = (fades[:, 1] > 0.0) & (length - t_k < reach)
+    end = (length - tolerance)[:, None]
+    out = first[:, None] & ((way <= tolerance) | (t_k <= tolerance)[:, None])
+    out |= last[:, None] & ((way >= end) | (t_k[:, None] >= end))
+    return out
+
+
 def _fresnel_tail_share(u: np.ndarray) -> np.ndarray:
     """The integral of exp(-j pi t^2 / 2) from ``u`` >= 0 to infinity over that along the
     whole line: erfc(u sqrt(pi / 2) e^(j pi / 4)) / 2."""
@@ -2241,12 +2282,24 @@ class EdgeDiffraction:
         # term continues its geometric wave by c and is part of the diffracted wave by
         # s = sqrt(1 - c^2) (_continued, :mod:`~acoustic_spaces.engine.clusters`); in
         # the others all of it adds in pressure.
-        # Near an end that fades, each wave's term counts whether its path is found or not:
-        # it fades out past the end, and the end's own edge takes the path round it
+        # Near an end that fades, a wave's term counts whether its path is found or not
+        # where the wave's way passes the edge's line beyond that end (beyond_fading_end): it
+        # fades out past the end, and the end's own edge takes the path round it
         # (end_fades), on the dark side where the path round the end is found and on the
-        # lit side where its reflection point leaves the face past the end, or lies on
-        # another face in the face's plane.
-        counted = (lit == (found >= 0)) | near[:, None]
+        # lit side where its reflection point leaves the face past the end. A wave that
+        # another edge cuts off (a reflection whose point leaves the face across the
+        # face's far edge) is that edge's, as at an end that stops.
+        waived = beyond_fading_end(
+            edges,
+            edge,
+            c["source_side"],
+            c["listener_side"],
+            t_k,
+            fades,
+            reach,
+            _TOLERANCE * self.size,
+        )
+        counted = (lit == (found >= 0)) | waived
         counted[in_line] |= moved
         energy = np.zeros((len(edge), self.wavenumber.shape[0]))
         pressure = (waves * counted[:, :, None, None]).sum(axis=1)
@@ -2682,11 +2735,7 @@ class EdgeDiffraction:
             * loss
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
-        # Near an end that fades, a term counts whether the path over the other edge alone
-        # is there or not, as a path over one edge does there (_single).
-        counted = ((lit1 == (has1 >= 0)) | near[0][0][:, None])[:, :, None] & (
-            (lit2 == (has2 >= 0)) | near[1][0][:, None]
-        )[:, None, :]
+        counted = (lit1 == (has1 >= 0))[:, :, None] & (lit2 == (has2 >= 0))[:, None, :]
         # Where the first edge's wave is lit, the path continues the path over the second
         # edge alone, and its waves at the second edge are one with that path's; and
         # likewise where the second edge's wave is lit. Where both are, both paths over
