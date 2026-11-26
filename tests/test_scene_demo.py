@@ -616,6 +616,48 @@ def test_a_tour_reads_its_stops_and_cuts_them_where_the_music_turns() -> None:
     assert gains == {"near": 0.0, "far.still": 20.0, "far": 20.0}
 
 
+def test_a_tour_of_a_movement_cuts_at_its_quiet_moments_and_rings_out(tmp_path: Path) -> None:
+    """For a recording whose tours share each piece out (a symphony's movements), stops
+    that give no length take even shares of the piece, each cut moved to the quietest
+    moment within 10 s of where the share puts it (half the shortest stop at most), by
+    the loudness of the first stop's mix, so that it falls between phrases; the last
+    stop, which runs to the piece's end, runs on to the end of its mix, so that the
+    hall's reverberation dies away as simulated."""
+    stops = scene_demo.tour_text("near,far")
+    assert scene_demo.timed_tour(stops, 60.0, None, share=True) == [
+        ("near", 0.0, 30.0),
+        ("far", 30.0, 60.0),
+    ]
+    assert scene_demo.timed_tour(stops, 60.0, None)[-1] == ("far", 20.0, 40.0)
+    assert scene_demo.timed_tour(stops, 60.0, None, 10.0, share=True)[-1] == ("far", 10.0, 20.0)
+    # A piece of 30 s, quiet from 13 to 14 s: the cut moves from 15 s to there.
+    rate = 8000
+    t = np.arange(30 * rate) / rate
+    x = np.where((t > 13.0) & (t < 14.0), 0.01, 0.5) * np.sin(2 * np.pi * 220 * t)
+    seats = {"rate": rate, "format": "binaural", "seats": {}}
+    for key, seconds in (("near", 30.0), ("far", 32.5)):  # far: the hall rings 2.5 s on
+        n = round(seconds * rate)
+        audio.write(tmp_path / f"{key}.binaural.wav", np.stack([x, x], 1)[:n], rate)
+        seats["seats"][key] = {"length_s": seconds}
+    timed = scene_demo.timed_tour(stops, 30.0, None, share=True)
+    cut = scene_demo.quiet_cuts(timed, stops, seats, tmp_path)
+    assert [key for key, _, _ in cut] == ["near", "far"]
+    assert 13.0 <= cut[0][2] <= 14.0 and cut[1][1] == cut[0][2] and cut[1][2] == 30.0
+    # Within half a stop at most: three stops of 10 s, each cut within 5 s of its share,
+    # the first at the quiet moment, the second, with none near, where it is quietest.
+    three = scene_demo.tour_text("near,far,near")
+    shares = scene_demo.timed_tour(three, 30.0, None, share=True)
+    first, second = (b for _, _, b in scene_demo.quiet_cuts(shares, three, seats, tmp_path)[:-1])
+    assert 13.0 <= first <= 14.0 and 15.0 <= second <= 25.25
+    # A stop that gives its length keeps its cut.
+    given = scene_demo.tour_text("near:15s,far")
+    kept = scene_demo.timed_tour(given, 30.0, None, share=True)
+    assert scene_demo.quiet_cuts(kept, given, seats, tmp_path) == kept
+    assert scene_demo.ringing_out(cut, seats, 30.0)[-1] == ("far", cut[1][1], 32.5)
+    early = [("near", 0.0, 12.0), ("far", 12.0, 20.0)]  # ends before the piece does
+    assert scene_demo.ringing_out(early, seats, 30.0) == early
+
+
 def _outdoors(folder: Path, seconds: float = 10.0, **more) -> Path:
     """A small outdoor scene in a wind, quick to simulate: a band 2 m up plays a tone of
     ``seconds`` to a listener 10 m away and one 40 m away; ``more`` adds to it."""
@@ -662,8 +704,8 @@ def test_a_tour_is_refused_where_it_cannot_play(tmp_path: Path) -> None:
         return demo.check(demo.parser().parse_args(["render", "--scene", scene.name, *argv]))
 
     assert check("--tour", "near,far:still") is None
-    assert "--tour takes LISTENER[:still][:LENGTH]" in check("--tour", "near:loud")
-    assert "'nobody', which is not in use" in check("--tour", "nobody")
+    assert "--tour takes [PIECE/]LISTENER[:still][:LENGTH]" in check("--tour", "near:loud")
+    assert "'nobody': no such listener here; it has near, far" in check("--tour", "nobody")
     assert "no tempo" in check("--tour", "far:2")
     assert check("--tour", "far:2", "--bpm", "120") is None
     assert "--downbeat is for a recording of yours" in check("--downbeat", "0.5")

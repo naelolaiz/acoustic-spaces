@@ -5592,33 +5592,45 @@ def test_demo_dialog_fits_the_demo_picked(qapp, monkeypatch) -> None:
 
 def test_demo_dialog_says_what_a_run_downloads(qapp, tmp_path: Path) -> None:
     """Above Run, whatever is open, the Run demo window says what the run downloads and
-    how much, until it is there: the orchestra's tracks of the movements neither in the
-    work folder nor in --zips, nothing for a step that downloads nothing or a song of
-    your own."""
+    how much, until it is there: what each movement of the orchestra's symphony the run
+    plays is built from, but a movement whose zip is in --zips; nothing for a step that
+    downloads nothing or a song of your own."""
+    from acoustic_spaces import recordings
     from acoustic_spaces.examples import copy_examples
     from acoustic_spaces.gui.demo_dialog import DemoDialog
 
     orchestra, stadium = copy_examples(tmp_path, ["orchestra", "stadium_concert"])
     dialog = DemoDialog(scene=orchestra)
     line = dialog.downloads
-    says = "This run downloads the 61 tracks of movement"
-    server = "from the TU Berlin's server"
+    title = recordings.named("beethoven_8").title
+
+    def built(*pieces: tuple[str, int]) -> str:
+        return (
+            "This run downloads "
+            + "; ".join(
+                f"what {piece} of {title} is built from (CC BY 4.0, {mb} MB), built into its 61 "
+                "stems and kept for every scene"
+                for piece, mb in pieces
+            )
+            + "."
+        )
+
     assert dialog.picker.currentData() == "orchestra"
-    assert line.text() == f"{says}s I, II and IV {server} (2.0 GB)."
+    assert line.text() == built(("I", 642), ("II", 605), ("IV", 743))
     assert not line.isHidden() and not dialog.advanced.isAncestorOf(line)
     dialog.step.setCurrentText("render")
     assert line.isHidden()
-    dialog.step.setCurrentText("tracks")
+    dialog.step.setCurrentText("recording")
     assert not line.isHidden()
-    dialog.fields["movements"].setText("1")
-    assert line.text() == f"{says} I {server} (642 MB)."
+    dialog.fields["piece"].setText("I")
+    assert line.text() == built(("I", 642))
     zips = tmp_path / "zips"
     zips.mkdir()
     (zips / "movement1.zip").touch()
     dialog.fields["zips"].set_value(zips)
     assert line.isHidden() and not line.text()
-    dialog.fields["movements"].setText("")
-    assert line.text() == f"{says}s II and IV {server} (1.3 GB)."
+    dialog.fields["piece"].setText("")
+    assert line.text() == built(("II", 605), ("IV", 743))
     dialog.deleteLater()
     concert = DemoDialog(scene=stadium)
     assert concert.picker.currentData() == "stadium"

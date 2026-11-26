@@ -97,6 +97,7 @@ from acoustic_spaces.demos import (
     pipeline,
     playing,
     product,
+    record_run,
     run_folder,
     run_plays,
     source_matches,
@@ -106,10 +107,12 @@ from acoustic_spaces.demos.audio import (
     channel_weights,
     channels_rms,
     decoded,
+    envelope,
     gated_rms,
     level_db,
     loudness_db,
     mono,
+    quiet_moment,
     read,
     resampled,
     stereo,
@@ -189,11 +192,14 @@ def results_at(args: argparse.Namespace, scene: str | Path) -> Path:
 def feeds_folder(args: argparse.Namespace) -> Path:
     """Where a run's feeds go: ``feeds/<scene>`` in the work folder, or with the files
     ``--input`` gives the sources, ``feeds/<scene>_<what plays>``
-    (:func:`~acoustic_spaces.demos.run_plays`): what a run feeds hangs on nothing else,
-    so that the runs that play the same share them."""
+    (:func:`~acoustic_spaces.demos.run_plays`), and for a recording of several pieces,
+    ``_<the piece>`` after it: what a run feeds hangs on nothing else, so that the runs
+    that play the same share them."""
     plays = run_plays(args)
+    scene = _run(args)
+    piece = piece_of(args, scene) if scene is not None else None
     name = name_part(stem_of(args)) + (f"_{plays}" if plays else "")
-    return work_of(args) / "feeds" / name
+    return work_of(args) / "feeds" / (name + (f"_{name_part(piece)}" if piece else ""))
 
 
 def stem_of(args: argparse.Namespace) -> str:
@@ -563,14 +569,15 @@ def _scene_hrtf(scene: str | Path | None) -> Path | None:
     return None if found is None else pipeline.scene_hrtf(found.outputs)
 
 
-def recording_of(scene: Scene) -> Path | None:
+def recording_of(scene: Scene, piece: str | None = None) -> Path | None:
     """The file the scene's ``recording`` is: its own, or where the free one it names is
-    kept (downloaded or not yet); None when it names none."""
+    kept (downloaded or not yet), for one of several pieces that of ``piece``; None
+    when it names none."""
     if scene.recording is None:
         return None
     if isinstance(scene.recording, Path):
         return scene.recording
-    return recordings.file_of(scene.recording)
+    return recordings.file_of(scene.recording, piece=piece)
 
 
 def free_of(scene: Scene) -> recordings.Recording | None:
@@ -578,13 +585,85 @@ def free_of(scene: Scene) -> recordings.Recording | None:
     return recordings.named(scene.recording) if isinstance(scene.recording, str) else None
 
 
+def piece_given(args: argparse.Namespace) -> str | None:
+    """The piece ``--piece`` names for a run of one (a part of a run of several), or
+    None."""
+    given = getattr(args, "piece", None)
+    if isinstance(given, tuple):
+        return str(given[0]) if given else None
+    return None if given is None else str(given)
+
+
+def tour_pieces(args: argparse.Namespace, scene: Scene) -> list[str]:
+    """The pieces of the scene's recording that the run's tour (``--tour``'s or the
+    scene's) stops in, in its order, every piece for a stop that names none and for no
+    tour; none for a recording of one piece."""
+    free = free_of(scene)
+    if free is None or not free.pieces:
+        return []
+    given = getattr(args, "tour", None)
+    try:
+        stops = tour_text(given) if given else scene.tour
+    except ValueError:  # the problems say why
+        stops = None
+    if not stops:
+        return list(free.piece_names)
+    named = [p for stop in stops for p in ([stop.piece] if stop.piece else free.piece_names)]
+    return [p for p in dict.fromkeys(named) if p in free.piece_names]
+
+
+def piece_of(args: argparse.Namespace, scene: Scene) -> str | None:
+    """The piece of the scene's recording a run plays: the one ``--piece`` names (one in
+    each part of a run of several), else the first its tour stops in
+    (:func:`tour_pieces`); None for a recording of one piece. One the recording lacks
+    is its first (:func:`problems` refuses the run)."""
+    free = free_of(scene)
+    if free is None or not free.pieces:
+        return None
+    given = piece_given(args)
+    if given is not None and given in free.piece_names:
+        return given
+    toured = tour_pieces(args, scene)
+    return toured[0] if toured and given is None else free.pieces[0].name
+
+
+def heard_sources(args: argparse.Namespace) -> set[str]:
+    """The sources that play in a run with ``args`` (paths resolved): those ``--sources``
+    picks, by name or group, else those that play by default (:func:`sources_of`)."""
+    known = sources_of(args)
+    names = given_names(getattr(args, "sources", None))
+    if names is None:
+        return {source.name for source in known if source.on}
+    return {s.name for s in known if any(source_matches(s, name) for name in names)}
+
+
+def pieces_of(args: argparse.Namespace) -> list[str]:
+    """The pieces a run that names none (``--piece``) plays, each in a part of its own:
+    those its tour stops in (:func:`tour_pieces`), but a piece that every source that
+    plays rests through (:attr:`~acoustic_spaces.recordings.Piece.rests`), unless
+    ``--input`` gives one of them a file of yours, which it plays in every piece."""
+    scene = _run(args)
+    if scene is None:
+        return []
+    free = free_of(scene)
+    if free is None or not free.pieces:
+        return []
+    heard = heard_sources(args)
+    fed = set(getattr(args, "inputs", None) or {})
+    return [
+        name for name in tour_pieces(args, scene) if not heard <= set(free.piece(name).rests) - fed
+    ]
+
+
 def stems_of(args: argparse.Namespace, scene: Scene) -> dict[str, Path]:
     """The stems of the recording the run plays and their files: a free song's (there or
-    still to download, :func:`acoustic_spaces.recordings.stem_file`), or those
-    ``--stem`` gives a recording of yours; none for a recording without."""
+    still to download, :func:`acoustic_spaces.recordings.stem_file`; for one of several
+    pieces, those of the run's, :func:`piece_of`), or those ``--stem`` gives a recording
+    of yours; none for a recording without."""
     free = free_of(scene)
     if free is not None:
-        return {name: recordings.stem_file(free, name) for name in free.stem_names}
+        piece = piece_of(args, scene)
+        return {name: recordings.stem_file(free, name, piece=piece) for name in free.stem_names}
     if scene.recording is None:
         return {}
     return {name: Path(file) for name, file in (getattr(args, "stems", None) or {}).items()}
@@ -597,7 +676,7 @@ def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Played | Non
     the mix of them, those the recording has (:func:`stems_of`). None: silent, as is a
     source none of whose stems the recording has."""
     inputs = getattr(args, "inputs", None) or {}
-    recording = recording_of(scene)
+    recording = recording_of(scene, piece_of(args, scene))
     stems = stems_of(args, scene)
     out: dict[str, Played | None] = {}
     for source in scene.sources:
@@ -652,7 +731,8 @@ def plays(args: argparse.Namespace) -> dict[str, str]:
     if found is None:
         return {}
     free = free_of(found)
-    free_file = recordings.file_of(free) if free is not None else None
+    piece = piece_of(args, found)
+    free_file = recordings.file_of(free, piece=piece) if free is not None else None
     out = {}
     own = argparse.Namespace(**{**vars(args), "inputs": None})
     sources = {source.name: source for source in found.sources}
@@ -669,6 +749,8 @@ def plays(args: argparse.Namespace) -> dict[str, str]:
             continue
         file, channel = played
         what = free.title if free is not None and file == free_file else file.name
+        if piece is not None and file == free_file:
+            what = f"{what}, {piece}"
         out[name] = what if channel is None else f"{what}, {channel_words(channel)}"
     return out
 
@@ -701,10 +783,12 @@ def downloads_of(args: argparse.Namespace) -> tuple[recordings.Recording | None,
     free = free_of(scene) if scene is not None else None
     if free is None:
         return None, False, False
+    piece = piece_of(args, scene)
     played = [v for v in signals_of(args, scene).values() if v is not None]
-    stems = any(stems_played(v) for v in played) and not recordings.stems_there(free)
-    heard = any(v[0] == recordings.file_of(free) for v in played)
-    return free, heard and not recordings.file_of(free).exists(), stems
+    stems = any(stems_played(v) for v in played) and not recordings.stems_there(free, None, piece)
+    master = recordings.file_of(free, piece=piece)
+    heard = any(v[0] == master for v in played)
+    return free, heard and not master.exists(), stems
 
 
 def recording_needed(args: argparse.Namespace) -> recordings.Recording | None:
@@ -716,10 +800,21 @@ def recording_needed(args: argparse.Namespace) -> recordings.Recording | None:
 
 def recording_download(args: argparse.Namespace) -> str | None:
     """What ``recording`` downloads: the free recording and its stems, as the run needs
-    them, its licence and size."""
+    them, its licence and size; nothing for a piece built from a copy of its archive in
+    ``--zips`` (:func:`acoustic_spaces.recordings.copy_of`)."""
     free, master, stems = downloads_of(args)
     if free is None or not (master or stems):
         return None
+    scene = _run(args)
+    piece = piece_of(args, scene) if scene is not None else None
+    if free.build is not None and piece is not None:
+        if recordings.copy_of(free, piece, getattr(args, "zips", None)) is not None:
+            return None
+        return (
+            f"what {piece} of {free.title} is built from ({free.licence}, "
+            f"{free.piece(piece).download_mb:g} MB), built into its {len(free.stems)} stems "
+            "and kept for every scene"
+        )
     if free.build is not None:
         return (
             f"what {free.title} is built from ({free.licence}, {free.download_mb:g} MB), "
@@ -749,10 +844,13 @@ def recording(args: argparse.Namespace) -> None:
         else:
             print(f"{named.title}: there already, or nothing plays it")
         return
-    print(f"{free.title}: {recordings.get(free)}")
+    scene = _run(args)
+    piece = piece_of(args, scene) if scene is not None else None
+    copies = getattr(args, "zips", None)
+    print(f"{free.title}: {recordings.get(free, piece=piece, archives=copies)}")
     if stems:
         print(f"its stems: {recordings.stems_folder(free)}")
-        recordings.get_stems(free)
+        recordings.get_stems(free, piece=piece, archives=copies)
 
 
 def completed(args: argparse.Namespace) -> argparse.Namespace:
@@ -917,6 +1015,9 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     free = free_of(scene)
     if getattr(args, "bpm", None) is not None and free is not None and free.bpm is not None:
         return f"--bpm is for a recording of yours: {free.name} has its own, {free.bpm:g} bpm"
+    problem = pieces_problem(resolved, scene)
+    if problem:
+        return problem
     signals = {k: v for k, v in signals_of(resolved, scene).items() if v is not None}
     if not signals:
         out = left_out(scene)
@@ -937,7 +1038,7 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
             f"--sources picks only sources that play nothing ({', '.join(chosen)}); "
             f"those that play: {', '.join(signals)}"
         )
-    downloaded = recordings.file_of(free) if free is not None else None
+    downloaded = recordings.file_of(free, piece=piece_of(resolved, scene)) if free else None
     for name, (signal, _channel) in signals.items():
         if signal == downloaded:  # the recording step downloads it
             continue
@@ -963,12 +1064,51 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     return tour_problem(resolved, scene, [item.name for item in movers])
 
 
+def pieces_problem(args: argparse.Namespace, scene: Scene) -> str | None:
+    """What is wrong with the piece the run plays (``args`` resolved, ``scene`` as the
+    run plays it): ``--piece`` or a stop of the tour naming a piece the recording lacks,
+    or one where it has a single piece; a piece every source that plays rests through;
+    ``--zips`` naming no folder."""
+    free = free_of(scene)
+    names = free.piece_names if free is not None else ()
+    have = (
+        f"{free.name} has the pieces {', '.join(names)}"
+        if free is not None and names
+        else f"{free.name if free is not None else 'the run'}'s recording is one piece"
+    )
+    given = piece_given(args)
+    if given is not None and given not in names:
+        return f"--piece {given}: {have}"
+    tour = getattr(args, "tour", None)
+    try:
+        stops = tour_text(tour) if tour else scene.tour or []
+    except ValueError:  # the tour's problems say why
+        stops = []
+    for stop in stops:
+        if stop.piece is not None and stop.piece not in names:
+            return f"the tour's stop at {stop.listener} is in the piece {stop.piece!r}; {have}"
+    piece = piece_of(args, scene)
+    if piece is not None:
+        heard = heard_sources(args)
+        fed = set(getattr(args, "inputs", None) or {})
+        rests = set(free.piece(piece).rests) if free is not None else set()
+        if heard and heard <= rests - fed:
+            return (
+                f"{piece}: every source that plays rests through it ({', '.join(sorted(heard))}"
+                "); pick others (--sources), or give one a file of yours (--input)"
+            )
+    copies = getattr(args, "zips", None)
+    if copies is not None and not Path(copies).is_dir():
+        return f"--zips: no folder {copies}"
+    return None
+
+
 def tour_problem(args: argparse.Namespace, scene: Scene, moving: list[str]) -> str | None:
     """What is wrong with the run's tour (:func:`tour_given`), ``scene`` as the run plays
     it and ``moving`` what moves in it: a ``--tour`` that does not read, a stop at a
-    listener the run does not hear, in still air where the scene's is still already or
-    where something moves, in phrases where the recording has no tempo, or a tour where
-    each listener is heard from the clock's start."""
+    listener the scene lacks or the run does not hear, in still air where the scene's is
+    still already or where something moves, in phrases where the recording has no
+    tempo, or a tour where each listener is heard from the clock's start."""
     given = getattr(args, "tour", None)
     try:
         stops = tour_given(args, scene)
@@ -996,6 +1136,10 @@ def tour_problem(args: argparse.Namespace, scene: Scene, moving: list[str]) -> s
             )
     heard = [lis.name for lis in scene.listeners if lis.in_use]
     for stop in stops:
+        if stop.listener not in {lis.name for lis in scene.listeners}:
+            return f"the tour stops at {stop.listener!r}: no such listener here; it has " + (
+                ", ".join(lis.name for lis in scene.listeners)
+            )
         if stop.listener not in heard:
             return f"the tour stops at {stop.listener!r}, which is not in use; the run hears " + (
                 ", ".join(heard)
@@ -1135,6 +1279,7 @@ def feeds(args: argparse.Namespace) -> None:
     silent: list[str] = []
     length = 0
     free = free_of(scene)
+    piece = piece_of(args, scene)
     multitrack = free is not None and free.kind == "multitrack"
     read_in: dict[Path, tuple[np.ndarray, dict[bool, float]]] = {}
     entries = feed_entries(args, scene)
@@ -1145,7 +1290,7 @@ def feeds(args: argparse.Namespace) -> None:
             continue
         signal, channel = played
         if not signal.exists():
-            if free is not None and signal == recordings.file_of(free):
+            if free is not None and signal == recordings.file_of(free, piece=piece):
                 raise SystemExit(
                     f"error: {name} plays {free.title}, not downloaded yet; run first: "
                     f"{DEMO.command('recording', args)}"
@@ -1500,16 +1645,20 @@ def length_of_stop(text: str) -> dict:
 
 
 def tour_text(text: str) -> list[TourStop]:
-    """``--tour``'s stops: LISTENER[:still][:LENGTH],... in turn, each in the scene's
-    atmosphere or in still air, for LENGTH phrases of 8 bars (a number), seconds (a
-    number and s, 12s) or to the recording's end (end); a stop without one lasts as
-    long as a stop does by default (:func:`timed_tour`). ValueError for one that does
-    not read."""
+    """``--tour``'s stops: [PIECE/]LISTENER[:still][:LENGTH],... in turn, each in a
+    piece of a recording of several (``IV/conductor``), in the scene's atmosphere or in
+    still air, for LENGTH phrases of 8 bars (a number), seconds (a number and s, 12s)
+    or to the recording's end (end); a stop without one lasts as long as a stop does by
+    default (:func:`timed_tour`). ValueError for one that does not read."""
     stops = []
     for part in text.split(","):
         fields = [field.strip() for field in part.split(":")]
         name, rest = fields[0], fields[1:]
-        given: dict = {"listener": name}
+        piece, slash, listener = name.rpartition("/")
+        given: dict = {"listener": listener.strip()} if slash else {"listener": name}
+        if slash:
+            given["piece"] = piece.strip()
+            name = listener.strip() if piece.strip() else ""
         if rest and rest[0] in ("", *ATMOSPHERES):
             given["atmosphere"] = rest.pop(0) or "scene"
         if rest and rest[0]:
@@ -1520,8 +1669,8 @@ def tour_text(text: str) -> list[TourStop]:
                 rest.append(length)
         if not name or rest:
             raise ValueError(
-                f"--tour takes LISTENER[:still][:LENGTH],... (LENGTH in phrases, as 2, in "
-                f"seconds, as 12s, or end), not {part!r}"
+                f"--tour takes [PIECE/]LISTENER[:still][:LENGTH],... (LENGTH in phrases, as "
+                f"2, in seconds, as 12s, or end), not {part!r}"
             )
         try:
             stops.append(TourStop(**given))
@@ -1535,13 +1684,22 @@ def tour_given(args: argparse.Namespace, scene: Scene) -> list[TourStop] | None:
     (:func:`tour_text`), in its own order, without the stops at listeners
     ``--listeners`` leaves out, as in every demo; else the scene's (``tour``), its stops
     at the listeners ``--listeners`` names in that order (a listener the tour does not
-    visit, in a stop of its own), its end kept; None when neither gives one. ``scene`` is
-    the scene as
-    the run plays it: in its still air, a stop in still air is in its only air."""
+    visit, in a stop of its own), its end kept; None when neither gives one. For a
+    recording of several pieces, the stops of the run's piece alone (:func:`piece_of`),
+    and None for none; there a listener named whom the tour visits in another piece
+    only is heard in that piece, and where the piece's tour visits none of those named,
+    each is heard in a stop of its own. ``scene`` is the scene as the run plays it: in
+    its still air, a stop in still air is in its only air."""
     given = getattr(args, "tour", None)
     stops = tour_text(given) if given else scene.tour
     if stops is None:
         return None
+    every = stops
+    piece = piece_of(args, scene)
+    if piece is not None:  # those of the run's piece
+        stops = [stop for stop in stops if stop.piece in (None, piece)]
+        if not stops:
+            return None
     names = listener_names(getattr(args, "listeners", None))
     if names is not None and given:
         stops = [stop for stop in stops if stop.listener in names]
@@ -1553,11 +1711,13 @@ def tour_given(args: argparse.Namespace, scene: Scene) -> list[TourStop] | None:
         closing = len(stops) > 1 and end.listener == stops[0].listener
         body = stops[:-1] if closing else stops
         runs_out = body[-1].to_end
+        elsewhere = {s.listener for s in every} - {s.listener for s in stops}
         stops = [
             stop
             for name in names
-            for stop in [s for s in body if s.listener == name] or [TourStop(listener=name)]
-        ]
+            for stop in [s for s in body if s.listener == name]
+            or ([] if name in elsewhere else [TourStop(listener=name)])
+        ] or [TourStop(listener=name) for name in names]
         if runs_out:
             unset = {"phrases": None, "seconds": None, "to_end": False}
             stops = [s.model_copy(update=unset) if s.to_end else s for s in stops[:-1]] + [
@@ -1589,7 +1749,7 @@ def tempo_of(args: argparse.Namespace, scene: Scene) -> tuple[float, float] | No
     free = free_of(scene)
     if free is None or free.bpm is None:
         return None
-    file = recordings.file_of(free)
+    file = recordings.file_of(free, piece=piece_of(args, scene))
     played = [v[0] for v in signals_of(args, scene).values() if v is not None]
     return (float(free.bpm), float(free.downbeat_s)) if file in played else None
 
@@ -1599,22 +1759,26 @@ def timed_tour(
     length_s: float,
     tempo: tuple[float, float] | None,
     seconds: float | None = None,
+    share: bool = False,
 ) -> list[tuple[str, float, float]]:
     """(mix, start, end) of each stop in the recording's time, one after another from
     its start: a stop in phrases ends that many phrases of 8 bars (``tempo``: beats a
     minute and the first downbeat, s) after the phrase it starts in, so that the cuts
     fall where the music turns; one in seconds after as many; one to the end at the
     recording's end (``length_s``); one that gives no length after ``seconds``, else
-    SECONDS, and where no stop gives one and the recording is too short for that, each
-    as long, sharing its length out. A stop with no time left is left out, the last one
-    is cut at the end, and stops of one mix in a row are one. ValueError for a stop in
-    phrases without a tempo."""
+    SECONDS, and where no stop gives one and the recording is too short for that, or
+    ``share`` asks for it (a recording whose tours share it out, and no ``seconds``),
+    each as long, sharing its length out. A stop with no time left is left out, the
+    last one is cut at the end, and stops of one mix in a row are one. ValueError for a
+    stop in phrases without a tempo."""
     from acoustic_spaces.demos import music
 
     each = SECONDS if seconds is None else seconds
     if stops and all(s.phrases is None and s.seconds is None and not s.to_end for s in stops):
         shared = length_s / len(stops)
-        if shared < each - 1e-6:
+        if share and seconds is None:
+            each = shared
+        elif shared < each - 1e-6:
             print(f"the piece lasts {length_s:.0f} s: each listener is heard {shared:.1f} s")
             each = shared
     out: list[tuple[str, float, float]] = []
@@ -1684,9 +1848,12 @@ def tour_of(
     args: argparse.Namespace, seats: dict, length_s: float, demo: Demo | None = None
 ) -> list[pipeline.TourStop]:
     """The stops, on the run's timeline (:func:`timeline_of`): on a shared one, the
-    run's tour (:func:`tour_given`, :func:`timed_tour`) where it has one, else
-    :func:`shared_stops`; else :func:`stops_from_start`; for ``--seconds`` or as long
-    as the timeline has them."""
+    run's tour (:func:`tour_given`, :func:`timed_tour`) where it has one, else each
+    listener in turn (as :func:`shared_stops` has them), shared out evenly where the
+    recording's tours share it (:attr:`~acoustic_spaces.recordings.Recording.cut`) and
+    cut at quiet moments where it cuts so (:func:`quiet_cuts`), the last running on as
+    the room rings out (:func:`ringing_out`); else :func:`stops_from_start`; for
+    ``--seconds`` or as long as the timeline has them."""
     entries = responses_of(args, demo)
     names = [name for name in listeners_of(args, entries) if name in seats["seats"]]
     if not names:
@@ -1696,15 +1863,51 @@ def tour_of(
     seconds = None if given is None else float(given)
     if timeline_of(args, seats.get("moving") or []) == "shared":
         scene = scene_of(args)
+        free = free_of(scene)
         tour = tour_given(args, scene)
-        if tour is not None:
-            timed = timed_tour(tour, length_s, tempo_of(args, scene), seconds)
-            keys = list(dict.fromkeys(key for key, _, _ in timed))
-            pipeline.missing_mixes(seats, keys, (demo or DEMO).command("render", args))
-            gains = stops_gains(seats, keys)
-            return [pipeline.TourStop(key, a, a, b, gains[key]) for key, a, b in timed]
-        return shared_stops(names, pipeline.gains_of(seats, names), seconds, length_s)
+        tempo = tempo_of(args, scene) if tour is not None else None
+        stops = tour if tour is not None else [TourStop(listener=name) for name in names]
+        share = free is not None and free.cut is not None and seconds is None
+        timed = timed_tour(stops, length_s, tempo, seconds, share)
+        keys = list(dict.fromkeys(key for key, _, _ in timed))
+        pipeline.missing_mixes(seats, keys, (demo or DEMO).command("render", args))
+        if share and free is not None and free.cut == "quiet":
+            timed = quiet_cuts(timed, stops, seats, run_folder(args) / "seats")
+        timed = ringing_out(timed, seats, length_s)
+        gains = stops_gains(seats, keys) if tour is not None else pipeline.gains_of(seats, keys)
+        return [pipeline.TourStop(key, a, a, b, gains[key]) for key, a, b in timed]
     return stops_from_start(names, seats, pipeline.gains_of(seats, names), seconds)
+
+
+def quiet_cuts(
+    timed: list[tuple[str, float, float]], stops: list[TourStop], seats: dict, folder: Path
+) -> list[tuple[str, float, float]]:
+    """``timed`` (:func:`timed_tour`, its stops ``stops``) with each cut between stops
+    that give no length moved to the quietest moment within
+    :data:`~acoustic_spaces.recordings.QUIET_S` of it (half a stop at most, so that the
+    cuts keep their order), by the loudness of the first stop's mix, so that the cuts
+    fall between phrases."""
+    if len(timed) < 2 or any(s.phrases or s.seconds or s.to_end for s in stops):
+        return timed
+    rate = seats["rate"]
+    env = envelope(read(pipeline.mix_path(folder, seats, timed[0][0]))[0], rate)
+    within = min(recordings.QUIET_S, min(b - a for _, a, b in timed) / 2)
+    cuts = [quiet_moment(env, 0.1, b, within) for _, _, b in timed[:-1]]
+    starts = [timed[0][1], *cuts]
+    ends = [*cuts, timed[-1][2]]
+    return [(key, a, b) for (key, _, _), a, b in zip(timed, starts, ends, strict=True) if b > a]
+
+
+def ringing_out(
+    timed: list[tuple[str, float, float]], seats: dict, length_s: float
+) -> list[tuple[str, float, float]]:
+    """``timed`` with its last stop, where it runs to the recording's end
+    (``length_s``), running on to the end of its mix, so that the room's reverberation
+    after the music dies away as simulated."""
+    if not timed or timed[-1][2] < length_s - 1e-6:
+        return timed
+    key, a, b = timed[-1]
+    return [*timed[:-1], (key, a, max(b, float(seats["seats"][key]["length_s"])))]
 
 
 def stops_gains(seats: dict, keys: list[str]) -> dict[str, float]:
@@ -1813,10 +2016,16 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         seats,
         crossfade_s=CROSSFADE_S,
         fade_out_s=min(FADE_OUT_S, stops[-1].length / 2),
+        peak_db=None,
         scene=args.scene,
     )
+    gain_db = pipeline.peak_gain_db(audio)
+    audio = audio * 10.0 ** (gain_db / 20.0)
     sound = product(args, ".wav")
     write(sound, audio, seats["rate"])
+    # What brought it to its peak, so that the parts of a run of several pieces are
+    # joined at one level.
+    record_run(run_folder(args), peak_gain_db=round(gain_db, 6))
     print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
     if seats.get("shaker"):
         from acoustic_spaces.demos.indoors import tour_shaker
@@ -1848,7 +2057,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         seats["seats"],
         stops,
         playing=fed,
-        credit=args.credit or plays_line(table, free_of(scene), fed),
+        credit=args.credit or plays_line(table, free_of(scene), fed, piece_of(args, scene)),
         tool=pictures.settings_lines(demo, args, data, report),
         fmt=args.format,
         paths={(kind, item.name): knots(item) for kind, item in movers(scene)},
@@ -1857,7 +2066,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         variants=variants,
         room=room,
         hide=hidden(args),
-        sections=sections_heard(table, free_of(scene), fed),
+        sections=sections_heard(table, free_of(scene), fed, piece_of(args, scene)),
     )
     pictures.save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     if moving:
@@ -1887,24 +2096,31 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
 
 
 def sections_heard(
-    table: dict, free: recordings.Recording | None, names: list[str]
+    table: dict, free: recordings.Recording | None, names: list[str], piece: str | None = None
 ) -> tuple[tuple[float, str], ...]:
     """The parts of the free recording in time (its ``sections``), where one of the
-    sources ``names`` plays it; none else."""
-    kept = str(recordings.file_of(free)) if free is not None else None
+    sources ``names`` plays it; for one of several pieces, the piece the run plays
+    (``I. Allegro vivace e con brio``); none else."""
+    kept = str(recordings.file_of(free, piece=piece)) if free is not None else None
     heard = any(v["signal"] == kept for k, v in table["sources"].items() if k in names)
-    return free.sections if free is not None and heard else ()
+    if free is None or not heard:
+        return ()
+    if piece is not None:
+        return ((0.0, f"{piece}. {free.piece(piece).title}"),)
+    return free.sections
 
 
 def plays_line(
     table: dict,
     free: recordings.Recording | None = None,
     names: list[str] | None = None,
+    piece: str | None = None,
 ) -> str:
     """What the sources ``names`` play (None: every one fed), for the stills when
     ``--credit`` says nothing: the credit the free recording's licence asks for, when
-    one of them plays it, and each other file by source."""
-    kept = str(recordings.file_of(free)) if free is not None else None
+    one of them plays it (its piece ``piece``, for one of several), and each other file
+    by source."""
+    kept = str(recordings.file_of(free, piece=piece)) if free is not None else None
     fed = {name: v for name, v in table["sources"].items() if names is None or name in names}
     parts = (
         [free.credit] if free is not None and any(v["signal"] == kept for v in fed.values()) else []
@@ -2004,13 +2220,39 @@ DEMO = Demo(
         Option(
             "tour",
             "the stops the video plays in turn where the timeline is shared, in place of "
-            "the scene's own tour, as LISTENER[:still][:LENGTH],...: a listener, in still "
-            "air with still, for LENGTH phrases of 8 bars of 4 beats (2), seconds (12s) or "
-            "to the recording's end (end); a stop without one lasts --seconds (default: "
-            "the scene's tour, else every listener in turn)",
+            "the scene's own tour, as [PIECE/]LISTENER[:still][:LENGTH],...: a listener, in "
+            "a piece of a recording of several (IV/conductor), in still air with still, for "
+            "LENGTH phrases of 8 bars of 4 beats (2), seconds (12s) or to the recording's "
+            "end (end); a stop without one lasts --seconds, or an even share of the piece "
+            "where the recording shares it out (default: the scene's tour, else every "
+            "listener in turn)",
             None,
             steps=("render", "video"),
             unset="the scene's",
+        ),
+        Option(
+            "piece",
+            "for a recording of several pieces (a symphony's movements): the pieces to play, "
+            "by name (I, IV), each in a part of its own with the tour's stops in it "
+            "(default: each piece the tour stops in, but one that every source that plays "
+            "rests through)",
+            None,
+            "text",
+            steps=("recording", "feeds", "render", "video"),
+            several=True,
+            unset="each the tour plays",
+            each=lambda args: pieces_of(args),
+            one_level=True,
+        ),
+        Option(
+            "zips",
+            "for a recording built from archives (Beethoven's 8th, from the TU Berlin's "
+            "zips): a folder with copies of them downloaded before (movement1.zip, or "
+            "unpacked into movement1/anechoic), read in place of the server",
+            None,
+            "folder",
+            steps=("recording",),
+            unset="none: from the server",
         ),
         Option(
             "last_stop",

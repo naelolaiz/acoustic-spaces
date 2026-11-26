@@ -972,6 +972,10 @@ tour:
 - `atmosphere: still` hears that listener in still air, the scene without its
   atmosphere and `long_term`, simulated beside the scene itself: for an outdoor scene
   whose air bends sound (where the air is still already, it is refused).
+- For a recording of several pieces (a symphony's movements), `piece` names the one a
+  stop is heard in (`{piece: IV, listener: conductor}`); a run plays each piece the
+  tour stops in, in its order, in a part of its own. The stops of a piece that give no
+  length share it out, each cut at its quietest moment within 10 s.
 - A run's `--tour` and `--listeners` give the demo another tour, without changing the
   scene.
 

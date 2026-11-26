@@ -8602,6 +8602,10 @@ msgid "\"Dona nobis pacem\", a choir of 19 singers and an organ"
 msgstr ""
 "\"Dona nobis pacem\", ein Chor aus 19 Sängerinnen und Sängern und eine Orgel"
 
+#: acoustic_spaces/recordings.py
+msgid "Beethoven's Symphony No. 8, an orchestra of 61 players"
+msgstr "Beethovens Sinfonie Nr. 8, ein Orchester aus 61 Musikern"
+
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py
 #, python-brace-format
@@ -9453,13 +9457,17 @@ msgid ""
 "The orchestra of an anechoic recording of Beethoven's Symphony No. 8 on the "
 "stage of the concert hall: 61 sources, one per track, and four seats. The "
 "tracks (TU Berlin, CC BY 4.0, https://doi.org/10.14279/depositonce-6729.2) "
-"are not included: download a movement and mix it at a seat with auralize.sh."
+"are not included: the demo of the scene (acoustic-spaces demo scene.yaml, or "
+"orchestra_demo.py) downloads each movement it plays the first time, or mix "
+"one movement at a seat with auralize.sh."
 msgstr ""
 "Das Orchester einer reflexionsfreien Aufnahme von Beethovens Sinfonie Nr. 8 "
 "auf der Bühne des Konzertsaals: 61 Quellen, eine pro Spur, und vier Plätze. "
 "Die Spuren (TU Berlin, CC BY 4.0, "
-"https://doi.org/10.14279/depositonce-6729.2) sind nicht enthalten: einen "
-"Satz herunterladen und mit auralize.sh für einen Platz mischen."
+"https://doi.org/10.14279/depositonce-6729.2) sind nicht enthalten: Die Demo "
+"der Szene (acoustic-spaces demo scene.yaml oder orchestra_demo.py) lädt "
+"jeden Satz, den sie spielt, beim ersten Mal herunter; oder einen Satz mit "
+"auralize.sh für einen Platz mischen."
 
 #: examples/railway/scene.yaml
 msgctxt "example"

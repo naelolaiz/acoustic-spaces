@@ -64,6 +64,20 @@
   long; its options, its `--tour` and its steps before 4.4.0 still work but `--scene`
   and `--results` (the scenes and results go to the work folder), and its first run
   simulates again.
+- Changed: the orchestra's `orchestra_demo.py` is the demo of its scene: Beethoven's
+  8th is `beethoven_8` in the recordings catalogue, a multitrack recording of three
+  pieces, its movements, each player a source playing their track as recorded and each
+  section a group; its tour is the scene's, each movement a part of the video at one
+  level with the others. Its `--movements` (as `--piece`), `--tour`, `--zips` and
+  `tracks` step still work; its first run simulates again into the work folder, and
+  reads the tracks it downloaded before with `--zips demo/tracks`.
+- Added: in the demo of any scene, a recording of several pieces: `--piece` plays those
+  named, each in a part of its own, by default each the tour visits, but one that every
+  source that plays rests through; a tour's stop names its piece (`IV/conductor`,
+  `piece` in a scene's tour), and the stops that give no length share the piece out,
+  each cut at its quietest moment within 10 s. The parts of one recording's pieces are
+  joined at one level. A last stop that runs to the recording's end runs on as the
+  room's reverberation dies away. A tour that names a listener the scene lacks says so.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

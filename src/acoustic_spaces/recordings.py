@@ -11,7 +11,9 @@ that every scene that names it plays the same file and none fetches it again. A 
 may also have its stems, the parts it was mixed from (:attr:`Recording.stems`): a
 source whose channel names one, or a mix of them (a monitor's), plays it, and
 :func:`get_stems` fetches them the first time one is played, into a folder named
-after the song, lined up with it. The licences ask for a credit:
+after the song, lined up with it. A multitrack recording has a stem per player or
+singer; one of several pieces (a symphony's movements, :attr:`Recording.pieces`) has
+them for each piece, in a folder of its own. The licences ask for a credit:
 :attr:`Recording.credit` is the line a demo's video shows.
 """
 
@@ -68,6 +70,9 @@ STEMS_LAG_S = 5.0
 #: The gated RMS (ITU-R BS.1770) a source's feed has when it plays at its sound power:
 #: a multitrack recording's stems are built or recorded so where they play loudest.
 LEVEL_RMS = 0.1
+#: How far (s) a tour's cut may move to a quieter moment in a recording whose stops cut
+#: so (:attr:`Recording.cut`).
+QUIET_S = 10.0
 #: The stems of the church's "Dona nobis pacem" (built by
 #: :mod:`acoustic_spaces.demos.dona_nobis_pacem`), named after the church's sources
 #: that play them: its 19 singers, by their names in VocalSet, and the two sides of its
@@ -85,6 +90,40 @@ _DONA_STEMS = (
     "organ_pedal_c",
     "organ_pedal_cis",
 )
+#: The stems of Beethoven's 8th symphony (built by
+#: :mod:`acoustic_spaces.demos.beethoven_8`): a track per player of the Orchester Wiener
+#: Akademie, named after the orchestra example's sources that play them, the winds, the
+#: brass and the timpani first, then the strings desk by desk.
+_BEETHOVEN_STEMS = (
+    *("fl1", "fl2", "ob1", "ob2", "cl1", "cl2", "bn1", "bn2"),
+    *("hn1", "hn2", "tp1", "tp2", "timpani"),
+    *(f"vl1_{k:02d}" for k in range(1, 15)),
+    *(f"vl2_{k:02d}" for k in range(1, 12)),
+    *(f"vla_{k:02d}" for k in range(1, 12)),
+    *(f"vc_{k}" for k in range(1, 7)),
+    *(f"db_{k}" for k in range(1, 7)),
+)
+
+
+@dataclass(frozen=True)
+class Piece:
+    """A piece of a recording of several (a movement of a symphony): its stems and its
+    master in a folder of its own (:func:`stems_folder`)."""
+
+    #: The name a tour's stop and ``--piece`` give it by (``I``, ``IV``).
+    name: str
+    #: What it is called (``Allegro vivace e con brio``).
+    title: str
+    #: MB read from the server to fetch it.
+    download_mb: float = 0.0
+    #: The archive its build reads (:attr:`Recording.build`), by its file name
+    #: (``movement1.zip``), that a folder of copies downloaded before may hold in its
+    #: place, or the folder it was unpacked into (:func:`copy_of`).
+    archive: str | None = None
+    #: The stems that rest through the whole piece, as the score has them (the
+    #: Allegretto scherzando of Beethoven's 8th has no trumpets and no timpani): a tour
+    #: of only them leaves the piece out.
+    rests: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -125,18 +164,43 @@ class Recording:
     #: MB read from the server to fetch the stems.
     stems_mb: float = 0.0
     #: For a recording built rather than downloaded as it is: ``module:function``, which
-    #: is called with the recording and the folder (:func:`data_folder` for None) and
-    #: writes its stems and its master there from what it downloads
-    #: (:attr:`download_mb`).
+    #: is called with the recording, the folder (:func:`data_folder` for None) and, for
+    #: one of several pieces, the piece, and writes its stems and its master there from
+    #: what it downloads (:attr:`download_mb`), or, with ``copy``, from a copy of the
+    #: archive of the piece it reads (:attr:`Piece.archive`) downloaded before
+    #: (:func:`copy_of`).
     build: str | None = None
     #: The parts of the music in time: when each starts (s) and what plays in it, as the
     #: still of a stop that starts in it says.
     sections: tuple[tuple[float, str], ...] = ()
+    #: For a recording of several pieces, each with its own stems (a symphony's
+    #: movements), in their order; a demo plays one piece in a run, a tour's stop names
+    #: the piece it is heard in. None: one piece, the recording itself.
+    pieces: tuple[Piece, ...] = ()
+    #: How a tour whose stops give no length shares the music out: None, each stop as
+    #: long as a stop is by default (``--seconds``); ``share``, the piece in even
+    #: shares; ``quiet``, so, each cut moved to the quietest moment within
+    #: :data:`QUIET_S` of where an even share puts it, so that it falls between
+    #: phrases.
+    cut: str | None = None
 
     @property
     def stem_names(self) -> tuple[str, ...]:
         """The names of its stems, in the order :data:`STEM_NAMES` has them."""
         return tuple(name for name, _ in self.stems)
+
+    @property
+    def piece_names(self) -> tuple[str, ...]:
+        """The names of its pieces, in their order; none for a recording of one."""
+        return tuple(piece.name for piece in self.pieces)
+
+    def piece(self, name: str) -> Piece:
+        """The piece called ``name``; KeyError naming those it has."""
+        for piece in self.pieces:
+            if piece.name == name:
+                return piece
+        have = ", ".join(self.piece_names) or "none"
+        raise KeyError(f"{self.name} has no piece {name!r}; it has {have}")
 
     def summary(self) -> str:
         """``Title (kind, licence, N MB download)``: what the editor offers."""
@@ -308,6 +372,23 @@ RECORDINGS = (
             (52.0, "Verse 3: the choir with the organ, quiet"),
         ),
     ),
+    Recording(
+        name="beethoven_8",
+        title=N_("Beethoven's Symphony No. 8, an orchestra of 61 players"),
+        kind="multitrack",
+        licence="CC BY 4.0",
+        credit="Anechoic recording: Orchester Wiener Akademie, cond. Martin Haselböck · TU "
+        "Berlin (Böhm, Ackermann, Weinzierl), CC BY 4.0, doi.org/10.14279/depositonce-6729.2",
+        download_mb=1990,
+        stems=tuple((name, ()) for name in _BEETHOVEN_STEMS),
+        build="acoustic_spaces.demos.beethoven_8:build",
+        pieces=(
+            Piece("I", "Allegro vivace e con brio", 642, "movement1.zip"),
+            Piece("II", "Allegretto scherzando", 605, "movement2.zip", ("tp1", "tp2", "timpani")),
+            Piece("IV", "Allegro vivace", 743, "movement4.zip"),
+        ),
+        cut="quiet",
+    ),
     *(
         Recording(
             name=f"ace_{talker.lower()}",
@@ -361,57 +442,90 @@ def data_folder() -> Path:
     return user_folder(FOLDER, "ACOUSTIC_SPACES_RECORDINGS")
 
 
-def file_of(item: Recording | str, folder: str | Path | None = None) -> Path:
-    """Where the recording's WAV file goes: in ``folder``, or in :func:`data_folder`."""
+def _piece_of(item: Recording, piece: str | None) -> str | None:
+    """The piece of ``item`` meant: ``piece`` (KeyError for one it lacks), its first for
+    None, or None for a recording of one piece."""
+    if not item.pieces:
+        if piece is not None:
+            raise KeyError(f"{item.name} is one piece; it has no piece {piece!r}")
+        return None
+    return item.piece(piece).name if piece is not None else item.pieces[0].name
+
+
+def file_of(
+    item: Recording | str, folder: str | Path | None = None, piece: str | None = None
+) -> Path:
+    """Where the recording's WAV file goes: in ``folder``, or in :func:`data_folder`; for
+    one of several pieces, the master of ``piece`` (its first for None), beside the
+    folder of that piece's stems."""
     item = named(item) if isinstance(item, str) else item
     base = Path(folder) if folder is not None else data_folder()
+    which = _piece_of(item, piece)
+    if which is not None:
+        return stems_folder(item, folder) / f"{which}.wav"
     return base / f"{item.name}.wav"
 
 
 def stems_folder(item: Recording | str, folder: str | Path | None = None) -> Path:
     """The folder a song's stems go in: named after it, in ``folder`` or in
-    :func:`data_folder`."""
+    :func:`data_folder`; a recording of several pieces has a folder in it for each."""
     item = named(item) if isinstance(item, str) else item
     base = Path(folder) if folder is not None else data_folder()
     return base / item.name
 
 
-def stem_file(item: Recording | str, stem: str, folder: str | Path | None = None) -> Path:
-    """Where the song's stem ``stem`` goes (:func:`stems_folder`)."""
-    return stems_folder(item, folder) / f"{stem}.wav"
-
-
-def stems_there(item: Recording | str, folder: str | Path | None = None) -> bool:
-    """Whether every stem of the song is downloaded (one with none has them all)."""
+def stem_file(
+    item: Recording | str, stem: str, folder: str | Path | None = None, piece: str | None = None
+) -> Path:
+    """Where the song's stem ``stem`` goes (:func:`stems_folder`); for a recording of
+    several pieces, that of ``piece`` (its first for None), in the piece's folder."""
     item = named(item) if isinstance(item, str) else item
-    return all(stem_file(item, name, folder).exists() for name in item.stem_names)
+    which = _piece_of(item, piece)
+    folder_of = stems_folder(item, folder)
+    return (folder_of / which if which is not None else folder_of) / f"{stem}.wav"
 
 
-def get_stems(item: Recording | str, folder: str | Path | None = None) -> dict[str, Path]:
+def stems_there(
+    item: Recording | str, folder: str | Path | None = None, piece: str | None = None
+) -> bool:
+    """Whether every stem of the song (of ``piece``, for one of several) is downloaded
+    (one with none has them all)."""
+    item = named(item) if isinstance(item, str) else item
+    return all(stem_file(item, name, folder, piece).exists() for name in item.stem_names)
+
+
+def get_stems(
+    item: Recording | str,
+    folder: str | Path | None = None,
+    piece: str | None = None,
+    archives: str | Path | None = None,
+) -> dict[str, Path]:
     """Every stem of the song as a WAV file (:func:`stem_file`), downloaded, decoded
     and added up from its files unless they are all there already, at the rate of the
     song (:func:`get`, fetched first if it is not there), lined up with it (their sum
     against it, within :data:`STEMS_LAG_S`) and cut or padded to its length, so that a
     stem plays in time with the song and with the others. What they were made from is
-    not kept."""
+    not kept. A recording that is built (:attr:`Recording.build`) is built instead,
+    those of ``piece`` for one of several, from the copies of its archives in
+    ``archives`` where it holds them."""
     from acoustic_spaces.demos import music
     from acoustic_spaces.demos.audio import decoded, resampled, write
 
     item = named(item) if isinstance(item, str) else item
-    paths = {name: stem_file(item, name, folder) for name in item.stem_names}
+    paths = {name: stem_file(item, name, folder, piece) for name in item.stem_names}
     if all(path.exists() for path in paths.values()):
         return paths
     if item.build is not None:
-        _built(item, folder)
+        _built(item, folder, piece, archives)
         return paths
     master, rate = decoded(get(item, folder))
     out = stems_folder(item, folder)
     out.mkdir(parents=True, exist_ok=True)
     stems: dict[str, np.ndarray] = {}
     with tempfile.TemporaryDirectory(dir=out) as parts:
-        with music.Archives() as archives:
+        with music.Archives() as opened:
             for name, files in item.stems:
-                x, got = music.summed(files, Path(parts), archives)
+                x, got = music.summed(files, Path(parts), opened)
                 stems[name] = resampled(x, got, rate)
     stems, lag = lined_up(stems, master, rate)
     print(f"the stems of {item.name} line up with it {lag / rate:+.3f} s later")
@@ -444,16 +558,22 @@ def lined_up(
     return {name: shifted(x, lag, len(master)) for name, x in stems.items()}, lag
 
 
-def get(item: Recording | str, folder: str | Path | None = None) -> Path:
+def get(
+    item: Recording | str,
+    folder: str | Path | None = None,
+    piece: str | None = None,
+    archives: str | Path | None = None,
+) -> Path:
     """The recording as a WAV file in ``folder`` (:func:`data_folder` by default),
-    downloaded and decoded unless it is there already. What it was made from is not
-    kept."""
+    downloaded and decoded unless it is there already; a recording that is built, built
+    (:func:`get_stems`), for one of several pieces that of ``piece``. What it was made
+    from is not kept."""
     from acoustic_spaces import fetch
     from acoustic_spaces.demos import music
     from acoustic_spaces.demos.audio import write
 
     item = named(item) if isinstance(item, str) else item
-    path = file_of(item, folder)
+    path = file_of(item, folder, piece)
     if path.exists():
         return path
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -463,7 +583,7 @@ def get(item: Recording | str, folder: str | Path | None = None) -> Path:
             kept.replace(path)  # fetched under its old name
             return path
     if item.build is not None:
-        _built(item, folder)
+        _built(item, folder, piece, archives)
         return path
     if item.tar is not None:
         url, member = item.tar
@@ -471,8 +591,8 @@ def get(item: Recording | str, folder: str | Path | None = None) -> Path:
         fetch.extract_tar(url, {member: path})
         return path
     with tempfile.TemporaryDirectory(dir=path.parent) as parts:
-        with music.Archives() as archives:
-            x, rate = music.summed(item.files, Path(parts), archives)
+        with music.Archives() as opened:
+            x, rate = music.summed(item.files, Path(parts), opened)
         part = path.with_name(path.name + ".part")
         write(part, x, rate)
         part.replace(path)
@@ -480,13 +600,45 @@ def get(item: Recording | str, folder: str | Path | None = None) -> Path:
     return path
 
 
-def _built(item: Recording, folder: str | Path | None) -> None:
-    """The recording built (:attr:`Recording.build`): its stems and its master."""
+def copy_of(item: Recording | str, piece: str | None, archives: str | Path | None) -> Path | None:
+    """The copy in ``archives`` of the archive the build of ``piece`` reads
+    (:attr:`Piece.archive`), downloaded before: the archive itself, else the folder it
+    was unpacked into (named as it is, without its suffix); None when neither is there,
+    or the piece reads none."""
+    item = named(item) if isinstance(item, str) else item
+    which = _piece_of(item, piece)
+    archive = item.piece(which).archive if which is not None else None
+    if archives is None or archive is None:
+        return None
+    path = Path(archives) / archive
+    if path.is_file():
+        return path
+    unpacked = path.with_suffix("")
+    return unpacked if unpacked.is_dir() else None
+
+
+def _built(
+    item: Recording,
+    folder: str | Path | None,
+    piece: str | None = None,
+    archives: str | Path | None = None,
+) -> None:
+    """The recording built (:attr:`Recording.build`): its stems and its master, of
+    ``piece`` for one of several (its first for None), from the copy of the archive it
+    reads in ``archives`` where that holds one (:func:`copy_of`), passed as ``copy``."""
     import importlib
 
     module, function = (item.build or "").split(":")
-    print(f"building {item.title}")
-    getattr(importlib.import_module(module), function)(item, folder)
+    build = getattr(importlib.import_module(module), function)
+    more: dict = {}
+    which = _piece_of(item, piece)
+    if which is not None:
+        more["piece"] = which
+    copy = copy_of(item, which, archives)
+    if copy is not None:
+        more["copy"] = copy
+    print(f"building {item.title}" + (f", {which}" if which is not None else ""))
+    build(item, folder, **more)
 
 
 __all__ = [
@@ -498,12 +650,15 @@ __all__ = [
     "FOLDER",
     "LEVEL_RMS",
     "NAMES",
+    "QUIET_S",
     "RECORDINGS",
     "STEMS_LAG_S",
     "STEM_NAMES",
     "File",
+    "Piece",
     "Recording",
     "canonical",
+    "copy_of",
     "data_folder",
     "file_of",
     "get",

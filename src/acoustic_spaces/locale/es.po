@@ -8613,6 +8613,10 @@ msgstr "\"Rubidium\", Software-Entwicklungskit"
 msgid "\"Dona nobis pacem\", a choir of 19 singers and an organ"
 msgstr "\"Dona nobis pacem\", un coro de 19 cantantes y un órgano"
 
+#: acoustic_spaces/recordings.py
+msgid "Beethoven's Symphony No. 8, an orchestra of 61 players"
+msgstr "Sinfonía n.º 8 de Beethoven, una orquesta de 61 músicos"
+
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py
 #, python-brace-format
@@ -9460,13 +9464,17 @@ msgid ""
 "The orchestra of an anechoic recording of Beethoven's Symphony No. 8 on the "
 "stage of the concert hall: 61 sources, one per track, and four seats. The "
 "tracks (TU Berlin, CC BY 4.0, https://doi.org/10.14279/depositonce-6729.2) "
-"are not included: download a movement and mix it at a seat with auralize.sh."
+"are not included: the demo of the scene (acoustic-spaces demo scene.yaml, or "
+"orchestra_demo.py) downloads each movement it plays the first time, or mix "
+"one movement at a seat with auralize.sh."
 msgstr ""
 "La orquesta de una grabación anecoica de la Sinfonía n.º 8 de Beethoven "
 "sobre el escenario de la sala de conciertos: 61 fuentes, una por pista, y "
 "cuatro asientos. Las pistas (TU Berlin, CC BY 4.0, "
-"https://doi.org/10.14279/depositonce-6729.2) no se incluyen: descargue un "
-"movimiento y mézclelo en un asiento con auralize.sh."
+"https://doi.org/10.14279/depositonce-6729.2) no se incluyen: la demo de la "
+"escena (acoustic-spaces demo scene.yaml, u orchestra_demo.py) descarga la "
+"primera vez cada movimiento que reproduce, o mezcle un movimiento en un "
+"asiento con auralize.sh."
 
 #: examples/railway/scene.yaml
 msgctxt "example"

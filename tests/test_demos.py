@@ -38,6 +38,7 @@ from acoustic_spaces.demos import (
     product,
     record_run,
     run_folder,
+    scene_demo,
     scripts_of,
     shell_line,
     sibling,
@@ -709,6 +710,33 @@ def test_a_demo_leaves_out_what_is_done_already(tmp_path: Path, capsys) -> None:
     assert ran == ["scene"]
 
 
+def test_an_option_not_given_plays_each_of_the_values_it_finds(tmp_path: Path) -> None:
+    """An option whose values a run that does not give it finds (``Option.each``, as
+    ``--piece`` the pieces the tour visits) plays each in a part of its own, named after
+    it, in the order found; given, it plays what it is given; one value found plays as
+    one value given does."""
+    demo, _ran = _demo(tmp_path)
+    found = ["b", "a"]
+    demo.options.append(
+        Option("piece", "the piece", None, "text", several=True, each=lambda args: found)
+    )
+    args = demo.resolved(demo.defaults())
+    assert args.run_folder.name == "test_binaural"
+    parts = demo.each(args)
+    assert [part.piece for part in parts] == ["b", "a"]
+    assert [part.run_folder.name for part in parts] == [
+        "test_piece-b_binaural",
+        "test_piece-a_binaural",
+    ]
+    given = demo.parser().parse_args(["render", "--piece", "c,a"])
+    assert [part.piece for part in demo.each(given)] == ["c", "a"]
+    assert demo.resolved(given).run_folder.name == "test_piece-c+a_binaural"
+    found[:] = ["a"]
+    (one,) = demo.each(demo.defaults())
+    (alone,) = demo.each(demo.parser().parse_args(["render", "--piece", "a"]))
+    assert one.piece == "a" and one.run_folder.name == alone.run_folder.name
+
+
 def test_a_demo_refuses_an_hrtf_for_another_format(tmp_path: Path) -> None:
     demo, _ran = _demo(tmp_path)
     args = demo.defaults()
@@ -950,7 +978,7 @@ def test_a_caption_leaves_out_a_path_at_its_default_where_the_demo_runs(
     monkeypatch.chdir(copy)  # where the editor runs it
     # The process parses its command line as the script's own Demo.main does.
     values = demo.resolved(demo.parser().parse_args(argv[2:]))
-    assert values.zips == copy and values.work == copy / "demo"
+    assert values.zips == copy and scene_demo.work_of(values) == copy / "demo"
     assert demo.arguments(values, names_only=True) == []
     assert demo.command("all", values, names_only=True) == "python orchestra_demo.py all"
     values.zips = tmp_path / "downloads"

@@ -8,7 +8,10 @@ Each part is an ordinary run, in its own folder with its own ``run.json``
 (:func:`~acoustic_spaces.demos.record_run`), whose video plays here after a title card
 that says what sets it apart and how it was made, as it is, at its own level: every part
 brings its loudest peak to -1 dBFS, so the parts are not comparable in level with each
-other, which the cards say. The joined video is named after the run
+other, which the cards say. Parts that differ only in what is heard at one level
+(:attr:`~acoustic_spaces.demos.Option.one_level`: the movements of a symphony) are
+joined at the level of the loudest of them instead, as their records say what brought
+each to its peak (``peak_gain_db``). The joined video is named after the run
 (``flight_departure+arrival_binaural.mp4``), in the work folder beside the parts', with
 the chapters of every part.
 """
@@ -86,9 +89,23 @@ def shifted_chapter(line: str, offset_s: float) -> str | None:
     return f"{clock(t + offset_s)} {title}"
 
 
-def card_lines(record: dict, k: int, n: int) -> tuple[str, str, list[str]]:
+def one_level(demo: Demo, args: argparse.Namespace, records: Sequence[dict]) -> bool:
+    """Whether the parts of the run with ``args`` (``records``, each part's) are joined at
+    one level: what they differ in is heard so (:attr:`Option.one_level`), and each says
+    what brought it to its peak."""
+    names = {option.name: option for option in demo.options}
+    varying = demo.series_order(args)
+    return (
+        bool(varying)
+        and all(name in names and names[name].one_level for name in varying)
+        and all(isinstance(record.get("peak_gain_db"), (int, float)) for record in records)
+    )
+
+
+def card_lines(record: dict, k: int, n: int, together: bool = False) -> tuple[str, str, list[str]]:
     """What the title card of the ``k``-th of ``n`` parts says: the demo's title, the
-    part's name, and lines on what it plays and how it was made."""
+    part's name, and lines on what it plays and how it was made, and whether it is at
+    its own level or, ``together``, at one with the others (:func:`one_level`)."""
     from acoustic_spaces.demos.pipeline import label_text
 
     parts = _parts(record)
@@ -109,7 +126,10 @@ def card_lines(record: dict, k: int, n: int) -> tuple[str, str, list[str]]:
     if record.get("command"):
         lines.append(f"Run as: {record['command']}")
     lines.append(
-        "At the level of its own video (its loudest peak at -1 dBFS): the parts are not "
+        "At one level with the other parts (the loudest peak of them at -1 dBFS): the parts "
+        "are comparable in level with each other."
+        if together
+        else "At the level of its own video (its loudest peak at -1 dBFS): the parts are not "
         "comparable in level with each other."
     )
     return str(record.get("title") or record["run"]), record["run"], lines
@@ -146,8 +166,12 @@ def join_parts(demo: Demo, args: argparse.Namespace) -> Path:
         f"pad={SIZE[0]}:{SIZE[1]}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={FPS},format=yuv420p"
     )
     sound = f"aresample={RATE},aformat=sample_fmts=fltp:channel_layouts=stereo"
+    together = one_level(demo, args, runs)
+    # At one level: each part turned down by as much as its gain to its peak exceeds the
+    # loudest part's.
+    common = min(float(run["peak_gain_db"]) for run in runs) if together else 0.0
     for k, run in enumerate(runs):
-        title, run_name, lines = card_lines(run, k, len(runs))
+        title, run_name, lines = card_lines(run, k, len(runs), together)
         card = cards / f"{k:02d}_{run_name}.png"
         draw_card(title, run_name, lines).convert("RGB").save(card, optimize=True)
         inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{CARD_S:g}", "-i", str(card)]
@@ -157,7 +181,8 @@ def join_parts(demo: Demo, args: argparse.Namespace) -> Path:
         graph.append(f"[{base}:v]{scale}[c{k}]")
         graph.append(f"[{base + 1}:a]{sound}[s{k}]")
         graph.append(f"[{base + 2}:v]{scale}[v{k}]")
-        graph.append(f"[{base + 2}:a]{sound}[a{k}]")
+        level = f",volume={common - float(run['peak_gain_db']):.6f}dB" if together else ""
+        graph.append(f"[{base + 2}:a]{sound}{level}[a{k}]")
         chapters.append(f"{clock(t)} {k + 1}. {run_name}")
         starts.append((t, run_name))
         t += CARD_S
@@ -211,6 +236,7 @@ __all__ = [
     "clock",
     "draw_card",
     "join_parts",
+    "one_level",
     "part_records",
     "shifted_chapter",
 ]

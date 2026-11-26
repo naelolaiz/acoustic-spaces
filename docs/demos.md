@@ -86,7 +86,8 @@ apart and how it was made, with the chapters of every part, and is named after t
 (`--horn blasts,chord` on the railway when the horn does not sound) play once. Each
 part keeps its own level (each
 brings its loudest peak to -1 dBFS), so the parts are not comparable in level with each
-other, which the cards say. `--series` sets the order of the parts, outermost first, by
+other, which the cards say; the pieces of one recording (`--piece`) are joined at one
+level instead, the loudest peak of them at -1 dBFS. `--series` sets the order of the parts, outermost first, by
 the options' names (`--series format,vehicle` plays both flights binaural, then both
 mono), and with `listeners` in it makes each listener a part of its own (otherwise the
 tour of each part visits them); the run's name then says the order (`series-format-vehicle`).
@@ -222,10 +223,11 @@ sources:
 | `potassium` | "Potassium" by Software-Entwicklungskit, its stereo master ([album](https://github.com/ichbinsoftware/everythingisfree)) | CC0 1.0 | 6 MB |
 | `francium`, `rubidium` | "Francium" and "Rubidium" by Software-Entwicklungskit, electronic, each its stereo master and 6 or 5 stems (the album's own, added up by part) ([album](https://github.com/ichbinsoftware/everythingisfree)) | CC0 1.0 | 7 or 6 MB, stems 35 or 37 MB |
 | `dona_nobis_pacem` | the round "Dona nobis pacem", 19 singers of VocalSet retuned and timed to one score, with an organ from VCSL's samples: multitrack, a stem per singer and per side of the organ's divisions, built the first time from what it is made of ([the church's demo](#a-choir-and-an-organ-in-the-church)) | CC BY 4.0 | 127 MB |
+| `beethoven_8` | Beethoven's Symphony No. 8, its movements `I`, `II` and `IV` played by the 61 players of the Orchester Wiener Akademie, anechoic: multitrack in three pieces, a stem per player as recorded, read out of the TU Berlin's zips ([the orchestra's demo](#an-orchestra-in-the-concert-hall)) | CC BY 4.0 | 2.0 GB (642, 605 and 743 MB) |
 | `ace_f1` to `ace_f5`, `ace_m1` to `ace_m9` | a woman or a man talking, anechoic, about a minute: the 14 talkers of the ACE challenge corpus ([Zenodo](https://doi.org/10.5281/zenodo.6257551)); `speech_male` and `speech_female`, their names before 4.4.0, are still read as `ace_m4` and `ace_f2` | CC BY 4.0 | 16 to 145 MB, read as far as the talk |
 
-They are the songs the lakeside demo plays, the church's choir and organ and the talks of
-the gallery's. A free
+They are the songs the lakeside demo plays, the church's choir and organ, the
+orchestra's symphony and the talks of the gallery's. A free
 recording is kept as one WAV file in the user's data folder (`acoustic-spaces/recordings`
 under `~/.local/share` on Linux, `~/Library/Application Support` on macOS,
 `%LOCALAPPDATA%` on Windows; `ACOUSTIC_SPACES_RECORDINGS` names another), so every
@@ -246,7 +248,16 @@ its stems) and cut to its length; a song without them leaves those sources silen
 with it so in the feeds. A multitrack recording (the church's) has a stem per player or
 singer, at the level each plays at: one gated RMS where it plays loudest, so that a
 source playing its stem as it is plays at its sound power there, and quieter where the
-music is (an organ's quiet verse); its master is the stems added up.
+music is (an organ's quiet verse); its master is the stems added up. The orchestra's
+plays each stem as recorded, so the balance between the players is the recording's.
+A recording of several pieces (the symphony's movements `I`, `II` and `IV`) keeps the
+stems of each in a folder of its own, its master beside it, and a run plays one piece:
+`--piece IV,I` plays those, each in a part of its own, and by default each piece the
+tour visits, in its order, but one that every source that plays rests through (the
+trumpets and the timpani in `II`) unless `--input` gives one of them a file. The parts
+are joined at one level, so the pieces keep their dynamics. A recording built from
+archives reads a copy of the one it needs downloaded before, the archive or the folder
+it was unpacked into, in `--zips FOLDER`, and then downloads nothing.
 `--recording ace_f1` plays another free recording in a run, in place of the scene's
 own, or `--recording song.flac` a file of yours; a source with a speech spectrum that
 plays a talker takes its talker's, a woman's or a man's, so that the levels and the STI
@@ -281,8 +292,9 @@ acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
 ```
 
 - **recording**: downloads the free recording the scene names, unless it is there or
-  no source plays it, or builds it from what it is made of (the church's); the editor's
-  Run demo window says so above Run, with its size.
+  no source plays it, or builds it from what it is made of (the church's, the
+  orchestra's), for a recording of several pieces the run's; the editor's Run demo
+  window says so above Run, with its size.
 - **feeds**: each source's file (its `signal`, or the scene's `recording`), at the
   scene's sample rate, its `channel` or mixed down to mono. A file mixed down is brought
   to one gated RMS (unweighted); its left and right channels share one gain that
@@ -355,7 +367,13 @@ recording of yours, counted from the first downbeat: a stop in phrases ends on a
 phrase's boundary, so the cuts fall where the music turns. With `--listeners`, the
 scene's tour keeps its stops at the listeners named, in that order (one it does not
 visit gets a stop of its own), and a `--tour` given keeps its own order, leaving out
-the stops at the others, as in every demo. Outdoors, where wind or a
+the stops at the others, as in every demo. With a recording of several pieces each stop
+is in one (`--tour I/conductor,IV/stalls-rear`, `piece` in the scene's tour) and a run
+plays the stops of its piece; where none gives a length, the stops share the piece out
+evenly, each cut moved to the quietest moment within 10 s of where the share puts it
+(the lowest half-second RMS of the first stop's mix), as the recording has its tours
+cut. A last stop that runs to the recording's end runs on to the end of its mix, so
+that the room's reverberation dies away as simulated. Outdoors, where wind or a
 temperature profile bends the sound, a stop in still air (`still`) hears its listener
 in a second simulation of the scene without its atmosphere (wind, temperature
 profiles, weather zones, turbulence) and its `long_term` classes, written to `scenes/`
@@ -410,69 +428,81 @@ In Python the demo is `acoustic_spaces.demos.scene_demo`
 `orchestra_demo.py` plays the three movements the TU Berlin's anechoic recording of
 Beethoven's 8th symphony has (one of the [dry recordings to
 try](spatial-audio.md#dry-recordings-to-try); 70 to 85 s of each) in the concert hall
-example, binaurally (use headphones), and makes a video of about four minutes that tours
-its four seats through them: the first
-movement from the middle of the stalls, the front rows and the conductor's podium, the
-second from the back of the hall and the middle, the finale from the podium, the front,
-the back and the middle again. Each of the 61 tracks is one source on the stage, in
-German seating: violins on both sides of the conductor, the winds and brass on risers,
-every player facing the conductor with a directivity that narrows above 1 kHz, horn
-bells pointing back. The `orchestra` example is that scene, with the four seats from the
-conductor's podium to the back of the hall.
+example, binaurally (use headphones), and makes a video that tours its four seats
+through them, each movement a part of it after a title card: the first movement from
+the middle of the stalls, the front rows and the conductor's podium, the second from
+the back of the hall and the middle, the finale from the podium, the front, the back
+and the middle again. Each of the 61 players is one source on the stage, in German
+seating: violins on both sides of the conductor, the winds and brass on risers, every
+player facing the conductor with a directivity that narrows above 1 kHz, horn bells
+pointing back; each section is a group (`Strings/Violins I` to `Percussion/Timpani`).
+It is the [demo of the orchestra's scene](#a-demo-of-any-scene) (`acoustic-spaces demo
+scene.yaml`, This scene in the editor), the scene's own [tour](scenes.md#tour-of-a-demo)
+and all: each player plays their stem of the scene's recording, `beethoven_8` in the
+[catalogue](#a-demo-of-any-scene), a recording of three pieces (`I`, `II` and `IV`),
+which the `recording` step reads the first time (below) and keeps for every scene.
 
 ```sh
 acoustic-spaces examples --copy . orchestra && cd orchestra
-python orchestra_demo.py tracks   # demo/tracks: the 61 tracks of each movement (2.0 GB)
-acoustic-spaces simulate scene.yaml --out results/binaural
-python orchestra_demo.py render   # demo/orchestra_binaural/seats: each stop of the tour (~1 min each)
-python orchestra_demo.py video    # demo/orchestra_binaural.mp4, its sound, stills and thumbnail
+python orchestra_demo.py all        # every step, into demo/ beside the scene
+python orchestra_demo.py recording  # the 61 tracks of each movement (2.0 GB), kept for every scene
+python orchestra_demo.py simulate   # the hall with the orchestra and its four seats
+python orchestra_demo.py render     # each movement at the seats its tour visits
+python orchestra_demo.py video      # demo/scene_binaural.mp4: the movements in turn
 ```
 
-Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement
-take equal shares of it), `--listeners conductor,stalls-rear` (each movement at the
-seats of its tour among them, in that order, or at all of them when it has none of
-them), `--sources Winds` (the players that play, by name, `fl1`, or by section:
-`Strings/Violins I` or `Strings` for all five string sections, `Winds`, `Brass`,
-`Percussion`; the trumpets and the timpani rest through movement II, which a pick of
-only them leaves out), `--zips FOLDER` for a folder with zips downloaded before,
-`--movements 4,1` (the movements played and downloaded, in that order),
-`--format` for another output the simulation wrote (the tour [decodes it to two
-ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `demo/orchestra_binaural_chapters.txt`
-lists the stops' times for a video description. `all` runs tracks, the simulation,
-render and video, leaving out what is there already.
+Its options are the demo of any scene's: `--piece IV,I` (the movements played, in that
+order, each in a part of its own; every one the tour visits by default),
+`--tour I/stalls-middle,I/conductor,II/stalls-rear` (a tour of your own, each stop in a
+movement), `--listeners stalls-rear,conductor` (each movement at the seats of its tour
+among them, in that order, or at all of them when its tour has none of them),
+`--sources Winds` (the players that play, by name, `fl1`, or by section:
+`Strings/Violins I`, or `Strings` for all five string sections, `Winds`, `Brass`,
+`Percussion`; a movement every player picked rests through, as the trumpets and the
+timpani do the second, is left out, unless `--input` gives one of them a file of yours,
+which it plays in every movement), `--zips FOLDER` for a folder with zips downloaded
+before (the example's folder by default), `--format` for another output the simulation
+wrote (the tour [decodes it to two ears](#running-a-demo)), `--no-mp4` for the audio
+and stills only. The simulation keeps every player and seat, so another pick of them
+needs no new one. The script's own command lines still work: `--movements 4,1` reads
+as `--piece IV,I`, its `--tour 1:conductor,2:stalls-rear` as `I/conductor,II/stalls-rear`,
+and its `tracks` step runs as `recording`. `demo/scene_binaural_chapters.txt` lists the
+movements and the stops' times for a video description.
 
-- **The cuts.** Within a movement the seat changes at the quietest moment within 10 s of
-  each equal share's end (the lowest half-second RMS of the first seat's mix), so the
-  cuts fall between phrases, with a 1 s crossfade. Between movements the hall's
-  reverberation dies away (the responses run 3.5 s) and there is a pause of 3 s. Every
-  seat's mix is shifted earlier by the time the orchestra's sound takes to reach it (the
-  peak of the energy of its responses: 10 ms on the podium, 85 ms at the back), so the
-  music runs on across a cut.
-- **One gain for all.** All stops keep one gain (the loudest peak at -1 dBFS): the hall's
-  differences are heard as the simulation gives them, from the podium, 2 m from the
-  first violins, to the back row, and each still says how far below the loudest stop it
-  is. Every source has the same power, so the balance between the instruments is the
-  recording's own.
-- **The pictures.** `make_images.py` draws the cover (the hall from above with the
-  orchestra, the seat and the first reflections from the leader to it, the sections and
-  their numbers), the seating plan and the thumbnail with Pillow (`viz` extra); the
-  demo adds the stop's facts and a bar across the top with the tour, the movements'
-  numerals and the seats, the current stop bright.
+- **The cuts.** Within a movement the seats of its tour take even shares of it, each cut
+  moved to the quietest moment within 10 s of where the share puts it (the lowest
+  half-second RMS of the first seat's mix), so the cuts fall between phrases, with a
+  1 s crossfade. Every seat's mix is shifted earlier by the time the orchestra's sound
+  takes to reach it (the peak of the energy of its responses), so the music runs on
+  across a cut. At a movement's end its last seat runs on as the hall's reverberation
+  dies away (the responses run 3.5 s), then the next movement's title card follows.
+- **One level for all.** The stops of a movement keep one gain, and the movements are
+  joined at one level, the loudest peak of them at -1 dBFS, as the cards say: the
+  hall's differences are heard as the simulation gives them, from the podium, 2 m from
+  the first violins, to the back row, and the movements keep their dynamics. Every
+  source has the same power and plays its track as recorded, so the balance between
+  the instruments is the recording's own.
+- **The pictures** are the demo of any scene's: the hall from above with the seat of the
+  moment, the level there, how long the sound takes to arrive, the reverberation time
+  T30 and the clarity C80 at mid frequencies, and the tour across the top.
 
 One seat and one movement at a time still work as before: `auralize.sh` maps each source
 to its track and calls `auralize` (the mix normalized to -1 dBFS), `make_images.py
---seat stalls-middle --movement 1` draws the pictures and `make_video.sh` puts a
+--seat stalls-middle --movement 1` draws a cover with the sections in their colours, the
+seating plan and a thumbnail with Pillow (`viz` extra), and `make_video.sh` puts a
 scrolling spectrogram of the mix under the cover.
 
 **Recording.** Böhm, Ackermann and Weinzierl, *Beethoven, Symphony No. 8*, TU Berlin,
 <https://doi.org/10.14279/depositonce-6729.2>, CC BY 4.0: movements 1, 2 and 4, 61 mono
-tracks each, in a zip with the movement's mix (590 to 740 MB). `tracks` reads the 61 WAV
-files of each out of its zip on the TU Berlin's server by HTTP range requests, without
-keeping the zip: 640, 600 and 740 MB, 2.0 GB for the three (nearly the whole zip, as the
-blocks of 32 MiB it reads of the last tracks hold the mix), 2.6 GB on disk. It reads
-them out of the zip, or the folder it was unpacked into (`movementN/anechoic`), in
-`--zips` instead, the example's folder by default. Tracks there already are kept, so a
-download cut short goes on where it stopped.
+tracks each, in a zip with the movement's mix (590 to 740 MB). `recording` reads the 61
+WAV files of each movement the run plays out of its zip on the TU Berlin's server by
+HTTP range requests, without keeping the zip: 640, 600 and 740 MB, 2.0 GB for the three
+(nearly the whole zip, as the blocks of 32 MiB it reads of the last tracks hold the
+mix), 2.6 GB on disk, each movement's tracks the stems of its folder (`beethoven_8/I`)
+in the recordings folder, their sum beside it. It reads them out of the zip, or the
+folder it was unpacked into (`movement1/anechoic`), in `--zips` instead, and then
+downloads nothing. Tracks there already are kept, so a download cut short goes on where
+it stopped.
 
 ## A choir and an organ in the church
 

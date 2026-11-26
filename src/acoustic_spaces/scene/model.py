@@ -3180,9 +3180,15 @@ ATMOSPHERES = ("scene", "still")
 
 class TourStop(_Model):
     """A stop of the tour a demo of the scene plays (``tour``): a listener heard for a
-    while as the recording runs on, in the scene's own weather or in still air."""
+    while as the recording runs on, in the scene's own weather or in still air, in one
+    of its pieces for a recording of several."""
 
     listener: str = Field(description="the listener heard")
+    piece: str | None = Field(
+        default=None,
+        description="for a recording of several pieces (a symphony's movements), the "
+        "piece the stop is heard in (I, IV); None: every piece",
+    )
     atmosphere: Literal["scene", "still"] = Field(
         default="scene",
         description="the scene's own, or still air: the scene without its atmosphere "

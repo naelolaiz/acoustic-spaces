@@ -763,6 +763,16 @@ def ears_of(
     return ears
 
 
+#: The peak a tour's sound is brought to (dBFS).
+PEAK_DB = -1.0
+
+
+def peak_gain_db(x: np.ndarray, peak_db: float = PEAK_DB) -> float:
+    """The gain (dB) that brings the peak of ``x`` to ``peak_db``; 0 for silence."""
+    peak = float(np.abs(x).max()) if x.size else 0.0
+    return peak_db - 20.0 * math.log10(peak) if peak > 0 else 0.0
+
+
 def tour_audio(
     stops: Sequence[TourStop],
     folder: Path,
@@ -770,7 +780,7 @@ def tour_audio(
     *,
     crossfade_s: float = 1.0,
     fade_out_s: float = 4.0,
-    peak_db: float | None = -1.0,
+    peak_db: float | None = PEAK_DB,
     scene: str | Path | None = None,
     kind: str | None = None,
 ) -> np.ndarray:
@@ -834,9 +844,8 @@ def tour_audio(
     fade = min(int(fade_out_s * rate), length)
     if fade:
         out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
-    peak = float(np.abs(out).max())
-    if peak > 0 and peak_db is not None and kind is None:
-        out *= 10.0 ** (peak_db / 20.0) / peak
+    if peak_db is not None and kind is None:
+        out *= 10.0 ** (peak_gain_db(out, peak_db) / 20.0)
     return out
 
 

@@ -409,6 +409,16 @@ class Option:
     #: choices (``--recording song.flac``), counted from the demo's folder as a file
     #: option is.
     or_file: bool = False
+    #: For an option that :attr:`varies`: the values a run that does not give it plays
+    #: in turn, each in a part of its own, from the arguments (paths resolved, one of
+    #: everything), as ``--piece`` plays each piece of a recording of several that the
+    #: tour visits; () or None plays its default once.
+    each: Callable[[argparse.Namespace], Sequence[Any]] | None = None
+    #: For an option that :attr:`varies`: whether the parts of a run that differ in it
+    #: alone are joined at one level (:func:`~acoustic_spaces.demos.join.join_parts`),
+    #: the loudest part's peak at -1 dBFS, as the pieces of one recording are, so that
+    #: a symphony's movements keep their dynamics; otherwise each part is at its own.
+    one_level: bool = False
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -1115,16 +1125,33 @@ class Demo:
         outermost."""
         combos: list[dict[str, Any]] = [{}]
         for dim in dims:
-            values = values_of(getattr(args, dim, None))
+            values = self._values(args, dim)
             combos = [combo | {dim: value} for combo in combos for value in values]
         return combos
 
+    def _values(self, args: argparse.Namespace, name: str) -> tuple:
+        """The values of the option ``name`` a run with ``args`` plays in turn: those
+        given, or for one not given whose values a run plays each of (:attr:`Option.each`),
+        those, as the arguments of the first part find them."""
+        value = getattr(args, name, None)
+        option = next((o for o in self.options if o.name == name), None)
+        if value is None and option is not None and option.each is not None:
+            try:
+                found = tuple(option.each(self._single(args)) or ())
+            except (Exception, SystemExit):  # the check says what is wrong
+                found = ()
+            if found:
+                return found
+        return values_of(value)
+
     def _options_given_several(self, args: argparse.Namespace) -> list[str]:
-        """The options given several values in ``args``, by name, in the options' order."""
+        """The options given several values in ``args``, by name, in the options' order,
+        and those not given whose values a run plays each of (:attr:`Option.each`), where
+        there are several."""
         return [
             option.name
             for option in self.options
-            if option.varies and len(values_of(getattr(args, option.name, None))) > 1
+            if option.varies and len(self._values(args, option.name)) > 1
         ]
 
     def varying(self, args: argparse.Namespace) -> list[str]:
@@ -1166,15 +1193,22 @@ class Demo:
         run of one of everything. An option that does not matter with a part's values
         (:attr:`Option.only`) takes its default there, and parts that come out as the
         same run (an option that changes nothing with the sources picked) are played
-        once. One part, the arguments themselves, when the run plays one of everything."""
+        once. An option not given whose values a run plays each of (:attr:`Option.each`)
+        takes them in turn so, or the one there is. One part, the arguments themselves,
+        when the run plays one of everything."""
         base = self._paths(args)
+        for option in self.options:  # one value found for it: the run plays that one
+            if option.each is not None and getattr(base, option.name, None) is None:
+                found = self._values(base, option.name)
+                if len(found) == 1 and found[0] is not None:
+                    setattr(base, option.name, found[0])
         order = self.series_order(base)
         if not order:
             return [base]
         listeners = next((o for o in self.options if o.kind == "listeners"), None)
         given = [d for d in order if d not in (SOURCES_DIM, LISTENERS_DIM)]
         ranks: dict[str, dict[Any, int]] = {
-            dim: {repr(value): k for k, value in enumerate(values_of(getattr(base, dim, None)))}
+            dim: {repr(value): k for k, value in enumerate(self._values(base, dim))}
             for dim in given
         }
         ranks[SOURCES_DIM], ranks[LISTENERS_DIM] = {}, {}

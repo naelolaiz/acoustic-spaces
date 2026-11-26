@@ -19,7 +19,7 @@ from pathlib import Path
 import yaml
 from PIL import Image, ImageDraw
 
-from acoustic_spaces.demos import sibling
+from acoustic_spaces import recordings
 from acoustic_spaces.demos.pictures import (
     BG,
     LINE,
@@ -47,8 +47,6 @@ from acoustic_spaces.demos.pictures import (
 )
 
 HERE = Path(__file__).resolve().parent
-#: The demo, whose sections (``SECTIONS``) the pictures colour.
-orchestra = sibling(__file__, "orchestra_demo")
 HALL_X, HALL_Y, STAGE_X = 32.0, 20.0, 8.0  # the concert hall: 32 x 20 m, stage 8 m deep
 CONDUCTOR = (7.3, 10.0)
 MOVEMENTS = {
@@ -61,7 +59,7 @@ STAGE = (58, 44, 34)
 STAGE_EDGE = (120, 90, 64)
 SEATS = (30, 38, 58)
 
-COLOURS = {  # each section's, by its label (the last part of its group)
+COLOURS = {  # each section's, by its label (the last part of its group), in the legend's order
     "Violins I": (246, 195, 91),
     "Violins II": (245, 152, 87),
     "Violas": (232, 109, 96),
@@ -89,10 +87,7 @@ LABELS = {  # where the seating picture writes each section's name, scene x and 
     "Trumpets": (1.55, 13.55),
     "Timpani": (0.55, 14.6),
 }
-CREDIT = (
-    "Anechoic recording: Orchester Wiener Akademie, cond. Martin Haselböck · TU Berlin "
-    "(Böhm, Ackermann, Weinzierl), CC BY 4.0, doi.org/10.14279/depositonce-6729.2"
-)
+CREDIT = recordings.named("beethoven_8").credit
 
 
 def label_of(group: str) -> str:
@@ -100,9 +95,9 @@ def label_of(group: str) -> str:
     return group.rsplit("/", 1)[-1]
 
 
-def section(name: str) -> tuple[str, tuple[int, int, int]]:
-    """The label and the colour of the section of the player ``name``."""
-    label = label_of(orchestra.section_of(name)[0])
+def section(source: dict) -> tuple[str, tuple[int, int, int]]:
+    """The label and the colour of the section of a player of the scene, by its group."""
+    label = label_of(source["group"])
     return label, COLOURS[label]
 
 
@@ -146,6 +141,7 @@ class Pictures:
         self.players = [
             (s["name"], s["position"], s.get("orientation", {})) for s in scene["sources"]
         ]
+        self.sections = {s["name"]: section(s) for s in scene["sources"]}
         every = [name for name, _, _ in self.players]
         self.heard = set(every if heard is None else heard) & set(every)
         self.played = played or f"{len(self.heard)} anechoic tracks"
@@ -157,7 +153,7 @@ class Pictures:
         self.movement = MOVEMENTS[movement]
         self.counts: dict[str, int] = {}  # of the players heard, by section
         for name in self.heard:
-            label = section(name)[0]
+            label = self.sections[name][0]
             self.counts[label] = self.counts.get(label, 0) + 1
 
     def players_on(self, img, plan, r, halo=True) -> None:
@@ -167,7 +163,7 @@ class Pictures:
             shapes = []
             for name, (x, y, _), _ in self.players:
                 if name in self.heard:
-                    shapes.append((*plan(x, y), r * 2.6, section(name)[1] + (110,)))
+                    shapes.append((*plan(x, y), r * 2.6, self.sections[name][1] + (110,)))
             glow(img, shapes, r * 1.6)
         draw = ImageDraw.Draw(img)
         for name, (x, y, _), orientation in self.players:
@@ -175,7 +171,7 @@ class Pictures:
             if name not in self.heard:
                 draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=MUTED, width=2)
                 continue
-            colour = section(name)[1]
+            colour = self.sections[name][1]
             yaw = math.radians(orientation.get("yaw", 0.0))
             vx, vy = plan.vec(math.cos(yaw), math.sin(yaw))
             draw.line(
@@ -234,8 +230,7 @@ class Pictures:
         head(img, at, forward, left, r, pointer=False, letters=False)
 
     def legend(self, draw, x, y, size, gap) -> int:
-        for _, group, _ in orchestra.SECTIONS:
-            label = label_of(group)
+        for label in COLOURS:
             dot = [x, y + 4, x + size - 6, y + size - 2]
             if self.counts.get(label):
                 draw.ellipse(dot, fill=COLOURS[label])

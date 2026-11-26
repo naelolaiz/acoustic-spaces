@@ -969,183 +969,205 @@ def test_stadium_demo_says_what_plays(tmp_path: Path) -> None:
     assert demo.sounding_of(argparse.Namespace(), table) == ["subs", "vocal_wedges"]
 
 
-def test_orchestra_demo_tour(tmp_path: Path) -> None:
-    """orchestra_demo.py names a track for every source of the orchestra, cuts between
-    seats at the quietest moment near each share's end, and plays the movements one
-    after the other with a pause, each seat's mix shifted earlier by its lag."""
-    demo = _script("orchestra", "orchestra_demo")
-    scene = yaml.safe_load(example_path("orchestra").read_text(encoding="utf-8"))
-    assert {source["name"] for source in scene["sources"]} == set(demo.TRACKS)
-    assert len(set(demo.TRACKS.values())) == len(demo.TRACKS)
-    plays = demo.plays(demo.DEMO.defaults())
-    assert set(plays) == set(demo.TRACKS) and plays["fl1"] == "01_Fl_1.wav of each movement"
-    assert {seat for _, seats in demo.TOUR for seat in seats} == set(demo.TITLES)
-    assert {seat["name"] for seat in scene["listeners"]} == set(demo.TITLES)
-    # A movement of 30 s, quiet from 14 to 16 s: two seats cut there, not at 15.
-    rate = 8000
-    t = np.arange(30 * rate) / rate
-    loud = np.where((t > 14.0) & (t < 16.0), 0.01, 0.5) * np.sin(2 * np.pi * 220 * t)
-    env = demo.envelope(loud, rate)
-    assert 14.0 <= demo.quiet_moment(env, 0.1, 15.0, demo.QUIET_S) <= 16.0
-    assert demo.quiet_moment(env, 0.1, 5.0, 2.0) == pytest.approx(5.0, abs=2.5)
-    work = tmp_path / "demo"
-    args = _demo_args(demo.DEMO, work=work, tour="1:stalls-middle,1:conductor,2:stalls-rear")
-    stereo = np.stack([loud, loud], axis=1)
-    seats = {"rate": rate, "format": "binaural", "gain": 1.0, "seats": {}}
-    for movement, seat in demo.stops_of(args):
-        length = (30 if movement == 1 else 10) * rate
-        key = demo.key_of(movement, seat)
-        demo.write(args.run_folder / "seats" / f"{key}.binaural.wav", stereo[:length], rate)
-        lag = {"conductor": 0.01, "stalls-middle": 0.05, "stalls-rear": 0.08}[seat]
-        seats["seats"][key] = {
-            "movement": movement,
-            "seat": seat,
-            "lag_s": lag,
-            "length_s": length / rate,
-        }
-    tour = demo.tour_of(args, seats)
-    assert [seats["seats"][stop.key]["seat"] for stop in tour] == [
-        "stalls-middle",
-        "conductor",
-        "stalls-rear",
-    ]
-    assert tour[0].start == 0.0 and 14.0 <= tour[0].stop <= 16.0
-    assert tour[1].start == tour[0].stop and tour[1].stop == 30.0
-    assert tour[2].at == pytest.approx(30.0 + demo.PAUSE_S) and tour[2].start == 0.0
-    # The movements are not crossfaded into each other, the seats of one are.
-    assert [stop.joined_before for stop in tour] == [False, True, False]
-    assert [stop.joined_after for stop in tour] == [True, False, False]
-    assert demo.last_of_movement(tour, 1) and not demo.last_of_movement(tour, 0)
-    audio = pipeline.tour_audio(
-        tour,
-        args.run_folder / "seats",
-        seats,
-        crossfade_s=demo.CROSSFADE_S,
-        fade_out_s=demo.FADE_OUT_S,
-    )
-    assert len(audio) == round((30.0 + demo.PAUSE_S + 10.0) * rate)
-    pause = audio[int(30.5 * rate) : int(32.5 * rate)]
-    assert np.abs(pause).max() == 0.0  # between the movements
-    assert np.abs(audio[int(5 * rate) : int(6 * rate)]).max() > 0.4  # playing before the cut
-    assert np.abs(audio[int(20 * rate) : int(21 * rate)]).max() > 0.4  # and after it
-    # The default tour, as it was before --listeners and --sources took part in it.
-    assert demo.stops_of(_demo_args(demo.DEMO, work=work)) == [
-        (movement, seat) for movement, seats in demo.TOUR for seat in seats
-    ]
-    # --listeners: each movement at the seats of its tour among them, in its order, or
-    # at all of them when it has none of them; the seats the scene has in use, by their
-    # names. --tour keeps its own order.
-    picked = _demo_args(demo.DEMO, work=work, listeners="stalls-rear,conductor")
-    assert demo.stops_of(picked) == [
-        (1, "conductor"),
-        (2, "stalls-rear"),
-        (4, "stalls-rear"),
-        (4, "conductor"),
-    ]
-    toured = _demo_args(
-        demo.DEMO, work=work, listeners="stalls-rear,conductor", tour="4:conductor,4:stalls-rear"
-    )
-    assert demo.stops_of(toured) == [(4, "conductor"), (4, "stalls-rear")]
-    front = _demo_args(demo.DEMO, work=work, listeners="stalls-front")
-    assert demo.stops_of(front) == [(1, "stalls-front"), (2, "stalls-front"), (4, "stalls-front")]
-    assert demo.DEMO.listeners(demo.DEMO.resolved(demo.DEMO.defaults())) == [
-        seat["name"] for seat in scene["listeners"]
-    ]
+def test_orchestra_symphony_is_a_recording_of_three_movements() -> None:
+    """Beethoven's 8th, a multitrack recording of the catalogue in three pieces (the
+    movements I, II and IV the TU Berlin recorded, each read out of its zip), a stem for
+    each of the 61 players named after the orchestra's source that plays it, from the
+    track auralize.sh gives that source; the trumpets and the timpani rest through II;
+    the orchestra's sources have their sections as groups, and each plays its stem.
+    Each piece's stems are in a folder of their own, its master beside it."""
+    from acoustic_spaces.demos import beethoven_8
 
-
-def test_orchestra_demo_plays_the_players_it_picks(tmp_path: Path) -> None:
-    """--sources picks the orchestra's players by name or by section (the demo's groups,
-    the scene having none), all 61 by default as before; a run of some mixes their feeds
-    and weights alone, lists them alone for --input, says who plays in its facts, and
-    leaves out a movement they all rest through. --movements picks the movements the
-    run plays, in its order; what neither plays nor exists is refused."""
-    demo = _script("orchestra", "orchestra_demo")
-    scene = yaml.safe_load(example_path("orchestra").read_text(encoding="utf-8"))
-    assert not any(source.get("group") for source in scene["sources"])  # its simulation holds
-    sources = demo.sources(demo.DEMO.defaults())
-    assert sorted(s.name for s in sources) == sorted(demo.TRACKS) and all(s.on for s in sources)
-    groups = [s.group for s in sources]
-    assert list(dict.fromkeys(groups)) == [group for _, group, _ in demo.SECTIONS]
+    item = recordings.named("beethoven_8")
+    assert item.kind == "multitrack" and item.build == f"{beethoven_8.__name__}:build"
+    assert item.piece_names == ("I", "II", "IV") == tuple(beethoven_8.ZIPS)
+    archives = [piece.archive for piece in item.pieces]
+    assert archives == ["movement1.zip", "movement2.zip", "movement4.zip"]
+    assert item.download_mb == pytest.approx(sum(p.download_mb for p in item.pieces), abs=1)
+    assert item.piece("II").rests == ("tp1", "tp2", "timpani") and item.cut == "quiet"
+    assert item.stem_names == tuple(beethoven_8.TRACKS) and len(item.stem_names) == 61
+    script = (EXAMPLES / "orchestra" / "auralize.sh").read_text(encoding="utf-8")
+    pairs = dict(re.findall(r"^\s+(\w+)=(\d\d_\w+\.wav)$", script, re.MULTILINE))
+    assert pairs == beethoven_8.TRACKS
+    orchestra = Scene.from_yaml(example_path("orchestra"))
+    assert orchestra.recording == "beethoven_8"
+    assert {s.name: s.channel for s in orchestra.sources} == {n: n for n in item.stem_names}
+    groups = [s.group for s in orchestra.sources]
     assert groups.count("Strings/Violins I") == 14 and groups.count("Winds/Flutes") == 2
-    work = tmp_path / "demo"
-    # By default every player plays, and the run's name is as it was.
-    every = _demo_args(demo.DEMO, work=work)
-    assert every.run_folder.name == "orchestra_binaural" and len(every.playing) == 61
-    assert set(demo.plays(every)) == set(demo.TRACKS)
-    assert demo.facts_of({"relative_db": 0.0, "lag_s": 0.01}, every.playing)[1] == (
-        "The orchestra reaches you 10 ms after it plays"
-    )
-    # The winds: their feeds and weights alone, from their tracks alone.
-    winds = _demo_args(demo.DEMO, work=work, sources="Winds")
-    assert winds.run_folder.name == "orchestra_Winds_binaural"
-    wind = ["fl1", "fl2", "ob1", "ob2", "cl1", "cl2", "bn1", "bn2"]
-    assert list(winds.playing) == wind and list(demo.plays(winds)) == wind
-    for movement in demo.MOVEMENTS:
-        for name in wind:
-            path = demo.tracks_folder(winds, movement) / demo.TRACKS[name]
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.touch()
-    mixes = pipeline.only_playing(demo.mixes_of(winds), winds)
-    assert len(mixes) == len(demo.stops_of(every)) == 9
-    for mix in mixes:
-        assert list(mix.feeds) == wind and list(mix.weights) == wind
-        assert mix.info["sources"] == wind
-    with pytest.raises(SystemExit, match="no tracks"):
-        demo.mixes_of(every)  # the strings' tracks are not there
-    facts = demo.facts_of({"relative_db": -3.0, "lag_s": 0.0504}, winds.playing)
-    assert facts == [
-        "-3.0 dB(A) against the loudest stop",
-        "The winds reach you 50 ms after they play",
+    assert {group.split("/")[0] for group in groups} == {"Strings", "Winds", "Brass", "Percussion"}
+    lib = Path("lib")
+    assert recordings.stem_file(item, "fl1", lib, "IV") == lib / "beethoven_8" / "IV" / "fl1.wav"
+    assert recordings.file_of(item, lib, "IV") == lib / "beethoven_8" / "IV.wav"
+    assert recordings.file_of(item, lib) == lib / "beethoven_8" / "I.wav"
+    with pytest.raises(KeyError, match="it has I, II, IV"):
+        recordings.file_of(item, lib, "III")
+
+
+def test_orchestra_movements_are_built_from_their_zips(tmp_path: Path, monkeypatch) -> None:
+    """A movement's 61 stems are its tracks as recorded (not the zip's mix), read out of
+    its zip on the TU Berlin's server by range requests, or out of a copy downloaded
+    before (the zip, the folder it was unpacked into, or the tracks as the orchestra's
+    script kept them); its master is their sum; a build cut short goes on where it
+    stopped; an unpacked copy short of a track says so rather than downloading the
+    movement."""
+    from acoustic_spaces.demos import beethoven_8
+    from acoustic_spaces.demos.audio import read, write
+
+    item = recordings.named("beethoven_8")
+    rate, served, tracks = 8000, {}, tmp_path / "tracks"
+    for k, (piece, url) in enumerate(beethoven_8.ZIPS.items()):
+        path = tmp_path / "server" / item.piece(piece).archive
+        path.parent.mkdir(exist_ok=True)
+        with zipfile.ZipFile(path, "w") as archive:
+            for n, track in enumerate(beethoven_8.TRACKS.values()):
+                wav = tracks / piece / track
+                wav.parent.mkdir(parents=True, exist_ok=True)
+                write(wav, np.full(80 + n, (k + 1) * 1e-3 + n * 1e-5), rate)
+                archive.write(wav, f"anechoic/{track}")
+            archive.writestr(f"mix/movement{k}_mix.wav", "the mix")
+        served[url] = path
+    opened: list[tuple[str, int]] = []
+
+    def open_zip(url: str, block: int) -> zipfile.ZipFile:
+        opened.append((url, block))
+        return zipfile.ZipFile(served[url])
+
+    monkeypatch.setattr(beethoven_8.fetch, "open_zip", open_zip)
+    lib = tmp_path / "lib"
+    stems = recordings.get_stems(item, lib, "II")
+    assert opened == [(beethoven_8.ZIPS["II"], beethoven_8.BLOCK)]
+    for name, track in beethoven_8.TRACKS.items():
+        assert stems[name].read_bytes() == (tracks / "II" / track).read_bytes(), name
+    master, got = read(recordings.file_of(item, lib, "II"))
+    played = [read(path)[0][:, 0] for path in stems.values()]
+    assert got == rate and len(master) == 80 + 60
+    assert master[:80, 0] == pytest.approx(sum(x[:80] for x in played), abs=1e-6)
+    # Cut short: the stems left come, those there are kept.
+    stems["vc_3"].unlink()
+    recordings.file_of(item, lib, "II").unlink()
+    kept = stems["fl1"].stat().st_mtime_ns
+    opened.clear()
+    recordings.get(item, lib, "II")
+    assert opened == [(beethoven_8.ZIPS["II"], beethoven_8.BLOCK)]
+    assert stems["vc_3"].exists() and stems["fl1"].stat().st_mtime_ns == kept
+    # Copies downloaded before: the zip, or the folder it was unpacked into.
+    copies = tmp_path / "zips"
+    copies.mkdir()
+    shutil.copyfile(served[beethoven_8.ZIPS["IV"]], copies / "movement4.zip")
+    with zipfile.ZipFile(served[beethoven_8.ZIPS["I"]]) as archive:
+        archive.extractall(copies / "movement1")
+    assert recordings.copy_of(item, "IV", copies) == copies / "movement4.zip"
+    assert recordings.copy_of(item, "I", copies) == copies / "movement1"
+    assert recordings.copy_of(item, "II", copies) is None
+    opened.clear()
+    for piece in ("IV", "I"):
+        stems = recordings.get_stems(item, lib, piece, copies)
+        assert stems["db_6"].read_bytes() == (tracks / piece / "61_Db_6.wav").read_bytes()
+        assert recordings.file_of(item, lib, piece).exists()
+    assert opened == []
+    (copies / "movement1" / "anechoic" / "13_Tp.wav").unlink()
+    recordings.stem_file(item, "timpani", lib, "I").unlink()
+    with pytest.raises(SystemExit, match="has no 13_Tp.wav"):
+        recordings.get_stems(item, lib, "I", copies)
+    assert opened == []
+    # The tracks as the script kept them before 4.4.0 (demo/tracks/movement2).
+    old = tmp_path / "demo" / "tracks"
+    shutil.copytree(tracks / "II", old / "movement2")
+    shutil.rmtree(recordings.stems_folder(item, lib) / "II")
+    recordings.get_stems(item, lib, "II", old)
+    assert opened == [] and recordings.stems_there(item, lib, "II")
+
+
+def test_orchestra_demo_is_a_preset_of_its_scene(tmp_path: Path) -> None:
+    """orchestra_demo.py is the demo of the orchestra's scene: each movement the scene's
+    tour visits in a part of its own, in the tour's order, each at its seats; the
+    script's --movements, --tour (movement:seat), --zips and tracks step still read;
+    --listeners plays each movement at the seats of its tour among those, in their
+    order, or at all of them where its tour has none; a pick of players leaves out a
+    movement they all rest through, unless --input gives one of them a file; a movement
+    or seat the scene lacks is refused; the recording step downloads a movement unless
+    a copy of its zip is in --zips."""
+    demo = _script("orchestra", "orchestra_demo")
+    folder = copy_examples(tmp_path, ["orchestra"])[0].parent
+    parser = demo.DEMO.parser()
+
+    def run(*argv: str) -> argparse.Namespace:
+        given = ["video", "--scene", str(folder / "scene.yaml"), "--work", str(tmp_path / "demo")]
+        return parser.parse_args([*given, *argv])
+
+    def toured(args: argparse.Namespace) -> list[tuple[str, list[str]]]:
+        parts = demo.DEMO.each(args)
+        return [
+            (part.piece, [stop.listener for stop in scene_demo.tour_given(part, run_of(part))])
+            for part in parts
+        ]
+
+    def run_of(part: argparse.Namespace) -> Scene:
+        return scene_demo.scene_of(part)
+
+    every = run()
+    assert demo.DEMO.check(every) is None
+    assert demo.DEMO.resolved(every).run_folder.name == "scene_binaural"
+    tour = [
+        ("I", ["stalls-middle", "stalls-front", "conductor"]),
+        ("II", ["stalls-rear", "stalls-middle"]),
+        ("IV", ["conductor", "stalls-front", "stalls-rear", "stalls-middle"]),
     ]
-    assert demo.who_plays(["fl1"]) == ("1 of the 2 flutes", True)
-    brass = ["hn1", "hn2", "tp1", "tp2", "timpani"]
-    assert demo.who_plays(brass) == ("the brass and the timpani", False)
-    assert demo.who_plays(["fl1", "ob1", "cl1", "bn1", "hn1"]) == ("5 of the 61 players", False)
-    assert pipeline.credited("credit", {"seats": {}}, winds.playing) == "credit"
-    problem = demo.DEMO.check(_demo_args(demo.DEMO, sources="Winds", inputs={"vl1_01": __file__}))
-    assert problem.startswith("--input vl1_01: no such source plays here; it has fl1, fl2")
-    # The timpani rest through movement II: a run of them leaves it out.
-    timpani = _demo_args(demo.DEMO, work=work, sources="Percussion/Timpani")
-    assert [m for m, _ in demo.stops_of(timpani)] == [1, 1, 1, 4, 4, 4, 4]
-    assert demo.movements_of(timpani) == [1, 4]
-    assert demo.DEMO.check(_demo_args(demo.DEMO, sources="Percussion", movements="2")) == (
-        "--sources Percussion: the players it picks rest through movement II, all the tour plays"
-    )
-    # A player --input gives a recording plays it in every movement: none is left out.
-    fed = _demo_args(demo.DEMO, work=work, sources="tp1", inputs={"tp1": __file__})
-    assert [m for m, _ in demo.stops_of(fed)] == [m for m, _ in demo.stops_of(every)]
-    second = _demo_args(demo.DEMO, sources="tp1", inputs={"tp1": __file__}, movements="2")
-    assert demo.DEMO.check(second) is None
-    assert demo.stops_of(second) == [(2, seat) for seat in dict(demo.TOUR)[2]]
-    # A recording for a player who does not play keeps the rest.
-    other = _demo_args(demo.DEMO, sources="tp1,tp2", inputs={"vl1_01": __file__})
-    assert 2 not in [m for m, _ in demo.stops_of(other)]
-    # Each section family in turn: a part each, named after it.
-    turns = demo.DEMO.resolved(_demo_args(demo.DEMO, work=work, sources_play="in-turn"))
-    assert turns.run_folder.name == "orchestra_each-source_binaural"
-    assert [part.run_folder.name for part in turns.series_parts] == [
-        f"orchestra_{family}_binaural" for family in ("Strings", "Winds", "Brass", "Percussion")
+    assert toured(every) == tour
+    assert [part.run_folder.name for part in demo.DEMO.each(every)] == [
+        f"scene_piece-{piece}_binaural" for piece in ("I", "II", "IV")
     ]
-    # --movements: those movements alone, in its order, downloaded, mixed and toured.
-    some = _demo_args(demo.DEMO, work=work, movements="4,1")
-    assert some.run_folder.name == "orchestra_movements-4+1_binaural"
-    assert demo.movements_of(some) == [4, 1]
-    assert demo.stops_of(some) == [
-        *((4, seat) for seat in dict(demo.TOUR)[4]),
-        *((1, seat) for seat in dict(demo.TOUR)[1]),
+    (first,) = [part for part in demo.DEMO.each(every) if part.piece == "IV"]
+    title = recordings.named("beethoven_8").title
+    plays = scene_demo.plays(first)
+    assert len(plays) == 61 and plays["fl1"] == f"{title}, IV, its fl1 stem"
+    # The script's options and steps.
+    old = run("--movements", "4,1", "--tour", "1:conductor,4:stalls-rear,4:conductor")
+    assert old.piece == ("IV", "I") and old.tour == "I/conductor,IV/stalls-rear,IV/conductor"
+    assert toured(old) == [("IV", ["stalls-rear", "conductor"]), ("I", ["conductor"])]
+    assert demo.DEMO.defaults().zips == Path(".")
+    assert demo.DEMO.step("tracks").name == "recording"
+    # --listeners: the seats of each movement's tour among them, or all of them.
+    picked = run("--listeners", "stalls-rear,conductor")
+    assert toured(picked) == [
+        ("I", ["conductor"]),
+        ("II", ["stalls-rear"]),
+        ("IV", ["stalls-rear", "conductor"]),
     ]
-    assert (
-        demo.DEMO.step("tracks").downloads(some).startswith("the 61 tracks of movements IV and I")
+    assert toured(run("--listeners", "stalls-front"))[1] == ("II", ["stalls-front"])
+    # Some players: by section, the movements they all rest through left out.
+    winds = run("--sources", "Winds")
+    wind = ["bn1", "bn2", "cl1", "cl2", "fl1", "fl2", "ob1", "ob2"]
+    assert sorted(demo.DEMO.each(winds)[0].playing) == wind
+    assert [piece for piece, _ in toured(winds)] == ["I", "II", "IV"]
+    assert [piece for piece, _ in toured(run("--sources", "Percussion/Timpani"))] == ["I", "IV"]
+    wav = tmp_path / "take.wav"
+    wav.write_bytes(b"")
+    fed = run("--sources", "tp1", "--input", f"tp1={wav}")
+    assert [piece for piece, _ in toured(fed)] == ["I", "II", "IV"]
+    assert demo.DEMO.check(run("--piece", "II", "--sources", "Brass/Trumpets")) == (
+        "II: every source that plays rests through it (tp1, tp2); pick others (--sources), "
+        "or give one a file of yours (--input)"
     )
-    for given, refused in [
-        ({"movements": "3"}, "--movements 3: the recording has the movements 1, 2, 4"),
-        ({"movements": "first"}, "--movements takes the movements' numbers (1, 2, 4), not 'first'"),
-        ({"movements": "2", "tour": "1:conductor"}, "--movements 2: the tour (--tour) plays none"),
-        ({"tour": "1:balcony"}, "--tour 1:balcony: no such seat here; it has conductor, "),
-        ({"tour": "3:conductor"}, "--tour 3:conductor: the recording has the movements 1, 2, 4"),
-        ({"sources": "Choir"}, "--sources Choir: no such source or group here"),
+    for argv, refused in [
+        (("--movements", "3"), "--piece 3: beethoven_8 has the pieces I, II, IV"),
+        (("--tour", "3:conductor"), "the tour's stop at conductor is in the piece '3'"),
+        (("--tour", "1:balcony"), "the tour stops at 'balcony': no such listener here"),
+        (("--zips", str(tmp_path / "none")), "--zips: no folder"),
     ]:
-        assert demo.DEMO.check(_demo_args(demo.DEMO, **given)).startswith(refused), given
+        assert refused in demo.DEMO.check(run(*argv)), argv
+    # The download, but for a movement whose zip is in --zips.
+    step = demo.DEMO.step("recording")
+    (one,) = demo.DEMO.each(run("--piece", "II"))
+    assert step.downloads(one) == (
+        f"what II of {title} is built from (CC BY 4.0, 605 MB), built into its 61 stems and "
+        "kept for every scene"
+    )
+    zips = tmp_path / "zips"
+    zips.mkdir()
+    (zips / "movement2.zip").write_bytes(b"")
+    (copied,) = demo.DEMO.each(run("--piece", "II", "--zips", str(zips)))
+    assert step.downloads(copied) is None
 
 
 def test_orchestra_pictures_show_the_players_that_play() -> None:
@@ -1168,55 +1190,6 @@ def test_orchestra_pictures_show_the_players_that_play() -> None:
         every.cover().tobytes()
         != pictures.Pictures(scene, "stalls-middle", 1, heard=winds).cover().tobytes()
     )
-
-
-def test_orchestra_demo_downloads_the_tracks(tmp_path: Path, monkeypatch) -> None:
-    """orchestra_demo.py's tracks come from the TU Berlin's server, the 61 of each
-    movement, not the zip's mix; a zip downloaded before (--zips) is read instead,
-    a download cut short goes on where it stopped, and the step says what it would
-    download until the tracks are there."""
-    demo = _script("orchestra", "orchestra_demo")
-    served = {}
-    for movement, (_, _, name) in demo.MOVEMENTS.items():
-        path = tmp_path / "server" / f"{name}.zip"
-        path.parent.mkdir(exist_ok=True)
-        with zipfile.ZipFile(path, "w") as archive:
-            for track in demo.TRACKS.values():
-                archive.writestr(f"anechoic/{track}", f"{name} {track}")
-            archive.writestr(f"mix/{name}_mix.wav", "the mix")
-        served[demo.ZIPS[movement]] = path
-    opened: list[tuple[str, int]] = []
-
-    def open_zip(url: str, block: int) -> zipfile.ZipFile:
-        opened.append((url, block))
-        return zipfile.ZipFile(served[url])
-
-    monkeypatch.setattr(demo.fetch, "open_zip", open_zip)
-    work, zips = tmp_path / "demo", tmp_path / "zips"
-    args = _demo_args(demo.DEMO, work=work, zips=zips)
-    step = demo.DEMO.step("tracks")
-    server = "from the TU Berlin's server"
-    assert step.downloads(args) == f"the 61 tracks of movements I, II and IV {server} (2.0 GB)"
-    zips.mkdir()
-    shutil.copyfile(served[demo.ZIPS[2]], zips / "movement2.zip")
-    assert step.downloads(args) == f"the 61 tracks of movements I and IV {server} (1.4 GB)"
-    args.movements = "2"
-    assert step.downloads(args) is None
-    args.movements = None
-    demo.tracks(args)
-    assert opened == [(demo.ZIPS[1], demo.BLOCK), (demo.ZIPS[4], demo.BLOCK)]
-    assert step.done(args) and step.downloads(args) is None
-    for _, _, name in demo.MOVEMENTS.values():
-        folder = work / "tracks" / name
-        assert sorted(path.name for path in folder.iterdir()) == sorted(demo.TRACKS.values())
-        assert (folder / "01_Fl_1.wav").read_text(encoding="utf-8") == f"{name} 01_Fl_1.wav"
-    # Cut short: the tracks left come, from where they came before.
-    (work / "tracks" / "movement1" / "05_Cl_1.wav").unlink()
-    (work / "tracks" / "movement2" / "13_Tp.wav").unlink()
-    assert step.downloads(args) == f"the 61 tracks of movement I {server} (at most 642 MB)"
-    opened.clear()
-    demo.tracks(args)
-    assert opened == [(demo.ZIPS[1], demo.BLOCK)] and step.done(args)
 
 
 def test_stadium_pictures_show_the_crowd() -> None:

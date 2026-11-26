@@ -11,6 +11,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from acoustic_spaces.demos import (
@@ -445,3 +446,50 @@ def test_the_parts_of_a_run_play_in_one_video(tmp_path: Path, capsys) -> None:
         "flight_departure_binaural",
         "flight_arrival_binaural",
     ]
+
+
+def _rms_db(path: Path, start_s: float, end_s: float) -> float:
+    """The RMS (dB) of the sound of a video between two times."""
+    out = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path), "-ss", f"{start_s}", "-to", f"{end_s}",
+         "-ac", "1", "-ar", "48000", "-f", "f32le", "-"],
+        check=True,
+        capture_output=True,
+    ).stdout  # fmt: skip
+    x = np.frombuffer(out, dtype=np.float32).astype(float)
+    return 10.0 * np.log10(np.mean(x**2))
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
+def test_the_movements_of_a_symphony_are_joined_at_one_level(tmp_path: Path) -> None:
+    """Parts that differ only in the piece of one recording (``--piece``, heard at one
+    level) are joined at the level of the loudest: each turned down by as much as its
+    own gain to its peak exceeds the loudest part's, which the cards say; parts of
+    another series keep their own level, whatever their records say."""
+    pytest.importorskip("PIL")
+    from acoustic_spaces.demos.join import one_level
+
+    scene = copy_examples(tmp_path, ["orchestra"])[0]
+    demo = load(scene.parent / "orchestra_demo.py").at(scene.parent)
+    args = demo.resolved(demo.parser().parse_args(["video", "--piece", "I,II"]))
+    first, second = args.series_parts
+    records = []
+    for part, gain in ((first, 6.0), (second, 0.0)):  # the first played 6 dB quieter
+        folder, video = run_folder(part), product(part, ".mp4")
+        folder.mkdir(parents=True, exist_ok=True)
+        _video(video, 2.0, 440)
+        record = {"run": folder.name, "parts": [list(p) for p in demo.run_parts(part)]}
+        record_run(folder, **record, video=video.name, length_s=2.0, peak_gain_db=gain)
+        records.append(record | {"peak_gain_db": gain})
+    assert one_level(demo, args, records)
+    out = join_parts(demo, args)
+    quiet, loud = _rms_db(out, 4.5, 5.5), _rms_db(out, 10.5, 11.5)
+    assert loud - quiet == pytest.approx(6.0, abs=0.3)
+    assert "comparable in level with each other" in card_lines(records[0], 0, 2, True)[2][-1]
+    assert not one_level(demo, args, [{"run": "a"}, {"run": "b"}])  # no gain recorded
+    airport = copy_examples(tmp_path, ["airport"])[0]
+    flight = load(airport.parent / "flight_demo.py").at(airport.parent)
+    flights = flight.resolved(
+        flight.parser().parse_args(["video", "--vehicle", "departure,arrival"])
+    )
+    assert not one_level(flight, flights, records)
