@@ -2245,19 +2245,19 @@ class EdgeDiffraction:
         # it fades out past the end, and the end's own edge takes the path round it
         # (end_fades), on the dark side where the path round the end is found and on the
         # lit side where its reflection point leaves the face past the end, or lies on
-        # another face in the face's plane. Not a reflection off a face whose plane the
-        # source side or the listener side lies in or behind, which is not a wave of its
-        # own there (as the edge fade has it): with the source in the plane of a wall,
-        # its term is the incident wave's once more, and counted it would take that wave
-        # off the paths a second time beside the wall's far end.
+        # another face in the face's plane. Not a reflection off a face of a solid whose
+        # plane the source side lies in or behind, which is no wave of its own there (as
+        # the edge fade has it): with the source in the plane of a wall, the wall's
+        # "reflection" is the incident wave once more, and counted, its term at the far
+        # end of the wall would take that wave off the paths a second time. (A screen's
+        # faces along a way through edges in a row are the incident wave's, _in_line.)
         tol = _TOLERANCE * self.size
-        rho_r = r2 * sin_beta
+        solid = n < 2.0 - 1e-9
         cannot = np.column_stack(
             [
                 np.zeros(len(edge), dtype=bool),
-                (c["rho_s"] * np.sin(c["phi_s"]) <= tol) | (rho_r * np.sin(c["phi_r"]) <= tol),
-                (c["rho_s"] * np.sin(n * np.pi - c["phi_s"]) <= tol)
-                | (rho_r * np.sin(n * np.pi - c["phi_r"]) <= tol),
+                solid & (c["rho_s"] * np.sin(c["phi_s"]) <= tol),
+                solid & (c["rho_s"] * np.sin(n * np.pi - c["phi_s"]) <= tol),
             ]
         )
         counted = (lit == (found >= 0)) | (near[:, None] & ~cannot)
@@ -2696,7 +2696,11 @@ class EdgeDiffraction:
             * loss
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
-        counted = (lit1 == (has1 >= 0))[:, :, None] & (lit2 == (has2 >= 0))[:, None, :]
+        # Near an end that fades, a term counts whether the path over the other edge alone
+        # is there or not, as a path over one edge does there (_single).
+        counted = ((lit1 == (has1 >= 0)) | near[0][0][:, None])[:, :, None] & (
+            (lit2 == (has2 >= 0)) | near[1][0][:, None]
+        )[:, None, :]
         # Where the first edge's wave is lit, the path continues the path over the second
         # edge alone, and its waves at the second edge are one with that path's; and
         # likewise where the second edge's wave is lit. Where both are, both paths over
