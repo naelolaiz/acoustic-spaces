@@ -72,6 +72,7 @@ from typing import Any
 import numpy as np
 
 from acoustic_spaces.emission import Emission
+from acoustic_spaces.engine.response import LATE_ARRAYS, Deferred
 from acoustic_spaces.engine.simulate import SimulationResult, simulate
 from acoustic_spaces.materials.bands import resolution_of
 from acoustic_spaces.parameters import EventLevels, event_levels
@@ -915,10 +916,41 @@ def simulate_movement(
         late_from=mixing,
         share_waves=[copy.name for copy in added["sources"]],
     )
+    if not mixing:
+        # Where a place mixes others' late parts, it reads them from what they were traced
+        # in, which stays whole however the places hold theirs.
+        _held_where_heard(result)
     turning = {name: paths[name] for name in sorted(tracked)}
     return Movement(
         room, times, result, copies, late_places, bool(with_doppler), turning, with_doppler
     )
+
+
+def _whole(kept: np.ndarray, first: int, shape: tuple[int, ...]) -> np.ndarray:
+    """An array of zeros of ``shape``, its time slots (the last axis) ``first`` on those
+    of ``kept``."""
+    whole = np.zeros(shape, dtype=kept.dtype)
+    whole[..., first : first + kept.shape[-1]] = kept
+    return whole
+
+
+def _held_where_heard(result: SimulationResult) -> None:
+    """Has each response of ``result`` hold its late arrays from the first time slot with
+    energy in any of them to the last, made whole as they are read (a
+    :class:`~acoustic_spaces.engine.response.Deferred`): they read as they were. A movement
+    holds a response for every listener at every place, and a mover far off hears nothing
+    of its late part for seconds (the stadium's helicopter, 600 m out, for 1.8 s of 4)."""
+    for response in result:
+        for name in LATE_ARRAYS:
+            held = vars(response).get(name)
+            if not isinstance(held, np.ndarray) or not held.size:
+                continue
+            slots = held.shape[-1]
+            used = np.flatnonzero(held.reshape(-1, slots).any(axis=0))
+            first, end = (int(used[0]), int(used[-1]) + 1) if used.size else (0, 0)
+            if end - first < slots:
+                kept = np.array(held[..., first:end])
+                setattr(response, name, Deferred(partial(_whole, kept, first, held.shape)).field())
 
 
 def render_movement(
@@ -934,11 +966,12 @@ def render_movement(
     | None = None,
     leads: Mapping[str, float] | None = None,
     listeners: Sequence[str] | None = None,
+    dtype: type = np.float64,
 ) -> dict[str, np.ndarray]:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
     pair) played through the movement, as heard at every listener in use (those of
-    ``listeners`` alone, when given): each as
-    (samples, channels) in format ``fmt`` (default mono; mono through each listener's
+    ``listeners`` alone, when given): each as (samples, channels) of ``dtype`` (each mixed
+    in 64-bit floats) in format ``fmt`` (default mono; mono through each listener's
     microphone when it has a pattern) at ``sample_rate`` (default: the simulation's), all
     of one length and, as in :func:`render_trajectory`, each signal scaled by its source's
     sound power against the loudest one's unless ``equal_power``. A pair
@@ -1096,7 +1129,7 @@ def render_movement(
         if turning is not None:
             ears = FieldToEars(HEAD_ORDER, rate, hrtf=fmt.at(rate))
             out = ears.run(out, head=lambda t, path=turning: tuple(path.at(t)[1]))[:length]
-        outputs[listener] = out
+        outputs[listener] = out.astype(dtype, copy=False)
     return outputs
 
 

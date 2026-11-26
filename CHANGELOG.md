@@ -229,6 +229,11 @@
   `demos.passby_pictures`, `demos.rail.TrainVehicle`, `demos.siren`'s police car, fire
   engine and honking car, `demos.helicopter.Helicopter` and `demos.aircraft.Aircraft`.
   What a scene's models need of them stays.
+- Changed: a movement (`simulate_movement`) with every place traced for its late part
+  holds each response's late arrays from the first time slot with energy to the last,
+  read back as they were (the stadium's helicopter 600 m out: half of them), and
+  `render_movement` gives its mixes in the `dtype` asked for, the demo of any scene's in
+  32-bit floats as it writes them.
 - Added: `engine.diffraction.diffract` takes the plane sequences the early stage tested
   (`candidates`) and then adds the terms that make paths fade at edges, as a simulation
   does; without them it is the edge diffraction alone, as before.

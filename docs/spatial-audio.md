@@ -408,7 +408,8 @@ From Python: `simulate_movement(room)`, `render_movement(movement, signals, fmt)
 dict of each listener's sound; `followers` plays more signals along a source's
 trajectory that many seconds behind it, as the points of a train behind its front,
 each with its own Doppler, and `leads` has a source heard that much after its
-trajectory is at each place), `save_movement(rendered, "heard.wav", rate, fmt)` and
+trajectory is at each place; `dtype=np.float32` gives the sounds in 32-bit floats, each
+mixed in 64-bit ones), `save_movement(rendered, "heard.wav", rate, fmt)` and
 `animate_movement(room, movement, "heard.mp4")`. In the editor, the Movement panel
 edits the keyframes, previews every mover along one timeline and renders the movement
 in the background (see [Graphical editor](editor.md)).

@@ -467,6 +467,36 @@ def test_a_mover_is_one_copy_per_distinct_place(monkeypatch: pytest.MonkeyPatch)
     assert seen == [place_name("w", j, movement.times[k]) for j, k in enumerate(places)]
 
 
+def test_a_movement_holds_each_late_part_where_it_has_energy() -> None:
+    """With every place traced for its late part, each response of a movement holds its
+    late arrays from the first time slot with energy to the last alone, and reads them
+    as the simulation of the same scene gives them; the mixes come out in the dtype
+    asked for, as the 64-bit ones round."""
+    from acoustic_spaces.engine.response import LATE_ARRAYS, Deferred
+
+    walk = {"to": [[5.0, 1.0, 1.5]], "speed_m_s": 2.0}
+    scene = _scene(
+        sources=[{"name": "s", "position": [7.0, 5.0, 1.5]}],
+        listeners=[_walker(walk), {"name": "seat", "position": [2.0, 4.0, 1.2]}],
+        simulation={**QUICK, "late": {"rays": 2000, "batches": 2}},
+    )
+    movement = simulate_movement(Room.from_scene(scene), step_m=1.0, late_step_m=None)
+    again = simulate(movement.result.room, settings=movement.result.settings)
+    held = 0
+    for key, response in movement.result.responses.items():
+        for name in LATE_ARRAYS:
+            np.testing.assert_array_equal(getattr(response, name), getattr(again[key], name))
+            held += isinstance(vars(response)[name], Deferred)
+    assert held >= 3 * len(movement.result)  # late, directional and batches; no moments
+    rate = 8000
+    signal = np.random.default_rng(0).standard_normal(rate // 2)
+    wide = render_movement(movement, {"s": signal}, sample_rate=rate)
+    narrow = render_movement(movement, {"s": signal}, sample_rate=rate, dtype=np.float32)
+    for name, x in narrow.items():
+        assert x.dtype == np.float32
+        np.testing.assert_array_equal(x, wide[name].astype(np.float32))
+
+
 def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
     """A walk with Doppler moving alone plays in a movement as in a walk of its own: at
     each listener, the same places, each early path through its changing delay and the

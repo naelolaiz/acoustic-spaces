@@ -2840,6 +2840,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
         followers=followers,
         leads=leads,
         listeners=names,
+        dtype=np.float32,  # as the mixes are written
     )
     times, places = movement.times, movement.places
     now_and_then = {
