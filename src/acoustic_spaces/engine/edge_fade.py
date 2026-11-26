@@ -177,6 +177,8 @@ _MAX_CROSSED = 8
 #: a strip or a square, and edges further out add under 0.1.
 _LEVELS = 9.0
 _LEVEL_STEP = 0.1
+#: The polygons :func:`_ellipses_covered` takes at once, to bound its memory.
+_POLYGONS_AT_ONCE = 16
 
 
 class EdgeFade:
@@ -198,6 +200,9 @@ class EdgeFade:
                 )
         self.tolerance = _TOLERANCE * diffraction.size
         self._bisector = self.edges.bisector()
+        # _joint_weights by its inputs, for the listener of the last terms() call: the
+        # paths' explaining and their products ask for the same ones.
+        self._joint: dict = {}
         # The geometric plane of each face of each edge (TraceModel.geometric_plane): the
         # edges a path meets in a plane are those with a face there, whichever of the
         # planes in one place holds it (two walls facing opposite ways, and a panel in
@@ -797,6 +802,7 @@ class EdgeFade:
         hand_back()  # what the last listener's pieces left
         listener = np.asarray(listener, dtype=float)
         self._bent = None
+        self._joint = {}
         if bent is not None:
             # With the edge diffraction's paths that carry too little to be among them.
             unheard = self.d.unheard
@@ -1445,9 +1451,19 @@ class EdgeFade:
         between = (j[None] > events[:, :1]) & (j[None] < events[:, 1:])
         between &= np.arange(planes.shape[1])[None] < geometry["order"][path][:, None]
         count = between.sum(axis=1)
+        # What a weight depends on: the points, the edges and the planes between.
+        keys = [
+            (point[i].tobytes(), *edge[i].tolist(), *planes[i][between[i]].tolist())
+            for i in range(n)
+        ]
+        known, fresh = self._joint, {}
+        for i, key in enumerate(keys):
+            if key not in known and key not in fresh:
+                fresh[key] = i
+        new = np.array(sorted(fresh.values()), dtype=np.int64)
         flat = wavelength.reshape(-1)
-        for m in np.unique(count).tolist():
-            rows = np.flatnonzero(count == m)
+        for m in np.unique(count[new]).tolist():
+            rows = new[count[new] == m]
             seqs = planes[rows][between[rows]].reshape(len(rows), m)
             orders = itertools.permutations(range(m)) if m <= _ALL_ORDERS else _swaps(m)
             for order in [tuple(range(m)), *(o for o in orders if o != tuple(range(m)))]:
@@ -1464,6 +1480,10 @@ class EdgeFade:
                     start[sel], end[sel], seqs[ok][:, list(order)], edge[sel], flat
                 )
                 out[sel] = np.maximum(out[sel], weight.reshape(len(sel), *wavelength.shape))
+        for key, i in fresh.items():
+            known[key] = out[i].copy()
+        for i, key in enumerate(keys):
+            out[i] = known[key]
         return out
 
     def _joint_path(self, start, end, seqs, edge, wavelength) -> np.ndarray:
@@ -1513,7 +1533,7 @@ class EdgeFade:
         cover, so that it changes smoothly as the reflection moves: a half at a straight
         edge through the reflection point, 0.97 for a strip half the first zone wide
         round it, where the share of the zone's area would be 0.61."""
-        from acoustic_spaces.geometry.outdoor import _disk_area, _fresnel_ellipses
+        from acoustic_spaces.geometry.outdoor import _fresnel_ellipses
 
         model, edges = self.model, self.edges
         normal = model.plane_normal[plane]
@@ -1552,14 +1572,11 @@ class EdgeFade:
 
         def area(polygons, rows):
             """(r, J + 1) the area of each ellipse of the frequencies ``rows`` that the
-            polygons (k, s, 2) cover, 0 at level 0."""
+            convex polygons (k, s, 2) cover, 0 at level 0."""
             out = np.zeros((len(rows), len(levels) + 1))
             if len(polygons) == 0 or len(rows) == 0:
                 return out
-            shifted = polygons[None, None] - centre[rows][:, :, None, None]
-            mapped = np.einsum("fjab,fjksb->fjksa", inverse[rows], shifted)
-            covered = _disk_area(mapped.reshape(-1, *polygons.shape[1:]))
-            covered = covered.reshape(len(rows), len(levels), len(polygons)).sum(axis=-1)
+            covered = _ellipses_covered(polygons, centre[rows], axes[rows], inverse[rows])
             out[:, 1:] = covered * size[rows]
             return out
 
@@ -2890,6 +2907,45 @@ def _visible(triangles, start, end, out, reach, tolerance) -> list[np.ndarray]:
     for polygon in held:
         groups.setdefault(len(polygon), []).append(polygon)
     return [np.stack(group) for _, group in sorted(groups.items())]
+
+
+def _ellipses_covered(polygons, centre, axes, inverse) -> np.ndarray:
+    """(r, J) the share of the unit disk, times pi, that the convex ``polygons`` (k, s, 2)
+    cover of each ellipse x = ``centre`` + ``axes`` v, |v| <= 1 (centres (r, J, 2), axes
+    and their ``inverse`` (r, J, 2, 2)), added over the polygons: pi for an ellipse inside
+    a polygon and none for one clear of it, by the polygon's sides; the exact area
+    (:func:`~acoustic_spaces.geometry.outdoor._disk_area`) for the others."""
+    from acoustic_spaces.geometry.outdoor import _disk_area
+
+    out = np.zeros(centre.shape[:2])
+    # |axes^T n|^2 = n^T Q n with Q = axes axes^T, for the ellipse's reach along n.
+    q00 = axes[..., 0, 0] ** 2 + axes[..., 0, 1] ** 2
+    q01 = axes[..., 0, 0] * axes[..., 1, 0] + axes[..., 0, 1] * axes[..., 1, 1]
+    q11 = axes[..., 1, 0] ** 2 + axes[..., 1, 1] ** 2
+    cx, cy = centre[..., 0, None, None], centre[..., 1, None, None]
+    q00, q01, q11 = q00[..., None, None], q01[..., None, None], q11[..., None, None]
+    for first in range(0, len(polygons), _POLYGONS_AT_ONCE):
+        part = polygons[first : first + _POLYGONS_AT_ONCE]
+        side = np.roll(part, -1, axis=1) - part  # (k, s, 2)
+        turn = np.sum(part[..., 0] * side[..., 1] - part[..., 1] * side[..., 0], axis=1)
+        outward = np.stack([side[..., 1], -side[..., 0]], axis=-1)
+        outward *= np.where(turn >= 0.0, 1.0, -1.0)[:, None, None]
+        length = np.linalg.norm(outward, axis=-1)
+        real = length > 0.0
+        outward = np.where(real[..., None], outward / np.where(real, length, 1.0)[..., None], 0.0)
+        # A side of no length bounds nothing: n . x = 0 <= 1 everywhere.
+        offset = np.where(real, np.einsum("ksa,ksa->ks", outward, part), 1.0)
+        nx, ny = outward[..., 0], outward[..., 1]  # (k, s)
+        middle = cx * nx + cy * ny  # (r, J, k, s)
+        spread = np.sqrt(np.maximum(q00 * nx**2 + 2.0 * q01 * nx * ny + q11 * ny**2, 0.0))
+        inside = np.all(middle + spread <= offset, axis=-1)  # (r, J, k)
+        clear = np.any(middle - spread >= offset, axis=-1)
+        out += np.pi * inside.sum(axis=-1)
+        f, j, k = np.nonzero(~inside & ~clear)
+        if len(f):
+            mapped = np.einsum("nab,nsb->nsa", inverse[f, j], part[k] - centre[f, j][:, None])
+            np.add.at(out, (f, j), _disk_area(mapped))
+    return out
 
 
 def _in_triangles(points, triangles, tolerance) -> np.ndarray:
