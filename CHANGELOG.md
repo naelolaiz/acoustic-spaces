@@ -23,6 +23,10 @@
   walks and the one who looks round, who now turns by keyframes in the scene; its
   options and steps before 4.4.0 still work, its first run simulates again, and every
   example talker speaks at normal vocal effort.
+- Added: a scene's `tour` (each stop a listener, for phrases of the recording, seconds
+  or to its end, in the scene's weather or in still air); in the demo of any scene,
+  `--tour` (no longer another name for `--listeners`), `--atmosphere still`, `--bpm`
+  and `--downbeat`.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

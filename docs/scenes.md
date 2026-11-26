@@ -938,6 +938,27 @@ sources:
   The editor's Movement panel edits keyframes in a table and along a timeline (see
   [Graphical editor](editor.md)).
 
+## Tour of a demo
+
+A scene may say the tour its [demo](demos.md#a-demo-of-any-scene) plays: which
+listener is heard when, and for how long, while the recording runs on.
+
+```yaml
+tour:
+  - {listener: front, phrases: 2}                     # two phrases of the recording
+  - {listener: back, atmosphere: still, seconds: 12}  # in still air, for 12 s
+  - {listener: front, to_end: true}                   # to the recording's end
+```
+
+- Each stop names a listener of the scene and one length at most: `phrases` of 8 bars
+  of 4 beats at the recording's tempo, `seconds`, or `to_end`; one without a length
+  lasts the run's `--seconds` (20 s by default).
+- `atmosphere: still` hears that listener in still air, the scene without its
+  atmosphere and `long_term`, simulated beside the scene itself: for an outdoor scene
+  whose air bends sound (where the air is still already, it is refused).
+- A run's `--tour` and `--listeners` give the demo another tour, without changing the
+  scene.
+
 ## Air, response length and seed
 
 ```yaml

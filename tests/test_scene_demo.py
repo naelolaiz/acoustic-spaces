@@ -574,9 +574,10 @@ def test_a_tour_reads_its_stops_and_cuts_them_where_the_music_turns() -> None:
     or in still air, for phrases (a number), seconds (12s) or to the end; anything else
     is refused with the form. The stops follow one another from the recording's start:
     one in phrases ends on a phrase's boundary counted from the first downbeat, one in
-    seconds after as many, one to the end at the end, one that says nothing a phrase
-    (a recording with a tempo), ``--seconds`` or 20 s; stops of one mix in a row are
-    one, a stop with no time left is left out and the last is cut at the end."""
+    seconds after as many, one to the end at the end, one that gives no length after
+    ``--seconds`` or 20 s, or, where none gives one and the recording is too short for
+    that, each as long; stops of one mix in a row are one, a stop with no time left is
+    left out and the last is cut at the end."""
     stops = scene_demo.tour_text("near:2, far:still:12s,far::end, near")
     assert [(s.listener, s.atmosphere, s.phrases, s.seconds, s.to_end) for s in stops] == [
         ("near", "scene", 2.0, None, False),
@@ -594,14 +595,17 @@ def test_a_tour_reads_its_stops_and_cuts_them_where_the_music_turns() -> None:
         ("near", 0.0, 32.5),  # the upbeat and two phrases
         ("far.still", 32.5, 44.5),
         ("far", 44.5, 48.5),  # to the end of the phrase it starts in
-        ("near", 48.5, 64.5),  # a phrase
+        ("near", 48.5, 68.5),  # 20 s
     ]
     assert scene_demo.timed_tour(tour, 80.0, tempo, 10.0)[-1] == ("near", 48.5, 58.5)
+    assert scene_demo.timed_tour(tour, 60.0, tempo)[-1] == ("near", 48.5, 60.0)  # cut
     short = scene_demo.tour_text("near:15s,far:0.25")  # ends at the next boundary
     assert scene_demo.timed_tour(short, 80.0, tempo)[-1] == ("far", 15.0, 16.5)
     joined = scene_demo.tour_text("near:5s,near:5s,far:end,near")
     assert scene_demo.timed_tour(joined, 30.0, None) == [("near", 0.0, 10.0), ("far", 10.0, 30.0)]
-    assert scene_demo.timed_tour(scene_demo.tour_text("near"), 12.0, None) == [("near", 0.0, 12.0)]
+    plain = scene_demo.tour_text("near,far")  # as --listeners plays them: shared out
+    assert scene_demo.timed_tour(plain, 30.0, tempo) == [("near", 0.0, 15.0), ("far", 15.0, 30.0)]
+    assert scene_demo.timed_tour(plain, 60.0, tempo)[-1] == ("far", 20.0, 40.0)
     with pytest.raises(ValueError, match="no tempo"):
         scene_demo.timed_tour(scene_demo.tour_text("near:2"), 80.0, None)
     # A listener's stop in still air plays at the gain of the same listener in the
@@ -665,8 +669,27 @@ def test_a_tour_is_refused_where_it_cannot_play(tmp_path: Path) -> None:
     assert "--downbeat is for a recording of yours" in check("--downbeat", "0.5")
     assert "positive" in check("--tour", "far:2", "--bpm", "0")
     assert check("--atmosphere", "still", "--tour", "far:still") is None
+    assert "--tour stops at none of the listeners" in check("--tour", "near", "--listeners", "far")
+    # --listeners: the scene's tour in the order it gives, a listener it does not visit in
+    # a stop of its own; a --tour given in its own order, without the stops left out.
     data = yaml.safe_load(scene.read_text(encoding="utf-8"))
-    data["listeners"].append(walker)
+    data["tour"] = [{"listener": "far", "seconds": 5.0}, {"listener": "near", "phrases": 1}]
+    data["listeners"].append({"name": "edge", "position": [0, 15, 1.5]})
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+    def tour(*argv: str) -> list[tuple[str, float | None]]:
+        resolved = _run(scene, *argv)[1]
+        stops = scene_demo.tour_given(resolved, scene_demo.scene_of(resolved))
+        return [(stop.listener, stop.seconds or stop.phrases) for stop in stops]
+
+    assert tour() == [("far", 5.0), ("near", 1.0)]
+    assert tour("--listeners", "near,edge,far") == [("near", 1.0), ("edge", None), ("far", 5.0)]
+    assert tour("--tour", "edge:3s,far,near", "--listeners", "near,edge") == [
+        ("edge", 3.0),
+        ("near", None),
+    ]
+    del data["tour"]
+    data["listeners"][-1] = walker
     scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     assert "a tour plays on a shared timeline" in check("--tour", "near,far")
     assert "while walker moves" in check("--tour", "far:still", "--timeline", "shared")

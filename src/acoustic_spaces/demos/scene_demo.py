@@ -761,6 +761,8 @@ def tour_problem(args: argparse.Namespace, scene: Scene, moving: list[str]) -> s
         return str(exc)
     if stops is None:
         return None
+    if not stops:
+        return f"--tour stops at none of the listeners --listeners names ({args.listeners})"
     shared = timeline_of(args, moving) == "shared"
     if not shared:
         return (
@@ -1188,8 +1190,8 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
 def tour_text(text: str) -> list[TourStop]:
     """``--tour``'s stops: LISTENER[:still][:LENGTH],... in turn, each in the scene's
     atmosphere or in still air, for LENGTH phrases of 8 bars (a number), seconds (a
-    number and s, 12s) or to the recording's end (end); a stop without one as long as
-    the tour's stops are by default (:func:`timed_tour`). ValueError for one that does
+    number and s, 12s) or to the recording's end (end); a stop without one lasts as
+    long as a stop does by default (:func:`timed_tour`). ValueError for one that does
     not read."""
     stops = []
     for part in text.split(","):
@@ -1223,16 +1225,19 @@ def tour_text(text: str) -> list[TourStop]:
 
 def tour_given(args: argparse.Namespace, scene: Scene) -> list[TourStop] | None:
     """The tour of a run where nothing moves or the timeline is shared: ``--tour``'s
-    (:func:`tour_text`), else the scene's (``tour``), the stops at the listeners
-    ``--listeners`` names in its order (a listener the tour does not visit, in a stop
-    of its own); None when neither gives one. ``scene`` is the scene as the run plays it:
-    in its still air, a stop in still air is in its only air."""
+    (:func:`tour_text`), in its own order, without the stops at listeners
+    ``--listeners`` leaves out, as in every demo; else the scene's (``tour``), its stops
+    at the listeners ``--listeners`` names in that order (a listener the tour does not
+    visit, in a stop of its own); None when neither gives one. ``scene`` is the scene as
+    the run plays it: in its still air, a stop in still air is in its only air."""
     given = getattr(args, "tour", None)
     stops = tour_text(given) if given else scene.tour
     if stops is None:
         return None
     names = listener_names(getattr(args, "listeners", None))
-    if names is not None:
+    if names is not None and given:
+        stops = [stop for stop in stops if stop.listener in names]
+    elif names is not None:
         stops = [
             stop
             for name in names
@@ -1274,36 +1279,40 @@ def timed_tour(
     its start: a stop in phrases ends that many phrases of 8 bars (``tempo``: beats a
     minute and the first downbeat, s) after the phrase it starts in, so that the cuts
     fall where the music turns; one in seconds after as many; one to the end at the
-    recording's end (``length_s``); one that says nothing after ``seconds``, else a phrase
-    when the recording has a tempo, else SECONDS. A stop with no time left is left out,
-    the last one is cut at the end, and stops of one mix in a row are one. ValueError
-    for a stop in phrases without a tempo."""
+    recording's end (``length_s``); one that gives no length after ``seconds``, else
+    SECONDS, and where no stop gives one and the recording is too short for that, each
+    as long, sharing its length out. A stop with no time left is left out, the last one
+    is cut at the end, and stops of one mix in a row are one. ValueError for a stop in
+    phrases without a tempo."""
     from acoustic_spaces.demos import music
 
+    each = SECONDS if seconds is None else seconds
+    if stops and all(s.phrases is None and s.seconds is None and not s.to_end for s in stops):
+        shared = length_s / len(stops)
+        if shared < each - 1e-6:
+            print(f"the piece lasts {length_s:.0f} s: each listener is heard {shared:.1f} s")
+            each = shared
     out: list[tuple[str, float, float]] = []
     t = 0.0
     for stop in stops:
         if t >= length_s - 1e-9:
             break
-        phrases = stop.phrases
-        if phrases is None and stop.seconds is None and not stop.to_end and seconds is None:
-            phrases = 1.0 if tempo is not None else None
         if stop.to_end:
             end = length_s
-        elif phrases is not None:
+        elif stop.phrases is not None:
             if tempo is None:
                 raise ValueError(
-                    f"the tour's stop at {stop.listener} lasts {phrases:g} phrases, and the "
-                    "recording has no tempo: give it seconds (12s), or the tempo (--bpm)"
+                    f"the tour's stop at {stop.listener} lasts {stop.phrases:g} phrases, and "
+                    "the recording has no tempo: give it seconds (12s), or the tempo (--bpm)"
                 )
             phrase = music.phrase_s({"bpm": tempo[0]})
             first = tempo[1]
             n = max(math.floor((t - first) / phrase + 1e-6), 0)
-            end = first + (n + phrases) * phrase
+            end = first + (n + stop.phrases) * phrase
             if end <= t + 1e-6:
                 end = first + (n + 1) * phrase
         else:
-            end = t + (stop.seconds or seconds or SECONDS)
+            end = t + (stop.seconds or each)
         end = min(end, length_s)
         key = stop_key(stop)
         if out and out[-1][0] == key:
@@ -1386,17 +1395,12 @@ def stops_gains(seats: dict, keys: list[str]) -> dict[str, float]:
 def shared_stops(
     names: list[str], gains: dict[str, float], seconds: float | None, length_s: float
 ) -> list[pipeline.TourStop]:
-    """The stops of a shared timeline: each listener of ``names`` in turn for
-    ``seconds`` (SECONDS when None) while the piece runs on, crossfaded into the next; a
-    piece too short for that (``length_s``) shares its length out."""
-    seconds = SECONDS if seconds is None else seconds
-    each = min(seconds, length_s / len(names))
-    if each < seconds - 1e-6:
-        print(f"the piece lasts {length_s:.0f} s: each listener is heard {each:.1f} s")
-    return [
-        pipeline.TourStop(name, k * each, k * each, (k + 1) * each, gains[name])
-        for k, name in enumerate(names)
-    ]
+    """The stops of a shared timeline without a tour: each listener of ``names`` in
+    turn for ``seconds`` (SECONDS when None) while the piece runs on, crossfaded into
+    the next; a piece too short for that (``length_s``) shares its length out
+    (:func:`timed_tour`)."""
+    timed = timed_tour([TourStop(listener=name) for name in names], length_s, None, seconds)
+    return [pipeline.TourStop(key, a, a, b, gains[key]) for key, a, b in timed]
 
 
 def stops_from_start(
@@ -1658,11 +1662,10 @@ DEMO = Demo(
         Option(
             "tour",
             "the stops the video plays in turn where the timeline is shared, in place of "
-            "the scene's tour (Tour on the scene's page), as LISTENER[:still][:LENGTH],...: "
-            "a listener, in still air with still, for LENGTH phrases of 8 bars (2), seconds "
-            "(12s) or to the end (end); a stop without one lasts --seconds, or a phrase "
-            "when the recording has a tempo (default: the scene's tour, else every "
-            "listener in turn)",
+            "the scene's own tour, as LISTENER[:still][:LENGTH],...: a listener, in still "
+            "air with still, for LENGTH phrases of 8 bars of 4 beats (2), seconds (12s) or "
+            "to the recording's end (end); a stop without one lasts --seconds (default: "
+            "the scene's tour, else every listener in turn)",
             None,
             steps=("render", "video"),
             unset="the scene's",

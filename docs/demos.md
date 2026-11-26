@@ -254,6 +254,7 @@ acoustic-spaces demo scene.yaml feeds           # one step: feeds, simulate, ren
 acoustic-spaces demo scene.yaml --seconds 15 --listeners front,back --hrtf me.sofa
 acoustic-spaces demo scene.yaml --moving none   # every mover standing where it starts
 acoustic-spaces demo scene.yaml --recording ace_f1 --vocal-effort raised,loud
+acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
 ```
 
 - **recording**: downloads the free recording the scene names, unless it is there or
@@ -271,13 +272,14 @@ acoustic-spaces demo scene.yaml --recording ace_f1 --vocal-effort raised,loud
 - **simulate**: `acoustic-spaces simulate` on the scene, its binaural output through the
   HRTFs the scene's binaural output names, `--hrtf` instead, or the spherical head
   model when neither names any. A scene changed since its results is simulated again.
-- **render**: every listener in use (or those `--listeners` names, in its order;
-  `--tour`, its earlier name, still works) hearing every source that plays (or those
-  `--sources` picks, by name or by the scene's group), with one gain for all, so that the listeners' differences in level are heard as they are.
+- **render**: every listener in use (or those `--listeners` names, in its order)
+  hearing every source that plays (or those `--sources` picks, by name or by the
+  scene's group), with one gain for all, so that the listeners' differences in level
+  are heard as they are.
 - **video**: its sound hears each listener in turn, on the run's `--timeline`. On a
   `shared` one (where nothing moves, by default) each is heard for `--seconds` (20 by
-  default) while the recordings run on, crossfading between them; a recording too short
-  for every listener shares its length out. On a `per-listener` one (where something
+  default), or as the tour has it (below), while the recordings run on, crossfading between them; a recording too short for every listener shares
+  its length out. On a `per-listener` one (where something
   moves, by default) each is heard from the clock's start, for `--seconds` or until what
   moves is over for it (every moving source arrived, or the listener itself) and 3 s
   more, or 20 s where nothing moves for it, faded out and 1 s before the next, so that
@@ -298,6 +300,26 @@ acoustic-spaces demo scene.yaml --recording ace_f1 --vocal-effort raised,loud
   `--credit` puts a line about the recordings on the stills (who made them, their
   licence); without it the line gives the free recording's credit, when one plays, and
   says which source plays which other file.
+
+**Tour.** On a `shared` timeline the video visits the listeners as the scene's
+[tour](scenes.md#tour-of-a-demo) has them, or as `--tour` gives them in a run:
+`--tour front:2,back:still:12s,front:end` hears front for two phrases, back in still
+air for 12 s, then front to the recording's end. A stop lasts phrases of 8 bars of 4
+beats (a number), seconds (`12s`) or to the end (`end`), and one that gives no length
+`--seconds`. Phrases go by the tempo of the free recording that plays (a song in the
+table above), or `--bpm` and `--downbeat` (when its first downbeat falls, s) for a
+recording of yours, counted from the first downbeat: a stop in phrases ends on a
+phrase's boundary, so the cuts fall where the music turns. With `--listeners`, the
+scene's tour keeps its stops at the listeners named, in that order (one it does not
+visit gets a stop of its own), and a `--tour` given keeps its own order, leaving out
+the stops at the others, as in every demo. Outdoors, where wind or a
+temperature profile bends the sound, a stop in still air (`still`) hears its listener
+in a second simulation of the scene without its atmosphere (wind, temperature
+profiles, weather zones, turbulence) and its `long_term` classes, written to `scenes/`
+(`scene_still-air.yaml`); it plays at the gain of the same listener in the scene's
+weather, so that the difference the weather makes is heard as simulated, and its still
+says so. `--atmosphere still` plays the whole run in still air. A stop in still air
+needs a run where nothing moves, and a scene whose air bends sound.
 
 **Movement.** Sources and listeners whose [trajectory](scenes.md#trajectories) is on
 move along it while the recordings play, all on one clock from their start, as
