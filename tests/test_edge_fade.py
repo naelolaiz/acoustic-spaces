@@ -335,6 +335,53 @@ def test_a_path_over_two_edges_takes_the_order_its_reflections_come_in(tmp_path:
     assert np.allclose(joint.reshape(1, -1), weights[1])
 
 
+def test_a_wall_of_another_room_in_the_plane_holds_no_zone() -> None:
+    """In the bar and dining room joined by an archway in a thick wall, the bar's long
+    wall lies in the plane of the dining room's, on the far side of the wall between
+    them. A reflection off the dining room's wall gives back what that wall and its
+    images in the walls it meets at the inside corners hold of the zone, and nothing
+    of the bar's wall, which the wall between them hides: as much as with the bar's
+    wall left out, and at 8 kHz what the whole plane would. Counting both made it 2,
+    twice the whole plane's, at 8 kHz."""
+    room = Room.from_yaml(EXAMPLES / "archway" / "scene.yaml")
+    model = TraceModel.from_room(room)
+    source = np.array([12.6, 6.4, 1.6])
+    diffraction = EdgeDiffraction(
+        model,
+        source,
+        speed_of_sound=room.speed_of_sound(),
+        air=np.zeros(BANDS),
+        mode="second_order",
+        edges=find_edges(model),
+        coherent=BANDS,
+    )
+    fade = EdgeFade(diffraction, early_stage.exhaustive_candidates(model, source, 2))
+    wall = int(
+        np.flatnonzero(
+            np.isclose(model.plane_normal[:, 1], 1.0) & np.isclose(model.plane_offset, 0.0)
+        )[0]
+    )
+    edges = diffraction.edges
+    upright = np.isclose(edges.start[:, 0], 10.4) & np.isclose(edges.end[:, 0], 10.4)
+    jamb = np.flatnonzero(upright & np.isclose(edges.start[:, 1], 3.0))[:1]
+    own = np.concatenate([jamb, jamb])
+    wavelength = (2.0 * np.pi / diffraction.wavenumber).reshape(-1)
+    at, before, after = (16.25, 0.0, 1.427), (10.4, 3.0, 1.53), (26.0, 5.0, 1.25)
+    args = (wall, np.array(at), np.array(before), np.array(after), own, wavelength)
+    share = fade._zone_share(*args)
+    faces = np.flatnonzero(np.isin(model.face_plane, fade._in_place(wall)))
+    bar = faces[model.room.mesh.triangles[faces][:, :, 0].max(axis=1) < 10.2]
+    assert len(bar) and len(bar) < len(faces)
+    transparent = model.transparent.copy()
+    try:
+        model.transparent[bar] = True
+        alone = fade._zone_share(*args)
+    finally:
+        model.transparent[:] = transparent
+    assert np.allclose(share, alone, atol=1e-9)
+    assert np.abs(share[-8:] - 1.0).max() < 0.02
+
+
 def test_diffract_adds_the_fade_with_the_plane_sequences(tmp_path: Path) -> None:
     """``diffract`` with the plane sequences the early stage tested adds the fade's terms
     to the edge diffraction's, as a simulation does; without them it is the edge

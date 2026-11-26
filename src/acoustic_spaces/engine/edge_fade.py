@@ -1566,13 +1566,15 @@ class EdgeFade:
         faces = np.flatnonzero(np.isin(model.face_plane, self._in_place(plane)))
         faces = faces[~model.transparent[faces]]
         faces = faces[_facing(model, faces, np.broadcast_to(before, (len(faces), 3)))]
-        triangles, beyond = self._held(plane, faces, before, 4.0 * reach)
-        corners = local(triangles)[..., :2]  # (f, 3, 2)
-        near = np.all(corners.min(axis=1) <= reach, axis=1)
-        near &= np.all(corners.max(axis=1) >= -reach, axis=1)
-        held = [corners[near]]
-        if len(beyond):
-            held.append(local(beyond)[..., :2])
+        triangles, sides = self._held(plane, faces, before)
+        held = _visible(
+            local(triangles)[..., :2],
+            local(sides[:, 0])[..., :2],
+            local(sides[:, 1])[..., :2],
+            np.einsum("sj,ij->si", sides[:, 2], frame)[:, :2],
+            reach,
+            max(self.tolerance, 1e-9 * reach),
+        )
         rows = np.flatnonzero(usable)
         whole = np.zeros((len(rows), len(levels) + 1))
         whole[:, 1:] = np.pi * size[rows]
@@ -1620,16 +1622,17 @@ class EdgeFade:
         )
         return front & open_side
 
-    def _held(self, plane: int, faces: np.ndarray, side: np.ndarray, far: float):
+    def _held(self, plane: int, faces: np.ndarray, side: np.ndarray):
         """The triangles (f, 3, 3) of ``faces`` (in the place of ``plane``, that a path
-        from the side of ``side`` reflects off) and the strips (s, 4, 3) ``far`` m wide
-        past each side of them that no other shares and no edge bounds
-        (:meth:`_bounds`): an inside corner, where the face goes on as the image of the
-        face it meets, a wall's foot on the floor or the side of a closing wall, and the
-        seam of faces in the plane whose corners do not meet."""
+        from the side of ``side`` reflects off) and the sides (s, 3, 3) of them that no
+        other shares and no edge bounds (:meth:`_bounds`), each as its two ends and the
+        unit vector in the plane out of its triangle across it: an inside corner, where
+        the face goes on as the image of the face it meets (a wall's foot on the floor,
+        the side of a closing wall), or the seam of faces in the plane whose corners do
+        not meet."""
         triangles = self.model.room.mesh.triangles[faces]
         if len(faces) == 0:
-            return triangles, np.zeros((0, 4, 3))
+            return triangles, np.zeros((0, 3, 3))
         p = np.concatenate([triangles[:, i] for i in (0, 1, 2)])
         q = np.concatenate([triangles[:, j] for j in (1, 2, 0)])
         r = np.concatenate([triangles[:, k] for k in (2, 0, 1)])
@@ -1658,8 +1661,7 @@ class EdgeFade:
             :, None
         ] * along
         out = -inward / np.maximum(np.linalg.norm(inward, axis=1), 1e-300)[:, None]
-        strips = np.stack([p, q, q + far * out, p + far * out], axis=1)
-        return triangles, strips
+        return triangles, np.stack([p, q, out], axis=1)
 
     def _leg_shares(self, points, faces, seqs, edge, wavelength) -> np.ndarray:
         """(F,) how much of the legs of a path over two edges (see :meth:`_joint_weights`)
@@ -2811,6 +2813,151 @@ def _beyond_line(gap, radius) -> np.ndarray:
     angle = np.arctan2(deep, np.where(np.isfinite(p2), np.sqrt(np.minimum(p2, 1e300)), 1.0))
     area = np.where(u > p2, u * angle - np.sqrt(np.minimum(p2, 1e300)) * deep, 0.0)
     return _level_integral(area)
+
+
+def _visible(triangles, start, end, out, reach, tolerance) -> list[np.ndarray]:
+    """The parts of a plane that hold a reflection's Fresnel zone, in the plane's frame
+    with the reflection at the origin, as polygons (k, n, 2) in groups of one number of
+    corners, that do not overlap: of its faces' ``triangles`` (f, 3, 2), those within
+    ``reach`` of the reflection, and of the faces' sides from ``start`` to ``end`` (s, 2)
+    that no other shares and no edge bounds, the strips ``out`` (s, 2) of them, 4
+    ``reach`` wide, where the face goes on as its image in the face it meets.
+
+    A side that another face in the plane goes on across (a seam, found ``tolerance``
+    past its middle) gives no strip: that face holds the zone there. Each other side is
+    an inside corner, where a face rises from the plane: it hides what lies past it as
+    seen from the reflection, the faces of the plane there (those of another room on
+    the far side of a wall), the strips past other sides and the corners there, and its
+    own strip counts only where the reflection lies in front of it."""
+    if len(start):
+        middle = 0.5 * (start + end) + tolerance * out
+        seam = _in_triangles(middle, triangles, tolerance)
+        start, end, out = start[~seam], end[~seam], out[~seam]
+    # Each corner hides the wedge past it from the origin: n . x >= c for each (n, c).
+    shadows = []
+    front = np.zeros(len(start), dtype=bool)
+    for k in range(len(start)):
+        p, q = start[k], end[k]
+        height = -float(np.einsum("i,i->", p, out[k]))  # the origin's, out of the face
+        turn = p[0] * q[1] - p[1] * q[0]
+        if abs(height) <= tolerance:
+            # On the corner's line: past it, the half-plane where the side runs by the
+            # origin.
+            front[k] = True
+            through = float(np.einsum("i,i->", p, q)) < 0.0
+            shadows.append([(out[k], float(np.einsum("i,i->", out[k], p)))] if through else None)
+            continue
+        front[k] = height < 0.0
+        towards = out[k] if front[k] else -out[k]
+        sign = 1.0 if turn > 0.0 else -1.0
+        shadows.append(
+            [
+                (towards, float(np.einsum("i,i->", towards, p))),
+                (sign * np.array([-p[1], p[0]]), 0.0),
+                (sign * np.array([q[1], -q[0]]), 0.0),
+            ]
+        )
+    # A corner that another hides (a wall's foot in the other room) hides nothing more
+    # and has no strip: all that lies past it lies past that one.
+    hidden = np.zeros(len(start), dtype=bool)
+    for k in range(len(start)):
+        ends = np.stack([start[k], end[k]])
+        for j, shadow in enumerate(shadows):
+            if j != k and shadow is not None:
+                if all((np.einsum("ij,j->i", ends, n) >= c - tolerance).all() for n, c in shadow):
+                    hidden[k] = True
+                    break
+    shadows = [None if hidden[k] else shadow for k, shadow in enumerate(shadows)]
+    front &= ~hidden
+    near = np.all(triangles.min(axis=1) <= reach, axis=1)
+    near &= np.all(triangles.max(axis=1) >= -reach, axis=1)
+    pieces = [(t, -1) for t in triangles[near]]
+    far = 4.0 * reach
+    for k in np.flatnonzero(front).tolist():
+        p, q = start[k], end[k]
+        pieces.append((np.stack([p, q, q + far * out[k], p + far * out[k]]), k))
+    held = []
+    for polygon, own in pieces:
+        parts = [polygon]
+        for k, shadow in enumerate(shadows):
+            if shadow is None or k == own:
+                continue
+            parts = [rest for part in parts for rest in _outside(part, shadow, tolerance)]
+            if not parts:
+                break
+        held.extend(parts)
+    groups = {}
+    for polygon in held:
+        groups.setdefault(len(polygon), []).append(polygon)
+    return [np.stack(group) for _, group in sorted(groups.items())]
+
+
+def _in_triangles(points, triangles, tolerance) -> np.ndarray:
+    """(s,) whether each of ``points`` (s, 2) lies inside one of ``triangles`` (f, 3, 2),
+    more than ``tolerance`` from its sides."""
+    if len(points) == 0 or len(triangles) == 0:
+        return np.zeros(len(points), dtype=bool)
+    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+
+    def cross(u, v):
+        return u[..., 0] * v[..., 1] - u[..., 1] * v[..., 0]
+
+    turn = cross(b - a, c - a)  # (f,)
+    sign = np.where(turn >= 0.0, 1.0, -1.0)
+    inside = np.ones((len(points), len(triangles)), dtype=bool)
+    for u, v in ((a, b), (b, c), (c, a)):
+        side = v - u
+        length = np.maximum(np.linalg.norm(side, axis=-1), 1e-300)
+        offset = cross(side[None], points[:, None] - u[None]) * sign / length
+        inside &= offset > tolerance
+    return inside.any(axis=1)
+
+
+def _clip(polygon, normal, offset) -> np.ndarray:
+    """The part (k, 2) of the convex ``polygon`` (n, 2) where ``normal`` . x >= ``offset``."""
+    if len(polygon) == 0:
+        return polygon
+    height = np.einsum("ij,j->i", polygon, normal) - offset
+    inside = height >= 0.0
+    if inside.all():
+        return polygon
+    if not inside.any():
+        return polygon[:0]
+    out = []
+    for i in range(len(polygon)):
+        j = (i + 1) % len(polygon)
+        if inside[i]:
+            out.append(polygon[i])
+        if inside[i] != inside[j]:
+            t = height[i] / (height[i] - height[j])
+            out.append(polygon[i] + t * (polygon[j] - polygon[i]))
+    return np.array(out)
+
+
+def _outside(polygon, shadow, tolerance) -> list[np.ndarray]:
+    """The convex parts of ``polygon`` (n, 2) outside the convex ``shadow``, where
+    n . x >= c for each of its (n, c): none where the polygon lies in it, the polygon
+    itself where it lies clear of it, none that are thinner than ``tolerance``."""
+    heights = [np.einsum("ij,j->i", polygon, n) - c for n, c in shadow]
+    if any((h < 0.0).all() for h in heights):
+        return [polygon]
+    if all((h >= 0.0).all() for h in heights):
+        return []
+    parts, rest = [], polygon
+    for n, c in shadow:
+        part = _clip(rest, -n, -c)
+        if len(part) >= 3 and _polygon_area(part) > tolerance * tolerance:
+            parts.append(part)
+        rest = _clip(rest, n, c)
+        if len(rest) < 3:
+            break
+    return parts
+
+
+def _polygon_area(polygon) -> float:
+    """The area of the simple ``polygon`` (n, 2)."""
+    x, y = polygon[:, 0], polygon[:, 1]
+    return 0.5 * abs(float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y)))
 
 
 def _segment_gaps(p0, p1, start, end) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
