@@ -248,6 +248,26 @@ class Flight:
             out[k] = power_between(self.powers[leg], self.powers[leg + 1], share)
         return out
 
+    def rounded(self, digits: int = 4, rest: int = 6) -> Flight:
+        """This flight as its keyframes have it: its times, places and orientations rounded
+        to ``digits`` (:meth:`keyframes`), its speeds and powers to ``rest``; so that a scene
+        written with its keyframes flies the same flight when it is read again."""
+
+        def three(v: tuple[float, float, float]) -> tuple[float, float, float]:
+            return (
+                round(float(v[0]), digits),
+                round(float(v[1]), digits),
+                round(float(v[2]), digits),
+            )
+
+        return Flight(
+            times=tuple(round(float(t), digits) for t in self.times),
+            positions=tuple(three(p) for p in self.positions),
+            orientations=tuple(three(o) for o in self.orientations),
+            speeds=tuple(round(float(v), rest) for v in self.speeds),
+            powers=tuple(round(float(v), rest) for v in self.powers),
+        )
+
     def keyframes(self, digits: int = 4) -> list[dict]:
         """The keyframes after the first, as a scene's trajectory takes them (the first is the
         source's own position and orientation), rounded to ``digits``."""

@@ -25,6 +25,7 @@ from acoustic_spaces.demos import (
     load,
     pipeline,
     scene_demo,
+    shell_line,
 )
 from acoustic_spaces.engine import simulate
 from acoustic_spaces.examples import (
@@ -1653,7 +1654,9 @@ def test_the_streets_passby_demo_is_a_preset_of_the_demo_of_its_scene(capsys) ->
     assert street.command("all", args) == "python passby_demo.py all"
     police = parser.parse_args(["all", "--vehicle", "police_car"])
     assert run_folder(street.resolved(police)).name == "passby_Police-car_binaural"
-    assert street.command("all", police) == "python passby_demo.py all --sources 'Police car'"
+    assert street.command("all", police) == "python passby_demo.py all " + shell_line(
+        ["--sources", "Police car"]
+    )
     assert street.moving(street.resolved(police)) == ["police_car", "police_car_siren"]
     several = street.resolved(parser.parse_args(["all", "--vehicle", "car,police_car"]))
     assert [run_folder(p).name for p in several.series_parts] == [

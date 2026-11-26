@@ -2549,10 +2549,11 @@ class Source(_Model):
         track of its trajectory's places, in its air (:meth:`AircraftModel.flight`): the
         flight's keyframes, its trajectory's Doppler, step and start kept."""
         assert self.trajectory is not None
-        flight = self.model.flight(self, self._air_c, self._air_kpa)
+        # Rounded as its keyframes are, so that it flies the same flight read again.
+        flight = self.model.flight(self, self._air_c, self._air_kpa).rounded()
         first = flight.positions[0]
-        yaw, pitch, roll = (round(v, 4) for v in flight.orientations[0])
-        self.__dict__["position"] = tuple(round(float(v), 4) for v in first)
+        yaw, pitch, roll = flight.orientations[0]
+        self.__dict__["position"] = first
         self.__dict__["orientation"] = Orientation(yaw=yaw, pitch=pitch, roll=roll)
         given = self.trajectory.model_dump(exclude={"to", "keyframes", "speed_m_s"})
         given = {k: v for k, v in given.items() if k in self.trajectory.model_fields_set}
