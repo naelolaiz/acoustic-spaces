@@ -841,8 +841,10 @@ def test_no_path_reflects_off_a_roof_s_plane_from_below(x: float) -> None:
     plane, and the roof's front edge explained a reflection off the back of the roof:
     the level stepped by up to 2.0 dB at 2 kHz there, and such terms made it up to
     1.6 dB too loud at 250 Hz over 50 m of track. Now no path reflects off that plane
-    outside the roof, and the level does not step."""
+    outside the roof, and the level does not step. (A path over the roof's front edge
+    touches the edge's line past its end, where it fades out.)"""
     scene = Scene.from_yaml(EXAMPLES / "railway" / "scene.yaml")
+    edges = find_edges(TraceModel.from_room(Room.from_scene(scene)))
     horn = next(s for s in scene.sources if s.name == "train_horn")
     levels = []
     for at in (x - 0.01, x + 0.01):
@@ -851,8 +853,16 @@ def test_no_path_reflects_off_a_roof_s_plane_from_below(x: float) -> None:
             scene.model_copy(update={"sources": [moved]}), "train_horn", "behind_barrier_25m"
         )
         levels.append(10 * np.log10(total_energy(paths)))
-        roof = [p for points in paths.points for p in points[1:-1] if abs(p[2] - 7.0) < 1e-6]
-        assert all(-66.0 - 1e-6 <= p[0] <= -54.0 + 1e-6 and p[1] >= 20.0 - 1e-6 for p in roof)
+        for points, edge in zip(paths.points, paths.edge, strict=True):
+            for p in points[1:-1]:
+                if abs(p[2] - 7.0) > 1e-6:
+                    continue
+                if edge >= 0:  # the point on the edge's line, where the path bends
+                    off = p - edges.start[edge]
+                    off -= (off @ edges.direction[edge]) * edges.direction[edge]
+                    if np.linalg.norm(off) < 1e-6:
+                        continue
+                assert -66.0 - 1e-6 <= p[0] <= -54.0 + 1e-6 and p[1] >= 20.0 - 1e-6
     # But 8 kHz, where 2 cm is half a wavelength.
     assert np.abs(levels[1] - levels[0])[:-1].max() < 0.1
 
