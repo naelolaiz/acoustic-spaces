@@ -4,6 +4,7 @@ with a display (or Xvfb) the 3D view tests run too."""
 import json
 import os
 import re
+import shutil
 import socket
 import struct
 import sys
@@ -4623,6 +4624,10 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     tree.tree.setCurrentItem(row)
     assert tree.choose.isEnabled() and not tree.default.isEnabled()
     mine = example_path("stadium_concert").parent / "box.csv"  # any file that is there
+    # ffmpeg decodes a file that is not a WAV file: on the PATH here, as where the demos
+    # make their videos (the Windows runners have none, and the run is refused there).
+    which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name: name if name == "ffmpeg" else which(name))
     row.setText(tree.FILE, str(mine))
     assert " --input subs=box.csv " in dialog.command.text()  # from the folder
     assert dialog.chosen()[2].inputs == {"subs": mine} and ok.isEnabled()
