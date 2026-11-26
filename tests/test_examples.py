@@ -178,7 +178,8 @@ def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
     their head on the spot 4 m in front of the guide, a quarter at a time and held for
     4 s, round to the front again (the script's turn of before, heard through the head
     tracker): the trajectories turn off and on, and the gallery copies with its demo."""
-    from acoustic_spaces.walkthrough import head_turners, knots, movers, with_moving
+    from acoustic_spaces.room import Room
+    from acoustic_spaces.walkthrough import _walker, head_turners, knots, movers, with_moving
 
     assert "gallery" in NAMES
     path = example_path("gallery")
@@ -201,6 +202,8 @@ def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
     assert np.ptp(turn.positions, axis=0).max() == 0.0
     assert [item.name for _kind, item in movers(scene)] == ["visitor", "standing"]
     assert head_turners(scene) == ["standing"]
+    # The walkthrough walks the visitor: the listener standing only turns where it is.
+    assert _walker(Room.from_scene(scene), None)[1].name == "visitor"
     assert movers(with_moving(scene, [])) == []
     assert scene.outputs[0].format == "binaural"  # what walkthrough plays by default
     assert demo_for("gallery").example == "gallery"

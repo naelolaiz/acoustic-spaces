@@ -1950,7 +1950,7 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
 
     from acoustic_spaces.cli import main as cli
     from acoustic_spaces.demos import scene_pictures
-    from acoustic_spaces.demos.scene_demo import DEMO, moving_of, moving_scene
+    from acoustic_spaces.demos.scene_demo import DEMO, FADE_OUT_S, moving_of, moving_scene
     from acoustic_spaces.walkthrough import knots, movers
 
     scene = _any_scene(tmp_path)
@@ -1985,8 +1985,12 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     assert demo.command("render", args) == "acoustic-spaces demo scene.yaml render --moving none"
 
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
+    # The talk, 2 s long, plays again from its start until what moves is over and 3 s more.
+    said = "talker plays 2.0 s, and what moves goes on for 1.5 s: played again from its start"
+    assert said in capsys.readouterr().out
     work = scene.parent / "demo" / "scene_seconds-0p8_binaural"
     seats = pipeline.read_json(work / "moving" / "seats.json")
+    assert all(s["length_s"] > 1.5 + FADE_OUT_S for s in seats["seats"].values())
     assert seats["moving"] == ["seat-b"] and set(seats["seats"]) == {"seat-a", "seat-b"}
     seat_a, seat_b = seats["seats"]["seat-a"], seats["seats"]["seat-b"]
     assert seat_b["moves"] and not seat_a["moves"]

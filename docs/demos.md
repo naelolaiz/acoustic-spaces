@@ -124,9 +124,7 @@ keep their phrases, the last running to the end; the lake's keep the stops of it
 default tour and end back at the first; the orchestra plays each movement at the seats
 of its tour among them, or at all of them when its tour has none. A `--tour` given keeps
 its own order, `--listeners` leaving out the stops at the others. A tour's crossfade is
-never longer than the shorter of the two stops it joins. The gallery walk takes the
-listener each of its two parts follows (`--listeners standing,visitor` plays the head
-turn first).
+never longer than the shorter of the two stops it joins.
 
 `--input SOURCE=WAV`, once for each source, has a source play a recording of yours
 instead of what the demo gives it: `python lakeside_demo.py render --input
@@ -138,10 +136,10 @@ cut or padded with silence to that feed's length, so the tour's times hold; a na
 demo has no source for is refused with the list of them. The mixes are made again when
 the inputs change. The credit line on the stills names the files that replaced a
 recording (and only them when every source has one); the captions go on describing the
-demo's own music. The walk through the gallery takes `--input guide=talk.wav`, played as
-it is: the video's one gain sets how loud it is heard, and the captions' level and STI
-stay the scene's voice; the pass-by demos take `--input car=engine.wav`, a dry recording
-played as the car's sound.
+demo's own music. The demo of any scene, and so the walk through the gallery (`--input
+guide=talk.wav`), plays the file as the source's feed
+([its feeds](#a-demo-of-any-scene)); the pass-by demos take `--input car=engine.wav`, a
+dry recording played as the car's sound.
 
 `--format` mixes the stops in another output the simulation wrote, by the label
 `simulate` gives it (`ambix3`, `5.0`, `7.0.4`, `mono`...), instead of binaural. The tour
@@ -283,7 +281,8 @@ acoustic-spaces demo scene.yaml --recording ace_f1 --vocal-effort raised,loud
   moves, by default) each is heard from the clock's start, for `--seconds` or until what
   moves is over for it (every moving source arrived, or the listener itself) and 3 s
   more, or 20 s where nothing moves for it, faded out and 1 s before the next, so that
-  each hears the whole of what moves. Each stop is turned up to the loudness of the
+  each hears the whole of what moves; a recording shorter than what moves (and 3 s)
+  plays again from its start, 2 s after it ends. Each stop is turned up to the loudness of the
   loudest, by 40 dB at most and by as much as the still says, the only step that is not
   the simulation's: K-weighted, with the channels' powers added up as ITU-R BS.1770-4
   adds them (the side surrounds of a loudspeaker layout 1.5 dB up, the LFE left out), an
@@ -777,55 +776,59 @@ changed, for example:
 
 ## A walk through the gallery
 
-`walk_demo.py` is the smallest demo and the only one of speech: a guide stands in the
-L-shaped gallery of the `gallery` example and talks while a visitor walks away
-from them, down the long arm and round the corner, where the guide is out of sight and
-only the sound bent round the corner arrives; then the visitor stands 4 m in front of
-the guide and turns their head a quarter at a time, so the voice moves to the right
-ear, behind, to the left ear and back in front. The video follows the visitor from
-above, with the head and its ears, the guide, and a bar of the levels.
+`walk_demo.py` is the demo of the `gallery` example's scene ([a demo of any
+scene](#a-demo-of-any-scene)) with the gallery's own choice of listeners, and the only
+demo of speech: a guide stands in the L-shaped gallery and talks while a visitor walks
+away from them, down the long arm and round the corner, where the guide is out of sight
+and only the sound bent round the corner arrives; then another visitor, standing 4 m in
+front of the guide, turns their head a quarter at a time, so the voice moves to the
+right ear, behind, to the left ear and back in front. The video follows each from above
+with the level and the STI of the guide's speech where they are.
 
 ```sh
 acoustic-spaces examples --copy . gallery && cd gallery
-python walk_demo.py all   # or speech, scene, walk, turn, video one at a time
+python walk_demo.py all   # or recording, feeds, simulate, render, video one at a time
 ```
 
-Options: `--talker M4` picks one of the corpus's 14 talkers, `--voice` how loud the
-guide speaks (relaxed, normal, raised, loud), `--stand 16,4` where the visitor stands
-for the turn (by default where the scene's `standing` listener does, left out of the
-gallery's own simulations), `--turn` the angles it holds, `--listeners standing,visitor` the parts played, by
-the listener each follows, in that order (the trajectory, then the turn, by default),
-`--hrtf me.sofa` a measured head.
+It runs as `acoustic-spaces demo scene.yaml all --listeners visitor,standing` does, and
+takes every option of the demo of a scene: `--recording ace_f1` another of the ACE
+corpus's 14 talkers, `--vocal-effort raised` how loud the guide talks (relaxed, normal,
+raised, loud), `--stand standing=14,4` where the visitor who looks round stands,
+`--turn standing=0:0,6:90,12:180` how they turn, `--listeners standing,visitor` the
+order they are heard in, `--hrtf me.sofa` a measured head. The options and steps of the
+script before 4.4.0 are still read: `--talker M4`, `--voice`, `--from`, `--stand 16,4`
+and `--turn 0:0,10:90` (both for the listener `standing`), and the steps `speech`,
+`scene`, `walk` and `turn` (`walk` and `turn` both render every listener the run
+hears).
 
-- **The trajectory** is the example's visitor's: responses every 25 cm along it
-  (`acoustic-spaces walkthrough`), the talk played along them so that the voice changes
-  as the visitor moves. The speech level at the ears falls from 56.0 dB(A) three metres
-  in front of the guide to 48.7 dB(A) round the corner, and the speech transmission
-  index with it, from 0.73 to 0.54: the gallery is quiet and bare, so what is lost is
-  the direct sound, not the clarity. The gallery's two other listeners stand where they
-  are and are left out. Edit the visitor's trajectory (the [Movement panel](editor.md),
-  or the scene file) and `all` makes the scene and the trajectory again; with the
-  trajectory turned off (**Moving**) the demo says there is no trajectory to play.
-- **The turn** goes through the engine's head tracker, scripted rather than played
-  live: the place's response in Ambisonics of order 7, the sound field turned against
-  the head every 256 samples and decoded to the ears
-  ([head tracking](spatial-audio.md#head-tracking)). It comes within half a decibel, in
-  each ear and octave, of rendering the ears again at every angle.
+- **The walk** is the scene's visitor's trajectory, simulated every 25 cm along it, the
+  talk played along it so that the voice changes as the visitor moves. The speech level
+  falls from 54.2 dB(A) three metres in front of the guide to 46.7 dB(A) round the
+  corner, and the speech transmission index with it, from 0.74 (good) to 0.51 (fair),
+  with the hum of the building the scene's coverage counts. The gallery's two other
+  listeners stand where they are. Edit the visitor's trajectory (the [Movement
+  panel](editor.md), or the scene file) and `all` simulates the walk again.
+- **The look round** is the listener `standing`'s, by keyframes in the scene: facing the
+  guide for 4 s, then a quarter turn to the left over 6 s, held 4 s, and so on round.
+  It goes through the engine's head tracker: the place's response in Ambisonics of
+  order 7, the sound field turned against the head every 256 samples and decoded to the
+  ears ([head tracking](spatial-audio.md#head-tracking)). Each visitor is heard from the
+  talk's start until their walk or their turn is over, and 3 s more; a talk shorter than
+  that, as `ace_m9`'s (25 s) and `ace_f4`'s (36 s) are for the look round's 43 s, is
+  said again from its start, 2 s after it ends.
 - **Front and back.** Through the spherical head model the guide behind sounds much as
   the guide in front: a sphere has no outer ears. This is the demo where a measured
   HRTF (`--hrtf`, or [a set to download](spatial-audio.md#hrtf-sets-to-download)) is
   heard most plainly.
-- **The voice** is IEC 60268-16's: the long-term spectrum of male speech at 60 dB(A) 1 m
-  in front for a normal voice, with a voice's directivity, all round in the bass and
-  towards the front in the treble. One gain plays the whole video, so the voice is as
-  much quieter round the corner as the simulation says.
+- **The voice** is the scene's guide: male speech (IEC 60268-16's long-term spectrum)
+  at normal vocal effort, 60 dB(A) 1 m in front (ISO 9921), cardioid. One gain plays the
+  whole video, so the voice is as much quieter round the corner as the simulation says.
 
 **Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
 College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work
-through Delft; `speech` reads the corpus's 148 MB archive as it comes, up to the talk:
-16 MB for that talker, up to 145 MB for another (`--talker`). A talk shorter than the
-trajectory and the turn need, as some talkers' are, is said again from its start, 2 s
-after it ends.
+through Delft (`ace_m4`, the scene's recording); the `recording` step reads the corpus's
+148 MB archive as it comes, up to the talk: 16 MB for that talker, up to 145 MB for
+another (`--recording`).
 
 ## Vehicles passing by
 

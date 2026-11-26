@@ -355,6 +355,21 @@ def test_a_silent_walker_walks_unless_sources_leaves_it_out(tmp_path: Path) -> N
     assert fan.trajectory is not None and not fan.trajectory.enabled
 
 
+def test_a_recording_shorter_than_what_moves_plays_again_from_its_start() -> None:
+    """A feed shorter than what moves plays again from its start, AGAIN_S after it
+    ends, until it lasts as long, and is cut there; one long enough stays as it is."""
+    rate = 10
+    x = np.arange(1, 31, dtype=np.float32).reshape(-1, 1)  # 3 s
+    gap = int(scene_demo.AGAIN_S * rate)
+    out = scene_demo.played_until(x, rate, 12.5)
+    assert out.shape == (125, 1) and gap == 20
+    assert np.array_equal(out[:30], x) and not out[30:50].any()
+    assert np.array_equal(out[50:80], x) and not out[80:100].any()
+    assert np.array_equal(out[100:], x[:25])
+    assert scene_demo.played_until(x, rate, 3.0) is x
+    assert scene_demo.played_until(x[:0], rate, 3.0).shape == (0, 1)
+
+
 def test_a_run_gives_the_talkers_a_vocal_effort_and_another_recording(tmp_path: Path) -> None:
     """``--vocal-effort`` has every talker in use (a source with a speech spectrum) talk
     so in the run, and ``--recording`` plays another free recording, the sources that

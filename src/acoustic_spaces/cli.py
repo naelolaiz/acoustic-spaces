@@ -3437,8 +3437,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--mover",
         "--walker",
         dest="mover",
-        help="listener or source that moves (default: the only one with a trajectory); "
-        "--walker is its name before 4.4.0",
+        help="listener or source that moves (default: the only one with a trajectory, or "
+        "the only listener that goes anywhere where the others are listeners turning where "
+        "they stand); --walker is its name before 4.4.0",
     )
     walkthrough.add_argument(
         "--all",

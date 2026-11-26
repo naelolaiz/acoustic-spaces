@@ -19,6 +19,13 @@
   `--step`, `--stand` and `--turn` (a listener elsewhere, or turning on the spot);
   binaurally, a listener turning on the spot is heard through the head tracker in
   `walkthrough --all`, the demo and **Render movement…**.
+- Changed: the gallery's `walk_demo.py` is the demo of its scene with the visitor who
+  walks and the one who looks round, who now turns by keyframes in the scene; its
+  options and steps before 4.4.0 still work, its first run simulates again, and every
+  example talker speaks at normal vocal effort.
+- Added: in the demo of any scene, a recording shorter than what moves plays again from
+  its start; `walkthrough` walks the only listener that goes anywhere when the other
+  movers are listeners turning where they stand.
 - Added: every demo plays several of something in one video: an option that changes
   what plays or how it sounds, and `--format`, take several values (`--vehicle
   departure,arrival`, `--speed 50,80`), each value a run of its own played after a title

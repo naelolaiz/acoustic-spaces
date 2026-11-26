@@ -34,7 +34,8 @@ simulates the scene as it plays it (:func:`run_scene_file`).
 Sources and listeners whose trajectory is on move along it while the piece plays, all on one
 clock from its start (:func:`acoustic_spaces.walkthrough.simulate_movement`): every
 listener is heard as it moves or as the sources move past it, and the video moves them
-as they go, its captions giving the level at each moment. ``--moving`` picks the trajectories
+as they go, its captions giving the level at each moment; a recording shorter than what
+moves plays again from its start. ``--moving`` picks the trajectories
 of a run without changing the scene: ``--moving visitor,guide`` moves those two and
 leaves every other mover standing where it starts, ``--moving none`` keeps them all
 still, so one scene serves both; without it, a source a given ``--sources`` leaves out
@@ -57,8 +58,8 @@ pitch shifts as it passes, the late sound crossfaded from place to place
 The editor runs it from **Simulation > Run demo…** as *This scene*, with a tick for each
 trajectory in its Movement table, for each listener in its Listeners list and for each source
 in its Sources list. The video needs ffmpeg on the PATH and Pillow (the ``viz`` extra).
-The five demos of the examples are scripts of their own, with their recordings; this one
-takes any scene.
+The demos of the examples are scripts of their own, with their recordings, the gallery's
+walk a preset of this one (:func:`preset`); this one takes any scene.
 """
 
 from __future__ import annotations
@@ -147,6 +148,8 @@ MOVING = "moving"
 SECONDS = 20.0
 #: The silence between two stops that each start from the clock's start (s).
 GAP_S = 1.0
+#: The silence before a recording shorter than what moves plays again from its start (s).
+AGAIN_S = 2.0
 #: The run's timelines (``--timeline``): one clock the tour moves along from listener
 #: to listener, or each listener heard from the clock's start; ``auto`` (the default),
 #: the second when something moves and the first otherwise.
@@ -970,6 +973,18 @@ def speech_along(movement, scene: Scene, source, listener: str) -> list[float | 
     return out
 
 
+def played_until(x: np.ndarray, rate: float, seconds: float) -> np.ndarray:
+    """``x`` (samples, channels) at ``rate`` played again from its start, AGAIN_S after it
+    ends, as many times as it takes to last ``seconds``, and cut there; as it is when it
+    lasts that long already."""
+    n = int(math.ceil(seconds * rate))
+    if len(x) >= n or not len(x):
+        return x
+    gap = np.zeros((int(round(AGAIN_S * rate)), *x.shape[1:]), dtype=x.dtype)
+    once = np.concatenate([x, gap])
+    return np.concatenate([once] * math.ceil(n / len(once)))[:n]
+
+
 def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None = None) -> None:
     """Every listener's mix with ``moving`` moving, all on one clock: the scene
     simulated with every mover at each moment of its trajectory
@@ -977,7 +992,8 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     that plays in the run (``--sources``) played through it at its sound power, one
     gain for all (the loudest peak at -1 dBFS), into ``moving/`` with seats.json; a
     trajectory with Doppler, which moves alone, with each early path through its
-    changing delay. That also keeps the moments and, at each, the A-weighted level of
+    changing delay; a recording shorter than what moves played again from its start
+    (:func:`played_until`). That also keeps the moments and, at each, the A-weighted level of
     each source that plays at every listener and the STI of each talker's speech there
     (:func:`speech_along`), for the pictures; the arrival time (``arrival_s``) is left
     out where something moves, as it changes along the way, and the tour shifts no mix
@@ -1010,6 +1026,16 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     fmt = format_of(args, scene)
     print(f"simulating the movement of {', '.join(moving)}, on one clock")
     movement = simulate_movement(room, progress=print, head_tracked=head_turners(scene, fmt))
+    # Every listener may be heard until what moves is over and FADE_OUT_S more
+    # (heard_for): a recording shorter than that plays again from its start.
+    over = float(movement.times[-1])
+    for name, (x, r) in list(feeds.items()):
+        if len(x) and len(x) < (over + FADE_OUT_S) * r:
+            feeds[name] = (played_until(x, r, over + FADE_OUT_S), r)
+            print(
+                f"{name} plays {len(x) / r:.1f} s, and what moves goes on for {over:.1f} s: "
+                f"played again from its start, {AGAIN_S:g} s after it ends"
+            )
     with_doppler = ", each early path through its changing delay" if movement.doppler else ""
     print(f"mixing {len(names)} listeners through {len(movement.times)} moments{with_doppler}")
     mixes = render_movement(movement, feeds, fmt, sample_rate=rate)

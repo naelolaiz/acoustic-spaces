@@ -280,8 +280,10 @@ A listener or a source with a [trajectory](scenes.md#trajectories) can be heard 
 goes. In the `gallery` example a visitor walks away from a guide, down the long arm of
 the L-shaped gallery and round the corner, while the guide talks (any dry speech
 recording does as `speech.wav`; see [dry recordings to try](#dry-recordings-to-try));
-the gallery's two other listeners stand still, and with the visitor's trajectory turned
-off (**Moving**, or `enabled: false`) the visitor stands too, so one scene serves both:
+two of the gallery's other listeners stand still and one turns their head where they
+stand, which a walking listener does not hear, so the visitor is the one that walks.
+With the visitor's trajectory turned off (**Moving**, or `enabled: false`) the visitor
+stands too, so one scene serves both:
 
 ```sh
 acoustic-spaces examples --copy . gallery && cd gallery
@@ -352,7 +354,7 @@ from acoustic_spaces.viz import animate_trajectory
 from acoustic_spaces.walkthrough import render_trajectory, simulate_trajectory
 
 room = Room.from_yaml("scene.yaml")
-responses = simulate_trajectory(room)  # the only listener or source with a trajectory
+responses = simulate_trajectory(room)  # the only listener or source that goes anywhere
 sound = render_trajectory(responses, {"guide": (speech, 44_100)}, Binaural())  # (samples, 2)
 animate_trajectory(room, responses, "walk.gif")
 ```

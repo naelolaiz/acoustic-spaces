@@ -39,6 +39,7 @@ from acoustic_spaces.walkthrough import (
     save_movement,
     simulate_movement,
     simulate_trajectory,
+    stays_in_place,
     step_of,
     trajectory_points,
     turns_on_the_spot,
@@ -861,6 +862,16 @@ def test_walk_errors() -> None:
     two_move = r"more than one listener or source moves \(w, v\): pick one"
     with pytest.raises(ValueError, match=two_move):
         simulate_trajectory(both)
+    # Another listener turning where it stands (as the gallery's looks round) leaves the
+    # one that walks: it hears no other listener. A source turning there is heard.
+    turn = {"keyframes": [{"time_s": 2, "position": [3, 3, 1.5], "orientation": {"yaw": 90}}]}
+    turning = {"name": "v", "position": [3, 3, 1.5], "trajectory": turn}
+    one = Room.from_scene(_scene(sources=sources, listeners=[two[0], turning]))
+    assert stays_in_place(one.scene.listeners[1]) and not stays_in_place(one.scene.listeners[0])
+    assert simulate_trajectory(one, step_m=1.0, late_step_m=None).name == "w"
+    source = Room.from_scene(_scene(sources=[*sources, turning], listeners=[two[0]]))
+    with pytest.raises(ValueError, match=r"more than one listener or source moves \(w, v\)"):
+        simulate_trajectory(source)
 
 
 @dataclass

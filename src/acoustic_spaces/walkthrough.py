@@ -183,7 +183,9 @@ class TrajectoryResponses:
 
 def _walker(room: Room, name: str | None):
     """The listener or source that moves: ``name``, or the only one with a trajectory that is
-    enabled."""
+    enabled; of several, the only listener that goes from place to place where the others
+    are listeners that stay in theirs (:func:`stays_in_place`), as a listener walking
+    hears none of the other listeners."""
     scene = room.scene
     found = [
         (kind, item)
@@ -199,6 +201,10 @@ def _walker(room: Room, name: str | None):
         raise ValueError(f"no listener or source named {name!r}")
     if not found:
         raise ValueError("no listener or source moves: give one a trajectory")
+    if len(found) > 1 and name is None:
+        going = [(kind, item) for kind, item in found if not stays_in_place(item)]
+        if len(going) == 1 and all(kind == "listeners" for kind, _ in found):
+            found = going
     if len(found) > 1:
         names = ", ".join(item.name for _, item in found)
         raise ValueError(
@@ -697,6 +703,12 @@ def turns_on_the_spot(item) -> bool:
     legs = np.linalg.norm(np.diff(path.positions, axis=0), axis=1)
     turns = np.abs(np.diff(path.angles, axis=0)).max(axis=1)
     return bool(np.any((legs < 1e-9) & (turns > 1e-9)))
+
+
+def stays_in_place(item) -> bool:
+    """Whether ``item``'s trajectory (a scene listener or source) never leaves the place
+    it starts at: it turns there, if it moves at all."""
+    return bool(np.all(np.ptp(knots(item).positions, axis=0) < 1e-9))
 
 
 def head_turners(scene, fmt=None) -> list[str]:
@@ -1541,6 +1553,7 @@ __all__ = [
     "save_movement",
     "simulate_movement",
     "simulate_trajectory",
+    "stays_in_place",
     "step_of",
     "trajectory_points",
     "turns_on_the_spot",

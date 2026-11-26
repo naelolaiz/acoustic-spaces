@@ -23,7 +23,7 @@ each from the simplest.
 | `concert_hall` | A 32 × 20 × 15 m shoebox hall with a raised stage and upholstered seats; two sources on stage, three seats in the stalls. |
 | `orchestra` | The concert hall with a full orchestra on its stage, one source for each of the 61 tracks of an anechoic recording, and the scripts that [mix them and make a video](demos.md#an-orchestra-in-the-concert-hall). |
 | `church` | A stone nave with an apse, 18 m high, with about six seconds of reverberation; `church_demo.py` plays its [choir and organ](demos.md#a-choir-and-an-organ-in-the-church), left out of the church's own simulations until ticked, as are the places it tours, and makes a video. |
-| `gallery` | An L-shaped gallery: one listener sees the guide, one stands round the corner and hears the guide by [edge diffraction](simulation.md#edge-diffraction), and a visitor walks away from the guide and round the corner, for a [walkthrough](spatial-audio.md#walkthroughs); `walk_demo.py` makes its [video](demos.md#a-walk-through-the-gallery), where the visitor then looks round from the listener `standing`, left out of the gallery's own simulations until ticked. With the trajectory turned off the visitor stands where it starts. |
+| `gallery` | An L-shaped gallery: one listener sees the guide, one stands round the corner and hears the guide by [edge diffraction](simulation.md#edge-diffraction), a visitor walks away from the guide and round the corner, for a [walkthrough](spatial-audio.md#walkthroughs), and another, `standing`, turns their head a quarter at a time; `walk_demo.py`, the demo of the scene with those two, makes its [video](demos.md#a-walk-through-the-gallery). With a trajectory turned off that visitor stands where they start. |
 
 ## Sound systems
 
