@@ -1252,23 +1252,23 @@ police car's two, the fire engine's three, the tram's two) and says how each goe
 
   | | car | bus | motorcycle | police car (wail) | fire engine | tram |
   |---|---:|---:|---:|---:|---:|---:|
-  | pavement | 79.4 | 90.3 | 78.1 | 114.8 | 113.0 | 95.6 |
-  | balcony | 74.0 | 80.3 | 73.4 | 104.5 | 111.0 | 91.1 |
-  | garden | 62.7 | 71.3 | 61.5 | 95.1 | 97.2 | 73.7 |
+  | pavement | 79.5 | 90.3 | 78.3 | 114.9 | 113.1 | 95.8 |
+  | balcony | 74.2 | 80.5 | 73.4 | 104.7 | 111.0 | 91.2 |
+  | garden | 62.8 | 71.3 | 61.6 | 95.2 | 97.2 | 74.0 |
 
   The police car's column is its siren's, which the car itself does not change at this
   precision: the car goes where the bus does, with a sound power at least 4.6 dB under
-  the bus's in every octave band, so its passes peak at least 28 dB(A) under the siren's
-  at every listener and add 0.01 dB at most. It is heard under the siren's pitch, which
+  the bus's in every octave band, so its passes peak at least 29 dB(A) under the siren's
+  at every listener and add 0.005 dB at most. It is heard under the siren's pitch, which
   dB(A) weighs little. The fire engine's column is its three sources together, its siren
   much the loudest: in the garden the siren alone peaks at 97.2 dB(A), the horn's blasts
-  at 89.3 and the truck at 68.4, and the fire engine peaks there as its siren does,
+  at 89.2 and the truck at 68.5, and the fire engine peaks there as its siren does,
   between two of the horn's blasts; on the pavement a blast comes with the siren's peak
-  and adds 0.7 dB to it (113.0 dB(A), the siren alone 112.3). The balcony hears the fire
+  and adds 0.8 dB to it (113.1 dB(A), the siren alone 112.3). The balcony hears the fire
   engine nearly as loud as the pavement does, as its siren, 3.0 m up in the lane on the
   offices' side, passes 7.6 m from the balcony and 6.2 m from the pavement. With its
-  horn (`--sources car+car_horn`) the car peaks at 97.0 dB(A) on the pavement, 93.9 on the
-  balcony and 80.5 in the garden, its horn's loudest blast 17.5 to 19.7 dB over the
+  horn (`--sources car+car_horn`) the car peaks at 97.2 dB(A) on the pavement, 93.9 on the
+  balcony and 80.6 in the garden, its horn's loudest blast 17.6 to 19.6 dB over the
   car's own loudest.
 
   The garden hears the car loudest where the car sees it straight through the 4 m gap
@@ -1480,8 +1480,8 @@ scene with the train taken in, `walk` the mixes), `--from` names the scene, and 
   7.1 dB(A) under its level on the meadow's side, the S-Bahn, whose rail top is 20 dB
   over its roof in sound power (the regional train's 16 dB), 13.3 dB(A) under.
 - **The tram in the street**: the tram runs down the middle of the street at 50 km/h, 4.0 m from the
-  pavement's listener, and peaks at 95.6 dB(A) on the pavement (SEL 99.3), 91.1 on the
-  balcony (95.4) and 73.7 in the garden (80.3): louder than the bus, which passes 2.5 m
+  pavement's listener, and peaks at 95.8 dB(A) on the pavement (SEL 99.5), 91.2 on the
+  balcony (95.6) and 74.0 in the garden (80.5): louder than the bus, which passes 2.5 m
   from the pavement's listener at 90.3 dB(A), as Schall 03's tram, on its track set in
   the street, has 10.5 dB(A) more sound power than CNOSSOS-EU's bus at 50 km/h.
 
