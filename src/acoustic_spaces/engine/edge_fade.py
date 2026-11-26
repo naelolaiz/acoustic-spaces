@@ -1402,10 +1402,14 @@ class EdgeFade:
             max_delay_s,
         )
         # Where the path over the edge reaches the end of it that lies in a plane the
-        # path may reflect off next to the event, that is where the edge meets its image
-        # in the plane: the path over either counts, and _pressure gives it to one leg.
+        # path may reflect off next to the event, and a face of the plane closes that
+        # end (end_fades), that is where the edge meets its image in the plane: the path
+        # over either counts, and _pressure gives it to one leg. A face that meets the
+        # end from behind (a box's top at the top of its upright edge) does not close it:
+        # the edge's terms fade there, and the face's own edges have its reflection.
         end = ~reach & (np.abs(t_k - edges.length[edge]) <= self.tolerance)
         end &= (r1 + r2) / d.speed_of_sound <= max_delay_s
+        end &= d.closed[edge, 1]
         rows = np.flatnonzero(end)
         if len(rows):
             ends = table["ends"][slot[rows]].reshape(len(rows), -1)
