@@ -153,6 +153,9 @@ Glossary:
 | sweep (exponential sine) | barrido (senoidal exponencial) | |
 | recording, playback | grabación, reproducción | |
 | walkthrough | recorrido | |
+| trajectory (of a source or listener) | trayectoria | feminine: *su trayectoria* |
+| tour (a demo's listeners in turn) | recorrido | |
+| stem, multitrack recording | pista, grabación multipista | the railway's track is *vía* |
 | results, messages | resultados, mensajes | the editor's panels |
 | command line | línea de comandos | |
 | warning, error (message levels) | aviso, error | |
@@ -205,6 +208,8 @@ Glossary:
 | coverage map, leak | mapa de cobertura, fuita |
 | auralization, dry recording | auralització, enregistrament anecoic |
 | playback, head tracking | reproducció, seguiment del cap |
+| trajectory, tour (a demo's) | trajectòria, recorregut |
+| stem, multitrack recording | pista, enregistrament multipista |
 | gain, delay, equalizer | guany, retard, equalitzador |
 | results, messages, warning | resultats, missatges, avís |
 | outdoors, ground, sky | a l'aire lliure, terreny, cel |
@@ -256,6 +261,8 @@ Glossary:
 | coverage map, leak | mappa di copertura, fuga |
 | auralization, dry recording | auralizzazione, registrazione anecoica |
 | playback, head tracking | riproduzione, tracciamento della testa |
+| trajectory, tour (a demo's) | traiettoria, percorso |
+| stem, multitrack recording | traccia, registrazione multitraccia |
 | gain, delay, equalizer | guadagno, ritardo, equalizzatore |
 | yaw, pitch, roll | imbardata, beccheggio, rollio |
 | results, messages, warning | risultati, messaggi, avviso |
@@ -310,6 +317,8 @@ Glossary:
 | coverage map, leak | Versorgungskarte, Undichtigkeit |
 | auralization, dry recording | Auralisation, reflexionsfreie Aufnahme |
 | playback, head tracking | Wiedergabe, Kopfverfolgung |
+| trajectory, tour (a demo's) | Trajektorie, Rundgang |
+| stem, multitrack recording | Stem (*Bass-Stem*), Mehrspuraufnahme |
 | gain, delay, equalizer | Verstärkung, Verzögerung, Equalizer |
 | yaw, pitch, roll | Gierwinkel, Nickwinkel, Rollwinkel |
 | results, messages, warning | Ergebnisse, Meldungen, Warnung |
@@ -365,6 +374,8 @@ Glossary:
 | coverage map, leak | dekkingskaart, lek |
 | auralization, dry recording | auralisatie, anechoïsche opname |
 | playback, head tracking | afspelen, hoofdtracking |
+| trajectory, tour (a demo's) | route, rondgang |
+| stem, multitrack recording | stem (*bas-stem*, not *basstem*, a bass voice), meersporenopname |
 | gain, delay, equalizer | versterking, vertraging, equalizer |
 | yaw, pitch, roll | gierhoek, stamphoek, rolhoek |
 | results, messages, warning | resultaten, meldingen, waarschuwing |

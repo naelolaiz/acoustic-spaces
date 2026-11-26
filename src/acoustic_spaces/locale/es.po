@@ -955,7 +955,7 @@ msgstr ""
 "Mientras hay en curso un cálculo, un mapa de cobertura, una exportación o "
 "una demostración, marcar con un anillo en la vista 3D y en la planta las "
 "fuentes y los receptores con los que trabaja su último paso, y dibujar los "
-"móviles donde los sitúa el lugar del recorrido que simula"
+"móviles donde los sitúa el lugar de la trayectoria que simula"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
@@ -2182,19 +2182,19 @@ msgstr ", con Doppler"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Trajectories"
-msgstr "Recorridos"
+msgstr "Trayectorias"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "The sources and listeners with a trajectory. Ticked ones move along it while "
 "the piece plays, all on one clock; the others stand where they start"
 msgstr ""
-"Las fuentes y receptores con recorrido. Los marcados lo siguen mientras "
+"Las fuentes y receptores con trayectoria. Los marcados la siguen mientras "
 "suena la pieza, todos con un mismo reloj; los demás se quedan donde empiezan"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick to move it along its trajectory in this run"
-msgstr "Marque para que siga su recorrido en esta ejecución"
+msgstr "Marque para que siga su trayectoria en esta ejecución"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "The source or listener, as the scene names it"
@@ -2210,7 +2210,7 @@ msgstr "Una fuente o un receptor"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Trajectory"
-msgstr "Recorrido"
+msgstr "Trayectoria"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "How it goes, how far and for how long"
@@ -2239,7 +2239,7 @@ msgid ""
 "before running the demo"
 msgstr ""
 "Cierra esta ventana y abre el panel Movimiento en el elemento seleccionado, "
-"para cambiar su recorrido o dar uno a una fuente o receptor; guarde la "
+"para cambiar su trayectoria o dar una a una fuente o receptor; guarde la "
 "escena antes de ejecutar la demo"
 
 #: acoustic_spaces/gui/demo_dialog.py
@@ -2438,7 +2438,7 @@ msgid ""
 "trajectory along keyframes."
 msgstr ""
 "Nada se mueve en esta escena. Editar movimiento… da a una fuente o a un "
-"receptor un recorrido por fotogramas clave."
+"receptor una trayectoria por fotogramas clave."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2447,7 +2447,7 @@ msgid ""
 "plays; the others stand where they start. The ticks start as Moving sets "
 "them in the scene, and change this run only ({option})."
 msgstr ""
-"Las fuentes y receptores marcados siguen sus recorridos mientras suena la "
+"Las fuentes y receptores marcados siguen sus trayectorias mientras suena la "
 "pieza; los demás se quedan donde empiezan. Las marcas empiezan como las pone "
 "En movimiento en la escena y solo cambian esta ejecución ({option})."
 
@@ -2456,8 +2456,8 @@ msgid ""
 "What this run moves along its trajectory, as the options below pick what "
 "plays; Edit movement… changes a trajectory."
 msgstr ""
-"Lo que esta ejecución mueve por su recorrido, según lo que eligen las "
-"opciones de abajo; Editar movimiento… cambia un recorrido."
+"Lo que esta ejecución mueve por su trayectoria, según lo que eligen las "
+"opciones de abajo; Editar movimiento… cambia una trayectoria."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -2465,7 +2465,7 @@ msgid ""
 "This scene plays the trajectories."
 msgstr ""
 "Esta demo no mueve nada: cada fuente y cada receptor se quedan donde "
-"empiezan. Esta escena reproduce los recorridos."
+"empiezan. Esta escena reproduce las trayectorias."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "all: every step in order, leaving out what is done already."
@@ -2592,15 +2592,15 @@ msgstr[1] "excluir {count} receptores"
 #: acoustic_spaces/gui/document.py
 #, python-brace-format
 msgid "{name} has no trajectory yet: add a keyframe first"
-msgstr "{name} aún no tiene recorrido: añada primero un fotograma clave"
+msgstr "{name} aún no tiene trayectoria: añada primero un fotograma clave"
 
 #: acoustic_spaces/gui/document.py
 msgid "turn the trajectory on"
-msgstr "activar el recorrido"
+msgstr "activar la trayectoria"
 
 #: acoustic_spaces/gui/document.py
 msgid "turn the trajectory off"
-msgstr "desactivar el recorrido"
+msgstr "desactivar la trayectoria"
 
 #: acoustic_spaces/gui/document.py
 msgid "turn Doppler on"
@@ -5574,7 +5574,7 @@ msgid ""
 "to point to give the source a trajectory"
 msgstr ""
 "Solo una fuente puntual se mueve: una línea o una superficie se queda donde "
-"está. Pon Forma en punto para dar un recorrido a la fuente"
+"está. Pon Forma en punto para dar una trayectoria a la fuente"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -6091,7 +6091,7 @@ msgstr ""
 "solo campo sobre todos ellos, con el terreno y las cubiertas dentro, donde "
 "sus partes superiores continúan lo bastante lejos a ambos lados del camino; "
 "segundos por cada fuente y receptor) o las trayectorias sobre una arista o "
-"dos solas. Los mapas y los recorridos toman las trayectorias"
+"dos solas. Los mapas y las trayectorias de los móviles usan estas últimas"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -7374,8 +7374,8 @@ msgid ""
 msgstr ""
 "A qué velocidad va de este fotograma clave al siguiente: la distancia entre "
 "ambos dividida por el tiempo entre ambos (m/s; 3,6 km/h cada uno). Nada que "
-"ajustar: cambie un tiempo o una posición y la velocidad se deduce. Un "
-"recorrido por puntos va a una sola velocidad: escríbala aquí y los tiempos "
+"ajustar: cambie un tiempo o una posición y la velocidad se deduce. Una "
+"trayectoria por puntos va a una sola velocidad: escríbala aquí y los tiempos "
 "se deducen"
 
 #: acoustic_spaces/gui/movement.py
@@ -7387,7 +7387,7 @@ msgid ""
 "Turn a trajectory along points at a speed (to, speed_m_s) into keyframes "
 "that move the same way, timed, so that they can be edited here"
 msgstr ""
-"Convertir un recorrido por puntos a una velocidad (to, speed_m_s) en "
+"Convertir una trayectoria por puntos a una velocidad (to, speed_m_s) en "
 "fotogramas clave que se mueven igual, con sus tiempos, para poder editarlos "
 "aquí"
 
@@ -7418,9 +7418,9 @@ msgid ""
 "add keyframes past the end, and the movers that have ended stand where their "
 "trajectories end"
 msgstr ""
-"Dónde termina la línea de tiempo: como mínimo el recorrido más largo; "
+"Dónde termina la línea de tiempo: como mínimo la trayectoria más larga; "
 "alárguela para añadir fotogramas clave más allá del final; los móviles que "
-"han terminado se quedan donde acaban sus recorridos"
+"han terminado se quedan donde acaban sus trayectorias"
 
 #: acoustic_spaces/gui/movement.py
 msgid "End"
@@ -7483,7 +7483,7 @@ msgid ""
 msgstr ""
 "{name} recorre sus puntos a una sola velocidad, {speed:.2f} m/s ({kmh:.1f} "
 "km/h): escriba o arrastre un punto para moverlo, escriba una velocidad para "
-"todo el recorrido, y los tiempos se deducen. Convertir en fotogramas clave "
+"toda la trayectoria, y los tiempos se deducen. Convertir en fotogramas clave "
 "para fijar usted el tiempo de cada punto."
 
 #: acoustic_spaces/gui/movement.py
@@ -7527,7 +7527,7 @@ msgid ""
 "the one after. With the last one, the trajectory goes too"
 msgstr ""
 "Quitar el punto seleccionado; el móvil va en línea recta del anterior al "
-"siguiente. Con el último, el recorrido también desaparece"
+"siguiente. Con el último, la trayectoria también desaparece"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Add keyframe"
@@ -7541,7 +7541,8 @@ msgid ""
 msgstr ""
 "Añadir un fotograma clave en el cursor de tiempo, donde está el móvil en ese "
 "instante (si ya hay uno ahí, o a 0 s: un segundo después del final de su "
-"recorrido, donde termina); después arrástrelo a su sitio o escriba dónde está"
+"trayectoria, donde termina); después arrástrelo a su sitio o escriba dónde "
+"está"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Remove keyframe"
@@ -7553,7 +7554,7 @@ msgid ""
 "the one after. With the last one, the trajectory goes too"
 msgstr ""
 "Quitar el fotograma clave seleccionado; el móvil va directo del anterior al "
-"siguiente. Con el último se va también el recorrido"
+"siguiente. Con el último se va también la trayectoria"
 
 #: acoustic_spaces/gui/movement.py
 #, python-brace-format
@@ -7562,7 +7563,7 @@ msgstr "{text} no es un número"
 
 #: acoustic_spaces/gui/movement.py
 msgid "a trajectory goes at a speed above 0 m/s"
-msgstr "un recorrido va a una velocidad mayor que 0 m/s"
+msgstr "una trayectoria va a una velocidad mayor que 0 m/s"
 
 #: acoustic_spaces/gui/movement.py
 msgid "change speed"
@@ -7627,7 +7628,7 @@ msgstr "quitar fotograma clave"
 
 #: acoustic_spaces/gui/movement.py
 msgid "convert trajectory to keyframes"
-msgstr "convertir recorrido en fotogramas clave"
+msgstr "convertir trayectoria en fotogramas clave"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Pause"
@@ -7846,7 +7847,7 @@ msgid ""
 "its trajectory; drag it once the run is over"
 msgstr ""
 "No movido: {name} se dibuja donde lo simula la ejecución, a los {time:.2f} s "
-"de su recorrido; arrástrelo cuando la ejecución termine"
+"de su trayectoria; arrástrelo cuando la ejecución termine"
 
 #: acoustic_spaces/gui/plan_view.py
 #, python-brace-format
@@ -9670,8 +9671,8 @@ msgstr ""
 "y otro está a 4 m del guía y gira la cabeza un cuarto de vuelta cada vez: la "
 "demo de la escena (`acoustic-spaces demo`, o walk_demo.py solo con el que "
 "camina y el que gira) reproduce la charla del guía tal como la oye cada uno. "
-"Desactive un recorrido (En movimiento, o `enabled: false`) y ese visitante "
-"se queda donde empieza, mirando hacia donde mira allí."
+"Desactive una trayectoria (En movimiento, o `enabled: false`) y ese "
+"visitante se queda donde empieza, mirando hacia donde mira allí."
 
 #: examples/helicopter_flyover/scene.yaml
 msgctxt "example"
@@ -9953,13 +9954,14 @@ msgstr ""
 "potencia acústica por metro y la directividad alrededor de la vía de Schall "
 "03 (el método alemán para el ruido de los ferrocarriles, 2014), toda en la "
 "cabeza del carril. Un tren pasa a 160 km/h y su tono baja al pasar "
-"(Doppler): tres fuentes a lo largo de un mismo recorrido, en la cabeza del "
-"carril, en el techo y en el pantógrafo, las alturas de Schall 03; cada una "
-"reproduce los puntos del tren a esa altura uno detrás de otro (sus bogies, "
-"los techos de sus coches, su pantógrafo), de modo que el tren tarda en pasar "
-"tanto como mide. Quedan fuera de las simulaciones hasta que se marcan, como "
-"la bocina del tren en su frente (el grupo Train), y passby_demo.py hace "
-"pasar uno de cuatro trenes, con la bocina sonando con --sources Train."
+"(Doppler): tres fuentes a lo largo de una misma trayectoria, en la cabeza "
+"del carril, en el techo y en el pantógrafo, las alturas de Schall 03; cada "
+"una reproduce los puntos del tren a esa altura uno detrás de otro (sus "
+"bogies, los techos de sus coches, su pantógrafo), de modo que el tren tarda "
+"en pasar tanto como mide. Quedan fuera de las simulaciones hasta que se "
+"marcan, como la bocina del tren en su frente (el grupo Train), y "
+"passby_demo.py hace pasar uno de cuatro trenes, con la bocina sonando con "
+"--sources Train."
 
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"
