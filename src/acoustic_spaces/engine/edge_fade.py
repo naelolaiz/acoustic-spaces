@@ -171,6 +171,12 @@ _NEGLIGIBLE = 1e-3
 #: The most faces a leg of a path over two edges is followed through
 #: (:meth:`EdgeFade._leg_shares`); each lets by half its zone at most.
 _MAX_CROSSED = 8
+#: The Fresnel integrals of the paths over two edges (:meth:`EdgeFade._joint_weights`)
+#: run over path differences up to this many half wavelengths (nine Fresnel zones), in
+#: steps of :data:`_LEVEL_STEP`: within 0.002 of the exact integral for a straight edge,
+#: a strip or a square, and edges further out add under 0.1.
+_LEVELS = 9.0
+_LEVEL_STEP = 0.1
 
 
 class EdgeFade:
@@ -1412,19 +1418,19 @@ class EdgeFade:
         stopped there, so the product stands for a path that runs from the first edge
         to the second off the planes of the path's reflections between the two events,
         as the image method places its points, and that path may not be. It carries
-        the share of the first Fresnel zone of each of its reflections that the faces
-        there hold (:data:`~acoustic_spaces.geometry.outdoor.FRESNEL_PATH_DIFFERENCE`
-        wavelengths of extra path, the zones the ground's reflections are weighted by),
-        less the share past the two edges themselves, where the path would come back to
+        what the faces there give back of each of its reflections, less what the plane
+        gives back past the two edges themselves, where the path would come back to
         an edge it bends at (between the tops of two screens, off the front of one and
         the back of the other: the waves bent back and forth between the tops come later
         and weaker than such a path, and the second order leaves them out); and on its
-        way from each edge to the other, of each Fresnel zone of its legs, the share
-        that each face it passes through lets by past the nearest edge of the face's
-        plane, and that each other edge near it leaves free. Each share changes smoothly
-        as the path moves, and is a half where the path meets an edge. Of the orders of
-        the reflections off perpendicular planes, which have one image, the one with the
-        most is taken, as its points come in that order along the way."""
+        way from each edge to the other, what each face it passes through lets by past
+        the nearest edge of the face's plane, and what each other edge near it leaves
+        free. Each is the magnitude of a Fresnel integral over what the faces hold or
+        leave free, as a share of the whole plane's (:meth:`_zone_share`,
+        :meth:`_leg_shares`); it changes smoothly as the path moves, and is a half where
+        the path meets an edge. Of the orders of the reflections off perpendicular
+        planes, which have one image, the one with the most is taken, as its points come
+        in that order along the way."""
         n = len(path)
         wavelength = 2.0 * np.pi / self.d.wavenumber  # (B, M)
         out = np.zeros((n, *wavelength.shape))
@@ -1494,15 +1500,19 @@ class EdgeFade:
         return out
 
     def _zone_share(self, plane, at, before, after, own, wavelength) -> np.ndarray:
-        """(F,) the share of the first Fresnel zone of a reflection off ``plane`` at
-        ``at`` from ``before`` to ``after`` (the source's image in the planes before
-        and the listener's in those after) that the faces in the plane's place hold
-        that it reflects off, less the share past the edges ``own`` (2,) of a face in
-        the plane, beside them (see :meth:`_joint_weights`), at each ``wavelength``
-        (F,). The zone is as the ground's reflections have it
-        (:meth:`~acoustic_spaces.geometry.outdoor.Layout.fresnel_shares`), and each
-        share the exact area of the ellipse that a face covers, so that it changes
-        smoothly as the reflection moves."""
+        """(F,) how much of a reflection off ``plane`` at ``at`` from ``before`` to
+        ``after`` (the source's image in the planes before and the listener's in those
+        after) the faces in the plane's place that it reflects off give back, less what
+        the plane gives back past the edges ``own`` (2,) of a face in it, beside them
+        (see :meth:`_joint_weights`), at each ``wavelength`` (F,): the magnitude of the
+        Fresnel integral over those faces, as a share of the whole plane's. The
+        integral runs over the Fresnel zones round the reflection, the ellipses where a
+        path by way of the plane is u half wavelengths longer than the reflected one
+        (:func:`~acoustic_spaces.geometry.outdoor._fresnel_ellipses`), as
+        :func:`_level_integral` has it from the exact area of each ellipse that the faces
+        cover, so that it changes smoothly as the reflection moves: a half at a straight
+        edge through the reflection point, 0.97 for a strip half the first zone wide
+        round it, where the share of the zone's area would be 0.61."""
         from acoustic_spaces.geometry.outdoor import _disk_area, _fresnel_ellipses
 
         model, edges = self.model, self.edges
@@ -1514,26 +1524,44 @@ class EdgeFade:
         def local(p):
             return (np.asarray(p, dtype=float) - at) @ frame.T
 
+        inside = self._reflecting_face(plane, at, before) >= 0
+        wavelength = np.asarray(wavelength, dtype=float)
+        count = len(wavelength)
+        levels = _levels()[1:]  # the ellipse of level 0 is the point itself
         height = np.array([model.plane_offset[plane] - normal @ at])
         centre, axes = _fresnel_ellipses(
-            local(before)[None], np.zeros((1, 3)), local(after)[None], height, wavelength
+            local(before)[None],
+            np.zeros((1, 3)),
+            local(after)[None],
+            height,
+            (wavelength[:, None] * levels[None]).reshape(-1),
         )
-        centre, axes = centre[0], axes[0]  # (F, 2), (F, 2, 2)
-        inside = self._reflecting_face(plane, at, before) >= 0
-        usable = np.abs(np.linalg.det(axes)) > 0.0
+        centre = centre[0].reshape(count, len(levels), 2)
+        axes = axes[0].reshape(count, len(levels), 2, 2)
+        size = np.abs(np.linalg.det(axes))  # (F, J): each ellipse's area over pi
+        usable = np.all(size > 0.0, axis=1)
         if not usable.any():
-            return np.full(len(wavelength), float(inside))
+            return np.full(count, float(inside))
         inverse = np.zeros_like(axes)
         inverse[usable] = np.linalg.inv(axes[usable])
-        reach = np.linalg.norm(axes, axis=-2).max() + np.linalg.norm(centre, axis=1).max()
+        widest = axes[:, -1][usable]
+        reach = (
+            np.linalg.norm(widest, axis=-2).max()
+            + np.linalg.norm(centre[:, -1][usable], axis=-1).max()
+        )
 
-        def share(polygons):
-            """(F,) the share of the zone that the polygons (k, s, 2) cover."""
-            if len(polygons) == 0:
-                return np.zeros(len(wavelength))
-            mapped = np.einsum("fij,fksj->fksi", inverse, polygons[None] - centre[:, None, None])
-            area = _disk_area(mapped.reshape(-1, *polygons.shape[1:]))
-            return area.reshape(len(wavelength), len(polygons)).sum(axis=1) / np.pi
+        def area(polygons, rows):
+            """(r, J + 1) the area of each ellipse of the frequencies ``rows`` that the
+            polygons (k, s, 2) cover, 0 at level 0."""
+            out = np.zeros((len(rows), len(levels) + 1))
+            if len(polygons) == 0 or len(rows) == 0:
+                return out
+            shifted = polygons[None, None] - centre[rows][:, :, None, None]
+            mapped = np.einsum("fjab,fjksb->fjksa", inverse[rows], shifted)
+            covered = _disk_area(mapped.reshape(-1, *polygons.shape[1:]))
+            covered = covered.reshape(len(rows), len(levels), len(polygons)).sum(axis=-1)
+            out[:, 1:] = covered * size[rows]
+            return out
 
         faces = np.flatnonzero(np.isin(model.face_plane, self._in_place(plane)))
         faces = faces[~model.transparent[faces]]
@@ -1542,41 +1570,37 @@ class EdgeFade:
         corners = local(triangles)[..., :2]  # (f, 3, 2)
         near = np.all(corners.min(axis=1) <= reach, axis=1)
         near &= np.all(corners.max(axis=1) >= -reach, axis=1)
-        held = share(corners[near])
+        held = [corners[near]]
         if len(beyond):
-            held = held + share(local(beyond)[..., :2])
-        held = np.clip(held, 0.0, 1.0)
-        # Past the edges themselves, beside them, in the plane of their face.
-        strips = []
-        geometric = model.geometric_plane[plane]
+            held.append(local(beyond)[..., :2])
+        rows = np.flatnonzero(usable)
+        whole = np.zeros((len(rows), len(levels) + 1))
+        whole[:, 1:] = np.pi * size[rows]
+        given = np.zeros((len(rows), len(levels) + 1))
+        for polygons in held:
+            given += area(polygons, rows)
+        out = np.full(count, float(inside))
+        out[rows] = np.abs(_level_integral(given)) / np.abs(_level_integral(whole))
+        # Near the edges themselves, the path would come back to an edge it bends at:
+        # none of it where it meets the edge, all of it from a few zones away, as the
+        # plane in front of the edge gives back less what it gives back past it.
         own = np.unique(own)
+        first = axes[rows, int(round(1.0 / _LEVEL_STEP)) - 1]  # the first zone's (r, 2, 2)
+        geometric = model.geometric_plane[plane]
         for e in own[self._bounds(own, plane, before)].tolist():
-            for side in (0, 1):
-                if self._edge_plane[e, side] != geometric:
-                    continue
-                angle = side * edges.wedge[e] * np.pi
-                into = np.cos(angle) * edges.along[e] + np.sin(angle) * edges.normal[e]
-                far = 4.0 * reach + edges.length[e]
-                a, b = edges.start[e], edges.end[e]
-                strip = np.stack([a, b, b - far * into, a - far * into])
-                strips.append(local(strip)[:, :2])
-                # Where the edge ends on a side that the face goes on past as an image
-                # (a wall's foot on open ground), the edge goes on as its image too.
-                for p, q, _, r in beyond:
-                    line, out = q - p, r - p
-                    out = out / np.linalg.norm(out)
-                    for end in (a, b):
-                        t = (end - p) @ line / (line @ line)
-                        gap = np.linalg.norm(end - p - t * line)
-                        if gap <= self.tolerance and -1e-9 <= t <= 1.0 + 1e-9:
-                            image = strip - 2.0 * ((strip - p) @ out)[:, None] * out
-                            strips.append(local(image)[:, :2])
-                            break
-                if edges.wedge[e] >= 2.0 - 1e-9:
-                    break  # a free edge: one face, both sides in one plane
-        past = share(np.array(strips)) if strips else 0.0
-        out = np.clip(held - past, 0.0, 1.0)
-        return np.where(usable, out, float(inside))
+            sides = np.flatnonzero(self._edge_plane[e] == geometric)
+            if len(sides) == 0:
+                continue
+            angle = sides[0] * edges.wedge[e] * np.pi
+            into = np.cos(angle) * edges.along[e] + np.sin(angle) * edges.normal[e]
+            a = local(edges.start[e])[:2]
+            across = (into @ frame.T)[:2]
+            across /= max(float(np.linalg.norm(across)), 1e-300)  # towards the edge's face
+            gap = -float(a @ across)  # the reflection's, on the face's side when positive
+            radius = np.linalg.norm(np.einsum("i,rij->rj", across, first), axis=1)
+            near = _beyond_line(abs(gap), radius)
+            out[rows] *= np.abs(1j - 2.0 * near) if gap > 0.0 else 0.0
+        return out
 
     def _bounds(self, edge: np.ndarray, plane: int, side: np.ndarray) -> np.ndarray:
         """Whether each of ``edge`` bounds a face of it in the place of ``plane`` that a
@@ -1637,15 +1661,17 @@ class EdgeFade:
         return triangles, strips
 
     def _leg_shares(self, points, faces, seqs, edge, wavelength) -> np.ndarray:
-        """(F,) the share of the Fresnel zones of the legs of a path over two edges (see
-        :meth:`_joint_weights`) that the model leaves free, at each ``wavelength`` (F,):
+        """(F,) how much of the legs of a path over two edges (see :meth:`_joint_weights`)
+        the model leaves free, at each ``wavelength`` (F,):
         its ``points`` (m + 2, 3) from just off the first edge of ``edge`` (2,) to just
         off the second, off the planes ``seqs`` (m,) at the ``faces`` (m + 1: -1 first,
         then the face of each reflection, or -1). The zone at a point a way along a path
         of length L is a disk of radius sqrt(2 d a (L - a) / L) across it (d the path
         difference of the first Fresnel zone). Each face the path passes through lets by
-        the share of the disk beyond the nearest edge of the face's plane; each other
-        edge near it leaves free the share of the disk on the path's side of it. The
+        what the half-plane beyond the nearest edge of the face's plane does, and each
+        other edge near it leaves free what the half-plane on the path's side of it
+        does: the magnitude of the Fresnel integral over it (:func:`_beyond_line`), as
+        past a knife edge, a half where the path grazes the edge. The
         edges of the planes the path reflects off (their shares are the reflections')
         and of the two edges' own planes do not count, nor does the first edge on the
         first leg or the second on the last."""
@@ -1700,7 +1726,7 @@ class EdgeFade:
                 lets = np.zeros(len(delta))
                 if len(near):
                     gap, s, _ = _segment_gaps(p0, p1, edges.start[near], edges.end[near])
-                    lets = _cap(gap[:, None], radius(along[leg] + s)).max(axis=0)
+                    lets = np.abs(_beyond_line(gap[:, None], radius(along[leg] + s))).max(axis=0)
                 out *= lets
                 if not out.any():
                     return out
@@ -1718,10 +1744,10 @@ class EdgeFade:
             )
             nearer = g < gap
             gap[nearer], at[nearer] = g[nearer], along[leg] + s[nearer]
-        widest = radius(0.5 * total).max()
+        widest = radius(0.5 * total).max() * np.sqrt(_levels()[-1])
         near = (gap < widest) & (at > self.tolerance) & (at < total - self.tolerance)
         if near.any():
-            out *= np.prod(1.0 - _cap(gap[near, None], radius(at[near])), axis=0)
+            out *= np.prod(np.abs(1j - _beyond_line(gap[near, None], radius(at[near]))), axis=0)
         return out
 
     def _product_weights(self, parts, stop, stop2, geometry) -> tuple[np.ndarray, np.ndarray]:
@@ -2741,15 +2767,49 @@ def _pairs(path, row, chosen, heads):
     return np.repeat(sel, count), heads[np.repeat(lo, count) + within]
 
 
-def _cap(gap, radius):
-    """The share of a disk of ``radius`` beyond a line ``gap`` from its centre (both
-    broadcast): a half where the line runs through the centre, none from one radius
-    away."""
+def _levels() -> np.ndarray:
+    """(J,) the levels of a Fresnel integral (:func:`_level_integral`): the path
+    differences 0, :data:`_LEVEL_STEP`, ... up to :data:`_LEVELS` half wavelengths and
+    one step past, for the slope there."""
+    count = int(round(_LEVELS / _LEVEL_STEP))
+    return np.arange(count + 2) * _LEVEL_STEP
+
+
+def _level_integral(area: np.ndarray) -> np.ndarray:
+    """(...,) the Fresnel integral of a region over a plane, the integral of exp(i pi u)
+    over it where a path by way of the point is u half wavelengths longer than the
+    reflected one, from ``area`` (..., J): the region's area inside each level of
+    :func:`_levels`, as the integral over u of exp(i pi u) times the area's growth. Past
+    the last level the region goes on growing as it does there (an Abel limit), which
+    leaves out only what edges further than that add; over the whole plane, with areas
+    pi u of a disk, it is exactly i."""
+    u = _levels()
+    top = u[-2]
+    count = len(u) - 2
+    weights = np.ones(count + 1)
+    weights[1:-1:2] = 4.0
+    weights[2:-1:2] = 2.0
+    alpha = -1j * np.pi
+    kernel = np.exp(-alpha * u[: count + 1]) * weights * (_LEVEL_STEP / 3.0)
+    integral = area[..., : count + 1] @ kernel
+    slope = (area[..., -1] - area[..., -3]) / (2.0 * _LEVEL_STEP)
+    return np.exp(-alpha * top) * (area[..., -2] + slope / alpha) + alpha * integral
+
+
+def _beyond_line(gap, radius) -> np.ndarray:
+    """(...,) the Fresnel integral (:func:`_level_integral`) of the half-plane beyond a
+    line ``gap`` from the axis of a leg, across it, where the first Fresnel zone is a
+    disk of ``radius`` (both broadcast): a half of the whole plane's (i) where the
+    line runs through the axis, and none from sqrt(:data:`_LEVELS`) radii on."""
     gap, radius = np.broadcast_arrays(np.asarray(gap, dtype=float), np.asarray(radius, dtype=float))
-    u = np.ones(gap.shape)
-    np.divide(gap, radius, out=u, where=radius > 0.0)
-    u = np.clip(u, 0.0, 1.0)
-    return (np.arccos(u) - u * np.sqrt(1.0 - u * u)) / np.pi
+    p = np.full(gap.shape, np.inf)
+    np.divide(gap, radius, out=p, where=radius > 0.0)
+    u = _levels()
+    p2 = (p * p)[..., None]
+    deep = np.sqrt(np.clip(u - p2, 0.0, None))
+    angle = np.arctan2(deep, np.where(np.isfinite(p2), np.sqrt(np.minimum(p2, 1e300)), 1.0))
+    area = np.where(u > p2, u * angle - np.sqrt(np.minimum(p2, 1e300)) * deep, 0.0)
+    return _level_integral(area)
 
 
 def _segment_gaps(p0, p1, start, end) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
