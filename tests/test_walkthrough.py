@@ -497,6 +497,40 @@ def test_a_movement_holds_each_late_part_where_it_has_energy() -> None:
         np.testing.assert_array_equal(x, wide[name].astype(np.float32))
 
 
+def test_a_movement_simulates_the_listeners_it_is_heard_by_alone() -> None:
+    """With ``listeners``, a movement simulates those alone, a moving one at each of its
+    places, on the moments it has with every listener; render_movement hears them, as
+    loud as the movement of every listener has them, and refuses the others."""
+    walk = {"to": [[5.0, 1.0, 1.5]], "speed_m_s": 2.0}
+    scene = _scene(
+        sources=[{"name": "s", "position": [7.0, 5.0, 1.5]}],
+        listeners=[
+            _walker(walk),
+            {"name": "seat", "position": [2.0, 4.0, 1.2]},
+            {"name": "back", "position": [6.5, 2.0, 1.2]},
+        ],
+    )
+    room = Room.from_scene(scene)
+    every = simulate_movement(room, step_m=1.0)
+    some = simulate_movement(room, step_m=1.0, listeners=["w", "seat"])
+    np.testing.assert_array_equal(some.times, every.times)
+    assert some.heard == {"w", "seat"} and every.heard is None
+    listeners = {key[1] for key in some.result.responses}
+    assert "back" not in listeners and "seat" in listeners
+    assert listeners - {"seat"} == set(some.copies["listeners", "w"])
+    for key, response in some.result.responses.items():
+        np.testing.assert_allclose(response.early.energy, every.result[key].early.energy)
+        np.testing.assert_array_equal(response.late, every.result[key].late)
+    rate = 8000
+    signal = np.random.default_rng(1).standard_normal(rate // 4)
+    heard = render_movement(some, {"s": signal}, sample_rate=rate)
+    assert set(heard) == {"w", "seat"}
+    with pytest.raises(ValueError, match="'back' was not simulated in the movement"):
+        render_movement(some, {"s": signal}, sample_rate=rate, listeners=["back"])
+    with pytest.raises(ValueError, match="no listener 'nobody' in use"):
+        simulate_movement(room, step_m=1.0, listeners=["nobody"])
+
+
 def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
     """A walk with Doppler moving alone plays in a movement as in a walk of its own: at
     each listener, the same places, each early path through its changing delay and the

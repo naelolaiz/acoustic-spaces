@@ -233,7 +233,9 @@
   holds each response's late arrays from the first time slot with energy to the last,
   read back as they were (the stadium's helicopter 600 m out: half of them), and
   `render_movement` gives its mixes in the `dtype` asked for, the demo of any scene's in
-  32-bit floats as it writes them.
+  32-bit floats as it writes them. `simulate_movement(listeners=...)` simulates those
+  listeners alone, on the same moments: a run of the demo of any scene where something
+  moves simulates its own listeners (`--listeners`, a part per listener) and no others.
 - Added: `engine.diffraction.diffract` takes the plane sequences the early stage tested
   (`candidates`) and then adds the terms that make paths fade at edges, as a simulation
   does; without them it is the edge diffraction alone, as before.

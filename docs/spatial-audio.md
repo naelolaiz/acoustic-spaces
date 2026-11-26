@@ -404,12 +404,12 @@ acoustic-spaces walkthrough scene.yaml band=song.wav speaker=talk.wav --all --ou
   `--all`, the demo of any scene and the editor's **Render movement…** do this; one
   mover alone (`--mover`) crossfades its places as above.
 
-From Python: `simulate_movement(room)`, `render_movement(movement, signals, fmt)` (a
-dict of each listener's sound; `followers` plays more signals along a source's
-trajectory that many seconds behind it, as the points of a train behind its front,
-each with its own Doppler, and `leads` has a source heard that much after its
-trajectory is at each place; `dtype=np.float32` gives the sounds in 32-bit floats, each
-mixed in 64-bit ones), `save_movement(rendered, "heard.wav", rate, fmt)` and
+From Python: `simulate_movement(room)` (`listeners=` simulates those alone),
+`render_movement(movement, signals, fmt)` (a dict of each listener's sound; `followers`
+plays more signals along a source's trajectory that many seconds behind it, as the
+points of a train behind its front, each with its own Doppler, and `leads` has a source
+heard that much after its trajectory is at each place; `dtype=np.float32` gives the
+sounds in 32-bit floats, each mixed in 64-bit ones), `save_movement(rendered, "heard.wav", rate, fmt)` and
 `animate_movement(room, movement, "heard.mp4")`. In the editor, the Movement panel
 edits the keyframes, previews every mover along one timeline and renders the movement
 in the background (see [Graphical editor](editor.md)).

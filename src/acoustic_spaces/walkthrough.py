@@ -693,6 +693,9 @@ class Movement:
     #: The movers ((``"listeners"`` or ``"sources"``, name)) that move with Doppler; when
     #: :attr:`doppler` is set and this is empty, the one mover.
     with_doppler: frozenset[tuple[str, str]] = frozenset()
+    #: The listeners simulated (:func:`simulate_movement`'s ``listeners``), by their names
+    #: in the scene; None for every one in use.
+    heard: frozenset[str] | None = None
 
     @property
     def duration_s(self) -> float:
@@ -787,6 +790,7 @@ def simulate_movement(
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
     head_tracked: Iterable[str] = (),
+    listeners: Iterable[str] | None = None,
 ) -> Movement:
     """Simulate the scene with every mover (:func:`movers`) on one clock, in one
     simulation: the moments are every mover's places (every ``step_m`` along its trajectory,
@@ -808,6 +812,10 @@ def simulate_movement(
     each is simulated at the positions it takes alone, facing ahead (yaw, pitch and roll
     0), and :func:`render_movement` turns its field against the head as it faces at each
     moment, rather than at every ``step_deg`` of its turns.
+
+    ``listeners`` (names of listeners in use; by default, every one) are the only ones
+    simulated, a moving one at each of its places, on the same moments as with every
+    listener: :func:`render_movement` hears them alone.
     """
     if step_m is not None and step_m <= 0:
         raise ValueError("step_m must be positive")
@@ -818,6 +826,15 @@ def simulate_movement(
     moving = movers(scene)
     if not moving:
         raise ValueError("nothing moves: give a listener or a source a trajectory that is enabled")
+    heard = None
+    if listeners is not None:
+        heard = frozenset(listeners)
+        in_use = {lis.name for lis in scene.listeners if lis.in_use}
+        unknown = sorted(heard - in_use)
+        if unknown:
+            raise ValueError(f"no listener {unknown[0]!r} in use to hear the movement")
+        if not heard:
+            raise ValueError("no listener to hear the movement")
     paths = {item.name: knots(item) for _, item in moving}
     tracked = set(head_tracked)
     turners = {item.name for kind, item in moving if kind == "listeners"}
@@ -880,6 +897,8 @@ def simulate_movement(
             _copy_at(item, names[j], positions[first], angles[first])
             for j, first in enumerate(places)
         ]
+        if kind == "listeners" and heard is not None and item.name not in heard:
+            continue  # a copy at each place, not simulated
         parts = _late_mixing_of(positions[places], late_step_m, settings or scene.simulation)
         mixing |= {
             names[j]: {names[other]: weight for other, weight in mix.items()}
@@ -907,10 +926,20 @@ def simulate_movement(
                 raise ValueError(
                     f"the trajectory of {name!r} leaves the room at ({where}) m, {when:.2f} s in"
                 )
+    simulated = None
+    if heard is not None:
+        simulated = [lis.name for lis in still["listeners"] if lis.name in heard]
+        simulated += [
+            name
+            for (kind, mover), names in copies.items()
+            if kind == "listeners" and mover in heard
+            for name in dict.fromkeys(names)
+        ]
     # The moving sources' places share the parabolic equation's runs where they can.
     result = simulate(
         walked,
         settings=settings,
+        listeners=simulated,
         threads=threads,
         progress=progress,
         late_from=mixing,
@@ -920,9 +949,9 @@ def simulate_movement(
         # Where a place mixes others' late parts, it reads them from what they were traced
         # in, which stays whole however the places hold theirs.
         _held_where_heard(result)
-    turning = {name: paths[name] for name in sorted(tracked)}
+    turning = {name: paths[name] for name in sorted(tracked) if heard is None or name in heard}
     return Movement(
-        room, times, result, copies, late_places, bool(with_doppler), turning, with_doppler
+        room, times, result, copies, late_places, bool(with_doppler), turning, with_doppler, heard
     )
 
 
@@ -969,15 +998,16 @@ def render_movement(
     dtype: type = np.float64,
 ) -> dict[str, np.ndarray]:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
-    pair) played through the movement, as heard at every listener in use (those of
-    ``listeners`` alone, when given): each as (samples, channels) of ``dtype`` (each mixed
-    in 64-bit floats) in format ``fmt`` (default mono; mono through each listener's
-    microphone when it has a pattern) at ``sample_rate`` (default: the simulation's), all
-    of one length and, as in :func:`render_trajectory`, each signal scaled by its source's
-    sound power against the loudest one's unless ``equal_power``. A pair
-    that moves crossfades from each moment's response to the next's, as a trajectory does, or
-    with Doppler (:attr:`Movement.doppler`) plays each early path through its changing
-    delay and crossfades the late part, as :func:`render_trajectory` does; a still pair plays
+    pair) played through the movement, as heard at every listener in use that it
+    simulated (:attr:`Movement.heard`; those of ``listeners`` alone, when given): each as
+    (samples, channels) of ``dtype`` (each mixed in 64-bit floats) in format ``fmt``
+    (default mono; mono through each listener's microphone when it has a pattern) at
+    ``sample_rate`` (default: the simulation's), all of one length and, as in
+    :func:`render_trajectory`, each signal scaled by its source's sound power against the
+    loudest one's unless ``equal_power``. A pair that moves crossfades from each moment's
+    response to the next's, as a trajectory does, or with Doppler
+    (:attr:`Movement.doppler`) plays each early path through its changing delay and
+    crossfades the late part, as :func:`render_trajectory` does; a still pair plays
     through its one response. A source that moves with Doppler, or that a listener
     passes with it, may send an :class:`~acoustic_spaces.emission.Emission` at
     ``sample_rate``, the sound it sends each way, as :func:`render_trajectory` plays it.
@@ -1019,7 +1049,17 @@ def render_movement(
         unheard = [name for name in listeners if name not in in_use]
         if unheard:
             raise ValueError(f"no listener {unheard[0]!r} in use to hear the movement")
+        unsimulated = [
+            n for n in listeners if movement.heard is not None and n not in movement.heard
+        ]
+        if unsimulated:
+            raise ValueError(
+                f"listener {unsimulated[0]!r} was not simulated in the movement "
+                "(simulate_movement's listeners)"
+            )
         in_use = list(listeners)
+    elif movement.heard is not None:
+        in_use = [name for name in in_use if name in movement.heard]
     listeners = in_use
     if not listeners:
         raise ValueError("no listener in use to hear the movement")

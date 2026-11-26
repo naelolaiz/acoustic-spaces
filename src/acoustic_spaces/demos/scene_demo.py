@@ -2783,7 +2783,11 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     trailing = trailing_of(sounding)
     fmt = format_of(args, scene)
     print(f"simulating the movement of {', '.join(moving)}, on one clock")
-    movement = simulate_movement(room, progress=print, head_tracked=head_turners(scene, fmt))
+    # The run's listeners alone, and where their rooms take their level outdoors.
+    heard = [*names, *(indoors.front_name(name) for name in fronts)]
+    movement = simulate_movement(
+        room, progress=print, head_tracked=head_turners(scene, fmt), listeners=heard
+    )
     for source in trailing:
         if not all(movement.moves_with_doppler(source.name, name) for name in names):
             raise SystemExit(f"error: {trailing_problem(source)}")
