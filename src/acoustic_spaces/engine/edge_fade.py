@@ -168,6 +168,9 @@ _CHUNK = 4096
 _ALL_ORDERS = 4
 #: The pressure of a term, relative to its path, below which it is left out (-60 dB).
 _NEGLIGIBLE = 1e-3
+#: The most faces a leg of a path over two edges is followed through
+#: (:meth:`EdgeFade._leg_shares`); each lets by half its zone at most.
+_MAX_CROSSED = 8
 
 
 class EdgeFade:
@@ -981,13 +984,23 @@ class EdgeFade:
             _subset(part, (part["at"] == stop[part["path"]]) | (part["at"] == stop2[part["path"]]))
             for part in parts
         ]
+        # Each product of two terms there takes the share its path over both edges
+        # carries (_joint_weights).
+        keys, weight = None, None
+        if (stop2 >= 0).any():
+            keys, weight = self._product_weights(parts, stop, stop2, geometry)
         explained = stop >= 0
         table["fail"] = np.where(explained[path], stop[path], fail)
         first = 0
+        square = len(self.edges) ** 2
         for _, go in groups:
             n = len(go["fail"])
             go["fail"] = np.where(explained[first : first + n], stop[first : first + n], go["fail"])
             go["fail2"] = np.where(explained[first : first + n], stop2[first : first + n], -1)
+            go["joint"] = None
+            if keys is not None:
+                mine = (keys >= first * square) & (keys < (first + n) * square)
+                go["joint"] = (keys[mine] - first * square, weight[mine])
             first += n
         stops = (at == table["fail"]) | (at == stop2[path])
         going = ~stops & ~skip[path, at] & ((table["fail"] < 0) | explained[path])
@@ -1349,17 +1362,25 @@ class EdgeFade:
                     if at_b > at_a and at_b not in one and at_a not in two
                 ]
         if pairs:
-            # Of the pairs whose path over both edges can be, the first cut's strongest.
+            # Of the first cut that has pairs, the pair whose product is strongest with
+            # the share its path over both edges carries (_joint_weights).
             ends = np.array(
                 [(strongest[(p[0], p[3], p[5])], strongest[(p[0], p[4], p[6])]) for p in pairs]
             )
-            column = np.array([(p[0], p[5], p[6]) for p in pairs])
-            ok = self._joint(flat, ends[:, 0], ends[:, 1], column, geometry)
+            weight = self._joint_weights(
+                np.array([p[0] for p in pairs]),
+                flat["point"][ends],
+                flat["edge"][ends],
+                np.array([(p[5], p[6]) for p in pairs]),
+                geometry,
+            )
+            carried = np.mean(weight**2, axis=(1, 2))
             best = {}
-            for pair, good in zip(pairs, ok.tolist(), strict=True):
-                if good and (pair[0] not in best or pair[1:7] < best[pair[0]][1:7]):
-                    best[pair[0]] = pair
-            for path, (_, _, _, a, b, at_a, at_b, cut) in best.items():
+            for pair, share in zip(pairs, carried.tolist(), strict=True):
+                key = (pair[1], share * pair[2], *pair[2:7])
+                if pair[0] not in best or key < best[pair[0]][0]:
+                    best[pair[0]] = (key, pair)
+            for path, (_, (_, _, _, a, b, at_a, at_b, cut)) in best.items():
                 stops = stops_of[path]
                 chosen_of[path] = [(at_a, a, stops[:cut]), (at_b, b, stops[cut:])]
         for path, chosen in chosen_of.items():
@@ -1380,64 +1401,314 @@ class EdgeFade:
             offset += n
         return out
 
-    def _joint(self, flat, first, second, events, geometry) -> np.ndarray:
-        """Whether the path over two edges that stand in for a missed path, one at each
-        of two events that stop it, can be: the terms ``first`` and ``second`` of
-        ``flat`` (their edges and points), at the events ``events`` (n, 3: the path, the
-        first event and the second; what stops the paths in ``geometry``, see
-        :meth:`_geometry`). From just off the first edge's point, in the middle of its
-        open side, to just off the second's, the way off the planes of the path's
-        reflections between the two events (as the image method places its points)
-        must reflect off a face of each plane, from its front, and be clear between.
+    def _joint_weights(self, path, point, edge, events, geometry) -> np.ndarray:
+        """(n, B, M) how much of the product of two edges' terms that stand in for a
+        missed path its path over both edges carries: the terms' points and edges
+        ``point`` (n, 2, 3) and ``edge`` (n, 2), at the events ``events`` (n, 2) of the
+        missed paths ``path`` (n,) (what stops the paths in ``geometry``, see
+        :meth:`_geometry`).
+
         Each term is found with the other event's leg straight, as if the path were not
-        stopped there; where the two together make no path (off the front of one
-        screen and the back of another between their tops: past both tops, or exactly
-        at them, where the waves bent back and forth between the tops come later and
-        weaker than such a path would), their product stands for nothing."""
-        model, n = self.model, len(first)
-        ok = np.zeros(n, dtype=bool)
+        stopped there, so the product stands for a path that runs from the first edge
+        to the second off the planes of the path's reflections between the two events,
+        as the image method places its points, and that path may not be. It carries
+        the share of the first Fresnel zone of each of its reflections that the faces
+        there hold (:data:`~acoustic_spaces.geometry.outdoor.FRESNEL_PATH_DIFFERENCE`
+        wavelengths of extra path, the zones the ground's reflections are weighted by),
+        less the share past the two edges themselves, where the path would come back to
+        an edge it bends at (between the tops of two screens, off the front of one and
+        the back of the other: the waves bent back and forth between the tops come later
+        and weaker than such a path, and the second order leaves them out); and on its
+        way from each edge to the other, of each Fresnel zone of its legs, the share
+        that each face it passes through lets by past the nearest edge of the face's
+        plane, and that each other edge near it leaves free. Each share changes smoothly
+        as the path moves, and is a half where the path meets an edge. Of the orders of
+        the reflections off perpendicular planes, which have one image, the one with the
+        most is taken, as its points come in that order along the way."""
+        n = len(path)
+        wavelength = 2.0 * np.pi / self.d.wavenumber  # (B, M)
+        out = np.zeros((n, *wavelength.shape))
         if n == 0:
-            return ok
-        path, at_a, at_b = events.T
-        offset = self.d.offset
-        start = flat["point"][first] + offset * self._bisector[flat["edge"][first]]
-        end = flat["point"][second] + offset * self._bisector[flat["edge"][second]]
+            return out
+        model = self.model
+        start = point[:, 0] + self.d.offset * self._bisector[edge[:, 0]]
+        end = point[:, 1] + self.d.offset * self._bisector[edge[:, 1]]
         # The reflections between the two events: j (from 1) with at_a < 2 j - 1 < at_b.
         planes = geometry["planes"][path]
         j = 2 * np.arange(1, planes.shape[1] + 1) - 1
-        between = (j[None] > at_a[:, None]) & (j[None] < at_b[:, None])
+        between = (j[None] > events[:, :1]) & (j[None] < events[:, 1:])
         between &= np.arange(planes.shape[1])[None] < geometry["order"][path][:, None]
         count = between.sum(axis=1)
+        flat = wavelength.reshape(-1)
         for m in np.unique(count).tolist():
             rows = np.flatnonzero(count == m)
-            if m == 0:
-                ok[rows] = _clear(model, start[rows], end[rows])
-                continue
             seqs = planes[rows][between[rows]].reshape(len(rows), m)
-            chain = [start[rows]]
-            for i in range(m):
-                chain.append(model.mirror(chain[-1], seqs[:, i]))
-            points, possible = _image_points(
-                model, seqs, chain, start[rows], end[rows], self.tolerance
-            )
-            for i in np.flatnonzero(possible).tolist():
-                faces = [
-                    self._reflecting_face(int(seqs[i, r]), points[i, r + 1], chain[r][i])
-                    for r in range(m)
-                ]
-                if min(faces) < 0:
+            orders = itertools.permutations(range(m)) if m <= _ALL_ORDERS else _swaps(m)
+            for order in [tuple(range(m)), *(o for o in orders if o != tuple(range(m)))]:
+                ok = np.ones(len(rows), dtype=bool)
+                where = np.argsort(order)
+                for a in range(m):
+                    for b in range(a + 1, m):
+                        if where[a] > where[b]:
+                            ok &= _perpendicular(model, seqs[:, a], seqs[:, b])
+                sel = rows[ok]
+                if len(sel) == 0:
                     continue
-                legs = np.diff(points[i], axis=0)
-                length = np.linalg.norm(legs, axis=1)
-                _, hit = _first_solid(
-                    model,
-                    points[i, :-1],
-                    legs / np.maximum(length, 1e-300)[:, None],
-                    length * (1.0 - 1e-9),
-                    np.array([-1, *faces]),
+                weight = self._joint_path(
+                    start[sel], end[sel], seqs[ok][:, list(order)], edge[sel], flat
                 )
-                ok[rows[i]] = bool(np.all(hit < 0))
-        return ok
+                out[sel] = np.maximum(out[sel], weight.reshape(len(sel), *wavelength.shape))
+        return out
+
+    def _joint_path(self, start, end, seqs, edge, wavelength) -> np.ndarray:
+        """(n, F) :meth:`_joint_weights` of the paths from ``start`` to ``end`` (n, 3),
+        just off the points of the edges ``edge`` (n, 2), off the planes ``seqs`` (n, m)
+        in that order, at the ``wavelength`` (F,); 0 where the image method has no such
+        path."""
+        model = self.model
+        n, m = seqs.shape
+        out = np.zeros((n, len(wavelength)))
+        chain = [start]
+        for i in range(m):
+            chain.append(model.mirror(chain[-1], seqs[:, i]))
+        # The end mirrored in the planes after each reflection, the last first.
+        back = [end]
+        for i in range(m - 1, -1, -1):
+            back.insert(0, model.mirror(back[0], seqs[:, i]))
+        if m:
+            points, possible = _image_points(model, seqs, chain, start, end, self.tolerance)
+        else:
+            points, possible = np.stack([start, end], axis=1), np.ones(n, dtype=bool)
+        for i in np.flatnonzero(possible).tolist():
+            weight = np.ones(len(wavelength))
+            faces = [-1]
+            for r in range(m):
+                plane, at = int(seqs[i, r]), points[i, r + 1]
+                weight *= self._zone_share(
+                    plane, at, chain[r][i], back[r + 1][i], edge[i], wavelength
+                )
+                faces.append(self._reflecting_face(plane, at, chain[r][i]))
+            if weight.max() > 0.0:
+                weight *= self._leg_shares(points[i], faces, seqs[i], edge[i], wavelength)
+            out[i] = weight
+        return out
+
+    def _zone_share(self, plane, at, before, after, own, wavelength) -> np.ndarray:
+        """(F,) the share of the first Fresnel zone of a reflection off ``plane`` at
+        ``at`` from ``before`` to ``after`` (the source's image in the planes before
+        and the listener's in those after) that the faces in the plane's place hold
+        that it reflects off, less the share past the edges ``own`` (2,) of a face in
+        the plane, beside them (see :meth:`_joint_weights`), at each ``wavelength``
+        (F,). The zone is as the ground's reflections have it
+        (:meth:`~acoustic_spaces.geometry.outdoor.Layout.fresnel_shares`), and each
+        share the exact area of the ellipse that a face covers, so that it changes
+        smoothly as the reflection moves."""
+        from acoustic_spaces.geometry.outdoor import _disk_area, _fresnel_ellipses
+
+        model, edges = self.model, self.edges
+        normal = model.plane_normal[plane]
+        u = np.cross(normal, [1.0, 0.0, 0.0] if abs(normal[0]) < 0.9 else [0.0, 1.0, 0.0])
+        u /= np.linalg.norm(u)
+        frame = np.stack([u, np.cross(normal, u), normal])  # (3, 3): rows u, v, normal
+
+        def local(p):
+            return (np.asarray(p, dtype=float) - at) @ frame.T
+
+        height = np.array([model.plane_offset[plane] - normal @ at])
+        centre, axes = _fresnel_ellipses(
+            local(before)[None], np.zeros((1, 3)), local(after)[None], height, wavelength
+        )
+        centre, axes = centre[0], axes[0]  # (F, 2), (F, 2, 2)
+        inside = self._reflecting_face(plane, at, before) >= 0
+        usable = np.abs(np.linalg.det(axes)) > 0.0
+        if not usable.any():
+            return np.full(len(wavelength), float(inside))
+        inverse = np.zeros_like(axes)
+        inverse[usable] = np.linalg.inv(axes[usable])
+        reach = np.linalg.norm(axes, axis=-2).max() + np.linalg.norm(centre, axis=1).max()
+
+        def share(polygons):
+            """(F,) the share of the zone that the polygons (k, s, 2) cover."""
+            if len(polygons) == 0:
+                return np.zeros(len(wavelength))
+            mapped = np.einsum("fij,fksj->fksi", inverse, polygons[None] - centre[:, None, None])
+            area = _disk_area(mapped.reshape(-1, *polygons.shape[1:]))
+            return area.reshape(len(wavelength), len(polygons)).sum(axis=1) / np.pi
+
+        faces = np.flatnonzero(np.isin(model.face_plane, self._in_place(plane)))
+        faces = faces[~model.transparent[faces]]
+        faces = faces[_facing(model, faces, np.broadcast_to(before, (len(faces), 3)))]
+        corners = local(model.room.mesh.triangles[faces])[..., :2]  # (f, 3, 2)
+        near = np.all(corners.min(axis=1) <= reach, axis=1)
+        near &= np.all(corners.max(axis=1) >= -reach, axis=1)
+        held = np.clip(share(corners[near]), 0.0, 1.0)
+        # Past the edges themselves, beside them, in the plane of their face.
+        strips = []
+        geometric = model.geometric_plane[plane]
+        for e in np.unique(own).tolist():
+            for side in (0, 1):
+                if self._edge_plane[e, side] != geometric:
+                    continue
+                angle = side * edges.wedge[e] * np.pi
+                into = np.cos(angle) * edges.along[e] + np.sin(angle) * edges.normal[e]
+                far = 4.0 * reach + edges.length[e]
+                a, b = edges.start[e], edges.end[e]
+                strips.append(local(np.stack([a, b, b - far * into, a - far * into]))[:, :2])
+                if edges.wedge[e] >= 2.0 - 1e-9:
+                    break  # a free edge: one face, both sides in one plane
+        past = share(np.array(strips)) if strips else 0.0
+        out = np.clip(held - past, 0.0, 1.0)
+        return np.where(usable, out, float(inside))
+
+    def _leg_shares(self, points, faces, seqs, edge, wavelength) -> np.ndarray:
+        """(F,) the share of the Fresnel zones of the legs of a path over two edges (see
+        :meth:`_joint_weights`) that the model leaves free, at each ``wavelength`` (F,):
+        its ``points`` (m + 2, 3) from just off the first edge of ``edge`` (2,) to just
+        off the second, off the planes ``seqs`` (m,) at the ``faces`` (m + 1: -1 first,
+        then the face of each reflection, or -1). The zone at a point a way along a path
+        of length L is a disk of radius sqrt(2 d a (L - a) / L) across it (d the path
+        difference of the first Fresnel zone). Each face the path passes through lets by
+        the share of the disk beyond the nearest edge of the face's plane; each other
+        edge near it leaves free the share of the disk on the path's side of it. The
+        edges of the planes the path reflects off (their shares are the reflections')
+        and of the two edges' own planes do not count, nor does the first edge on the
+        first leg or the second on the last."""
+        from acoustic_spaces.geometry.outdoor import FRESNEL_PATH_DIFFERENCE
+
+        model, edges = self.model, self.edges
+        legs = np.diff(points, axis=0)
+        length = np.linalg.norm(legs, axis=1)
+        along = np.concatenate([[0.0], np.cumsum(length)])
+        total = along[-1]
+        delta = FRESNEL_PATH_DIFFERENCE * np.asarray(wavelength, dtype=float)  # (F,)
+        out = np.ones(len(delta))
+        if total <= self.tolerance:
+            return out
+
+        def radius(a):
+            """(..., F) the radius of the zone at ``a`` (...) along the path."""
+            a = np.clip(np.asarray(a, dtype=float), 0.0, total)[..., None]
+            return np.sqrt(2.0 * delta * a * (total - a) / total)
+
+        _, mine = self._of_planes(np.concatenate([edges.plane[edge].ravel(), seqs]))
+        skip = np.zeros(len(edges), dtype=bool)
+        skip[mine] = True
+        crossed = np.zeros(len(edges), dtype=bool)
+        for leg in range(len(legs)):
+            if length[leg] <= self.tolerance:
+                continue
+            p0, p1 = points[leg], points[leg + 1]
+            direction = legs[leg] / length[leg]
+            travelled, ignore = 0.0, faces[leg]
+            for _ in range(_MAX_CROSSED):
+                left = length[leg] * (1.0 - 1e-9) - travelled
+                if left <= 0.0:
+                    break
+                t, face = _first_solid(
+                    model,
+                    (p0 + travelled * direction)[None],
+                    direction[None],
+                    np.array([left]),
+                    ignore,
+                )
+                if face[0] < 0:
+                    break
+                travelled += float(t[0])
+                ignore = int(face[0])
+                _, near = self._of_planes(np.array([model.face_plane[ignore]]))
+                crossed[near] = True
+                if leg == 0:
+                    near = near[near != edge[0]]
+                if leg == len(legs) - 1:
+                    near = near[near != edge[1]]
+                lets = np.zeros(len(delta))
+                if len(near):
+                    gap, s, _ = _segment_gaps(p0, p1, edges.start[near], edges.end[near])
+                    lets = _cap(gap[:, None], radius(along[leg] + s)).max(axis=0)
+                out *= lets
+                if not out.any():
+                    return out
+        # The other edges near the path, on its side of them.
+        others = np.flatnonzero(~skip & ~crossed)
+        if len(others) == 0:
+            return out
+        gap = np.full(len(others), np.inf)
+        at = np.zeros(len(others))
+        for leg in range(len(legs)):
+            if length[leg] <= self.tolerance:
+                continue
+            g, s, _ = _segment_gaps(
+                points[leg], points[leg + 1], edges.start[others], edges.end[others]
+            )
+            nearer = g < gap
+            gap[nearer], at[nearer] = g[nearer], along[leg] + s[nearer]
+        widest = radius(0.5 * total).max()
+        near = (gap < widest) & (at > self.tolerance) & (at < total - self.tolerance)
+        if near.any():
+            out *= np.prod(1.0 - _cap(gap[near, None], radius(at[near])), axis=0)
+        return out
+
+    def _product_weights(self, parts, stop, stop2, geometry) -> tuple[np.ndarray, np.ndarray]:
+        """For the paths that two events stop (``stop`` and ``stop2``, by path), the
+        weights (K, B, M) of the products of their terms ``parts`` there, one at each
+        (:meth:`_joint_weights`, at the points of the strongest term of each edge at
+        each), sorted by their keys (K,): (path * E + the edge at the first) * E + the
+        edge at the second, for E edges."""
+        shape = self.d.wavenumber.shape
+        none = (np.zeros(0, dtype=np.int64), np.zeros((0, *shape)))
+        if not parts:
+            return none
+        count = len(self.edges)
+        path = np.concatenate([part["path"] for part in parts])
+        at = np.concatenate([part["at"] for part in parts])
+        edge = np.concatenate([part["edge"] for part in parts])
+        point = np.concatenate([part["point"] for part in parts])
+        strength = np.concatenate([_strength(part["pressure"]) for part in parts])
+        two = stop2[path] >= 0
+
+        def strongest(rows):
+            """Of ``rows``, the strongest of each path and edge, by path."""
+            rows = rows[np.lexsort((-strength[rows], edge[rows], path[rows]))]
+            key = path[rows] * count + edge[rows]
+            return rows[np.r_[True, key[1:] != key[:-1]]] if len(rows) else rows
+
+        first = strongest(np.flatnonzero(two & (at == stop[path])))
+        second = strongest(np.flatnonzero(two & (at == stop2[path])))
+        if len(first) == 0 or len(second) == 0:
+            return none
+        lo = np.searchsorted(path[second], path[first], side="left")
+        many = np.searchsorted(path[second], path[first], side="right") - lo
+        if many.sum() == 0:
+            return none
+        a = np.repeat(first, many)
+        within = np.arange(many.sum()) - np.repeat(np.cumsum(many) - many, many)
+        b = second[np.repeat(lo, many) + within]
+        weight = self._joint_weights(
+            path[a],
+            np.stack([point[a], point[b]], axis=1),
+            np.column_stack([edge[a], edge[b]]),
+            np.column_stack([at[a], at[b]]),
+            geometry,
+        )
+        keys = (path[a] * count + edge[a]) * count + edge[b]
+        order = np.argsort(keys, kind="stable")
+        return keys[order], weight[order]
+
+    def _product_weight(self, joint, ids, path, first, second, t) -> np.ndarray:
+        """(n, B, M) the weights of the products of the terms ``first`` and ``second``
+        (n,) of ``t``, at the two events that stop their paths ``path`` (n, into
+        ``ids``, the rows of the paths in their group), from ``joint`` (the group's
+        :meth:`_product_weights`, by the paths' rows); 1 for any not there."""
+        out = np.ones((len(first), *self.d.wavenumber.shape))
+        if joint is None or len(joint[0]) == 0 or len(first) == 0:
+            return out
+        keys, weight = joint
+        count = len(self.edges)
+        key = (ids[path] * count + t["edge"][first]) * count + t["edge"][second]
+        where = np.minimum(np.searchsorted(keys, key), len(keys) - 1)
+        found = keys[where] == key
+        out[found] = weight[where[found]]
+        return out
 
     def _terms_at(self, table: dict, slots: np.ndarray, passes: bool, max_delay_s) -> list:
         """The terms of the events ``slots`` of ``table`` at every edge they may meet, in
@@ -1972,8 +2243,18 @@ class EdgeFade:
                 at_first = event == fail[path[row[which]]]
                 taken[:, 0] = np.where(at_first, q, taken[:, 0])
                 taken[:, 1] = np.where(at_first, taken[:, 1], q)
+                # A term at the second stop takes the share of its product with the
+                # term at the first (the row's own, or the one it took there).
+                taken_term = term[q, :coherent]
+                then = np.flatnonzero(~at_first)
+                if len(then) and go.get("joint") is not None:
+                    own = t["at"][row[which[then]]] == fail[path[row[which[then]]]]
+                    one = np.where(own, row[which[then]], taken[then, 0])
+                    share = self._product_weight(go["joint"], ids, path[q[then]], one, q[then], t)
+                    taken_term = taken_term.copy()
+                    taken_term[then] *= share[:, :coherent]
                 row = np.concatenate([row[keep], row[which]])
-                factor = np.concatenate([factor[keep], factor[which] * term[q, :coherent]])
+                factor = np.concatenate([factor[keep], factor[which] * taken_term])
                 top = np.concatenate([top[keep], top[which] * size[q]])
                 detour = np.concatenate([detour[keep], detour[which] + t["detour"][q]])
                 plain = np.concatenate([plain[keep], np.zeros(len(which), dtype=bool)])
@@ -2141,6 +2422,18 @@ class EdgeFade:
             g0, d0, w0 = parts(q0)
             g1, d1, w1 = parts(stop[r, 0])
             g2, d2, w2 = parts(stop[r, 1])
+            # The term at the second stop takes the share of its product with the term
+            # at the first (see _combine).
+            second = np.flatnonzero(stop[r, 1] >= 0)
+            if len(second) and go.get("joint") is not None:
+                own = t["at"][q0[second]] == fail[path[second]]
+                one = np.where(own, q0[second], stop[r[second], 0])
+                share = self._product_weight(
+                    go["joint"], ids, path[second], one, stop[r[second], 1], t
+                )[:, late]
+                g2[second] *= share
+                d2[second] *= share
+                w2[second] *= share
             # The events each term passes: what of them continues the path (keep), and
             # all of them (whole); what of each is part of its diffracted wave, which the
             # others continue, is a piece of that wave (bent_at).
@@ -2370,6 +2663,44 @@ def _pairs(path, row, chosen, heads):
     count = np.searchsorted(path[heads], path[row[sel]], side="right") - lo
     within = np.arange(count.sum()) - np.repeat(np.cumsum(count) - count, count)
     return np.repeat(sel, count), heads[np.repeat(lo, count) + within]
+
+
+def _cap(gap, radius):
+    """The share of a disk of ``radius`` beyond a line ``gap`` from its centre (both
+    broadcast): a half where the line runs through the centre, none from one radius
+    away."""
+    gap, radius = np.broadcast_arrays(np.asarray(gap, dtype=float), np.asarray(radius, dtype=float))
+    u = np.ones(gap.shape)
+    np.divide(gap, radius, out=u, where=radius > 0.0)
+    u = np.clip(u, 0.0, 1.0)
+    return (np.arccos(u) - u * np.sqrt(1.0 - u * u)) / np.pi
+
+
+def _segment_gaps(p0, p1, start, end) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The least distance (c,) between the segment from ``p0`` to ``p1`` (3,) and each
+    of the segments from ``start`` to ``end`` (c, 3), and where their nearest points lie:
+    how far along the first (m) and the share of the way along the second."""
+    d1 = np.asarray(p1, dtype=float) - p0
+    d2 = end - start
+    r = p0 - start
+    a = float(d1 @ d1)
+    e = np.einsum("ij,ij->i", d2, d2)
+    f = np.einsum("ij,ij->i", d2, r)
+    c = r @ d1
+    b = d2 @ d1
+    denominator = a * e - b * b
+    s = np.zeros(len(start))
+    np.divide(b * f - c * e, denominator, out=s, where=denominator > 1e-12 * max(a, 1e-300) * e)
+    s = np.clip(s, 0.0, 1.0)
+    t = np.zeros(len(start))
+    np.divide(b * s + f, e, out=t, where=e > 0.0)
+    low, high = t < 0.0, t > 1.0
+    t = np.clip(t, 0.0, 1.0)
+    if a > 0.0:
+        s = np.where(low, np.clip(-c / a, 0.0, 1.0), s)
+        s = np.where(high, np.clip((b - c) / a, 0.0, 1.0), s)
+    gap = np.linalg.norm(p0 + s[:, None] * d1 - (start + t[:, None] * d2), axis=1)
+    return gap, s * np.sqrt(a), t
 
 
 def _swaps(k: int):
