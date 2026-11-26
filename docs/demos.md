@@ -331,16 +331,22 @@ acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
   Ambisonics mix measured on its W channel alone. `--levels as-simulated` plays every
   stop at the one gain of the mixes instead, so the differences in level between the
   listeners are heard as simulated (`matched`, the default, turns them up). The stills show the scene from above,
-  drawn from its own model, with its sources (those that play in colour, with a ray to
-  the listener), the listeners and the one of the moment as a head, and beside it the
-  A-weighted level there of the sources that play, as simulated, when their sound
-  arrives, the nearest source that plays and, where a talker plays, the STI of the
-  speech of the one loudest there (IEC 60268-16), rated as ISO 9921 rates it (bad below
-  0.30, poor, fair, good, excellent from 0.75); it counts the scene's background noise
-  (coverage `noise_db`) but not the other sources that play, which the still then says.
-  In a room they give its reverberation time T30 and, where something other than speech
-  plays, its clarity C80, each the mean of the 500 Hz and 1 kHz bands (ISO 3382-1);
-  outdoors, where those say nothing of a room, neither. Outdoors the plan draws the
+  drawn from its own model, with its sources (those that play in the stop in colour,
+  with a ray to the listener), the listeners and the one of the moment as a head, and
+  beside it the A-weighted level there of the sources that play in the stop, as
+  simulated, when their sound arrives, the nearest of them and, where a talker plays,
+  the STI of the speech of the one loudest there (IEC 60268-16), rated as ISO 9921
+  rates it (bad below 0.30, poor, fair, good, excellent from 0.75); it counts the
+  scene's background noise (coverage `noise_db`) but not the other sources that play,
+  which the still then says. A source plays in a stop at the level its signal plays at
+  over the stop's part of the recording (the mean square of its feed there against the
+  one it plays at its sound power), so that the level is the stop's equivalent level,
+  where nothing moves; one whose signal is 70 dB or more below that there, as a stem
+  where its player rests, does not play in it: the church's second verse is the choir
+  alone, and its third counts the organ on its quiet stops. In a room they give its
+  reverberation time T30 and, where something other than speech plays, its clarity
+  C80, of the sources that play in the stop, each the mean of the 500 Hz and 1 kHz
+  bands (ISO 3382-1); outdoors, where those say nothing of a room, neither. Outdoors the plan draws the
   ground by its materials (water, soft and hard ground), the buildings, barriers and
   plants on it, and the wind of each of the atmosphere's weathers, its zones dashed and
   labelled with their wind 10 m up and their temperature; under it, the view from the
@@ -395,11 +401,12 @@ move along it while the recordings play, all on one clock from their start, as
 simulation, and mixes every listener hearing the movers go by, or walking itself, with
 one gain for all; the still simulation stays for what the stills say where nothing
 moves. The video is a moving picture: the trajectories dotted, every mover where it is
-at that moment, and the level of the sources that play and the STI as simulated at that
-moment; the arrival time is left out where something moves, and T30 is the one where the
-trajectories start. A stop hears its listener where the clock has it then: from the
-start on the `per-listener` timeline, and on a `shared` one as the tour reaches it. A
-trajectory sets off at its `start_s` and is simulated every `step_m` along it
+at that moment, and the level of the sources that play in the stop (each at the level
+it plays at over it) and the STI as simulated at that moment; the arrival time is left
+out where something moves, and T30 is the one where the trajectories start. A stop
+hears its listener where the clock has it then: from the start on the `per-listener`
+timeline, and on a `shared` one as the tour reaches it. A trajectory sets off at its
+`start_s` and is simulated every `step_m` along it
 ([trajectories](scenes.md#trajectories)); `--speed 5` moves every trajectory of the run
 at 5 km/h (along keyframes, through their places in turn) and `--step 0.5` simulates
 them 0.5 m apart, without changing the scene. `--stand seat=6,2` stands a listener
@@ -514,7 +521,7 @@ it stopped.
 
 ## A choir and an organ in the church
 
-![A frame of the church video: the church from above and from the side, with the choir in front of the altar, the organ in the gallery and the conductor facing the choir, a line from each singer to the conductor, the choir close up, the tour and a spectrogram of the sound](images/church_demo.png)
+![A frame of the church video in the third verse: the church from above, the choir of 19 in front of the altar and the organ's four pipe towers at the entrance end, a line from each to the listener in the middle of the nave; beside it what that verse plays, the level there, the arrival time, T30, C80, the nearest singer and the tour, and a spectrogram of the sound](images/church_demo.png)
 
 `church_demo.py` puts a choir of 19 real singers in front of the altar of the `church`
 example and the organ in the gallery over the entrance, and plays the round "Dona nobis
@@ -583,8 +590,10 @@ and the feeds) and `scene` (the recording) run as the ones that took them over.
   gaps between verses), with a 1 s crossfade. Time is the performers': a listener far
   from the choir hears it up to 80 ms later than one near it, as in the church.
 - **The pictures** are the demo of any scene's: the church from above with the listener
-  of the moment, what plays in the verse, the level there, how long the sound takes to
-  arrive, the reverberation time T30 and the clarity C80 at mid frequencies.
+  of the moment and a ray from each source that plays in the verse (the organ grey
+  while the choir sings alone), what plays in the verse, the level there of what plays,
+  how long the sound takes to arrive, the reverberation time T30 and the clarity C80 at
+  mid frequencies.
 
 **Limits.** A "virtual choir": the takes were recorded separately, so the singers do not
 hear each other or the room; their timing and tuning are evened out by the script, not by

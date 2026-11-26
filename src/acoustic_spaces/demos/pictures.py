@@ -373,6 +373,11 @@ def tour_column(
 #: The smallest size a footer line is set in to fit the width; a line that does not fit
 #: even so is cut with an ellipsis.
 FOOTER_MIN = 13
+#: The smallest size the credit is set in on one line: a longer credit (the church's
+#: singers and organ, each with its licence) takes two lines, so that it is read whole.
+CREDIT_ONE_MIN = 16
+#: The size of the footer's lines under a credit of two lines.
+FOOTER_TWO = 16
 
 
 def fitted(draw, line: str, size: int, width: float) -> tuple[str, ImageFont.FreeTypeFont]:
@@ -387,22 +392,54 @@ def fitted(draw, line: str, size: int, width: float) -> tuple[str, ImageFont.Fre
     return line.rstrip() + "…", f
 
 
+def credit_lines(draw, credit: str, width: float) -> list[str]:
+    """``credit`` as the footer sets it: one line where it fits ``width`` pixels in
+    :data:`CREDIT_ONE_MIN`, else two, split nearest its middle where each line fits the
+    width in :data:`FOOTER_TWO`: at the `` · `` between its parts if one does, else
+    after a semicolon, a comma or at a space; nearest the middle where none does."""
+    if draw.textlength(credit, font=font("Regular", CREDIT_ONE_MIN)) <= width:
+        return [credit]
+    f = font("Regular", FOOTER_TWO)
+    middle = len(credit) / 2
+    for mark in (" · ", "; ", ", ", " "):
+        cuts = [k for k in range(len(credit)) if credit.startswith(mark, k)]
+        cuts.sort(key=lambda k: abs(k - middle))
+        kept = mark.strip() if mark.strip() in (";", ",") else ""  # the · goes with the break
+        for k in cuts:
+            first, second = credit[:k] + kept, credit[k + len(mark) :]
+            if max(draw.textlength(first, font=f), draw.textlength(second, font=f)) <= width:
+                return [first, second]
+    k = credit.rfind(" ", 0, round(middle) + 1)
+    k = k if k > 0 else round(middle)
+    return [credit[:k].rstrip(), credit[k:].lstrip()]
+
+
 def footer(draw, credit: str, tool: str | Sequence[str], size: int = 19) -> None:
     """The spectrogram's panel (the video draws over it), the credit line and under it
     up to two lines that say how the sound was made (:func:`settings_lines`, or one
     line such as :func:`tool_line`'s). The credit is set in ``size`` pixels, the others
-    in 18; each is made smaller, down to :data:`FOOTER_MIN`, to fit the still's width."""
+    in 18; each is made smaller, down to :data:`FOOTER_MIN`, to fit the still's width.
+    A credit too long for one line (:func:`credit_lines`) takes two, and every line
+    under the panel is then set in :data:`FOOTER_TWO` at most."""
     left, top, width, height = SPECTRUM_BOX
     draw.rounded_rectangle([left - 20, top - 7, left + width + 20, top + height + 7], 14, PANEL)
     lines = [tool] if isinstance(tool, str) else list(tool)
     if len(lines) > 2:
         raise ValueError("the footer has room for two lines about the sound")
     room = SIZE[0] - 2 * MARGIN
-    line, f = fitted(draw, credit, size, room)
-    text(draw, (MARGIN, 1002), line, f, MUTED)
+    credits = credit_lines(draw, credit, room)
+    if len(credits) == 1:
+        line, f = fitted(draw, credit, size, room)
+        text(draw, (MARGIN, 1002), line, f, MUTED)
+        y, step, tool_size = 1028, 24, 18
+    else:
+        for k, line in enumerate(credits):
+            line, f = fitted(draw, line, FOOTER_TWO, room)
+            text(draw, (MARGIN, 1000 + 19 * k), line, f, MUTED)
+            y, step, tool_size = 1040, 20, FOOTER_TWO
     for k, line in enumerate(lines):
-        line, f = fitted(draw, line, 18, room)
-        text(draw, (MARGIN, 1028 + 24 * k), line, f, MUTED)
+        line, f = fitted(draw, line, tool_size, room)
+        text(draw, (MARGIN, y + step * k), line, f, MUTED)
 
 
 def thumbnail_badge(draw, x: float, y: float, label: str = "BINAURAL", size: int = 34) -> None:
@@ -528,9 +565,11 @@ def settings_lines(demo, args, scene: dict, report: dict | None = None) -> list[
 __all__ = [
     "BADGE",
     "BG",
+    "CREDIT_ONE_MIN",
     "DIFFRACTION",
     "FAINT",
     "FOOTER_MIN",
+    "FOOTER_TWO",
     "LINE",
     "LISTENER",
     "MARGIN",
@@ -548,6 +587,7 @@ __all__ = [
     "badge",
     "canvas",
     "cone",
+    "credit_lines",
     "ears_text",
     "facing",
     "facts",

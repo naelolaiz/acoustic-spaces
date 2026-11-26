@@ -129,7 +129,12 @@ class Pictures(scene_pictures.Pictures):
     # -- the scene from above ---------------------------------------------------------
 
     def draw_scene(
-        self, img: Image.Image, plan: Plan, current: str | None, t: float | None = None
+        self,
+        img: Image.Image,
+        plan: Plan,
+        current: str | None,
+        t: float | None = None,
+        k: int | None = None,
     ) -> None:
         """The ground's zones (the road) under the scene's own picture."""
         draw = ImageDraw.Draw(img)
@@ -139,7 +144,7 @@ class Pictures(scene_pictures.Pictures):
             draw.polygon(points, fill=PANEL, outline=LINE)
             xs, ys = zip(*points, strict=True)
             text(draw, (min(xs) + 8, min(ys) + 6), name.replace("_", " "), label, FAINT)
-        super().draw_scene(img, plan, current, t)
+        super().draw_scene(img, plan, current, t, k)
 
     # -- what is heard -----------------------------------------------------------------
 
@@ -271,7 +276,7 @@ class Pictures(scene_pictures.Pictures):
             f"{self.speed_text()}, heard at {counted(len(self.stops), 'place')}, "
             "its pitch falling as it goes by (Doppler)",
         )
-        self.draw_scene(img, self.plan(*PLAN_BOX), stop.key, t)
+        self.draw_scene(img, self.plan(*PLAN_BOX), stop.key, t, k)
         draw = ImageDraw.Draw(img)
         self.graph(draw, stop.key, t)
         x = 1010

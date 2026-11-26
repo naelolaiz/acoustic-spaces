@@ -2683,6 +2683,91 @@ def test_the_json_the_demos_write_is_strict(tmp_path: Path) -> None:
     }
 
 
+def test_a_still_counts_the_sources_that_play_in_its_stop_at_their_level_there() -> None:
+    """As in "Dona nobis pacem": a stop where the organ rests counts the choir alone (its
+    level, the nearest source that plays, the clarity, the rays, the organ grey), and one
+    where the organ plays 20 dB down counts it so; each source at the mean square of its
+    signal over the stop against the one it plays at its sound power."""
+    import math
+
+    pytest.importorskip("PIL")
+    from acoustic_spaces.demos import scene_pictures
+    from acoustic_spaces.demos.pictures import MUTED, SOURCE
+
+    rate = 1000
+    organ = np.concatenate([np.full(2 * rate, 0.1), np.zeros(2 * rate), np.full(2 * rate, 0.01)])
+    choir = np.concatenate([np.zeros(2 * rate), np.full(4 * rate, 0.1)])
+    played = {
+        name: scene_pictures.block_powers(y, rate) / 0.1**2
+        for name, y in (("organ", organ), ("choir", choir))
+    }
+    scene = {
+        "sources": [
+            {"name": "organ", "position": [0.0, 0.0, 1.0]},
+            {"name": "choir", "position": [10.0, 0.0, 1.0]},
+        ],
+        "listeners": [{"name": "nave", "position": [3.0, 4.0, 1.0]}],
+    }
+    own = {"organ": (80.0, -2.0), "choir": (70.0, 4.0)}
+    report = {
+        "bands_hz": [500, 1000],
+        "responses": [
+            {"source": s, "listener": "nave", "spl_a_db": a, "parameters": {"c80": [c, c]}}
+            for s, (a, c) in own.items()
+        ],
+    }
+    stops = [pipeline.TourStop("nave", t, t, t + 2.0) for t in (0.0, 2.0, 4.0)]
+    drawing = scene_pictures.Pictures(
+        scene, np.zeros((0, 2, 2)), report, {}, stops, playing=["organ", "choir"], played=played
+    )
+    assert drawing.played[0] == {"organ": pytest.approx(0.0), "choir": -math.inf}
+    assert drawing.levels_of("nave", None, 1) == {"choir": 70.0}
+    assert drawing.levels_of("nave", None, 2) == pytest.approx({"organ": 60.0, "choir": 70.0})
+    organ_alone, choir_alone, both = (drawing.lines(k) for k in range(3))
+    assert "80 dB(A) here, as simulated" in organ_alone
+    assert "Clarity C80 -2.0 dB (mean of 500 Hz and 1 kHz)" in organ_alone
+    assert "70 dB(A) here, as simulated" in choir_alone
+    assert "Clarity C80 +4.0 dB (mean of 500 Hz and 1 kHz)" in choir_alone
+    assert "Nearest playing: choir, 8.1 m away" in choir_alone
+    assert "70 dB(A) here, as simulated" in both  # 70.4: the organ 10 dB under the choir
+    assert "Nearest playing: organ, 5.0 m away" in both
+    assert drawing.shown(1) == "choir -> nave"
+    # Its mark grey where it rests, in colour where it plays; no signal given, at its
+    # sound power throughout.
+    plan = drawing.plan(*scene_pictures.PLAN_BOX)
+    at = tuple(round(v) for v in plan(0.0, 0.0))
+    assert drawing.still(1).getpixel(at)[:3] == MUTED[:3]
+    assert drawing.still(0).getpixel(at)[:3] == SOURCE[:3]
+    every = scene_pictures.Pictures(
+        scene, np.zeros((0, 2, 2)), report, {}, stops, playing=["organ", "choir"]
+    )
+    assert every.levels_of("nave", None, 1) == {"organ": 80.0, "choir": 70.0}
+
+
+def test_a_long_credit_takes_two_lines_read_whole() -> None:
+    """A credit that fits the still's width at a readable size takes one line; a longer
+    one (the church's singers and organ, each with its licence) two, split between its
+    parts, each line within the width, nothing cut."""
+    pytest.importorskip("PIL")
+    from PIL import Image, ImageDraw
+
+    from acoustic_spaces import recordings
+    from acoustic_spaces.demos import pictures
+
+    draw = ImageDraw.Draw(Image.new("RGB", pictures.SIZE))
+    room = pictures.SIZE[0] - 2 * pictures.MARGIN
+    song = recordings.named("spicy_funk_cake").credit
+    assert pictures.credit_lines(draw, song, room) == [song]
+    church = recordings.named("dona_nobis_pacem").credit
+    first, second = pictures.credit_lines(draw, church, room)
+    assert f"{first} {second}" == church and first.endswith("7061507);")  # its singers
+    small = pictures.font("Regular", pictures.FOOTER_TWO)
+    assert max(draw.textlength(line, font=small) for line in (first, second)) <= room
+    image = Image.new("RGB", pictures.SIZE)
+    pictures.footer(ImageDraw.Draw(image), church, ["how it was simulated", "and mixed"])
+    assert image.getbbox()[3] <= pictures.SIZE[1]
+
+
 def test_the_stills_say_how_the_sound_was_made(tmp_path: Path) -> None:
     """The lines under every still state the simulation as it ran, the engine's defaults
     for what a scene leaves out, the wave solver and, outdoors in wind, what the weather

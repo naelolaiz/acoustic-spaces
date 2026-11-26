@@ -2106,6 +2106,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         room=room,
         hide=hidden(args),
         sections=sections_heard(table, free_of(scene), fed, piece_of(args, scene)),
+        played=played_signals(args, fed, seats.get("movement")),
     )
     pictures.save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     if moving:
@@ -2132,6 +2133,31 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         no_mp4=args.no_mp4,
         shown=drawing.shown,
     )
+
+
+def played_signals(
+    args: argparse.Namespace, names: list[str], movement: dict | None = None
+) -> dict[str, np.ndarray]:
+    """The signal each of the sources ``names`` plays, as the stills weigh it in a stop
+    (:class:`~acoustic_spaces.demos.scene_pictures.Pictures`): the
+    :func:`~acoustic_spaces.demos.scene_pictures.block_powers` of its feed, mixed down as
+    :func:`~acoustic_spaces.demos.audio.gated_rms` mixes it, over FEED_RMS squared (1
+    where it plays at its sound power); where something moves (``movement``, the moving
+    mixes' entry of seats.json), played again from its start as those mixes play it
+    (:func:`played_until`)."""
+    from acoustic_spaces.demos.scene_pictures import block_powers
+
+    over = None if not movement else float(movement["times"][-1]) + FADE_OUT_S
+    out: dict[str, np.ndarray] = {}
+    for name in names:
+        path = feeds_folder(args) / f"{name}.wav"
+        if not path.exists():
+            continue
+        x, rate = read(path)
+        if over is not None:
+            x = played_until(x, rate, over)
+        out[name] = block_powers(mono(x), rate) / FEED_RMS**2
+    return out
 
 
 def sections_heard(

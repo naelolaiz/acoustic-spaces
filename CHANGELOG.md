@@ -87,6 +87,10 @@
   `as-simulated` plays every stop at the one gain of the mixes, as the church's, the
   orchestra's and the gallery's scripts do. An example's script names its runs after
   itself, by what differs from its own defaults (`church_binaural`).
+- Changed: the stills of the demo of any scene count the sources that play in each stop,
+  each at the level its signal plays at there, so the church's second verse is the
+  choir alone and its third has the organ on its quiet stops; a long credit takes two
+  lines instead of being cut.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

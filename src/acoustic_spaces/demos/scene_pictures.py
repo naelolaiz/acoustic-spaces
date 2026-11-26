@@ -53,6 +53,41 @@ SIDE_BOTTOM = 832
 HIDDEN = ("side", "wind", "ground")
 #: The octave bands the reverberation time is averaged over (Hz).
 MID_BANDS = (500, 1000)
+#: The blocks a source's signal is weighed in over a stop (s): its mean square in each
+#: (:func:`block_powers`).
+PLAYED_BLOCK_S = 0.1
+#: How far below the level of its sound power a source's signal may be over a stop, and
+#: the source still play in it (dB); further, it is silent there, as a stem is where its
+#: player rests (the 70 dB of the first gate of
+#: :func:`~acoustic_spaces.demos.audio.gated_rms`).
+SILENT_DB = 70.0
+
+
+def block_powers(y: np.ndarray, rate: float) -> np.ndarray:
+    """The mean square of the signal ``y`` (one channel) in each PLAYED_BLOCK_S of it, the
+    last block as long as what is left."""
+    y = np.asarray(y, dtype=float)
+    if not len(y):
+        return np.zeros(0)
+    starts = np.arange(0, len(y), max(1, int(round(PLAYED_BLOCK_S * rate))))
+    sizes = np.diff(np.append(starts, len(y)))
+    return np.add.reduceat(y**2, starts) / sizes
+
+
+def played_db(powers: np.ndarray | None, start: float, stop: float) -> float:
+    """How loud a source plays from ``start`` to ``stop`` (s of its signal) against the
+    level of its sound power (dB): the mean of ``powers`` (:func:`block_powers` of its
+    signal, over the mean square it plays at its sound power) over the blocks in that
+    span, as far as its signal goes; minus infinity where it is SILENT_DB or more below
+    (or its signal ends before), and 0 where ``powers`` is None (its signal unknown: at
+    its sound power throughout)."""
+    if powers is None:
+        return 0.0
+    first = max(int(math.floor(start / PLAYED_BLOCK_S + 1e-9)), 0)
+    last = max(int(math.ceil(stop / PLAYED_BLOCK_S - 1e-9)), first + 1)
+    span = powers[first:last]
+    mean = float(np.mean(span)) if len(span) else 0.0
+    return 10.0 * math.log10(mean) if mean > 10.0 ** (-SILENT_DB / 10.0) else -math.inf
 
 
 def _mid(values: Sequence, bands: Sequence[float]) -> float | None:
@@ -224,7 +259,12 @@ class Pictures:
     ``scene`` is the scene as data, ``outline`` the model's edges from above ((E, 2, 2),
     :func:`acoustic_spaces.room.outline_edges`), ``report`` the results' parameters.json,
     ``seats`` the mixes' entries of seats.json, ``stops`` the tour, ``playing`` the
-    sources that play a signal, ``credit`` and ``tool`` the footer's lines. When
+    sources that play a signal and ``played`` the signals (each one's
+    :func:`block_powers` over the mean square it plays at its sound power): a stop
+    counts the sources that play in its span of them, each at the level it plays at
+    there (:func:`played_db`; at its sound power where its signal is not given), as
+    "Dona nobis pacem" has the organ alone, the choir alone, then both with the organ
+    quiet; ``credit`` and ``tool`` the footer's lines. When
     something moves, ``paths`` gives each mover's knots (("sources" or "listeners",
     name): :class:`~acoustic_spaces.walkthrough.Knots`) and ``movement`` the moving mixes'
     moments and the level of each source and the STI of each talker's speech at each
@@ -263,6 +303,7 @@ class Pictures:
         room=None,
         hide: Sequence[str] = (),
         sections: Sequence[tuple[float, str]] = (),
+        played: Mapping[str, np.ndarray] | None = None,
     ):
         self.scene, self.report, self.seats, self.stops = scene, report, seats, list(stops)
         #: The parts of the music the recording has in time (when each starts, s, and
@@ -291,6 +332,17 @@ class Pictures:
         self.indoors = dict(indoors or {})
         self.sources = [s for s in scene["sources"] if s.get("enabled", True) is not False]
         self.playing = [s for s in self.sources if s["name"] in set(playing)]
+        #: How loud each source that plays does in each stop, against its sound power
+        #: (dB; minus infinity where it is silent there).
+        self.played = [
+            {
+                s["name"]: played_db(
+                    None if played is None else played.get(s["name"]), stop.start, stop.stop
+                )
+                for s in self.playing
+            }
+            for stop in self.stops
+        ]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
         self.outline = np.asarray(outline, dtype=float).reshape(-1, 2, 2)
         # A source whose sound does not reach the listener (None) is left out. A mix in
@@ -362,18 +414,36 @@ class Pictures:
         """The moment of the moving mixes that ``t`` falls in: the last one at or before."""
         return int(max(np.searchsorted(self.moments, t + 1e-9, side="right") - 1, 0))
 
-    def levels_of(self, listener: str, t: float | None) -> dict[str, float]:
+    def playing_in(self, k: int | None) -> list[dict]:
+        """The sources that play in stop ``k`` (:func:`played_db`): every one that plays
+        a signal, where ``k`` is None."""
+        if k is None:
+            return list(self.playing)
+        return [s for s in self.playing if math.isfinite(self.played[k][s["name"]])]
+
+    def levels_of(self, listener: str, t: float | None, k: int | None = None) -> dict[str, float]:
         """The A-weighted level of each playing source at ``listener`` (dB), as simulated:
-        at ``t`` when something moves, else as the still results give it; a source whose
-        sound does not reach the listener (None) is left out."""
+        at ``t`` when something moves, else as the still results give it; in stop ``k``,
+        of each that plays in it at the level it plays at there (:func:`played_db`). A
+        source whose sound does not reach the listener (None) is left out, and one silent
+        in the stop."""
         if t is not None and listener in self.along:
-            k = self.moment(t)
-            values = {name: v[k] for name, v in self.along[listener].items()}
-            return {name: v for name, v in values.items() if v is not None}
+            moment = self.moment(t)
+            values = {name: v[moment] for name, v in self.along[listener].items()}
+            values = {name: v for name, v in values.items() if v is not None}
+        else:
+            values = {
+                s["name"]: self.levels[(s["name"], listener)]
+                for s in self.playing
+                if (s["name"], listener) in self.levels
+            }
+        if k is None:
+            return values
+        played = self.played[k]
         return {
-            s["name"]: self.levels[(s["name"], listener)]
-            for s in self.playing
-            if (s["name"], listener) in self.levels
+            name: v + played.get(name, 0.0)
+            for name, v in values.items()
+            if math.isfinite(played.get(name, 0.0))
         }
 
     def draw_paths(self, draw, plan: Plan) -> None:
@@ -386,12 +456,18 @@ class Pictures:
                 draw.line([points[k], points[k + 1]], fill=MUTED, width=2)
 
     def draw_scene(
-        self, img: Image.Image, plan: Plan, current: str | None, t: float | None = None
+        self,
+        img: Image.Image,
+        plan: Plan,
+        current: str | None,
+        t: float | None = None,
+        k: int | None = None,
     ) -> None:
         """The outline, the sources with their names, the listeners as rings and the
-        listener of the moment as a head, with a ray from each playing source; with
-        ``t``, the trajectories dotted and every mover where it is then. ``current`` is
-        the mix of the moment: a listener's, or its in still air."""
+        listener of the moment as a head, with a ray from each playing source (those
+        that play in stop ``k``, in colour, the others grey); with ``t``, the
+        trajectories dotted and every mover where it is then. ``current`` is the mix of
+        the moment: a listener's, or its in still air."""
         key, current = current, self.where.get(current, current)
         sources = [self.placed("sources", s, t) for s in self.sources]
         listeners = {name: self.placed("listeners", lis, t) for name, lis in self.listeners.items()}
@@ -409,12 +485,12 @@ class Pictures:
             self.draw_paths(draw, plan)
         r = self.marker(plan)
         label = font("Regular", 16)
+        playing = {s["name"] for s in self.playing_in(k)}
         if current is not None and current in listeners:
-            playing = {s["name"] for s in self.playing}
             rays(
                 img,
                 plan,
-                self.levels_of(key, t),
+                self.levels_of(key, t, k),
                 [s for s in sources if s["name"] in playing],
                 plan(*listeners[current]["position"]),
                 lambda _n: SOURCE,
@@ -423,7 +499,7 @@ class Pictures:
         marks = []
         for source, given in zip(sources, self.sources, strict=True):
             x, y = plan(*source["position"])
-            colour = SOURCE if given in self.playing else MUTED
+            colour = SOURCE if given["name"] in playing else MUTED
             rs = max(4.0, r * 0.55)
             draw.ellipse([x - rs, y - rs, x + rs, y + rs], fill=colour, outline=colour)
             marks.append(((x, y), rs, source["name"], given.get("group")))
@@ -455,17 +531,13 @@ class Pictures:
 
     # -- words ---------------------------------------------------------------------------
 
-    def level_at(self, listener: str, t: float | None = None) -> float | None:
+    def level_at(self, listener: str, t: float | None = None, k: int | None = None) -> float | None:
         """The A-weighted level of every playing source together (dB), as simulated, at
-        ``t`` when something moves; a source whose sound does not reach the listener
-        (None) adds nothing, and None when nothing of them is heard."""
-        if t is not None and listener in self.along:
-            k = self.moment(t)
-            values = [
-                self.along[listener].get(s["name"], [None] * (k + 1))[k] for s in self.playing
-            ]
-        else:
-            values = [self.levels.get((s["name"], listener)) for s in self.playing]
+        ``t`` when something moves; in stop ``k``, of those that play in it, each at the
+        level it plays at there (:meth:`levels_of`: over the stop, the equivalent level,
+        where nothing moves). A source whose sound does not reach the listener (None)
+        adds nothing, and None when nothing of them is heard."""
+        values: list[float | None] = list(self.levels_of(listener, t, k).values())
         rumble = self.indoors.get("rumble_a_db", {}).get(listener)
         if listener in self.indoors.get("about", {}) and not self.indoors.get("airborne", True):
             values = []  # in the house, the rumble alone
@@ -474,14 +546,17 @@ class Pictures:
             energy += 10.0 ** (rumble / 10.0)
         return 10.0 * math.log10(energy) if energy > 0.0 else None
 
-    def speech_at(self, listener: str, t: float | None = None) -> tuple[str, float] | None:
+    def speech_at(
+        self, listener: str, t: float | None = None, k: int | None = None
+    ) -> tuple[str, float] | None:
         """The playing talker (a source with a speech spectrum) loudest at ``listener``,
-        at ``t`` when something moves, and the STI of its speech there, as simulated;
-        None when no talker that plays is heard there, or its STI is not defined."""
-        levels = self.levels_of(listener, t)
+        at ``t`` when something moves, of those that play in stop ``k``, and the STI of
+        its speech there, as simulated; None when no talker that plays is heard there,
+        or its STI is not defined."""
+        levels = self.levels_of(listener, t, k)
         talkers = [
             s["name"]
-            for s in self.playing
+            for s in self.playing_in(k)
             if s.get("spectrum", "flat") != "flat" and s["name"] in levels
         ]
         if not talkers:
@@ -494,30 +569,36 @@ class Pictures:
             sti = self.sti.get((name, listener))
         return None if sti is None else (name, float(sti))
 
-    def t30_at(self, listener: str) -> float | None:
-        values = [self.t30.get((s["name"], listener)) for s in self.playing]
+    def t30_at(self, listener: str, k: int | None = None) -> float | None:
+        """The reverberation time T30 (s, ISO 3382-1) at ``listener`` of the sources that
+        play in stop ``k``, their mean; None where none has one."""
+        values = [self.t30.get((s["name"], listener)) for s in self.playing_in(k)]
         values = [v for v in values if v is not None]
         return sum(values) / len(values) if values else None
 
-    def c80_at(self, listener: str) -> float | None:
-        """The clarity C80 (dB, ISO 3382-1) at ``listener`` of the playing sources that
-        are not talkers, their mean; None where only speech plays (whose clarity the STI
-        gives) or none has one."""
+    def c80_at(self, listener: str, k: int | None = None) -> float | None:
+        """The clarity C80 (dB, ISO 3382-1) at ``listener`` of the sources that play in
+        stop ``k`` and are not talkers, their mean; None where only speech plays (whose
+        clarity the STI gives) or none has one."""
         values = [
             self.c80.get((s["name"], listener))
-            for s in self.playing
+            for s in self.playing_in(k)
             if s.get("spectrum", "flat") == "flat"
         ]
         values = [v for v in values if v is not None]
         return sum(values) / len(values) if values else None
 
-    def nearest(self, listener: str, t: float | None = None) -> tuple[str, float] | None:
-        """The playing source nearest the listener, and how far it is (m), at ``t``."""
+    def nearest(
+        self, listener: str, t: float | None = None, k: int | None = None
+    ) -> tuple[str, float] | None:
+        """The source nearest the listener of those that play in stop ``k``, and how far
+        it is (m), at ``t``."""
         at = self.placed("listeners", self.listeners[self.where.get(listener, listener)], t)
         at = at["position"]
-        if not self.playing:
+        playing = self.playing_in(k)
+        if not playing:
             return None
-        placed = [self.placed("sources", s, t) for s in self.playing]
+        placed = [self.placed("sources", s, t) for s in playing]
         name, source = min(
             ((s["name"], s) for s in placed), key=lambda p: math.dist(p[1]["position"], at)
         )
@@ -531,28 +612,30 @@ class Pictures:
         section = self.section_at(stop.start)
         if section is not None:
             lines.append(section)
-        level = self.level_at(stop.key, t)
+        level = self.level_at(stop.key, t, k)
         if level is not None:
             lines.append(f"{level:.0f} dB(A) here, as simulated")
-        speech = None if stop.key in self.indoors.get("about", {}) else self.speech_at(stop.key, t)
+        speech = (
+            None if stop.key in self.indoors.get("about", {}) else self.speech_at(stop.key, t, k)
+        )
         if speech is not None:
             name, sti = speech
             said = f"Speech of {name.replace('_', ' ')}: STI {sti:.2f}, {sti_rating(sti)}"
             lines.append(said)
-            if len(self.playing) > 1:
+            if len(self.playing_in(k)) > 1:
                 lines.append(("Of that speech alone, the others not counted as noise", MUTED))
         # The moving mixes keep when the sound arrives apart, where nothing moves.
         lag = seat["arrival_s"] if "arrival_s" in seat else seat.get("lag_s")
         if lag is not None:
             lines.append(f"The sound arrives {lag * 1e3:.0f} ms after it leaves")
-        t30 = self.t30_at(stop.key) if self.indoor else None
+        t30 = self.t30_at(stop.key, k) if self.indoor else None
         where = " where the trajectories start" if seat.get("moves") else ""
         if t30 is not None:
             lines.append(f"Reverberation time T30 {t30:.1f} s{where} (mean of 500 Hz and 1 kHz)")
-        c80 = self.c80_at(stop.key) if self.indoor else None
+        c80 = self.c80_at(stop.key, k) if self.indoor else None
         if c80 is not None:
             lines.append(f"Clarity C80 {c80:+.1f} dB{where} (mean of 500 Hz and 1 kHz)")
-        near = self.nearest(stop.key, t)
+        near = self.nearest(stop.key, t, k)
         if near is not None:
             lines.append(f"Nearest playing: {near[0].replace('_', ' ')}, {near[1]:.1f} m away")
         shaking = self.indoors.get("vibration_vdb", {}).get(stop.key)
@@ -617,9 +700,9 @@ class Pictures:
             plan = Plan(plan.left, top, plan.s, self.box)
         else:
             plan = self.plan(*PLAN_BOX)
-        self.draw_scene(img, plan, stop.key, t)
+        self.draw_scene(img, plan, stop.key, t, k)
         if side:
-            self.draw_side(img, plan, stop.key, t)
+            self.draw_side(img, plan, stop.key, t, k)
         draw = ImageDraw.Draw(img)
         x = 1010
         if self.fmt == "binaural":
@@ -631,26 +714,30 @@ class Pictures:
         footer(draw, self.credit, self.tool)
         return img
 
-    def side_source(self, key: str, t: float | None = None) -> dict | None:
-        """The playing source the view from the side goes through at the mix ``key``: the
-        one heard loudest there, as simulated (the nearest, where none is heard); where
-        it is at ``t``."""
-        if not self.playing:
+    def side_source(self, key: str, t: float | None = None, k: int | None = None) -> dict | None:
+        """The source the view from the side goes through at the mix ``key``, of those
+        that play in stop ``k``: the one heard loudest there, as simulated (the nearest,
+        where none is heard); where it is at ``t``."""
+        playing = self.playing_in(k)
+        if not playing:
             return None
-        levels = self.levels_of(key, t)
-        heard = [s for s in self.playing if s["name"] in levels]
+        levels = self.levels_of(key, t, k)
+        heard = [s for s in playing if s["name"] in levels]
         if heard:
             source = max(heard, key=lambda s: levels[s["name"]])
         else:
-            near = self.nearest(key, t)
-            source = next(s for s in self.playing if s["name"] == near[0])
+            near = self.nearest(key, t, k)
+            source = next(s for s in playing if near is not None and s["name"] == near[0])
         return self.placed("sources", source, t)
 
-    def draw_side(self, img: Image.Image, plan: Plan, key: str, t: float | None = None) -> None:
+    def draw_side(
+        self, img: Image.Image, plan: Plan, key: str, t: float | None = None, k: int | None = None
+    ) -> None:
         """Under the plan, the view from the side through the source heard loudest at
-        the mix ``key`` and its listener (:meth:`Outdoors.side`), with its caption."""
+        the mix ``key`` and its listener (:meth:`Outdoors.side`), of those that play in
+        stop ``k``, with its caption."""
         name = self.where.get(key, key)
-        source = self.side_source(key, t)
+        source = self.side_source(key, t, k)
         if source is None or name not in self.listeners:
             return
         listener = self.placed("listeners", self.listeners[name], t)
@@ -696,7 +783,7 @@ class Pictures:
 
     def shown(self, k: int, t: float | None = None) -> str:
         """What the still of stop ``k`` shows, for the video's messages: the sources that
-        play, then the stop's listener, each mover at ``t`` of its trajectory
+        play in it, then the stop's listener, each mover at ``t`` of its trajectory
         (:func:`~acoustic_spaces.walkthrough.moment_name`), as ``stage, car @ 3.40 s ->
         seat``; the sources of a group that play more than one, standing still, by
         the group once and how many of it play (``Choir (19)``), as the plan labels a
@@ -708,12 +795,13 @@ class Pictures:
         def named(kind: str, name: str) -> str:
             return moment_name(name, t) if walks(kind, name) else name
 
+        playing = self.playing_in(k)
         groups: dict[str, int] = {}
-        for source in self.playing:
+        for source in playing:
             if source.get("group") and not walks("sources", source["name"]):
                 groups[source["group"]] = groups.get(source["group"], 0) + 1
         words: list[str] = []
-        for source in self.playing:
+        for source in playing:
             group = source.get("group")
             if groups.get(group or "", 0) < 2 or walks("sources", source["name"]):
                 words.append(named("sources", source["name"]))
@@ -731,7 +819,7 @@ class Pictures:
         img = canvas(THUMBNAIL)
         plan = self.plan(560, 60, 680, 600)
         first = self.stops[0].key if self.stops else None
-        self.draw_scene(img, plan, first, 0.0 if self.paths else None)
+        self.draw_scene(img, plan, first, 0.0 if self.paths else None, 0 if self.stops else None)
         draw = ImageDraw.Draw(img)
         lines, f = wrapped(draw, self.scene.get("name", "scene"), "Black", 76, 470, 3)
         y = 60
