@@ -369,13 +369,13 @@ def test_the_model_options_matter_with_the_sources_that_have_them() -> None:
         "a siren's yelp"
     )
     assert demo.check(run("--sources", "police_car", "--siren", "yelp")) == (
-        "no siren plays a made sound"
+        "--siren changes nothing: no siren plays a made sound"
     )
     assert demo.check(run("--sources", "police_car_siren", "--rpm", "3000")) == (
-        "no road vehicle plays a made sound"
+        "--rpm changes nothing: no road vehicle plays a made sound"
     )
     assert demo.check(run("--sources", "Fire engine", "--horn", "chord")) == (
-        "no train horn plays a made sound"
+        "--horn changes nothing: no train horn plays a made sound"
     )
     # The fire engine's siren sounds its two tones whatever --siren says.
     fire = run("--vehicle", "fire_engine,police_car", "--siren", "wail")
@@ -1204,8 +1204,8 @@ def test_a_pass_by_run_refuses_sources_its_scene_has_not() -> None:
 
     have = (
         "traffic, car, car_horn, bus, motorcycle, police_car, police_car_siren, fire_engine, "
-        "fire_engine_siren, fire_engine_horn, tram, tram_roof, Fire engine, Passenger car, "
-        "Police car, Tram"
+        "fire_engine_siren, fire_engine_horn, tram, tram_roof, breaker, generator, dumper, "
+        "dumper_alarm, Fire engine, Passenger car, Police car, Road works, Tram"
     )
     assert (
         check("--sources", "horn") == f"--sources horn: no such source or group here; it has {have}"

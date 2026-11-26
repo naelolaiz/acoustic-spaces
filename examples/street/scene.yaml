@@ -208,30 +208,35 @@ sources:
       doppler: true
       step_m: 1
   # Road works in the lane on the houses' side, 20 m along from the pavement's
-  # listener: a 1650 kg hydraulic breaker on a 15 t excavator breaking up the road, a
-  # 6 kVA diesel generator on the pavement and a 9 t dumper reversing to them, its
-  # alarm at its back, 1.2 m up, facing the works. Each machine's sound power per octave
-  # band is its level 10 m away in Defra's noise database for construction sites (2005,
-  # the data of BS 5228-1 Annex C) plus 28 dB; the alarm's is a tonal one's at 1200 Hz,
-  # 107 dB(A) 1.2 m in front of it (SAE J994 Type B), beeping half the time, with the
-  # directivity of siren.csv (works_demo.py plays them).
+  # listener (the group Road works): a 1650 kg hydraulic breaker on a 15 t excavator
+  # breaking up the road, a 6 kVA diesel generator on the pavement and a 9 t dumper
+  # reversing to them, its alarm at its back, 1.2 m up, facing the works. Each machine's
+  # sound power per octave band is its level 10 m away in Defra's noise database for
+  # construction sites (2005, the data of BS 5228-1 Annex C) plus 28 dB; a demo plays a
+  # sound made to it, the breaker's blows (480 a minute) and the engines' firing. The
+  # alarm is a tonal one at 1200 Hz, 107 dB(A) 1.2 m in front of it (SAE J994 Type B),
+  # beeping half the time, with the directivity of siren.csv (works_demo.py plays them).
   - name: breaker
+    group: Road works
     enabled: false
     position: [-20, 2, 1.0]
-    level_db: [116.0, 116.0, 114.0, 117.0, 111.0, 111.0, 108.0, 104.0]
+    model: {method: defra, machine: breaker}
   - name: generator
+    group: Road works
     enabled: false
     position: [-26, 4.5, 0.5]
-    level_db: [105.0, 100.0, 92.0, 88.0, 87.0, 85.0, 82.0, 70.0]
+    model: {method: defra, machine: generator}
   - name: dumper
+    group: Road works
     enabled: false
     position: [-13, 2, 1.5]
-    level_db: [110.0, 104.0, 103.0, 102.0, 96.0, 96.0, 92.0, 83.0]
+    model: {method: defra, machine: dumper}
   - name: dumper_alarm
+    group: Road works
     enabled: false
     position: [-14.5, 2, 1.2]
     orientation: {yaw: 180}
-    level_db: [48.6, 48.2, 51.6, 56.2, 108.6, 59.9, 44.1, 35.9]
+    model: {method: sae-j994}
     directivity: {file: siren.csv}
 listeners:
   - name: pavement

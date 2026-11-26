@@ -23,11 +23,12 @@
   source is the train's front, and the demo of any scene plays every point of the train
   at that height as far behind it as it is, each a noise of its own at its own sound
   power with its own Doppler (`render_movement`'s `followers` and `leads`).
-- Added: `--indoors` in the demo of any scene hears what moves past in the room behind
-  each listener in front of a building's wall: `airborne` through its closed window,
-  `rumble` the rumble a train's or a tram's wheels make in it, or `airborne_and_rumble`;
-  a run where nothing moves, no listener stands so, or nothing that plays shakes the
-  ground for the rumble is refused, saying why.
+- Added: `--indoors` in the demo of any scene hears the run in the room behind each
+  listener in front of a building's wall: `airborne` through its closed window,
+  `rumble` the rumble that a train's or a tram's wheels moving past, or construction
+  plant standing, make in it, or `airborne_and_rumble`; a run where no listener stands
+  so, or nothing that plays shakes the ground for the rumble, or plant stands shaking it
+  while something moves past, is refused, saying why.
 - Changed: the street's `passby_demo.py` is the demo of its scene, its vehicles the
   scene's sources with a model, each in a group (`Passenger car` with its horn, `Police
   car` with its siren, `Fire engine` with its siren and its air horn, `Tram`, its four
@@ -36,6 +37,19 @@
   and steps before 4.4.0 still work (`--vehicle`, `--car`, `--police-car` and
   `--fire-engine` as `--sources`, `--indoors tram` and `tram_and_rumble` as `airborne`
   and `airborne_and_rumble`), and `--indoors` hears any of its vehicles.
+- Added: a source's `model` may be construction plant of Defra's database for
+  construction sites (`defra`: a breaker, a generator or a dumper, the breaker's
+  `blows_per_minute`) or a reversing alarm (`sae-j994`, SAE J994 Type B); they need no
+  trajectory, and the demo of any scene plays their made sound standing, all through
+  the run (`--blows` sets every breaker's).
+- Changed: the street's `works_demo.py` is the demo of its scene, its machines and alarm
+  the scene's sources with a model (the group `Road works`); its options and steps
+  before 4.4.0 still work but `--scene` (the scenes go to the work folder, now `demo`),
+  `--indoors works` and `works_and_rumble` read as `airborne` and
+  `airborne_and_rumble`, and its first run simulates again.
+- Changed: an option that changes nothing in a run is refused naming it (`--rpm changes
+  nothing: no road vehicle plays a made sound`), and `--rpm` and `--blows` are refused
+  unless positive.
 - Added: in the demo of any scene and **Render movement…**, sources with Doppler move
   together, beside other sources that move (a police car and its siren), every listener
   hearing each early path of each through its own changing delay; a listener with

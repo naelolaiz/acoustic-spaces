@@ -1955,10 +1955,84 @@ class RailVehicleModel(_Model):
         return [round(float(v), 6) for v in self.points(speed_m_s)[0].power_db]
 
 
+#: The construction plant a plant model is (:data:`acoustic_spaces.demos.plant.MACHINES`).
+PlantMachine = Literal["breaker", "generator", "dumper"]
+
+
+class PlantModel(_Model):
+    """Construction plant as Defra's noise database for construction sites measured it
+    (*Update of noise database for prediction of noise on construction and open sites*,
+    2005: the data of BS 5228-1 Annex C), ``machine`` a row of it
+    (:mod:`acoustic_spaces.demos.plant`): its sound power per octave band is the row's
+    level 10 m away plus 28 dB, a point over hard ground radiating into a half sphere. A
+    demo of the scene plays a sound made to that power: a breaker's blows,
+    ``blows_per_minute`` of them, or an engine's firing; the breaker and the dumper shake
+    the ground as the FTA's rows for them say, which ``--indoors`` hears as a rumble in a
+    room. It sounds all along, standing or moving."""
+
+    method: Literal["defra"] = Field(
+        description="the method that gives the source's sound power: defra, construction "
+        "plant as Defra's noise database (BS 5228-1 Annex C) measured it"
+    )
+    machine: PlantMachine = Field(
+        description="the machine: breaker (a 1650 kg breaker on a 15 t excavator, breaking "
+        "up the ground; Defra's table 1, row 9), generator (a 6 kVA diesel generator; table "
+        "4, row 87) or dumper (a 9 t dumper; table 4, row 4, a drive-by's L_max)"
+    )
+    blows_per_minute: PositiveFloat | None = Field(
+        default=None,
+        description="how many blows a minute a breaker strikes, for its made sound (default "
+        "480, the middle of the 320 to 640 Epiroc gives its MB 1650); a demo's --blows sets "
+        "every breaker's",
+    )
+
+    needs: ClassVar[str | None] = None
+    steady: ClassVar[bool] = True
+
+    @model_validator(mode="after")
+    def _blows_for_a_breaker(self) -> PlantModel:
+        if self.blows_per_minute is not None and self.machine != "breaker":
+            raise ValueError(f"a {self.machine} strikes no blows: blows_per_minute is a breaker's")
+        return self
+
+    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+        """The sound power per octave band (dB re 1 pW): the row's level 10 m away plus
+        28 dB; it takes no speed or air."""
+        from acoustic_spaces.demos.plant import MACHINES
+
+        return [round(float(v), 6) for v in MACHINES[self.machine].sound_power()]
+
+
+class AlarmModel(_Model):
+    """A lorry's reversing alarm of SAE J994 Type B (:mod:`acoustic_spaces.demos.plant`):
+    a tonal one at 1200 Hz, 107 dB(A) 1.2 m in front of it on its axis, as Hella's
+    009148021, beeping 1.5 times a second, on and off for equal times. Its sound power is
+    that of its beeps through the measured siren's directivity, averaged over its beeps
+    and pauses as its made sound plays them (at 48 kHz); the source's directivity is its
+    own (the examples' siren.csv). It sounds all along, standing or moving."""
+
+    method: Literal["sae-j994"] = Field(
+        description="the method that gives the source's sound power: sae-j994, a reversing "
+        "alarm of SAE J994 Type B"
+    )
+
+    needs: ClassVar[str | None] = None
+    steady: ClassVar[bool] = False
+
+    def power_db(self, speed_m_s: float | None, temperature_c: float) -> list[float]:
+        """The sound power per octave band (dB re 1 pW), averaged over its beeps and
+        pauses (:func:`acoustic_spaces.demos.plant.alarm_power` at 48 kHz); it takes no
+        speed or air."""
+        from acoustic_spaces.demos.plant import alarm_power
+
+        return [round(float(v), 6) for v in alarm_power(48000)]
+
+
 #: The models a source's sound power and made sound can come from (``model``), by their
 #: method.
 SourceModel = Annotated[
-    RoadVehicleModel | SirenModel | HornModel | RailVehicleModel, Field(discriminator="method")
+    RoadVehicleModel | SirenModel | HornModel | RailVehicleModel | PlantModel | AlarmModel,
+    Field(discriminator="method"),
 ]
 
 
@@ -2025,9 +2099,9 @@ class Source(_Model):
             "a standard method that gives the source's sound power in place of level_db, "
             "and a sound made to it that a demo of the scene plays unless signal or channel "
             "gives another: cnossos-eu (a road vehicle, at the speed of its trajectory, in "
-            "the scene's air), siren (a vehicle's siren), horn (a vehicle's horn in blasts) "
-            "or schall-03 (a train or a tram, its sources at one height, at the speed of its "
-            "trajectory)"
+            "the scene's air), siren (a vehicle's siren), horn (a vehicle's horn in blasts), "
+            "schall-03 (a train or a tram, its sources at one height, at the speed of its "
+            "trajectory), defra (construction plant) or sae-j994 (a reversing alarm)"
         ),
     )
     gain_db: float = Field(

@@ -1598,24 +1598,35 @@ stadium demo's do, without the helicopter.
 
 `works_demo.py` comes with the `street` example too: road works in the lane on the
 houses' side, 20 m along from the pavement's listener, heard on the pavement, on the
-balcony and in the garden in turn, binaurally, and a video that tours them.
+balcony and in the garden in turn, binaurally, and a video that tours them. It is [the
+demo of the street's scene](#a-demo-of-any-scene) with the works taken in: the machines
+and the alarm are the scene's sources `breaker`, `generator`, `dumper` and
+`dumper_alarm` (the group `Road works`), each with a model, left out of the scene's own
+simulations until picked, and that demo makes their sound, standing where they are, all
+through the run. The script's command lines still work: `--from` reads as `--scene`,
+`--tour` names the listeners in turn, the `scene` step runs as `simulate`, and
+`--indoors works` and `works_and_rumble` read as `airborne` and `airborne_and_rumble`;
+its `--scene`, the scene file it wrote, is no longer taken, as the scenes a run
+simulates go to the work folder.
 
 ```sh
 acoustic-spaces examples --copy . street && cd street
-python works_demo.py all   # or scene, feeds, simulate, render, video one at a time
+python works_demo.py all   # or feeds, simulate, render, video one at a time
 ```
 
 Options: `--blows 480` how many blows a minute the breaker strikes (Epiroc's MB 1650, a
-1650 kg breaker, strikes 320 to 640), `--seconds 20` how long each listener is heard,
-`--listeners pavement,garden` which listeners and in which order (every one in use by
-default; `--tour`, its earlier name, still works), `--sources breaker,dumper` which of
-the works play (`breaker`, `generator`, `dumper`, `dumper_alarm`; all of them by
-default), `--indoors off` where they are heard (see below), `--hrtf me.sofa` a measured head, `--input NAME=WAV` a dry recording of
-yours instead of a made sound (`breaker`, `generator`, `dumper` or `dumper_alarm`). The
-scene with the works alone goes to `scene_works.yaml`, the same heard 2 m in front of
-the offices to `scene_works_2m.yaml` (see Indoors below), everything else to
-`demo_works/`, each run's mixes and video in their own names there. In the editor, **Simulation > Run demo…** on the street's scene has it
-beside the pass-by demo.
+1650 kg breaker, strikes 320 to 640; the scene's breaker strikes 480), `--seconds 20`
+how long each listener is heard, `--listeners pavement,garden` which listeners and in
+which order (every one in use by default), `--sources breaker,dumper` which of the works
+play (`breaker`, `generator`, `dumper`, `dumper_alarm`; all of them together by default,
+each alone in a part of its own with `--sources-play in-turn`), `--indoors off` where
+they are heard (see below), `--hrtf me.sofa` a measured head, `--input NAME=WAV` a dry
+recording of yours instead of a made sound (a machine's at its sound power over the
+whole file, the alarm's beeps as loud as the made alarm's). Everything goes to `demo/`,
+each run's mixes and video in their own names there (`demo/works_binaural.mp4`,
+`demo/works_breaker+dumper_binaural.mp4`). In the editor, **Simulation > Run demo…** on
+the street's scene has it beside the pass-by demo, and **This scene** with the road
+works ticked plays the same.
 
 - **The machines** are rows of Defra's noise database for construction sites (*Update
   of noise database for prediction of noise on construction and open sites*, Hepworth
@@ -1645,37 +1656,45 @@ beside the pass-by demo.
 
   | | breaker | generator | dumper | alarm | all |
   |---|---:|---:|---:|---:|---:|
-  | pavement | 91.0 | 65.4 | 77.8 | 79.7 | 91.5 |
-  | balcony | 89.0 | 62.9 | 75.7 | 77.3 | 89.5 |
-  | garden | 72.1 | 48.0 | 57.7 | 58.5 | 72.5 |
+  | pavement | 91.0 | 65.4 | 77.8 | 79.8 | 91.5 |
+  | balcony | 89.0 | 62.6 | 75.9 | 77.3 | 89.5 |
+  | garden | 73.2 | 48.2 | 57.9 | 57.8 | 73.4 |
 
   The houses stand between the works and the garden, which hears them over and round
-  the houses and the barrier, 19 dB(A) under the pavement.
+  the houses and the barrier, some 18 dB(A) under the pavement. The late part's random
+  rays move these levels from run to run: by up to 0.3 dB on the pavement, 0.4 dB on
+  the balcony and 0.7 dB in the garden, which hears the late part most (the breaker
+  72.5 to 73.2 dB(A) there in seven runs; more rays, `simulation.late.rays`, make them
+  steadier).
 - **A tone is heard as the street makes it at its frequency.** The table's levels are
   each octave band's, as a sound spread over the octave has them. The alarm's beeps are
   one tone, where the reflections off the road and the facades add up or cancel: they
-  come out 2.9 dB under the table's level on the pavement, 0.7 dB over it on the
-  balcony and 5.3 dB under it in the garden (the simulated responses at 1200 Hz, which
-  change a few tens of centimetres away). The engines' firing, a row of tones, comes
-  out within 1.1 dB of the table's; the breaker's blows, noise, within 0.4 dB. The
-  captions give the octaves' levels.
+  come out from 2.0 dB under the table's level to 1.2 dB over it on the pavement, 1.3
+  to 3.6 dB over it on the balcony and from 1.7 dB under it to 2.0 dB over it in the
+  garden, in seven runs (the simulated responses at 1200 Hz, which the late part's
+  random rays change from run to run, as a few tens of centimetres do). The engines'
+  firing, a row of tones, comes out within 1.5 dB of the table's; the breaker's blows,
+  noise, within 0.3 dB. The captions give the octaves' levels.
 - **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors.StillHouses`): as in [Trains
   passing by](#trains-passing-by), the pavement's listener, 2 m in front of the houses,
   and the balcony's, 1 m in front of the offices, hear the works in a room behind that
-  wall, and the garden hears them outdoors: `works_and_rumble` the works through the
-  closed window and the rumble of the breaker's and the dumper's vibration, `works` the
-  window alone, `rumble` the rumble alone. The offices' room takes its level outdoors at
-  the point 2 m in front of their wall, 1 m out from the balcony: the `scene` step
-  writes that point (`balcony_2m`) to `scene_works_2m.yaml`, which `simulate` simulates
-  too. The vibration is each machine's level at its distance from the room's wall by the
-  FTA's eq. 7-3 from table 7-4 (a hoe ram, 87 VdB at 25 ft; loaded trucks, 86 VdB),
-  their energies added, with no adjustment for the building, as the manual compares
-  plant's level with its limits as it is; the rumble is 50 dB under it in dB(A), as the
-  trains'. It is 29.8 dB(A) in the houses (their floor at 79.8 VdB) and 25.5 in the
-  offices (75.5), and steady, as the breaker's blows come faster than noise at 25 Hz can
-  swell and fade. The garden's ground shakes at 66.1 VdB, just felt. The captions give
-  what is felt at each listener, and each one's vibration is a bass shaker's track
-  (`.shaker.wav` beside each mix, and the run's `<run>_shaker.wav`), as the trains' are.
+  wall, and the garden hears them outdoors: `airborne_and_rumble` the works through the
+  closed window and the rumble of the breaker's and the dumper's vibration, `airborne`
+  the window alone, `rumble` the rumble alone. The offices' room takes its level
+  outdoors at the point 2 m in front of their wall, 1 m out from the balcony: the
+  `simulate` step writes the scene the run plays heard there (`balcony_2m`), beside it
+  with `_2m` after its name, and simulates it too. The vibration is each machine's level
+  at its distance from the room's wall by the FTA's eq. 7-3 from table 7-4 (a hoe ram,
+  87 VdB at 25 ft; loaded trucks, 86 VdB), their energies added, with no adjustment for
+  the building, as the manual compares plant's level with its limits as it is; the
+  rumble is 50 dB under it in dB(A), as the trains'. It is 29.8 dB(A) in the houses
+  (their floor at 79.8 VdB) and 25.5 in the offices (75.5), and steady, as the breaker's
+  blows come faster than noise at 25 Hz can swell and fade. The garden's ground shakes
+  at 66.1 VdB, just felt. The captions give what is felt at each listener, and each
+  one's vibration is a bass shaker's track (`.shaker.wav` beside each mix, and the
+  run's `<run>_shaker.wav`), as the trains' are. A run where something else moves past
+  (the tram, say) leaves standing plant's vibration out, so it refuses the rumble while
+  a breaker or a dumper plays: play them in a run of their own.
 
 What it leaves out: the dumper stands still while its alarm sounds, as if it reversed on
 the spot; the machines' bodies are not in the scene, so nothing of the dumper shields

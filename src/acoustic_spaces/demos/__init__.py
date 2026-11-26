@@ -1755,7 +1755,8 @@ class Demo:
                 continue
             why = option.moot(self._single(args))
             if why is not None:
-                return why
+                # Said with the option, unless the reason names it.
+                return why if option.option in why else f"{option.option} changes nothing: {why}"
         if not self.stepless:
             for name in given_names(getattr(args, "series", None)) or []:
                 dim = self._dim_of(name)

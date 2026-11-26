@@ -799,9 +799,19 @@ sources:
   a trajectory at one steady speed, and its sound power that of the train's first point
   at that height; a demo of the scene plays every point at that height (a tram's four
   bogies at the rail top, the two halves of its roof) as far behind the front as it is,
-  each a noise of its own at its own sound power, with Doppler. A siren's, a horn's and
-  a train's directivity is the source's own (the examples' `siren.csv`, `train.csv` and
-  `tram.csv`; see [demos](demos.md#vehicles-passing-by)). The editor shows the model on
+  each a noise of its own at its own sound power, with Doppler. With `method: defra` it
+  is construction plant, a `machine` (`breaker`, `generator` or `dumper`) of Defra's
+  noise database for construction sites (2005, the data of BS 5228-1 Annex C): the
+  row's level 10 m away plus 28 dB in each octave band; a demo of the scene makes the
+  breaker's blows (`blows_per_minute`, 480 unless set; a demo's `--blows`) or the
+  engines' firing, and hears the breaker's and the dumper's vibration as a rumble in a
+  room ([road works](demos.md#road-works-in-the-street)). With `method: sae-j994` it is a
+  reversing alarm, 1200 Hz beeps 1.5 times a second, 107 dB(A) 1.2 m in front of it
+  (SAE J994 Type B), its sound power the average over its beeps and pauses. Plant and
+  alarms need no trajectory: standing, a demo plays their sound all through the run. A
+  siren's, a horn's, an alarm's and a train's directivity is the source's own (the
+  examples' `siren.csv`, `train.csv` and `tram.csv`; see
+  [demos](demos.md#vehicles-passing-by)). The editor shows the model on
   the source's page (**Model**), with the sound power it gives.
 - `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
   the sound power and on the impulse responses, so a mix made with `auralize` hears

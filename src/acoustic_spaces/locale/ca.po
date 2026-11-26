@@ -3180,7 +3180,9 @@ msgid ""
 "its blasts as loud as its rule or its maker gives them, averaged over its "
 "blasts and pauses; a train's or a tram's by Schall 03, at the speed of its "
 "trajectory, that of the first of its points at one height, a demo playing "
-"those behind it too"
+"those behind it too; construction plant's, Defra's row for the machine plus "
+"28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its beeps and "
+"pauses"
 msgstr ""
 "El mètode que dona la potència acústica de la font en lloc de la que hi "
 "poseu, i el so que hi reprodueix una demostració de l'escena (model: al "
@@ -3190,7 +3192,10 @@ msgstr ""
 "amb els tocs tan forts com els dona la seva norma o el seu fabricant, en "
 "mitjana sobre els tocs i les pauses; la d'un tren o un tramvia segons Schall "
 "03, a la velocitat de la seva trajectòria, la del primer dels seus punts a "
-"una alçada, i una demostració també reprodueix els que van darrere"
+"una alçada, i una demostració també reprodueix els que van darrere; la de "
+"maquinària d'obra, la fila de Defra per a la màquina més 28 dB; la d'una "
+"alarma de marxa enrere, la del tipus B de la SAE J994, en mitjana sobre els "
+"senyals i les pauses"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -3307,6 +3312,43 @@ msgstr "al seu sostre, a 4 m d'alçada"
 #: acoustic_spaces/gui/inspector.py
 msgid "at its pantograph's head, 5 m up"
 msgstr "al cap del seu pantògraf, a 5 m d'alçada"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C)"
+msgstr ""
+"Maquinària d'obra: la fila de Defra per a {machine} (2005, BS 5228-1, annex "
+"C)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C); its "
+"made sound's blows: {blows} a minute"
+msgstr ""
+"Maquinària d'obra: la fila de Defra per a {machine} (2005, BS 5228-1, annex "
+"C); els cops del so generat: {blows} per minut"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 1650 kg breaker on a 15 t excavator"
+msgstr "un martell trencador de 1650 kg en una excavadora de 15 t"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 6 kVA diesel generator"
+msgstr "un generador dièsel de 6 kVA"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 9 t dumper"
+msgstr "un dúmper de 9 t"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Reversing alarm: SAE J994 Type B, {hz} Hz beeps {per_s} times a second, "
+"{level} dB(A) {at} m in front of it"
+msgstr ""
+"Alarma de marxa enrere: SAE J994 tipus B, senyals de {hz} Hz {per_s} vegades "
+"per segon, {level} dB(A) a {at} m davant seu"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "light motor vehicles"

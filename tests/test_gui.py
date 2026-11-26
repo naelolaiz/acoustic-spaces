@@ -1891,7 +1891,8 @@ def test_a_source_page_shows_its_model(window) -> None:
     """A source with a model shows it on its page, its sound power given by it: the
     street's road vehicles by CNOSSOS-EU at the speed of their trajectories; the police
     car's and the fire engine's sirens and horns, at any speed, by what they sound; the
-    tram's sources by Schall 03, at the speed of their trajectories."""
+    tram's sources by Schall 03, at the speed of their trajectories; the road works'
+    machines by Defra's rows and the alarm by SAE J994."""
     window.open_example(example_path("street"))
     page = window.inspector.pages["sources"]
     names = [source.name for source in window.document.scene.sources]
@@ -1927,6 +1928,22 @@ def test_a_source_page_shows_its_model(window) -> None:
         "up, the sound power the first's, the others played behind it"
     )
     assert page.level.toolTip().endswith(". Given by the model, at the speed of the trajectory")
+    # The road works, standing: their sound power by the model whatever they do.
+    window.select("sources", names.index("breaker"))
+    assert page.model.text() == (
+        "Construction plant: Defra's row for a 1650 kg breaker on a 15 t excavator (2005, "
+        "BS 5228-1 Annex C); its made sound's blows: 480 a minute"
+    )
+    assert page.level.toolTip().endswith(". Given by the model") and not page.level.isEnabled()
+    window.select("sources", names.index("generator"))
+    assert page.model.text() == (
+        "Construction plant: Defra's row for a 6 kVA diesel generator (2005, BS 5228-1 Annex C)"
+    )
+    window.select("sources", names.index("dumper_alarm"))
+    assert page.model.text() == (
+        "Reversing alarm: SAE J994 Type B, 1200 Hz beeps 1.5 times a second, 107 dB(A) 1.2 m "
+        "in front of it"
+    )
 
 
 def test_a_source_plays_a_wav_in_a_demo(window, monkeypatch, tmp_path: Path) -> None:
@@ -4762,6 +4779,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
         "Police car",
         "Fire engine",
         "Tram",
+        "Road works",
     ]
 
     def shown() -> set[str]:

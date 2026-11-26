@@ -250,7 +250,9 @@ MODEL_TIP = N_(
     "the 100 W electronic siren NBS measured; a horn's, its blasts as loud as its rule or "
     "its maker gives them, averaged over its blasts and pauses; a train's or a tram's by "
     "Schall 03, at the speed of its trajectory, that of the first of its points at one "
-    "height, a demo playing those behind it too"
+    "height, a demo playing those behind it too; construction plant's, Defra's row for "
+    "the machine plus 28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its "
+    "beeps and pauses"
 )
 #: A siren model on its page, as loud as the siren NBS measured, or louder or quieter.
 SIREN_TEXT = N_(
@@ -295,6 +297,22 @@ RAIL_HEIGHTS = {
     "roof": N_("on its roof, 4 m up"),
     "pantograph": N_("at its pantograph's head, 5 m up"),
 }
+#: A plant model on its page: Defra's row for the machine, and a breaker's blows.
+PLANT_TEXT = N_("Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C)")
+BREAKER_TEXT = N_(
+    "Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C); its made "
+    "sound's blows: {blows} a minute"
+)
+PLANT_MACHINES = {
+    "breaker": N_("a 1650 kg breaker on a 15 t excavator"),
+    "generator": N_("a 6 kVA diesel generator"),
+    "dumper": N_("a 9 t dumper"),
+}
+#: An alarm model on its page: its beeps and how loud it is.
+ALARM_TEXT = N_(
+    "Reversing alarm: SAE J994 Type B, {hz} Hz beeps {per_s} times a second, {level} "
+    "dB(A) {at} m in front of it"
+)
 #: CNOSSOS-EU's road vehicle categories, as a source's model names them.
 ROAD_CATEGORIES = {
     "1": N_("light motor vehicles"),
@@ -3385,9 +3403,27 @@ def model_text(model) -> str:
     """A source's model (``model``) in words, on its page: none; a road vehicle's
     method, its category and the engine of its made sound; a siren's pattern, those it
     can sound and how loud it is; a horn's kind, its notes and how loud they sound; a
-    rail vehicle's train, its track and the height of its sources."""
+    rail vehicle's train, its track and the height of its sources; construction
+    plant's row of Defra's database (a breaker's blows); an alarm's beeps."""
     if model is None:
         return _("none")
+    if model.method == "defra":
+        from acoustic_spaces.demos.plant import BLOWS_PER_MINUTE
+
+        machine = _(PLANT_MACHINES[model.machine])
+        if model.machine != "breaker":
+            return _(PLANT_TEXT).format(machine=machine)
+        blows = model.blows_per_minute or BLOWS_PER_MINUTE
+        return _(BREAKER_TEXT).format(machine=machine, blows=f"{blows:g}")
+    if model.method == "sae-j994":
+        from acoustic_spaces.demos import plant
+
+        return _(ALARM_TEXT).format(
+            hz=f"{plant.ALARM_HZ:g}",
+            per_s=f"{plant.ALARM_PER_S:g}",
+            level=f"{plant.ALARM_ON_AXIS_DB_A:g}",
+            at=f"{plant.ALARM_AT_M:g}",
+        )
     if model.method == "schall-03":
         return _(RAIL_TEXT).format(
             train=_(RAIL_TRAINS[model.train]),

@@ -1579,7 +1579,7 @@ def test_the_passby_demo_is_a_preset_of_the_demo_of_its_scene(tmp_path: Path) ->
     taken = parser.parse_args(["all", "--input", f"car={wav}"])
     assert road.check(taken) is None
     assert road.check(parser.parse_args(["all", "--input", f"car={wav}", "--rpm", "3000"])) == (
-        "no road vehicle plays a made sound"
+        "--rpm changes nothing: no road vehicle plays a made sound"
     )
 
 

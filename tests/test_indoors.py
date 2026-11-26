@@ -623,8 +623,9 @@ def test_the_street_demo_hears_indoors_whatever_goes_past_and_the_tram_s_rumble(
 ) -> None:
     """In the street demo --indoors hears in the room behind a listener in front of a
     wall whatever goes past, the rumble only where a train's or a tram's wheels shake the
-    ground; the script's values for the tram read as the demo's, and a run it would
-    change nothing in, or whose rumble nothing makes, is refused."""
+    ground; the script's values for the tram read as the demo's, a run where nothing
+    moves is heard through the window too, and a run it would change nothing in, or
+    whose rumble nothing makes, is refused."""
     from acoustic_spaces.demos import load
     from acoustic_spaces.examples import example_path
 
@@ -653,8 +654,10 @@ def test_the_street_demo_hears_indoors_whatever_goes_past_and_the_tram_s_rumble(
 
     write_wav(tmp_path / "traffic.wav", np.zeros(4800), 48000)
     standing = ("--sources", "traffic", "--input", f"traffic={tmp_path / 'traffic.wav'}")
-    refused = demo.check(parsed(*standing, "--indoors", "airborne"))
-    assert refused is not None and refused.endswith("nothing moves in this run")
+    # Standing, the traffic is heard through the window too, but shakes nothing.
+    assert demo.check(parsed(*standing, "--indoors", "airborne")) is None
+    refused = demo.check(parsed(*standing, "--indoors", "rumble"))
+    assert refused is not None and "nothing that plays shakes it (traffic;" in refused
 
 
 def test_listeners_in_turn_hear_indoors_only_at_a_house() -> None:

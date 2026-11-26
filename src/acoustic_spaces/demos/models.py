@@ -43,10 +43,15 @@ METHOD_WORDS = {
     "siren": "a siren",
     "horn": "a horn",
     "schall-03": "a rail vehicle",
+    "defra": "construction plant",
+    "sae-j994": "a reversing alarm",
 }
 #: Each rail model's height, for the seeds of its points' noise: the old pass-by demo's
 #: order of a train's sources.
 RAIL_SEEDS = {"rail_top": 0, "roof": 1, "pantograph": 2}
+#: Each plant model's machine, for the seed of its made sound: the old works demo's order
+#: of the street's machines.
+PLANT_SEEDS = {"breaker": 0, "generator": 1, "dumper": 2}
 
 
 def speed_kmh(source) -> float | None:
@@ -66,6 +71,15 @@ def driven_kmh(source) -> float:
     if kmh is None:
         raise ValueError(f"{source.name}'s {source.model.method} model takes no speed")
     return kmh
+
+
+def blows_of(model) -> float:
+    """How many blows a minute a plant model's breaker strikes: its own, or
+    :data:`~acoustic_spaces.demos.plant.BLOWS_PER_MINUTE`."""
+    from acoustic_spaces.demos.plant import BLOWS_PER_MINUTE
+
+    given = getattr(model, "blows_per_minute", None)
+    return BLOWS_PER_MINUTE if given is None else float(given)
 
 
 def rail_points(source) -> list:
@@ -110,20 +124,33 @@ def recorded_trail(source, x: np.ndarray) -> np.ndarray:
     return np.column_stack(columns) if columns else np.zeros((n, 0))
 
 
-def pass_times(source) -> tuple[float, float]:
-    """When ``source``'s trajectory sets off and when it ends, on the run's clock (s)."""
+def stands(source) -> bool:
+    """Whether ``source`` (as the run plays it) stands: it has no trajectory, or its
+    trajectory is off."""
+    return source.trajectory is None or not source.trajectory.enabled
+
+
+def pass_times(source, length_s: float | None = None) -> tuple[float, float]:
+    """When ``source``'s trajectory sets off and when it ends, on the run's clock (s);
+    for one that stands (:func:`stands`), from the clock's start to ``length_s``, the
+    run's length."""
     from acoustic_spaces.walkthrough import knots
 
+    if stands(source):
+        if length_s is None:
+            raise ValueError(f"{source.name} stands: give how long the run lasts")
+        return 0.0, float(length_s)
     start = float(source.trajectory.start_s)
     return start, float(knots(source).duration_s)
 
 
-def made_key(source, rate: int, temperature_c: float) -> str:
+def made_key(source, rate: int, temperature_c: float, length_s: float | None = None) -> str:
     """What the sound ``source`` makes hangs on, as a short digest: its model (as the run
-    sets it), its speed where the method takes one, its pass on the run's clock, the
-    air's temperature and the sample rate."""
+    sets it), its speed where the method takes one, its pass on the run's clock (all of
+    the run, ``length_s`` long, for one that stands), the air's temperature and the
+    sample rate."""
     speed = speed_kmh(source)
-    start, end = pass_times(source)
+    start, end = pass_times(source, length_s)
     what = {
         "model": source.model.model_dump(mode="json"),
         "speed_kmh": None if speed is None else round(speed, 6),
@@ -134,10 +161,13 @@ def made_key(source, rate: int, temperature_c: float) -> str:
     return hashlib.sha256(json.dumps(what, sort_keys=True).encode()).hexdigest()[:12]
 
 
-def made_file(folder: Path, source, rate: int, temperature_c: float) -> Path:
+def made_file(
+    folder: Path, source, rate: int, temperature_c: float, length_s: float | None = None
+) -> Path:
     """Where the sound ``source`` makes is kept in ``folder``, named after it and
     :func:`made_key`."""
-    return Path(folder) / f"{source.name}_{made_key(source, rate, temperature_c)}.wav"
+    key = made_key(source, rate, temperature_c, length_s)
+    return Path(folder) / f"{source.name}_{key}.wav"
 
 
 def horn_kind(model):
@@ -149,21 +179,27 @@ def horn_kind(model):
 
 def fade_s(model) -> float:
     """How long the made sound of ``model`` fades in and out over (s): FADE_S, or a
-    horn's rise, its blasts rising and falling of themselves."""
-    return horn_kind(model).rise_s if model.method == "horn" else FADE_S
+    horn's or an alarm's rise, its blasts or beeps rising and falling of themselves."""
+    from acoustic_spaces.demos.plant import ALARM_RISE_S
+
+    if model.method == "horn":
+        return horn_kind(model).rise_s
+    return ALARM_RISE_S if model.method == "sae-j994" else FADE_S
 
 
-def made_sound(source, rate: int, temperature_c: float) -> np.ndarray:
+def made_sound(
+    source, rate: int, temperature_c: float, length_s: float | None = None
+) -> np.ndarray:
     """The sound ``source`` (a scene source with a model, its trajectory and model as the
     run plays them) makes on the run's clock at ``rate``: silent until its trajectory
     sets off, then its model's sound along the pass at an RMS of SOUND_RMS, faded in and
-    out (:func:`fade_s`); mono, but for a rail model of several points, a column each
-    (its first the source's, :func:`trail`), each faded so, the others at their sound
-    power against the first's."""
+    out (:func:`fade_s`); for one that stands, all along the run, ``length_s`` long;
+    mono, but for a rail model of several points, a column each (its first the source's,
+    :func:`trail`), each faded so, the others at their sound power against the first's."""
     from acoustic_spaces.demos.passby import faded
 
     model = source.model
-    start, end = pass_times(source)
+    start, end = pass_times(source, length_s)
     duration = end - start
     if model.method == "cnossos-eu":
         from acoustic_spaces.demos.road import vehicle_power, vehicle_sound
@@ -180,6 +216,20 @@ def made_sound(source, rate: int, temperature_c: float) -> np.ndarray:
         from acoustic_spaces.demos.horn import horn_sound
 
         x = horn_sound(int(rate), duration, horn_kind(model))
+    elif model.method == "defra":
+        from acoustic_spaces.demos.plant import MACHINES, machine_sound
+
+        x = machine_sound(
+            MACHINES[model.machine],
+            int(rate),
+            duration,
+            blows_per_minute=blows_of(model),
+            seed=PLANT_SEEDS[model.machine],
+        )
+    elif model.method == "sae-j994":
+        from acoustic_spaces.demos.plant import alarm_sound
+
+        x = alarm_sound(int(rate), duration)
     else:
         from acoustic_spaces.demos.rail import point_sound
 
@@ -193,6 +243,8 @@ def made_sound(source, rate: int, temperature_c: float) -> np.ndarray:
             ]
         )
         x = x[:, 0] if x.shape[1] == 1 else x
+    if stands(source):  # sounding all along the run, from its start to its end
+        return x
     lead = np.zeros((int(round(start * rate)), *x.shape[1:]))
     return np.concatenate([lead, faded(x, int(rate), fade_s(model))])
 
@@ -201,12 +253,23 @@ def input_gain(source, x: np.ndarray, rate: int) -> float | None:
     """The gain of ``x``, a recording that ``source`` (a scene source with a model) plays
     in place of its made sound, so that it plays as loud as that sound: a horn's blasts
     as loud as the made horn's, whatever its pauses
-    (:func:`~acoustic_spaces.demos.horn.recorded_gain`); any other its gated RMS brought
-    to SOUND_RMS. None when it is silent."""
+    (:func:`~acoustic_spaces.demos.horn.recorded_gain`), an alarm's beeps as loud as the
+    made alarm's, construction plant's RMS over the whole file, as its made sound's, and
+    any other its gated RMS brought to SOUND_RMS. None when it is silent."""
     if source.model.method == "horn":
         from acoustic_spaces.demos.horn import recorded_gain
 
         return recorded_gain(x, int(rate), horn_kind(source.model))
+    if source.model.method == "sae-j994":  # its beeps as loud as the made alarm's
+        from acoustic_spaces.demos.horn import sounding_rms
+        from acoustic_spaces.demos.plant import ALARM_POWER_S, alarm_sound
+
+        rms = sounding_rms(x, int(rate))
+        made = sounding_rms(alarm_sound(int(rate), ALARM_POWER_S), int(rate))
+        return made / rms if rms > 0.0 else None
+    if source.model.method == "defra":  # at its sound power over the whole file, as made
+        rms = float(np.sqrt(np.mean(np.asarray(x, dtype=float) ** 2)))
+        return SOUND_RMS / rms if rms > 0.0 else None
     from acoustic_spaces.demos.audio import gated_rms
 
     rms = gated_rms(x, int(rate))
@@ -237,6 +300,10 @@ def made_words(source) -> str:
         noun = _horn_noun(model)
         own = "'" if noun.endswith("s") else "'s"
         return f"{noun}{own} blasts, made to {_horn_loudness(model)}"
+    if model.method == "defra":
+        return f"{_machine(model)}, made to Defra's sound power ({_machine_sound(model)})"
+    if model.method == "sae-j994":
+        return f"a reversing alarm's beeps, made to {_alarm_loudness()}"
     kind = CATEGORIES[model.category].name
     return (
         f"CNOSSOS-EU {kind}{_speed_words(source)}, made to the method's sound power (tyres "
@@ -267,11 +334,14 @@ def model_line(source, temperature_c: float) -> str:
         what = "CNOSSOS-EU"
     else:
         power = a_weighted(np.asarray(model.power_db(None, temperature_c), dtype=float))
-        what = (
-            f"a siren, {_pattern(model.pattern)}"
-            if model.method == "siren"
-            else f"{_horn_noun(model)} in blasts, on average"
-        )
+        if model.method == "siren":
+            what = f"a siren, {_pattern(model.pattern)}"
+        elif model.method == "horn":
+            what = f"{_horn_noun(model)} in blasts, on average"
+        elif model.method == "defra":
+            what = f"Defra's row for {_machine(model)}"
+        else:
+            what = "SAE J994 Type B, beeping half the time"
     return f"Sound power of {source.name}{_speed_words(source)}: {power:.1f} dB(A) ({what})"
 
 
@@ -299,6 +369,19 @@ def made_credit(source) -> str:
         return (
             f"Sound made up for {source.name}: {_horn_noun(model)}, {tones} Hz"
             f"{how} in blasts, {_horn_loudness(model)}"
+        )
+    if model.method == "defra":
+        return (
+            f"Sound made up for {source.name}: {_machine_sound(model)}, with the octave "
+            f"spectrum of Defra's row for {_machine(model)} (2005, the data of BS 5228-1 "
+            "Annex C)"
+        )
+    if model.method == "sae-j994":
+        from acoustic_spaces.demos.plant import ALARM_HZ, ALARM_PER_S
+
+        return (
+            f"Sound made up for {source.name}: a reversing alarm's {ALARM_HZ:g} Hz beeps, "
+            f"{ALARM_PER_S:g} a second, {_alarm_loudness()}"
         )
     kind = CATEGORIES[model.category]
     cylinders = CYLINDER_WORDS.get(model.cylinders, str(model.cylinders))
@@ -350,6 +433,14 @@ def made_brief(source) -> str:
             f"{kind.on_axis_db:g} dB({kind.weighting}){each} at {kind.at_m:g} m "
             f"({HORN_BRIEF[model.kind]})"
         )
+    if model.method == "defra":
+        return f"{_machine_sound(model)} (Defra's row for {_machine(model)})"
+    if model.method == "sae-j994":
+        from acoustic_spaces.demos.plant import ALARM_HZ, ALARM_PER_S
+
+        return (
+            f"a reversing alarm's {ALARM_HZ:g} Hz beeps, {ALARM_PER_S:g} a second (SAE J994 Type B)"
+        )
     kind = CATEGORIES[model.category]
     tyres = "tyres and " if kind.rolling_a is not None else ""
     cylinders = CYLINDER_WORDS.get(model.cylinders, str(model.cylinders))
@@ -395,6 +486,34 @@ def _rail_points(source) -> str:
     if height == "roof":
         return f"{n} points on its roof, 4 m up" if n > 1 else "its roof, 4 m up"
     return f"its {n} pantographs' heads, 5 m up" if n > 1 else "its pantograph's head, 5 m up"
+
+
+def _machine(model) -> str:
+    """A plant model's machine in words: "a 1650 kg breaker on a 15 t excavator"."""
+    from acoustic_spaces.demos.plant import MACHINES
+
+    return MACHINES[model.machine].noun
+
+
+def _machine_sound(model) -> str:
+    """What a plant model's made sound is, in words: "480 blows a minute", "its engine
+    firing at 3000 rpm"."""
+    from acoustic_spaces.demos.plant import MACHINES
+
+    machine = MACHINES[model.machine]
+    if machine.made == "blows":
+        return f"{blows_of(model):g} blows a minute"
+    return f"its engine firing at {machine.rpm:g} rpm"
+
+
+def _alarm_loudness() -> str:
+    """How loud an alarm model is, in words."""
+    from acoustic_spaces.demos.plant import ALARM_AT_M, ALARM_ON_AXIS_DB_A
+
+    return (
+        f"{ALARM_ON_AXIS_DB_A:g} dB(A) {ALARM_AT_M:g} m in front of it (SAE J994 Type B, "
+        "Hella's 009148021)"
+    )
 
 
 def _article(noun: str) -> str:
@@ -461,8 +580,10 @@ __all__ = [
     "HORN_NOUNS",
     "HORN_RULES",
     "METHOD_WORDS",
+    "PLANT_SEEDS",
     "RAIL_SEEDS",
     "SOUND_RMS",
+    "blows_of",
     "driven_kmh",
     "fade_s",
     "horn_kind",
@@ -479,5 +600,6 @@ __all__ = [
     "rail_points",
     "recorded_trail",
     "speed_kmh",
+    "stands",
     "trail",
 ]
