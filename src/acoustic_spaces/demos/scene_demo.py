@@ -113,10 +113,11 @@ from acoustic_spaces.demos.audio import (
     stereo,
     write,
 )
+from acoustic_spaces.demos.music import AUDIO_FILTER
 from acoustic_spaces.i18n import N_
 from acoustic_spaces.parameters import VOCAL_EFFORT_DB_A
 from acoustic_spaces.scene import Scene, TourStop
-from acoustic_spaces.scene.model import ATMOSPHERES
+from acoustic_spaces.scene.model import ATMOSPHERES, CHANNELS
 
 #: What the feeds are brought to (gated RMS, full scale): the loudness every source's
 #: signal has before the simulation's sound powers set the balance.
@@ -139,8 +140,10 @@ SOURCES_HELP = (
     "stay silent, and as the feeds and the simulation keep every source, another pick "
     "needs neither again"
 )
-#: What a source plays: the file, and the channel of it (None: mixed down to mono).
-Played = tuple[Path, str | None]
+#: What a source plays: the file, and the channel of it (None: mixed down to mono), or
+#: the recording and the stem of it the source plays, or the mix of its stems (stem to
+#: gain, dB), those the recording has.
+Played = tuple[Path, str | dict[str, float] | None]
 #: How :func:`plays` names a channel.
 CHANNEL_WORDS = {"left": "left channel", "right": "right channel", "mono": "mixed down to mono"}
 CROSSFADE_S = 1.0
@@ -423,6 +426,23 @@ def talkers_of(args: argparse.Namespace) -> list[str]:
     return [s.name for s in found.sources if s.in_use and s.spectrum != "flat"]
 
 
+def stems_moot(args: argparse.Namespace) -> str | None:
+    """Why ``--stem`` changes nothing in the run, or None: the run plays a free song (it
+    has its own stems), no recording, or no source of it plays a stem."""
+    scene = _run(args)
+    if scene is None:
+        return None
+    free = free_of(scene)
+    if free is not None:
+        return f"the run plays {free.name}, a free recording: --stem is for one of yours"
+    if scene.recording is None:
+        return "the run plays no recording: give one of yours (--recording)"
+    inputs = getattr(args, "inputs", None) or {}
+    if not any(s.stems for s in scene.sources if s.in_use and plays_recording(s, inputs)):
+        return "no source in use plays a stem: give one a stem or a mix of them as its channel"
+    return None
+
+
 def recording_heard(args: argparse.Namespace) -> bool:
     """Whether a source in use plays the scene's recording (:func:`plays_recording`)."""
     found = _current(getattr(args, "scene", None))
@@ -487,21 +507,71 @@ def free_of(scene: Scene) -> recordings.Recording | None:
     return recordings.named(scene.recording) if isinstance(scene.recording, str) else None
 
 
+def stems_of(args: argparse.Namespace, scene: Scene) -> dict[str, Path]:
+    """The stems of the recording the run plays and their files: a free song's (there or
+    still to download, :func:`acoustic_spaces.recordings.stem_file`), or those
+    ``--stem`` gives a recording of yours; none for a recording without."""
+    free = free_of(scene)
+    if free is not None:
+        return {name: recordings.stem_file(free, name) for name in free.stem_names}
+    if scene.recording is None:
+        return {}
+    return {name: Path(file) for name, file in (getattr(args, "stems", None) or {}).items()}
+
+
 def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Played | None]:
     """What each source in use plays, and which channel of it: the file ``--input``
-    gives it, else its signal, else, with a channel, the scene's recording (None:
-    silent)."""
+    gives it, else its signal (the channel left, right or mono of it), else, with a
+    channel, the scene's recording: a channel of it, or the stem the channel names or
+    the mix of them, those the recording has (:func:`stems_of`). None: silent, as is a
+    source none of whose stems the recording has."""
     inputs = getattr(args, "inputs", None) or {}
     recording = recording_of(scene)
+    stems = stems_of(args, scene)
     out: dict[str, Played | None] = {}
     for source in scene.sources:
         if not source.in_use:
             continue
         file = inputs.get(source.name) or source.signal
-        if file is None and source.channel is not None:
-            file = recording
-        out[source.name] = None if file is None else (Path(file), source.channel)
+        if file is not None:
+            channel = source.channel if source.channel in CHANNELS else None
+            out[source.name] = (Path(file), channel)
+        elif source.channel is None or recording is None:
+            out[source.name] = None
+        elif not source.stems:
+            out[source.name] = (recording, source.channel)
+        else:
+            have = {name: gain for name, gain in source.stems.items() if name in stems}
+            if not have:
+                out[source.name] = None
+            elif isinstance(source.channel, str):
+                out[source.name] = (recording, source.channel)
+            else:
+                out[source.name] = (recording, have)
     return out
+
+
+def stems_played(played: Played | None) -> dict[str, float]:
+    """The stems ``played`` plays and their gains (dB): none for a file or a channel."""
+    if played is None or played[1] is None:
+        return {}
+    channel = played[1]
+    if isinstance(channel, dict):
+        return dict(channel)
+    return {} if channel in CHANNELS else {channel: 0.0}
+
+
+def channel_words(channel: str | dict[str, float] | None) -> str:
+    """How :func:`plays` and the feeds name what a source plays of its file: a channel,
+    a stem (``its vocal stem``) or a mix (``a mix of its vocal, backing -6 dB ...``)."""
+    if channel is None:
+        return ""
+    if isinstance(channel, dict):
+        parts = [name if gain == 0 else f"{name} {gain:+g} dB" for name, gain in channel.items()]
+        return f"a mix of its stems {', '.join(parts)}"
+    if channel in CHANNEL_WORDS:
+        return CHANNEL_WORDS[channel]
+    return f"its {channel} stem"
 
 
 def plays(args: argparse.Namespace) -> dict[str, str]:
@@ -514,13 +584,21 @@ def plays(args: argparse.Namespace) -> dict[str, str]:
     free_file = recordings.file_of(free) if free is not None else None
     out = {}
     own = argparse.Namespace(**{**vars(args), "inputs": None})
+    sources = {source.name: source for source in found.sources}
     for name, played in signals_of(own, found).items():
         if played is None:
-            out[name] = "silent"
+            wanted = sources[name].stems if sources[name].signal is None else {}
+            heard = recording_of(found)
+            if wanted and heard is not None and free is not None:
+                out[name] = f"silent: {free.title} has no {', '.join(wanted)} stem"
+            elif wanted and heard is not None:
+                out[name] = f"silent: no {', '.join(wanted)} stem of {heard.name} (--stem)"
+            else:
+                out[name] = "silent"
             continue
         file, channel = played
         what = free.title if free is not None and file == free_file else file.name
-        out[name] = what if channel is None else f"{what}, {CHANNEL_WORDS[channel]}"
+        out[name] = what if channel is None else f"{what}, {channel_words(channel)}"
     return out
 
 
@@ -539,33 +617,50 @@ def sources_of(args: argparse.Namespace) -> list[Source]:
     ]
 
 
-def recording_needed(args: argparse.Namespace) -> recordings.Recording | None:
-    """The free recording the run plays and has not downloaded yet, or None."""
+def downloads_of(args: argparse.Namespace) -> tuple[recordings.Recording | None, bool, bool]:
+    """The free recording the run plays, whether it is still to download (a source plays
+    it, or its stems, which are lined up with it), and whether its stems are (a source
+    plays one)."""
     scene = _run(args)
     free = free_of(scene) if scene is not None else None
     if free is None:
-        return None
-    path = recordings.file_of(free)
-    if path.exists():
-        return None
-    played = [v[0] for v in signals_of(args, scene).values() if v is not None]
-    return free if path in played else None
+        return None, False, False
+    played = [v for v in signals_of(args, scene).values() if v is not None]
+    stems = any(stems_played(v) for v in played) and not recordings.stems_there(free)
+    heard = any(v[0] == recordings.file_of(free) for v in played)
+    return free, heard and not recordings.file_of(free).exists(), stems
+
+
+def recording_needed(args: argparse.Namespace) -> recordings.Recording | None:
+    """The free recording the run plays whose file or stems are not downloaded yet, or
+    None."""
+    free, master, stems = downloads_of(args)
+    return free if master or stems else None
 
 
 def recording_download(args: argparse.Namespace) -> str | None:
-    """What ``recording`` downloads: the free recording, its licence and size."""
-    free = recording_needed(args)
-    if free is None:
+    """What ``recording`` downloads: the free recording and its stems, as the run needs
+    them, its licence and size."""
+    free, master, stems = downloads_of(args)
+    if free is None or not (master or stems):
         return None
-    return f"{free.title} ({free.licence}, {free.download_mb:g} MB), kept for every scene"
+    parts = [f"{free.title} ({free.licence}, {free.download_mb:g} MB)"] if master else []
+    if stems:
+        whose = "its" if master else f"of {free.title}"
+        parts.append(
+            f"{whose} {len(free.stems)} stems ({free.stems_mb:g} MB)"
+            if master
+            else f"the {len(free.stems)} stems {whose} ({free.stems_mb:g} MB)"
+        )
+    return f"{' and '.join(parts)}, kept for every scene"
 
 
 def recording(args: argparse.Namespace) -> None:
     """The free recording the scene names, downloaded into the recordings folder
     (:func:`acoustic_spaces.recordings.data_folder`) unless it is there or nothing plays
-    it."""
-    free = recording_needed(args)
-    if free is None:
+    it, and its stems where a source plays one."""
+    free, master, stems = downloads_of(args)
+    if free is None or not (master or stems):
         scene = _run(args)
         named = free_of(scene) if scene is not None else None
         if named is None:
@@ -573,8 +668,10 @@ def recording(args: argparse.Namespace) -> None:
         else:
             print(f"{named.title}: there already, or nothing plays it")
         return
-    path = recordings.get(free)
-    print(f"{free.title}: {path}")
+    print(f"{free.title}: {recordings.get(free)}")
+    if stems:
+        print(f"its stems: {recordings.stems_folder(free)}")
+        recordings.get_stems(free)
 
 
 def completed(args: argparse.Namespace) -> argparse.Namespace:
@@ -850,14 +947,76 @@ def feeds_done(args: argparse.Namespace) -> bool:
     scene = _run(args)
     if scene is None:
         return False
-    wanted = {k: [str(v[0]), v[1]] for k, v in signals_of(args, scene).items() if v is not None}
-    if wanted != {k: [v["signal"], v.get("channel")] for k, v in table["sources"].items()}:
+    wanted = feed_entries(args, scene)
+    kept = ("signal", "channel", "stems")
+    if wanted != {k: {f: v.get(f) for f in kept} for k, v in table["sources"].items()}:
         return False
-    files = [Path(args.scene), *(Path(v[0]) for v in wanted.values())]
+    files = [Path(args.scene)]
+    for entry in wanted.values():
+        files += [Path(entry["signal"]), *(Path(f) for f in (entry["stems"] or {}).values())]
     return all(not f.exists() or f.stat().st_mtime <= made for f in files)
 
 
-def channel_of(x: np.ndarray, channel: str | None) -> np.ndarray:
+def feed_entries(args: argparse.Namespace, scene: Scene) -> dict[str, dict]:
+    """What each source that plays is fed from, as feeds.json keeps it: its file, the
+    channel of it, and the files of the stems it plays (None for none)."""
+    stems = stems_of(args, scene)
+    out = {}
+    for name, played in signals_of(args, scene).items():
+        if played is None:
+            continue
+        mix = stems_played(played)
+        out[name] = {
+            "signal": str(played[0]),
+            "channel": played[1],
+            "stems": {k: str(stems[k]) for k in mix} if mix else None,
+        }
+    return out
+
+
+def read_signal(
+    path: Path, rate: int, read_in: dict[Path, tuple[np.ndarray, dict[bool, float]]]
+) -> tuple[np.ndarray, dict[bool, float]]:
+    """``path`` decoded at ``rate``, once for all the feeds (``read_in`` keeps it, with
+    the gains its feeds are brought to the same RMS by)."""
+    if path not in read_in:
+        x, r = decoded(path)
+        read_in[path] = (resampled(x, r, rate), {})
+    return read_in[path]
+
+
+def stems_heard(
+    args: argparse.Namespace,
+    scene: Scene,
+    rate: int,
+    read_in: dict[Path, tuple[np.ndarray, dict[bool, float]]],
+) -> dict[str, np.ndarray]:
+    """The stems of the recording the run plays (:func:`stems_of`), each mixed down to
+    mono at ``rate``, lined up with the recording and as long as it: a free song's
+    downloaded so, those of a recording of yours lined up here
+    (:func:`acoustic_spaces.recordings.lined_up`)."""
+    free = free_of(scene)
+    files = stems_of(args, scene)
+    missing = [name for name, path in files.items() if not path.exists()]
+    if missing and free is not None:
+        raise SystemExit(
+            f"error: the stems of {free.title} are not downloaded yet; run first: "
+            f"{DEMO.command('recording', args)}"
+        )
+    if missing:
+        raise SystemExit(f"error: --stem {missing[0]}: no {files[missing[0]]}")
+    stems = {name: mono(read_signal(path, rate, read_in)[0]) for name, path in files.items()}
+    if free is None:
+        master = recording_of(scene)
+        if master is None:  # the problems say so before
+            raise SystemExit("error: --stem gives the stems of a recording of yours (--recording)")
+        whole = mono(read_signal(master, rate, read_in)[0])
+        stems, lag = recordings.lined_up(stems, whole, rate)
+        print(f"the stems line up with {master.name} {lag / rate:+.3f} s later")
+    return stems
+
+
+def channel_of(x: np.ndarray, channel: str | dict[str, float] | None) -> np.ndarray:
     """The ``channel`` of ``x`` (samples, or samples by channels): left or right (a mono
     file's one channel for both), or all of them mixed down (mono, or None)."""
     if channel in ("left", "right"):
@@ -883,6 +1042,8 @@ def feeds(args: argparse.Namespace) -> None:
     length = 0
     free = free_of(scene)
     read_in: dict[Path, tuple[np.ndarray, dict[bool, float]]] = {}
+    entries = feed_entries(args, scene)
+    stems: dict[str, np.ndarray] | None = None
     for name, played in signals_of(args, scene).items():
         if played is None:
             silent.append(name)
@@ -895,21 +1056,28 @@ def feeds(args: argparse.Namespace) -> None:
                     f"{DEMO.command('recording', args)}"
                 )
             raise SystemExit(f"error: {name} plays {signal}, which is not there")
-        if signal not in read_in:
-            x, r = decoded(signal)
-            read_in[signal] = (resampled(x, r, rate), {})
-        x, gains = read_in[signal]
-        stereo_pair = channel in ("left", "right")
-        if stereo_pair not in gains:
-            rms = channels_rms(stereo(x), rate) if stereo_pair else gated_rms(x, rate)
+        mix = stems_played(played)
+        if mix:
+            if stems is None:
+                stems = stems_heard(args, scene, rate, read_in)
+            y = sum(stems[k] * 10.0 ** (gain / 20.0) for k, gain in mix.items())
+            rms = gated_rms(y, rate)
             if rms <= 0.0:
-                raise SystemExit(f"error: {signal} is silent")
-            gains[stereo_pair] = FEED_RMS / rms
-        y = channel_of(x, channel) * gains[stereo_pair]
+                raise SystemExit(f"error: {name}'s {channel_words(channel)} is silent")
+            y = y * (FEED_RMS / rms)
+        else:
+            x, gains = read_signal(signal, rate, read_in)
+            stereo_pair = channel in ("left", "right")
+            if stereo_pair not in gains:
+                rms = channels_rms(stereo(x), rate) if stereo_pair else gated_rms(x, rate)
+                if rms <= 0.0:
+                    raise SystemExit(f"error: {signal} is silent")
+                gains[stereo_pair] = FEED_RMS / rms
+            y = channel_of(x, channel) * gains[stereo_pair]
         write(out / f"{name}.wav", y, rate)
         length = max(length, len(y))
-        table[name] = {"signal": str(signal), "channel": channel, "length_s": len(y) / rate}
-        which = "" if channel is None else f", {CHANNEL_WORDS[channel]}"
+        table[name] = entries[name] | {"length_s": len(y) / rate}
+        which = "" if channel is None else f", {channel_words(channel)}"
         print(f"{name:>20}: {signal.name}{which} ({len(y) / rate:.1f} s)")
     if not table:
         raise SystemExit(
@@ -1806,6 +1974,21 @@ DEMO = Demo(
             steps=("video",),
             unit="s",
             unset="at its start",
+        ),
+        Option(
+            "stems",
+            "a stem of a recording of yours (--recording FILE), as STEM=FILE, once per stem "
+            f"({', '.join(recordings.STEM_NAMES)}; WAV, or anything ffmpeg decodes): what a "
+            "source whose channel names it, or a mix of stems, plays, lined up with the "
+            "recording; a stem not given is left out of the mixes, and a source none of "
+            "whose stems is given is silent (a free song has its own)",
+            None,
+            "files",
+            recordings.STEM_NAMES,
+            ("feeds",),
+            flag="--stem",
+            filter=AUDIO_FILTER,
+            moot=lambda args: stems_moot(args),
         ),
         Option(
             "moving",

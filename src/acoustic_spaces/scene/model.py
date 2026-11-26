@@ -87,6 +87,7 @@ from acoustic_spaces.materials.libraries import find_material, read_library
 from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB, VOCAL_EFFORT_DB_A, VocalEffort
 from acoustic_spaces.recordings import ALIASES as RECORDING_ALIASES
 from acoustic_spaces.recordings import NAMES as RECORDING_NAMES
+from acoustic_spaces.recordings import STEM_NAMES
 
 Vector3 = tuple[float, float, float]
 Coefficient = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -1674,6 +1675,11 @@ def _trajectory_key(data):
     return data
 
 
+#: The channels of a source's file or of the scene's recording it may play (``channel``),
+#: rather than its stems.
+CHANNELS = ("left", "right", "mono")
+
+
 class Source(_Model):
     name: str
     group: str | None = _group_field()
@@ -1763,12 +1769,16 @@ class Source(_Model):
             "channel is given, else silent there"
         ),
     )
-    channel: Literal["left", "right", "mono"] | None = Field(
+    channel: Literal["left", "right", "mono"] | str | dict[str, float] | None = Field(
         default=None,
         description=(
             "the channel of what the source plays in a demo of the scene: left, right, "
             "or both mixed down (mono), of its signal, or, with no signal, of the scene's "
-            "recording; None: its signal mixed down to mono, and silent without one"
+            "recording; or one of the recording's stems by name (drums, bass, guitar, keys, "
+            "brass, vocal, backing), or a mix of them, each at its gain (dB), as a "
+            "monitor's ({vocal: 0, backing: -6}), mixed down to mono (a stem the recording "
+            "has not is left out, and a source none of whose stems it has is silent); "
+            "None: its signal mixed down to mono, and silent without one"
         ),
     )
 
@@ -1789,6 +1799,39 @@ class Source(_Model):
     @classmethod
     def _resolve_signal(cls, value: Path | None, info: ValidationInfo) -> Path | None:
         return None if value is None else _resolve_path(value, info)
+
+    @field_validator("channel")
+    @classmethod
+    def _stem_or_mix(cls, value):
+        """A stem's name, or a mix of stems, by the names stems go by
+        (:data:`~acoustic_spaces.recordings.STEM_NAMES`), each mix's gain a finite
+        number of dB."""
+        names = [value] if isinstance(value, str) and value not in CHANNELS else []
+        names += list(value) if isinstance(value, dict) else []
+        for name in names:
+            if name not in STEM_NAMES:
+                raise ValueError(
+                    f"{name!r}: a channel names left, right or mono, or a stem of the "
+                    f"recording, {', '.join(STEM_NAMES)}, or a mix of them"
+                )
+        if isinstance(value, dict):
+            if not value:
+                raise ValueError("a mix of stems names one or more, each with its gain in dB")
+            for name, gain in value.items():
+                if not math.isfinite(gain):
+                    raise ValueError(f"{name}: a stem's gain in a mix, dB, not {gain}")
+        return value
+
+    @property
+    def stems(self) -> dict[str, float]:
+        """The stems of the scene's recording it plays and their gains (dB): the one its
+        channel names at 0 dB, or its mix; none for a channel of the recording (left,
+        right, mono) or none at all."""
+        if isinstance(self.channel, dict):
+            return dict(self.channel)
+        if self.channel is None or self.channel in CHANNELS:
+            return {}
+        return {self.channel: 0.0}
 
     @field_validator("level_db")
     @classmethod

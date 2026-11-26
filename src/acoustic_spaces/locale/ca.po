@@ -2990,14 +2990,19 @@ msgid ""
 "The channel the source plays in a demo of the scene: left or right, or both "
 "mixed down (mono), of its WAV file or, without one, of the scene's recording "
 "(on the scene's page), so that a sound system's left and right loudspeakers "
-"play the two sides of one stereo recording. (none): its WAV file mixed down "
-"to mono, or silent"
+"play the two sides of one stereo recording; or a stem of the recording, a "
+"part it was mixed from, as a band's drum kit plays the drums (a mix of "
+"stems, as a monitor's, is set in the scene file). (none): its WAV file mixed "
+"down to mono, or silent"
 msgstr ""
 "El canal que reprodueix la font en una demostració de l'escena: l'esquerre o "
 "el dret, o tots dos mesclats (mono), del seu fitxer WAV o, sense fitxer, de "
 "la gravació de l'escena (a la pàgina de l'escena), perquè els altaveus "
 "esquerre i dret d'un sistema de so reprodueixin els dos costats d'una "
-"mateixa gravació estèreo. (cap): el seu fitxer WAV mesclat a mono, o silenci"
+"mateixa gravació estèreo; o una pista de la gravació, una de les parts amb "
+"què es va mesclar, com la bateria d'un grup reprodueix la pista de bateria "
+"(una mescla de pistes, com la d'un monitor, es fixa al fitxer de l'escena). "
+"(cap): el seu fitxer WAV mesclat a mono, o silenci"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3025,6 +3030,35 @@ msgstr "dreta"
 #: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
 msgid "mono"
 msgstr "mono"
+
+#. Translators: this and the entries below are stems of a song, the parts it was mixed from, as the scene file names them (drums, bass, ...).
+#: acoustic_spaces/gui/inspector.py
+msgid "drums stem"
+msgstr "pista de bateria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "bass stem"
+msgstr "pista de baix"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "guitar stem"
+msgstr "pista de guitarra"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "keys stem"
+msgstr "pista de teclats"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "brass stem"
+msgstr "pista de metalls"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "vocal stem"
+msgstr "pista de veu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "backing vocals stem"
+msgstr "pista de cors"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "a song in stereo"
@@ -5006,6 +5040,12 @@ msgstr[1] "conjunt de {count} elements"
 #, python-brace-format
 msgid "per band: {patterns}"
 msgstr "per banda: {patterns}"
+
+#. Translators: {parts} are stems and their gains, "vocal; backing -6 dB".
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "mix of stems: {parts}"
+msgstr "mescla de pistes: {parts}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "The source's name, as the results and the exported files show it"
@@ -8491,6 +8531,14 @@ msgstr "\"Great British Summer\", Tom McKenzie"
 #: acoustic_spaces/recordings.py
 msgid "\"Potassium\", Software-Entwicklungskit"
 msgstr "\"Potassium\", Software-Entwicklungskit"
+
+#: acoustic_spaces/recordings.py
+msgid "\"Francium\", Software-Entwicklungskit"
+msgstr "\"Francium\", Software-Entwicklungskit"
+
+#: acoustic_spaces/recordings.py
+msgid "\"Rubidium\", Software-Entwicklungskit"
+msgstr "\"Rubidium\", Software-Entwicklungskit"
 
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py

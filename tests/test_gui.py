@@ -1940,6 +1940,22 @@ def test_a_scene_names_the_recording_its_sources_play(
     page.channel.activated.emit(index)
     assert window.document.scene.sources[0].channel == "right"
     assert window.undo_action.text() == "&Undo change source"
+    # A stem of the recording, from the list; a mix of stems, set in the scene file,
+    # shows as an entry of its own, which picked again keeps the mix.
+    index = page.channel.findData("drums")
+    assert page.channel.itemText(index) == "drums stem"
+    page.channel.setCurrentIndex(index)
+    page.channel.activated.emit(index)
+    assert window.document.scene.sources[0].channel == "drums"
+    window.document.update_point("sources", 0, channel={"vocal": 0.0, "backing": -6.0})
+    window.select("sources", 0)
+    assert page.channel.currentText() == "mix of stems: vocal; backing -6 dB"
+    page.channel.activated.emit(page.channel.currentIndex())
+    assert window.document.scene.sources[0].channel == {"vocal": 0.0, "backing": -6.0}
+    index = page.channel.findData("right")
+    page.channel.setCurrentIndex(index)
+    page.channel.activated.emit(index)
+    assert window.document.scene.sources[0].channel == "right"
     window.select("scene")
     scene_page = window.inspector.pages["scene"]
     assert scene_page.recording.toolTip() and scene_page.choose_recording.toolTip()

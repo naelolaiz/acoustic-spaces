@@ -211,6 +211,42 @@ def lag_of(x: np.ndarray, reference: np.ndarray, rate: int, most_s: float) -> in
     return int(lags[np.argmax(np.abs(c[lags]))])
 
 
+#: Above what :func:`onset_lag` follows a recording's onsets (Hz), the window it averages
+#: them over (s) and how finely it lines them up (s).
+ONSET_HIGH_PASS_HZ = 2000.0
+ONSET_WINDOW_S = 0.005
+ONSET_STEP_S = 0.001
+
+
+def onsets(x: np.ndarray, rate: int) -> np.ndarray:
+    """The onsets of ``x`` (mono): its envelope above :data:`ONSET_HIGH_PASS_HZ`,
+    rectified and averaged over :data:`ONSET_WINDOW_S`, every :data:`ONSET_STEP_S`,
+    less its mean."""
+    from scipy.signal import butter, sosfilt
+
+    sos = butter(4, ONSET_HIGH_PASS_HZ, "highpass", fs=rate, output="sos")
+    rectified = np.abs(sosfilt(sos, np.asarray(x, dtype=float)))
+    window = max(1, int(ONSET_WINDOW_S * rate))
+    summed = np.cumsum(np.r_[0.0, rectified])
+    envelope = (summed[window:] - summed[:-window])[:: max(1, round(ONSET_STEP_S * rate))]
+    return envelope - envelope.mean() if len(envelope) else envelope
+
+
+def onset_lag(x: np.ndarray, reference: np.ndarray, rate: int, most_s: float) -> int:
+    """Samples by which ``x`` lags ``reference`` (both mono), within ``most_s``, to
+    :data:`ONSET_STEP_S`: where their onsets (:func:`onsets`) match best. A song's
+    stems summed line up with its master so even where the master was mastered apart
+    (another equalisation, a limiter, the bass's phase turned), which leaves their
+    waveforms unlike (:func:`lag_of`)."""
+    step = max(1, round(ONSET_STEP_S * rate))
+    a, b = onsets(x, rate), onsets(reference, rate)
+    n = 1 << math.ceil(math.log2(len(a) + len(b)))
+    c = np.fft.irfft(np.fft.rfft(a, n) * np.conj(np.fft.rfft(b, n)), n)
+    most = int(most_s * rate / step)
+    lags = np.r_[np.arange(0, most + 1), np.arange(-most, 0)]
+    return int(lags[np.argmax(c[lags])]) * step
+
+
 def shifted(x: np.ndarray, samples: int, length: int) -> np.ndarray:
     """``x`` started ``samples`` earlier (later if negative), cut or padded to ``length``."""
     out = np.zeros((length,) + x.shape[1:])
@@ -282,6 +318,8 @@ __all__ = [
     "gated_rms",
     "k_weighted",
     "lag_of",
+    "onset_lag",
+    "onsets",
     "level_db",
     "loudness_db",
     "mmss",

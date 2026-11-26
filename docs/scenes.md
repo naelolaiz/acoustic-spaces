@@ -734,7 +734,8 @@ sources:
 ```
 
 The scene's `recording` is what its sources with a `channel` and no `signal` play,
-so a stage's loudspeakers play the two channels of a band's stereo master:
+so a stage's loudspeakers play the two channels of a band's stereo master, and its
+monitors and the band themselves the stems it was mixed from:
 
 ```yaml
 recording: spicy_funk_cake   # a free song, downloaded the first time; or a file
@@ -742,6 +743,10 @@ sources:
   - {name: house_left, position: [0, 6, 6], channel: left}   # on the audience's left
   - {name: house_right, position: [0, -6, 6], channel: right}
   - {name: subs, position: [0, 0, 0.5], channel: mono}
+  - {name: drum_kit, position: [-8, 0, 1.5], channel: drums}  # a stem
+  - name: vocal_wedges                                         # a mix of stems, dB
+    position: [-4, 0, 1.2]
+    channel: {vocal: 0, backing: -6, keys: -8, guitar: -12, bass: -14, drums: -16}
 ```
 
 - `level_db` is the sound power level, in all or per band. A level in all is spread
@@ -777,13 +782,20 @@ sources:
   mixed down; without a channel it is mixed down to mono.
 - The scene's `recording` is the file a source with a `channel` and no `signal` plays: a
   file relative to the scene's folder, or the name of one of the free recordings
-  (`spicy_funk_cake`, `great_british_summer`, `potassium`, and the ACE corpus's talkers
-  `ace_f1` to `ace_m9`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which
-  the demo downloads the first time and keeps for every scene. A name without a suffix
-  must be a free recording's or a file that is there, so a mistyped free name is
-  refused. Left and right are the recording's, so the loudspeaker on the audience's left
-  plays `left`. A source with neither a signal nor a channel is silent in the demo. The
-  simulation reads neither.
+  (`spicy_funk_cake`, `great_british_summer`, `potassium`, `francium`, `rubidium`, and
+  the ACE corpus's talkers `ace_f1` to `ace_m9`; see [a demo of any
+  scene](demos.md#a-demo-of-any-scene)), which the demo downloads the first time and
+  keeps for every scene. A name without a suffix must be a free recording's or a file
+  that is there, so a mistyped free name is refused. Left and right are the
+  recording's, so the loudspeaker on the audience's left plays `left`. A source with
+  neither a signal nor a channel is silent in the demo. The simulation reads neither.
+- A `channel` may instead name one of the recording's stems, the parts it was mixed
+  from (`drums`, `bass`, `guitar`, `keys`, `brass`, `vocal`, `backing`), or a mix of
+  them, each at its gain in dB, as a monitor mix is: the source plays it mixed down to
+  mono. The free songs `spicy_funk_cake`, `francium` and `rubidium` have their stems,
+  downloaded with them the first time a source plays one; a recording of yours takes
+  its stems from the run (`--stem vocal=vox.wav`). A stem the recording has not is left
+  out of a mix, and a source none of whose stems it has stays silent.
 - `simulate` reports the sound pressure level per octave band and A-weighted (`spl_db`
   and `spl_a_db` in `parameters.json`), the editor's results show it per band, and
   `inspect` lists each source's sound power. In a band whose G is undefined, the level

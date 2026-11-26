@@ -217,9 +217,10 @@ sources:
 
 | Free recording | What it is | Licence | Download |
 | --- | --- | --- | --- |
-| `spicy_funk_cake` | "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece funk band, its stereo mix ([Zenodo](https://doi.org/10.5281/zenodo.3601032)) | CC BY 4.0 | 61 MB |
+| `spicy_funk_cake` | "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece funk band, its stereo mix and 7 stems ([Zenodo](https://doi.org/10.5281/zenodo.3601032)) | CC BY 4.0 | 61 MB, stems 249 MB |
 | `great_british_summer` | "Great British Summer" by Tom McKenzie, its stereo master ([Zenodo](https://doi.org/10.5281/zenodo.19683001)) | CC BY 4.0 | 50 MB |
 | `potassium` | "Potassium" by Software-Entwicklungskit, its stereo master ([album](https://github.com/ichbinsoftware/everythingisfree)) | CC0 1.0 | 6 MB |
+| `francium`, `rubidium` | "Francium" and "Rubidium" by Software-Entwicklungskit, electronic, each its stereo master and 6 or 5 stems (the album's own, added up by part) ([album](https://github.com/ichbinsoftware/everythingisfree)) | CC0 1.0 | 7 or 6 MB, stems 35 or 37 MB |
 | `ace_f1` to `ace_f5`, `ace_m1` to `ace_m9` | a woman or a man talking, anechoic, about a minute: the 14 talkers of the ACE challenge corpus ([Zenodo](https://doi.org/10.5281/zenodo.6257551)); `speech_male` and `speech_female`, their names before 4.4.0, are still read as `ace_m4` and `ace_f2` | CC BY 4.0 | 16 to 145 MB, read as far as the talk |
 
 They are the songs the lakeside demo plays and the talks of the gallery's. A free
@@ -234,8 +235,13 @@ recording and give their loudspeakers or talker a channel, so their demo plays o
 the box: concert_stage, stadium_concert, lakeside_concert (its sound system),
 open_air_stage and studio a song; town_hall_pa,
 lecture_hall, leaky_classroom, shoebox, bim_office, material_libraries and gallery the
-male talk. A stereo mix has none of the parts that the monitors or a band on the stage
-play, so they stay silent; the stadium demo plays its song's stems through them.
+male talk. The monitors and the band on a stage play the song's stems
+([channels](scenes.md#sources-and-directivity)): a song with stems has them downloaded
+with it the first time one plays, lined up with its master by their onsets (the beats
+above 2 kHz, to the millisecond, which hold where the master was mastered apart from
+its stems) and cut to its length; a song without them leaves those sources silent.
+`--stem vocal=vox.wav`, once per stem, gives the stems of a recording of yours, lined up
+with it so in the feeds.
 `--recording ace_f1` plays another free recording in a run, in place of the scene's
 own, or `--recording song.flac` a file of yours; a source with a speech spectrum that
 plays a talker takes its talker's, a woman's or a man's, so that the levels and the STI

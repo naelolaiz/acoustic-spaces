@@ -207,7 +207,9 @@ CHANNEL_TIP = N_(
     "The channel the source plays in a demo of the scene: left or right, or both mixed "
     "down (mono), of its WAV file or, without one, of the scene's recording (on the "
     "scene's page), so that a sound system's left and right loudspeakers play the two "
-    "sides of one stereo recording. (none): its WAV file mixed down to mono, or silent"
+    "sides of one stereo recording; or a stem of the recording, a part it was mixed from, "
+    "as a band's drum kit plays the drums (a mix of stems, as a monitor's, is set in the "
+    "scene file). (none): its WAV file mixed down to mono, or silent"
 )
 RECORDING_TIP = N_(
     "What the sources with a channel and no WAV file of their own play in a demo of the "
@@ -223,7 +225,18 @@ CHANNELS = [
     ("left", N_("left")),
     ("right", N_("right")),
     ("mono", N_("mono")),
+    # Translators: this and the entries below are stems of a song, the parts it was
+    # mixed from, as the scene file names them (drums, bass, ...).
+    ("drums", N_("drums stem")),
+    ("bass", N_("bass stem")),
+    ("guitar", N_("guitar stem")),
+    ("keys", N_("keys stem")),
+    ("brass", N_("brass stem")),
+    ("vocal", N_("vocal stem")),
+    ("backing", N_("backing vocals stem")),
 ]
+#: The Channel list's entry for a mix of stems, which only the scene file sets.
+MIX = "mix"
 #: What each kind of free recording is, for the scene's Recording list.
 RECORDING_KINDS = {"song": N_("a song in stereo"), "speech": N_("speech")}
 LEVEL_TIP = N_(
@@ -3333,6 +3346,22 @@ def _per_band_label(patterns) -> str:
     return _("per band: {patterns}").format(patterns=", ".join(str(v) for v in patterns))
 
 
+def _choose_channel(combo: QComboBox, value) -> None:
+    """Fill ``combo`` with :data:`CHANNELS` and show ``value``: one of them, or a mix of
+    stems (set in the scene file), shown as an entry of its own."""
+    combo.clear()
+    _fill(combo, CHANNELS)
+    if isinstance(value, dict):
+        parts = "; ".join(
+            name if gain == 0 else f"{name} {number(gain, '+g')} dB" for name, gain in value.items()
+        )
+        # Translators: {parts} are stems and their gains, "vocal; backing -6 dB".
+        combo.addItem(_("mix of stems: {parts}").format(parts=parts), MIX)
+        combo.setCurrentIndex(len(CHANNELS))
+    else:
+        _choose(combo, value)
+
+
 def _choose_pattern(combo: QComboBox, choices, value) -> None:
     """Fill ``combo`` with ``choices`` and show ``value``: one of them, or a pattern per
     band (a list, set in the scene file), shown as an entry of its own."""
@@ -3613,9 +3642,7 @@ class PointPage(Page):
         self.channel = QComboBox()
         _fill(self.channel, CHANNELS)
         self.channel.setToolTip(_(CHANNEL_TIP))
-        self.channel.activated.connect(
-            lambda index: self._update(channel=self.channel.itemData(index))
-        )
+        self.channel.activated.connect(self._pick_channel)
         self.shape = QComboBox()
         _fill(self.shape, SHAPES)
         self.shape.setToolTip(
@@ -3819,7 +3846,7 @@ class PointPage(Page):
             self.eq.setText("" if item.eq_db is None else numbers_text(item.eq_db))
             self.delay.setValue(item.delay_ms)
             self.signal.setText(plays_text(self.document.scene, item))
-            _choose(self.channel, item.channel)
+            _choose_channel(self.channel, item.channel)
             self.signal.setToolTip(
                 f"{_(PLAYS_TIP)}. {item.signal}" if item.signal is not None else _(PLAYS_TIP)
             )
@@ -3856,6 +3883,12 @@ class PointPage(Page):
     def _update(self, **fields) -> None:
         if not self._loading:
             self.run(lambda: self.document.update_point(self.kind, self.key, **fields))
+
+    def _pick_channel(self, index: int) -> None:
+        """The channel picked in the list; the entry of a mix of stems keeps the mix."""
+        value = self.channel.itemData(index)
+        if value != MIX:
+            self._update(channel=value)
 
     def _name(self) -> None:
         name = self.name.text().strip()

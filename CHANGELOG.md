@@ -38,6 +38,12 @@
   simulation finds to the listener (`--hide` leaves them out); indoors they add the
   clarity C80 where something other than speech plays, and outdoors leave out T30
   and C80 (ISO 3382-1).
+- Added: a source's `channel` may name a stem of the scene's recording or a mix of stems
+  at their gains, as a monitor's; "Spicy Funk Cake" has its 7 stems, and "Francium" and
+  "Rubidium", new free recordings, theirs, downloaded the first time a source plays one
+  and lined up with the song by their onsets; the demo of any scene's `--stem` gives the
+  stems of a recording of yours. "Spicy Funk Cake"'s phrases now run from its first
+  downbeat, 0.5 s in.
 - Added: in the demo of any scene, a recording shorter than what moves plays again from
   its start; `walkthrough` walks the only listener that goes anywhere when the other
   movers are listeners turning where they stand.

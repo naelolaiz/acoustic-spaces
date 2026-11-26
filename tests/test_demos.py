@@ -2264,6 +2264,136 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
     assert plays(args) == {"talker": "talk.wav, right channel", "radio": "silent", "fan": "silent"}
 
 
+def _beats(seconds: float, rate: int, period_s: float, start_s: float, seed: int) -> np.ndarray:
+    """Bursts of noise 20 ms long every ``period_s`` from ``start_s``: onsets a stem's
+    beats give."""
+    rng = np.random.default_rng(seed)
+    x = np.zeros(int(seconds * rate))
+    burst = int(0.02 * rate)
+    for start in np.arange(start_s, seconds - 0.05, period_s):
+        at = int(start * rate)
+        x[at : at + burst] += 0.3 * rng.standard_normal(burst)
+    return x
+
+
+def test_a_source_plays_a_stem_of_the_recording_or_a_mix_of_them(
+    tmp_path: Path, monkeypatch, recordings_folder: Path
+) -> None:
+    """A source whose channel names a stem of the scene's recording plays it, and one
+    whose channel is a mix of stems plays them added at their gains (dB), each feed at
+    the feeds' gated RMS; a stem the recording has not is left out, and a source none
+    of whose stems it has is silent. A free song's stems are downloaded with it, by the
+    recording step, and lined up with it by their onsets (they start 0.25 s late here,
+    as after a count-in) and cut to its length; a recording of yours takes its stems
+    from --stem and is lined up so in the feeds."""
+    import dataclasses
+
+    import yaml
+
+    from acoustic_spaces import recordings
+    from acoustic_spaces.cli import main as cli
+    from acoustic_spaces.demos import scene_demo
+    from acoustic_spaces.demos.scene_demo import (
+        DEMO,
+        FEED_RMS,
+        feeds_done,
+        plays,
+        recording_download,
+    )
+    from acoustic_spaces.scene import Scene, model
+
+    rate, late = 16_000, 0.25
+    drums = _beats(6.0, rate, 0.5, 0.1, 1)
+    vocal = _beats(6.0, rate, 0.75, 0.3, 2) + _tone(6.0, 440.0, rate, 0.05)
+    server = tmp_path / "server"
+    audio.write(server / "master.wav", np.stack([drums + vocal, drums + vocal], axis=1), rate)
+    pad = np.zeros(int(late * rate))
+    audio.write(server / "drums.wav", np.r_[pad, drums, pad], rate)  # longer, and late
+    audio.write(server / "vocal.wav", np.r_[pad, vocal, pad], rate)
+    song = dataclasses.replace(
+        recordings.named("spicy_funk_cake"),
+        name="test_band",
+        files=(((server / "master.wav").as_uri(), None),),
+        stems=(
+            ("drums", (((server / "drums.wav").as_uri(), None),)),
+            ("vocal", (((server / "vocal.wav").as_uri(), None),)),
+        ),
+        stems_mb=2,
+    )
+    monkeypatch.setattr(recordings, "RECORDINGS", (*recordings.RECORDINGS, song))
+    monkeypatch.setattr(recordings, "NAMES", (*recordings.NAMES, "test_band"))
+    scene = _any_scene(tmp_path)
+    monkeypatch.chdir(scene.parent)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["recording"] = "test_band"
+    data["sources"][0].pop("signal")
+    data["sources"][0]["channel"] = "vocal"  # the talker: the singer
+    data["sources"][1].pop("signal")
+    data["sources"][1]["channel"] = {"vocal": 0, "drums": -6, "brass": -3}  # a wedge
+    data["sources"][2]["channel"] = "brass"  # the fan: a stem the song has not
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(model, "RECORDING_NAMES", (*model.RECORDING_NAMES, "test_band"))
+    demo = DEMO.at(scene.parent)
+    args = demo.defaults()
+    args.scene = Path("scene.yaml")
+    args = demo.resolved(args)
+    assert demo.check(args) is None
+    title = song.title
+    assert plays(args) == {
+        "talker": f"{title}, its vocal stem",
+        "radio": f"{title}, a mix of its stems vocal, drums -6 dB",
+        "fan": f"silent: {title} has no brass stem",
+    }
+    assert recording_download(args) == (
+        f"{title} (CC BY 4.0, 61 MB) and its 2 stems (2 MB), kept for every scene"
+    )
+    assert cli(["demo", "scene.yaml", "recording"]) == 0
+    assert recording_download(args) is None
+    kept = {name: recordings.stem_file(song, name) for name in ("drums", "vocal")}
+    assert all(path.parent == recordings_folder / "test_band" for path in kept.values())
+    for name, part in (("drums", drums), ("vocal", vocal)):
+        x, got = audio.read(kept[name])
+        assert got == rate and len(x) == len(drums)  # the song's length
+        np.testing.assert_allclose(audio.mono(x), part, atol=1e-6)  # lined up
+    assert cli(["demo", "scene.yaml", "feeds"]) == 0
+    assert feeds_done(args)
+    folder = scene.parent / "demo" / "feeds" / "scene"
+    table = pipeline.read_json(folder / "feeds.json")
+    assert table["silent"] == ["fan"]
+    assert table["sources"]["radio"]["stems"] == {k: str(v) for k, v in kept.items()}
+    feed = {k: audio.read(folder / f"{k}.wav")[0].ravel() for k in ("talker", "radio")}
+    wedge = vocal + drums * 10 ** (-6 / 20)
+    np.testing.assert_allclose(
+        feed["radio"], wedge * FEED_RMS / audio.gated_rms(wedge, rate), atol=1e-6
+    )
+    np.testing.assert_allclose(
+        feed["talker"], vocal * FEED_RMS / audio.gated_rms(vocal, rate), atol=1e-6
+    )
+    # A recording of yours: --stem gives its stems, lined up in the feeds; one not given
+    # is left out of the mixes, and a source with none of them is silent.
+    audio.write(scene.parent / "mine.wav", np.stack([drums + vocal] * 2, axis=1), rate)
+    audio.write(scene.parent / "drums.wav", np.r_[pad, drums], rate)
+    own = ["--recording", "mine.wav", "--stem", "drums=drums.wav"]
+    mine = demo.resolved(demo.parser().parse_args(["feeds", "--scene", "scene.yaml", *own]))
+    assert demo.check(mine) is None
+    assert plays(mine)["talker"] == "silent: no vocal stem of mine.wav (--stem)"
+    assert plays(mine)["radio"] == "mine.wav, a mix of its stems drums -6 dB"
+    assert cli(["demo", "scene.yaml", "feeds", *own]) == 0
+    folder = scene_demo.feeds_folder(mine)
+    assert folder.name.startswith("scene_") and feeds_done(mine)
+    radio = audio.read(folder / "radio.wav")[0].ravel()
+    np.testing.assert_allclose(radio, drums * FEED_RMS / audio.gated_rms(drums, rate), atol=1e-6)
+    # Against a free song --stem changes nothing; a channel names a stem by the
+    # catalogue's names.
+    free = demo.parser().parse_args(["feeds", "--scene", "scene.yaml", "--stem", "drums=drums.wav"])
+    assert "--stem" in (demo.check(free) or "")
+    with pytest.raises(ValueError, match="a channel names left, right or mono, or a stem"):
+        Scene.model_validate(
+            {**data, "sources": [{**data["sources"][2], "channel": "centre"}]},
+            context={"base_dir": scene.parent},
+        )
+
+
 def test_free_recordings_are_downloaded_once(tmp_path: Path, monkeypatch) -> None:
     """A free recording comes as one WAV file in the recordings folder: a song's files
     decoded and added together, or a talk taken out of its corpus's tar archive; one
