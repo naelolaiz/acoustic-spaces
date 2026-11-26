@@ -53,6 +53,11 @@ WIND = (76, 201, 240)
 COOL = (60, 120, 200)
 WARM = (214, 120, 64)
 STILL = (190, 196, 210)
+#: Where along the top of the ground, then along its bottom, the line that says the air is
+#: still is tried (a fraction of the way across), and how far (pixels) it keeps from the
+#: marks of the sources and listeners.
+STILL_ACROSS = (0.5, 0.25, 0.75)
+CLEAR_PX = 14.0
 AIR = (16, 22, 36)
 #: The colour of each kind of ground (:func:`ground_kind`).
 GROUNDS = {"water": WATER, "hard": HARD, "soft": SOFT}
@@ -235,18 +240,43 @@ class Outdoors:
             parts.append(f"{rise:+.1f} °C per 10 m up")
         return ", ".join(parts)
 
-    def wind(self, img: Image.Image, plan, still: bool, keep_clear=()) -> None:
+    def wind(
+        self, img: Image.Image, plan, still: bool, keep_clear=()
+    ) -> list[tuple[float, float, float, float]]:
         """The wind from above: an arrow the way it blows in each weather, as long as it
         is strong 10 m up, the weather zones dashed and each weather's label; in still
-        air, a line that says so. No arrow within reach of the points ``keep_clear``
-        (x, y), the sources' and listeners'."""
+        air, a line that says so, along the top or the bottom of the ground where it
+        covers none of the points ``keep_clear`` (x, y), the sources' and listeners'. No
+        arrow within reach of those either. The boxes its words take (pixels: left, top,
+        right, bottom), for the labels of the sources and listeners to keep clear of."""
         draw = ImageDraw.Draw(img, "RGBA")
         x0, y0, x1, y1 = self.layout.extent
         small = font("SemiBold", 15)
         if still or self.air is None:
-            px, py = plan((x0 + x1) / 2, y1)
-            text(draw, (px, py + 16), "STILL AIR · NO WIND, ONE TEMPERATURE", small, STILL, "mm")
-            return
+            words = "STILL AIR · NO WIND, ONE TEMPERATURE"
+            half = draw.textlength(words, font=small) / 2 + 4
+            left, top, right, bottom = plan.rect(x0, y0, x1, y1)
+            marks = [plan(*p) for p in keep_clear]
+            box = None
+            for py in (top + 16.0, bottom - 16.0):
+                for across in STILL_ACROSS:
+                    px = min(max(left + (right - left) * across, left + half), right - half)
+                    tried = (px - half, py - 10.0, px + half, py + 10.0)
+                    if box is None:
+                        box = tried  # the top's middle, where nothing is clear
+                    if not any(
+                        tried[0] - CLEAR_PX < mx < tried[2] + CLEAR_PX
+                        and tried[1] - CLEAR_PX < my < tried[3] + CLEAR_PX
+                        for mx, my in marks
+                    ):
+                        box = tried
+                        break
+                else:
+                    continue
+                break
+            assert box is not None
+            text(draw, ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), words, small, STILL, "mm")
+            return [box]
         for polygon in self.air.polygons:
             if polygon is None:
                 continue
@@ -298,6 +328,7 @@ class Outdoors:
             placed.append((px - half, px + half, py))
             draw.rounded_rectangle([px - half, py - 12, px + half, py + 12], 12, BG + (210,))
             text(draw, (px, py), words, small, WIND, "mm")
+        return [(a, y - 12.0, b, y + 12.0) for a, b, y in placed]
 
     def _label_at(self, k: int) -> tuple[float, float] | None:
         """Where weather ``k``'s label goes: near the top of where it holds, in the

@@ -237,6 +237,41 @@ def test_the_stills_of_an_outdoor_scene_show_its_ground_weather_and_side(tmp_pat
     assert not any("C80" in str(line) for line in inside.lines(0))
 
 
+def test_the_line_that_says_the_air_is_still_keeps_clear_of_the_marks() -> None:
+    """In still air the line that says so goes along the top of the ground, in the
+    middle where it covers no source's or listener's mark, else to one side, else along
+    the bottom; the stills' labels keep clear of the box it gives back."""
+    from PIL import Image
+
+    from acoustic_spaces.demos.pictures import Plan
+
+    outdoors = outdoor_pictures.Outdoors(Room.from_scene(_scene(wind=None)))
+    x0, y0, x1, y1 = outdoors.layout.extent
+    plan = Plan(10, 10, 1.5, (x0, y0, x1, y1))
+    left, top, right, bottom = plan.rect(x0, y0, x1, y1)
+    img = Image.new("RGB", (int(right) + 10, int(bottom) + 10))
+
+    def placed(marks):
+        (box,) = outdoors.wind(img, plan, True, marks)
+        return box
+
+    def covers(box, mark) -> bool:
+        x, y = plan(*mark)
+        clear = outdoor_pictures.CLEAR_PX
+        return box[0] - clear < x < box[2] + clear and box[1] - clear < y < box[3] + clear
+
+    middle = ((x0 + x1) / 2, y1 - 1.0)
+    box = placed([])
+    assert (box[0] + box[2]) / 2 == pytest.approx((left + right) / 2)
+    assert (box[1] + box[3]) / 2 == pytest.approx(top + 16.0)
+    box = placed([middle])
+    assert not covers(box, middle) and (box[1] + box[3]) / 2 == pytest.approx(top + 16.0)
+    along_top = [(x, y1 - 1.0) for x in np.arange(x0, x1, 5.0)]
+    box = placed(along_top)
+    assert not any(covers(box, mark) for mark in along_top)
+    assert (box[1] + box[3]) / 2 == pytest.approx(bottom - 16.0)
+
+
 def test_hide_names_what_a_still_leaves_out(tmp_path) -> None:
     from acoustic_spaces.demos.scene_demo import DEMO
 

@@ -533,10 +533,12 @@ class Pictures:
         if self.audiences:
             self.draw_audience(img, plan)
             draw = ImageDraw.Draw(img)
+        # What the wind's words take, which the labels keep clear of.
+        worded: list[Box] = []
         if self.outdoors is not None and "wind" not in self.hide:
             clear = [s["position"][:2] for s in sources]
             clear += [lis["position"][:2] for lis in listeners.values()]
-            self.outdoors.wind(img, plan, key in self.where, clear)
+            worded = self.outdoors.wind(img, plan, key in self.where, clear)
             draw = ImageDraw.Draw(img)
         if t is not None:
             self.draw_paths(draw, plan)
@@ -566,6 +568,7 @@ class Pictures:
         # The listeners' names first, the places the tour goes, then the sources'.
         labels: list[tuple[Box, str, Sequence[str]]] = []
         taken: list[Box] = [(x - rs, y - rs, x + rs, y + rs) for (x, y), rs, _, _ in marks]
+        taken += worded
         for name, lis in listeners.items():
             if lis.get("enabled", True) is False:
                 continue
