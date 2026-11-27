@@ -6,18 +6,23 @@
   barriers in a row, the terms that make paths fade at edges added a path in the gap
   between them (off the second's front and then the first's back, which both stop) that
   cannot be: image sources were up to 3.2 dB from ray tracing over two screens close
-  together, and 0.3 to 0.8 dB higher behind two barriers. Each product of two edges'
-  terms is now weighed by its path from one edge to the other: the Fresnel integral over
-  the faces of each reflection on it, less what they give back past the two edges, and
-  for each plane a leg passes through, Kirchhoff's integral over what the faces leave
-  free there. Image sources give ray tracing's level there, and over rows of roofs and
-  screens most of the cases that main put up to 22 dB apart the two ways round now
-  agree. Levels also move where such a path reflects near a face's edge: under a
-  ceiling over two screens the level steps by 3.5 to 6.6 dB (63 to 500 Hz), not 6.7 to
-  11.7 dB, where the ceiling's end crosses the point that path reflects at; of the
-  examples, the street's garden moves by up to 0.24 dB at 63 Hz and the archway's diner
-  behind the wall by 0.18 dB. Where a path that two edges stop turns into one that one
-  edge stops, the level can step by up to 0.23 dB (a known issue).
+  together, and behind two barriers on the ground up to 4.9 dB higher at 63 Hz with
+  `second_order` (with `first_order`, which has no path over two edges, up to 16 dB, and
+  some sound where ray tracing finds none). Each product of two edges' terms is now
+  weighed by its path from one edge to the other: the Fresnel integral over the faces of
+  each reflection on it, less what they give back past the two edges, and for each plane
+  a leg passes through, Kirchhoff's integral over what the faces leave free there. With
+  `second_order` image sources give ray tracing's level there within 0.5 dB, and over
+  rows of roofs and screens most of the cases that main put up to 22 dB apart the two
+  ways round now agree. Levels also move where such a path reflects near a face's edge:
+  behind barriers in a U or a Z of one height, where it reflects at the top of the wall
+  that joins them, ray tracing gives 4.2 to 4.3 dB less at 63 Hz and 6.0 to 8.0 dB
+  less higher up with `first_order` (up to 1.9 dB less with `second_order`); under a
+  ceiling over two screens the level steps by 3.5 to 6.6 dB (63 to 500 Hz), not 6.7
+  to 11.7 dB, where the ceiling's end crosses the point that path reflects at; of the
+  examples, the street's garden moves by up to 0.24 dB at 63 Hz and the archway's
+  diner behind the wall by 0.18 dB. Where a path that two edges stop turns into one
+  that one edge stops, the level can step by up to 0.25 dB (a known issue).
   `validation/edge_diffraction.py` checks two screens close together and a ceiling over
   two screens against a wave calculation.
 - Added: `engine.diffraction.diffract` takes the plane sequences the early stage tested

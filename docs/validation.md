@@ -1847,12 +1847,16 @@ theory gives +6.0 dB on both sides.
   reflection before or after it stop where that reflection leaves its face, which the
   fade makes up for where it follows the path. A leg that two obstacles block, or two
   sides of one, is one event, which no one edge explains: behind two barriers 4 m
-  apart, a U-shaped or a Z-shaped one, on a rigid ground, the level steps by up to
-  2.5 dB (`first_order`; 1.3 dB with `second_order`) in a band from 63 to 250 Hz, along
-  the one line of listeners measured, where the reflection off the ground crosses the
-  first one's foot, and behind the U by 2.0 dB (`second_order`; 4.8 dB with
-  `first_order`) where it lies just behind the first side's foot and the path round that
-  side's end leaves its foot.
+  apart, a U-shaped or a Z-shaped one, on a rigid ground, along the one line of
+  listeners measured, the level steps in a band from 63 to 250 Hz where the reflection
+  off the ground crosses the first one's foot, by up to 2.4 dB with `second_order`
+  (2.1 dB with image sources), and behind the U by 2.1 dB (`second_order`, either
+  method) where it lies just behind the first side's foot and the path round that
+  side's end leaves its foot. With `first_order`, which has no path over two edges, the
+  level past those points is what the paths over one edge leave: it steps by up to
+  4.3 dB behind the U and the Z (2.1 dB with image sources), and behind two barriers
+  and the U's end ray tracing finds no sound past them (image sources 6.8 and 33 dB
+  less at 63 Hz).
 - **Products of two edges' terms.** Where two edges explain the events that stop a
   path, the fade multiplies their terms, each found with the other event's leg straight,
   and weighs the product by the path from one edge to the other that it stands for: for
@@ -1864,7 +1868,13 @@ theory gives +6.0 dB on both sides.
   over what the faces the leg enters by leave free there, but for what lies past the
   mirrors at the leg's ends or inside the edges it leaves and comes to. The weight moves
   smoothly with the geometry and is about a half where the path reflects at a face's
-  edge or a leg grazes one, but the product is no path over both edges by way of the
+  edge or a leg grazes one (behind barriers in a U or a Z of one height, along the line
+  of listeners of the bullet above, the path reflects at the top of the wall that joins
+  them: with `first_order` ray tracing gives 4.2 to 4.3 dB less there at 63 Hz than
+  with the product taken whole, and 6.0 dB less from 250 Hz up behind the U and from
+  1 kHz up behind the Z, where at 250 and 500 Hz the product interferes with a path it
+  does not change and the level falls by up to 8.0 dB; with `second_order` up to 0.7
+  and 1.9 dB less), but the product is no path over both edges by way of the
   reflections: under a whole ceiling over two screens the level is 1.4 to 5.2 dB
   high, over a strip of ceiling about one Fresnel zone wide the integral gives back more
   than the whole plane, and where the ceiling ends at the point the path reflects at the
