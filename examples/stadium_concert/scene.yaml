@@ -425,7 +425,10 @@ tours:
     - {listener: pitch_behind_towers, phrases: 2}
     - {listener: mix_position, to_end: true}
 simulation:
-  early: {method: image_sources, max_order: 2, diffraction: none}
+  # The direct sound bends round the edges of the stands and of the stage roof, so a
+  # source that moves (the helicopter crossing) fades as an edge hides it instead of
+  # dropping by ten decibels or more from one moment to the next.
+  early: {method: image_sources, max_order: 2, diffraction: direct}
   # The late sound radiates from every reflection to the listeners: in a bowl this size
   # a detector sphere catches so few rays that a single one would be heard as an echo.
   late: {method: stochastic_ray_tracing, reception: secondary_sources}

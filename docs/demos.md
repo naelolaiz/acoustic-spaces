@@ -1610,7 +1610,11 @@ longer taken: the scenes a run simulates go to the work folder.
   stadium's decay after the helicopter's sound arrives.
 - **The pass**: the helicopter every 4 m along its flight at each of the 12 listeners,
   with Doppler, its sound what its rotors send each way down each early path, as in the
-  flyover. At the mix position it peaks at 81.3 to 81.4 dB(A) over five runs (74.1 from
+  flyover; its direct sound bends round the edges of the stands and of the stage roof
+  (the scene's `diffraction: direct`), so that it fades as an edge hides it. Each
+  stop's still gives how far under the other sources it is there at its loudest, and
+  `--sources helicopter` flies it with the concert left out, to hear it alone. At the
+  mix position it peaks at 81.3 to 81.4 dB(A) over five runs (74.1 from
   330 m), where the sound system's loudspeakers, simulated at their sound power, give
   97.0 dB(A): it is some 16 dB under the music, heard most in the song's quiet passages.
   In the north stand it peaks 9.8 to 10.2 dB lower at the far seats and 8.3 to 12.2 dB

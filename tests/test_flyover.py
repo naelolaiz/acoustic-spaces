@@ -392,7 +392,7 @@ def test_the_crossing_is_a_preset_of_the_demo_of_the_stadiums_scene(tmp_path: Pa
     """helicopter_demo.py is the demo of the stadium's scene with the helicopter taken
     in, on one clock with the concert, listed after the stadium's own demo: the
     helicopter always plays, beside the concert's sources ``--sources`` picks (in each
-    part with ``--sources-play in-turn``); the script's ``--at`` sets it off so that it
+    part with ``--sources-play in-turn``), or alone; the script's ``--at`` sets it off so that it
     is over the centre spot then, a time it cannot get there by refused, and
     ``--height`` flies it higher; the scene the run simulates holds its flight in the
     open air; each command line of the script it was reads as the demo's, and its steps
@@ -424,6 +424,9 @@ def test_the_crossing_is_a_preset_of_the_demo_of_the_stadiums_scene(tmp_path: Pa
     assert list(args.playing) == played and "singer_mic" not in played and len(played) == 23
     assert run("--sources", "PA").sources == "PA,helicopter"
     assert run("--sources", "PA,Helicopter").sources == "PA,Helicopter"
+    alone = run("--sources", "helicopter")
+    assert alone.sources == "helicopter" and list(alone.playing) == ["helicopter"]
+    assert run_folder(alone).name == "crossing_helicopter_binaural"
     turns = run("--sources", "PA,Monitors", "--sources-play", "in-turn")
     assert turns.sources == "PA+helicopter,Monitors+helicopter"
     assert run("--sources-play", "in-turn").sources == (

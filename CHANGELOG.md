@@ -89,6 +89,10 @@
   `--stadium`, `--band`, `--results` and `--flight`; it is over the centre spot halfway
   through "Spicy Funk Cake", by its trajectory's `start_s`, and another song's halfway
   takes `--at`.
+- Changed (results change): the stadium's direct sound bends round the edges of its
+  stands and of its stage roof (`diffraction: direct`, was `none`), so that the
+  helicopter crossing fades as an edge hides it instead of dropping by ten decibels or
+  more from one moment to the next; `--sources helicopter` flies it alone.
 - Added: the demo of any scene's `--start` (when what moves sets off) and `--height`
   (how high every helicopter flies); outdoors the scene a run simulates has its ground
   and its sky widened to hold every trajectory in use that goes past them. A source of a

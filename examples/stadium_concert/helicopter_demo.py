@@ -45,7 +45,8 @@ do, the helicopter at their edge, with how far it is, while it is past the stadi
 them in that order; ``--tour`` gives a tour of your own (the script's
 ``listener:phrases,...`` still reads). ``--sources PA`` has it fly over the sound system
 alone (or ``Monitors``, ``Band``, a group such as ``PA/Delays`` or a source by its name,
-comma separated); the helicopter always plays. ``--speed``, ``--broadband``, ``--step``
+comma separated); the helicopter always plays, and ``--sources helicopter`` has it fly
+alone, to hear it without the concert. ``--speed``, ``--broadband``, ``--step``
 and ``--input helicopter=WAV`` are the flyover demo's.
 
 Both play at their simulated levels, as every source of the scene does: each
