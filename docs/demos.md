@@ -720,7 +720,7 @@ Singing Dataset, the ESMUC Choir Dataset and Cantoría are all for non-commercia
 
 ## A concert in the stadium
 
-![A frame of the stadium video: the stadium from above with the sound system, the monitors and the band, the listener at the mix position facing the stage with a line from each loudspeaker, the crowd standing on the pitch and seated in the stands, the tour and a spectrogram of the sound](images/stadium_demo.png)
+![A frame of the stadium video: the stadium from above with the sound system, the monitors and the band, the listener at the mix position facing the stage with a line from each source that plays, the crowd standing on the pitch and seated in the stands, the tour and a spectrogram of the sound](images/stadium_demo.png)
 
 `stadium_demo.py` plays a song by a band on the stage of the `stadium_concert` example,
 through its sound system and stage monitors, and mixes it at each of its 12 listeners.
