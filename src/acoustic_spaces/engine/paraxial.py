@@ -27,14 +27,19 @@ row only in part: the mean over which edges are in it of the field over those th
 are, as each edge's term in the product is linear in whether it is there.
 
 The edges of a row (:func:`find_row`) are of two families: those that lie across the
-way at right angles to one direction ``q`` across it (the tops of screens and blocks,
-whose obstacles stand on one side of them along ``q``), and the edges of thin screens
-along ``q`` (a screen's upright end), whose screens stand on one side of them along the
-third direction ``p``. The bridge's two coordinates along ``q`` and ``p`` are
-independent, so the probability is the product of a chain in each. A screen whose top
-and end are both in the row stops the bridge where it is on the screen's side of both:
-the product of the two edges' conditions, which the two chains give as the difference
-of two products (:meth:`Row.branches`). A rigid flat top between two edges of the
+way nearer right angles to one direction ``q`` across it than along it (the tops of
+screens and blocks, whose obstacles stand on one side of them along ``q``), and the
+edges of thin screens nearer along ``q`` (a screen's upright end), whose screens stand
+on one side of them along the third direction ``p``. The bridge's two coordinates along
+``q`` and ``p`` are independent, so the probability is the product of a chain in each.
+An edge that leans from its family's direction stops the bridge's coordinate along its
+own normal across the way: the chain takes its threshold at its distance from the way
+along that normal, and its correlation with each other node as if it did not lean,
+where the two coordinates correlate by the cosine of the angle between the nodes'
+normals times that (:func:`_lean_error`). A screen whose top and end are both in the
+row stops the bridge where it is on the screen's side of both: the product of the two
+edges' conditions, which the two chains give as the difference of two products
+(:meth:`Row.branches`). A rigid flat top between two edges of the
 first family (a block's top) reflects the bridge: by Neumann's images, the field over
 it is the bridge's plus that of the bridge from the source's image in the top's plane,
 which crosses the edges before the top mirrored in it.
@@ -105,9 +110,16 @@ ROW_FAR = 3.0
 #: _GROWTH_FAR points, none where it would take more than _MOST (:meth:`Row.growth`).
 _GROWTH_NEAR = 10.0
 _GROWTH_FAR = 20.0
-#: Edges within this angle of a direction lie along it or at right angles to it.
+#: A face is a block's top where its normal lies within this angle of q, and an edge
+#: is parallel to the row's reference edge (and may set q by its top) within it.
 _PARALLEL = math.radians(1.0)
-#: An edge crosses the way where the sine of its angle to the way is at least this.
+#: A row holds in full where taking its edges for lines of its two families changes
+#: the share of the bridge past any two of them right on the way by at most _LEAN_NEAR
+#: dB, and not from _LEAN_FAR dB (:func:`_lean_error`).
+_LEAN_NEAR = 0.1
+_LEAN_FAR = 0.5
+#: A face lies along the way where the sine of its angle to the way's direction across
+#: its edge (:func:`_across`) is at most this (a block's top), and across it otherwise.
 _CROSSING = 0.25
 #: An edge's obstacle stands across the way where the direction from the edge into it
 #: has at least this share along the direction of the edge's constraint.
@@ -358,7 +370,12 @@ def _fade(growth: np.ndarray) -> np.ndarray:
     """The share of a frequency the row takes at its chains' ``growth``
     (:meth:`Row.growth`): 1 up to _GROWTH_NEAR, 0 from _GROWTH_FAR, and half a cosine's
     period between."""
-    x = np.clip((growth - _GROWTH_NEAR) / (_GROWTH_FAR - _GROWTH_NEAR), 0.0, 1.0)
+    return _between(growth, _GROWTH_NEAR, _GROWTH_FAR)
+
+
+def _between(value, near: float, far: float):
+    """1 up to ``near``, 0 from ``far``, and half a cosine's period between."""
+    x = np.clip((value - near) / (far - near), 0.0, 1.0)
     return 0.5 * (1.0 + np.cos(np.pi * x))
 
 
@@ -420,6 +437,10 @@ class Row:
     #: two sides in part (:func:`membership`): the nodes of a leg (:meth:`past`), each
     #: in it by its share in the row, which the leg may pass far from.
     limit_far: bool = False
+    #: The share by which the row holds as its chain takes its edges for lines of their
+    #: families (:func:`_lean_error`): its hold has it, and so has each part of it on a
+    #: leg of a path past it (:meth:`passing`).
+    fit: float = 1.0
 
     def __post_init__(self) -> None:
         cornered = {i for first, second, _ in self.corners for i in (first, second)}
@@ -735,6 +756,7 @@ class Row:
             hold, share = _held(
                 membership(np.abs(level - mean)[:, None] / sigma) * self.ends[inside]
             )
+            hold = hold * self.fit
         corners = []
         for first, second, states in self.corners:
             if first in index and second in index:
@@ -779,6 +801,7 @@ class Row:
             axes=self.axes,
             ends=self.ends[inside],
             wavenumber=self.wavenumber,
+            fit=self.fit,
         )
         return part if own else part.computable()
 
@@ -942,13 +965,50 @@ def _corner_states(a: np.ndarray, b: np.ndarray, beside: bool, aside: bool) -> t
     return (1.0 - both - one - other, one, other, both)
 
 
+def _across(d: np.ndarray, u: np.ndarray) -> np.ndarray:
+    """(3,) the way's direction ``u`` at right angles to the unit direction ``d`` of an
+    edge it crosses: the way as seen along the edge."""
+    w = u - _dot(u, d) * d
+    return w / math.sqrt(_dot(w, w))
+
+
+def _lean_error(
+    normal: np.ndarray, family: np.ndarray, clear: np.ndarray, along: np.ndarray, length: float
+) -> float:
+    """The most, in dB, by which the chain changes the share of the bridge that passes
+    any two of a row's nodes on their clear sides where the way runs through both
+    (1/4 + asin(r) / (2 pi) for the correlation r of the bridge's two coordinates
+    there), as it takes each node for a line of its family: r is rho (by the clear
+    sides) for two of one family and 0 for two of different families, whose coordinates
+    are independent, where it is rho times the cosine of the angle between the nodes'
+    normals in the plane across the way (``normal`` (n, 3), each towards its node's
+    clear side). ``family`` and ``clear`` (n,) are the nodes', ``along`` (n,) their
+    places along the way of ``length``."""
+    if len(along) < 2:
+        return 0.0
+    i, j = np.triu_indices(len(along), 1)
+    x, y = np.minimum(along[i], along[j]), np.maximum(along[i], along[j])
+    rho = np.sqrt(np.clip(x * (length - y) / (y * (length - x)), 0.0, 1.0))
+    chain = np.where(family[i] == family[j], clear[i] * clear[j] * rho, 0.0)
+    exact = rho * np.einsum("ij,ij->i", normal[i], normal[j])
+    through = [0.25 + np.arcsin(np.clip(r, -1.0, 1.0)) / (2.0 * np.pi) for r in (chain, exact)]
+    with np.errstate(divide="ignore"):
+        error = np.abs(
+            20.0 * np.log10(np.maximum(through[0], 1e-300) / np.maximum(through[1], 1e-300))
+        )
+    return float(error.max())
+
+
 def _directions(edges, model, u: np.ndarray, nearest: int, candidates: np.ndarray) -> tuple:
     """The row's directions q and p for the way along ``u`` with ``nearest`` its reference
     edge, and each edge's family, the direction of its constraint and the share of its
     obstacle along that (:func:`find_row`): q at right angles to the way and to the
-    edge, or the normal of a face along the way (its sine to the way at most
-    _CROSSING, a block's top) of the first of ``candidates`` (by distance) parallel to
-    the edge that has one."""
+    edge, or the normal of a face along the way (its sine to the way across the edge,
+    :func:`_across`, at most _CROSSING: a block's top) of the first of ``candidates``
+    (by distance) parallel to the edge that has one; an edge is of the first family
+    where its line across the way lies nearer p than q, and of the second where it lies
+    nearer q and is a thin screen's (and of neither, -1, where it is a solid's along
+    q)."""
     d = edges.direction
     q = np.cross(u, d[nearest])
     q /= math.sqrt(_dot(q, q))
@@ -956,41 +1016,53 @@ def _directions(edges, model, u: np.ndarray, nearest: int, candidates: np.ndarra
         if edges.wedge[e] >= 2.0 - 1e-9 or abs(_dot(d[e], q)) > math.sin(_PARALLEL):
             continue
         normals = model.plane_normal[edges.plane[e]]
-        along_way = np.abs(np.einsum("ij,j->i", normals, u)) <= _CROSSING
+        along_way = np.abs(np.einsum("ij,j->i", normals, _across(d[e], u))) <= _CROSSING
         if along_way.any():
             normal = normals[np.flatnonzero(along_way)[0]]
             q = normal * np.sign(_dot(normal, q))
             break
     p = np.cross(u, q)
     p /= math.sqrt(_dot(p, p))
-    lies = np.abs(np.einsum("ij,j->i", d, q))
-    family = np.full(len(edges), -1, dtype=np.int64)
-    family[lies <= math.sin(_PARALLEL)] = 0
-    family[(lies >= math.cos(_PARALLEL)) & np.isclose(edges.wedge, 2.0)] = 1
+    lines = _lines(d, u)
+    nearer_q = np.abs(np.einsum("ij,j->i", lines, q)) > np.abs(np.einsum("ij,j->i", lines, p))
+    family = np.where(nearer_q, -1, 0)
+    family[nearer_q & np.isclose(edges.wedge, 2.0)] = 1
     constraint = np.where((family == 0)[:, None], q[None, :], p[None, :])
     stands = np.einsum("ij,ij->i", -edges.bisector(), constraint)
     return q, p, family, constraint, stands
+
+
+def _lines(d: np.ndarray, u: np.ndarray) -> np.ndarray:
+    """(E, 3) the unit directions ``d`` (E, 3) of edges as seen along the way's ``u``: in
+    the plane across the way (those along the way, which do not cross it, as they are)."""
+    across = d - np.einsum("ij,j->i", d, u)[:, None] * u[None, :]
+    size = np.linalg.norm(across, axis=1)
+    return np.where((size > 1e-12)[:, None], across / np.maximum(size, 1e-300)[:, None], d)
 
 
 def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) -> Row | None:
     """The row of edges that the way from ``source`` to ``listener`` passes close by, at
     the ``wavenumber`` (F,), or None where it passes fewer than two obstacles so: the
     ``edges`` (:class:`~acoustic_spaces.engine.diffraction.Edges` of ``model``) whose
-    line crosses the way between the two at more than :data:`_CROSSING` (the sine of its
-    angle to the way), within :data:`ROW_FAR` standard deviations of the bridge at the
-    lowest wavenumber, and whose obstacle stands across the way. ``reflection(edge,
-    side)`` is the (F,) reflection factor of face ``side`` of ``edge`` as the edge's
-    paths have it. Where such an edge cannot be in the row (it leans across the
-    families' directions, or is an edge of a solid that runs along q), two edges of one
-    family are too close along the way for the chain, or two are the edges of one
-    obstacle across the way (a strip's top and foot, a panel's two ends), there is no
-    row either.
+    line crosses the way between the two (at any angle: over parallel edges at a slant
+    to it the chain's thresholds and correlations are those of the way at right angles
+    to them at the wavenumber times the sine of that angle), within :data:`ROW_FAR`
+    standard deviations of the bridge at the lowest wavenumber, and whose obstacle
+    stands across the way. ``reflection(edge, side)`` is the (F,) reflection factor of
+    face ``side`` of ``edge`` as the edge's paths have it. Where such an edge cannot be
+    in the row (an edge of a solid that runs nearer q than across it), or two are the
+    edges of one obstacle across the way (a strip's top and foot, a panel's two ends)
+    or of two solids that touch, there is no row either. The row holds in full where
+    taking its edges for lines of their families changes the share of the bridge past
+    any two of them by at most :data:`_LEAN_NEAR` dB, and not from :data:`_LEAN_FAR`
+    (:func:`_lean_error`): edges that lean from one another.
 
     The row's directions: q at right angles to the way and to the edge nearest it in
-    Fresnel units (the nearest for which every such edge is of one of the families), or
-    the normal of a face along the way (at most :data:`_CROSSING` its sine to it: a
-    block's top) of the nearest edge parallel to that one that has such a face, and p at
-    right angles to the way and to q. An edge's share (:func:`membership`)
+    Fresnel units (the nearest for which every such edge is of one of the families,
+    :func:`_directions`), or the normal of a face along the way (at most
+    :data:`_CROSSING` its sine to the way across the edge, :func:`_across`: a block's
+    top) of the nearest edge parallel to that one that has such a face, and p at right
+    angles to the way and to q. An edge's share (:func:`membership`)
     is that of the way's distance from it, and, near an end of it that is not the corner
     of a screen whose other edge is in the row, of the way's distance from that end too:
     the end's own paths (and the fades of the edge's) take it there, and past the end the
@@ -1009,7 +1081,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
     d = edges.direction
     cosine = np.einsum("ij,j->i", d, u)
     sine = np.sqrt(np.maximum(1.0 - cosine**2, 0.0))
-    crossing = sine >= _CROSSING
+    crossing = sine * length > tolerance
     w0 = source[None, :] - edges.start
     dd = np.einsum("ij,j->i", w0, u)
     ee = np.einsum("ij,ij->i", w0, d)
@@ -1064,13 +1136,13 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         for side in (0, 1):
             plane = edges.plane[e, side]
             sides = np.flatnonzero(edges.plane[f] == plane)
-            if len(sides) == 0 or abs(_dot(model.plane_normal[plane], u)) <= _CROSSING:
+            crosses = abs(_dot(model.plane_normal[plane], _across(d[e], u))) > _CROSSING
+            if len(sides) == 0 or not crosses:
                 continue
             towards = _dot(facing[e, side], apart) > 0.0
             back = _dot(facing[f, sides[0]], apart) < 0.0
             if towards or back:
                 return None
-    level = np.einsum("ij,ij->i", on_edge[nodes], constraint[nodes])
     clear = -np.sign(stands[nodes])
     way_coordinates = np.array(
         [[_dot(source, q), _dot(listener, q)], [_dot(source, p), _dot(listener, p)]]
@@ -1078,6 +1150,24 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
     sigma = np.sqrt(across[nodes][:, None] / k[None, :])  # (n, F)
     mean = way_coordinates[fam, 0] + along / length * (
         way_coordinates[fam, 1] - way_coordinates[fam, 0]
+    )
+    # Each node's line and normal across the way (in the plane at right angles to it), the
+    # normal towards its clear side, and the cosine of the line's angle to its family's
+    # there: the reference edge's line, or that at right angles to it.
+    lines = _lines(d[nodes], u)
+    clear_normal = np.cross(u[None, :], lines)
+    towards = np.sign(np.einsum("ij,ij->i", clear_normal, constraint[nodes]))
+    clear_normal *= (clear * towards)[:, None]
+    reference = _lines(d[nearest][None, :], u)[0]
+    families = np.stack([reference, np.cross(u, reference)])
+    lean_cosine = np.abs(np.einsum("ij,ij->i", lines, families[fam]))
+    # Each edge's level along its constraint: the way's there and the edge's offset from
+    # the way along the constraint over the cosine, as along its own normal (across which
+    # the bridge's coordinate that it stops has the spread of the constraint's); for an
+    # edge parallel to its family's line, its own level along the constraint.
+    offsets = np.einsum("ij,ij->i", on_edge[nodes] - on_way[nodes], constraint[nodes])
+    level = np.einsum("ij,ij->i", on_edge[nodes], constraint[nodes]) + offsets * (
+        1.0 / lean_cosine - 1.0
     )
     own = membership(np.abs(level - mean)[:, None] / sigma)
     # The ends: a screen's corner with its other edge in the row is a corner of the row;
@@ -1105,6 +1195,9 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
             else:
                 ends[i] *= 1.0 - membership(-past / sigma[i])
     hold, share = _held(own * ends)
+    fit = float(
+        _between(_lean_error(clear_normal, fam, clear, along, length), _LEAN_NEAR, _LEAN_FAR)
+    )
     units = []
     for first, second in corners:
         beside = clear[first] * (mean[first] - level[first]) > 0.0
@@ -1120,7 +1213,8 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         for side in (0, 1):
             plane = edges.plane[e, side]
             normal = model.plane_normal[plane]
-            if abs(_dot(normal, q)) < math.cos(_PARALLEL) or abs(_dot(normal, u)) > _CROSSING:
+            along_way = abs(_dot(normal, _across(d[e], u))) <= _CROSSING
+            if abs(_dot(normal, q)) < math.cos(_PARALLEL) or not along_way:
                 continue
             for j in range(i + 1, count):
                 f = nodes[j]
@@ -1162,7 +1256,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         way=way_coordinates,
         length=length,
         share=share,
-        hold=hold,
+        hold=hold * fit,
         corners=units,
         tops=tops,
         top_planes=top_planes,
@@ -1173,6 +1267,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         axes=np.stack([q, p]),
         ends=ends,
         wavenumber=k,
+        fit=fit,
     ).computable()
     return row if row.hold.any() else None
 
