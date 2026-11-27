@@ -524,6 +524,34 @@ def is_fed(source) -> bool:
     return source.gain_db != 0 or source.eq_db is not None or source.delay_ms > 0
 
 
+def late_need(
+    room: Room,
+    *,
+    settings: SimulationSettings | None = None,
+    sources: Sequence[str] | None = None,
+    listeners: Sequence[str] | None = None,
+    threads: int | None = None,
+    groups: np.ndarray | None = None,
+    late_from: Mapping[str, Mapping[str, float]] | None = None,
+) -> run_size.Need:
+    """The memory the late part of :func:`simulate` with these arguments needs
+    (:func:`~acoustic_spaces.engine.run_size.simulation_need`), which it checks before
+    it starts: a run that needs more than the computer has is refused."""
+    settings = settings or room.scene.simulation
+    if threads is None:
+        threads = settings.performance.threads
+    faces = 0 if groups is None else int(np.max(groups, initial=-1)) + 1
+    return run_size.simulation_need(
+        room,
+        settings,
+        _pick(room.scene.sources, sources, "source"),
+        _pick(room.scene.listeners, listeners, "listener"),
+        threads,
+        groups=faces,
+        mixed=late_from or (),
+    )
+
+
 def simulate(
     room: Room | Scene | str | Path,
     *,
@@ -589,16 +617,15 @@ def simulate(
     chosen_listeners = _pick(scene.listeners, listeners, "listener")
     if not chosen_listeners:
         raise ValueError("no listener to simulate")
-    faces = 0 if groups is None else int(np.max(groups, initial=-1)) + 1
     run_size.check(
-        run_size.simulation_need(
+        late_need(
             room,
-            settings,
-            chosen_sources,
-            chosen_listeners,
-            threads,
-            groups=faces,
-            mixed=late_from or (),
+            settings=settings,
+            sources=sources,
+            listeners=listeners,
+            threads=threads,
+            groups=groups,
+            late_from=late_from,
         )
     )
     # Seeds follow the scene's order, so a run of some sources or listeners gives them
@@ -1076,6 +1103,7 @@ __all__ = [
     "SimulationResult",
     "check_late_method",
     "early_paths",
+    "late_need",
     "mixing_time",
     "response_length",
     "simulate",

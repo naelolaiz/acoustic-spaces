@@ -250,6 +250,11 @@
   32-bit floats as it writes them. `simulate_movement(listeners=...)` simulates those
   listeners alone, on the same moments: a run of the demo of any scene where something
   moves simulates its own listeners (`--listeners`, a part per listener) and no others.
+- Changed: where all its listeners at once would need more memory for their late parts
+  than the computer has, `simulate_movement` simulates them one at a time (a moving one
+  with all its places), each getting what a run of all gives it, and says so: the
+  airport's demo, its three listeners kilometres apart, needed about 65 GiB at once and
+  takes one listener's 11 GiB.
 - Fixed (results change): with the late rays on a GPU (`simulation.late.device` gpu
   or both, or auto where it takes either), the spread from the materials' absorption
   uncertainty could be far too wide, most with the CPU and the GPU sharing the rays: in

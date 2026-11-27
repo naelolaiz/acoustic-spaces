@@ -531,6 +531,56 @@ def test_a_movement_simulates_the_listeners_it_is_heard_by_alone() -> None:
         simulate_movement(room, step_m=1.0, listeners=["nobody"])
 
 
+def test_a_movement_too_big_for_the_memory_simulates_its_listeners_one_at_a_time(
+    monkeypatch,
+) -> None:
+    """Where every listener at once would need more memory for the late parts than the
+    computer has, a movement simulates them one at a time, a moving one with all its
+    places, says so, and each gets what a run of all gives it."""
+    import acoustic_spaces.walkthrough as walkthrough
+    from acoustic_spaces.engine import run_size
+
+    walk = {"to": [[5.0, 1.0, 1.5]], "speed_m_s": 2.0}
+    scene = _scene(
+        sources=[{"name": "s", "position": [7.0, 5.0, 1.5]}],
+        listeners=[
+            _walker(walk),
+            {"name": "seat", "position": [2.0, 4.0, 1.2]},
+            {"name": "back", "position": [6.5, 2.0, 1.2]},
+        ],
+    )
+    room = Room.from_scene(scene)
+    every = simulate_movement(room, step_m=1.0)
+    monkeypatch.setattr(run_size, "machine_memory", lambda: 8 * 2**30)
+    need = walkthrough.late_need
+    monkeypatch.setattr(
+        walkthrough,
+        "late_need",
+        lambda *args, **kwargs: dataclasses.replace(need(*args, **kwargs), bytes=9.0 * 2**30),
+    )
+    runs: list = []
+    real = walkthrough.simulate
+
+    def counted(*args, **kwargs):
+        runs.append(kwargs["listeners"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(walkthrough, "simulate", counted)
+    said: list[str] = []
+    apart = simulate_movement(room, step_m=1.0, progress=said.append)
+    walker = frozenset(every.copies["listeners", "w"])
+    assert sorted(map(frozenset, runs), key=len) == [{"seat"}, {"back"}, walker]
+    assert (
+        "the 3 listeners at once would need about 9.0 GiB of memory, more than this "
+        "computer's 8.0 GiB: simulating them one at a time"
+    ) in said
+    np.testing.assert_array_equal(apart.times, every.times)
+    assert apart.result.responses.keys() == every.result.responses.keys()
+    for key, response in apart.result.responses.items():
+        np.testing.assert_allclose(response.early.energy, every.result[key].early.energy)
+        np.testing.assert_array_equal(response.late, every.result[key].late)
+
+
 def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
     """A walk with Doppler moving alone plays in a movement as in a walk of its own: at
     each listener, the same places, each early path through its changing delay and the

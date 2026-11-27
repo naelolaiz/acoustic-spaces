@@ -404,7 +404,10 @@ acoustic-spaces walkthrough scene.yaml band=song.wav speaker=talk.wav --all --ou
   `--all`, the demo of any scene and the editor's **Render movement…** do this; one
   mover alone (`--mover`) crossfades its places as above.
 
-From Python: `simulate_movement(room)` (`listeners=` simulates those alone),
+From Python: `simulate_movement(room)` (`listeners=` simulates those alone; where all
+the listeners at once would need more memory for their late parts than the computer
+has, it simulates them one at a time, each as a run of all would, its rays traced
+again for each),
 `render_movement(movement, signals, fmt)` (a dict of each listener's sound; `followers`
 plays more signals along a source's trajectory that many seconds behind it, as the
 points of a train behind its front, each with its own Doppler, and `leads` has a source

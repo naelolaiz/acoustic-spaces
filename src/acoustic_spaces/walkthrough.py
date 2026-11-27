@@ -72,8 +72,9 @@ from typing import Any
 import numpy as np
 
 from acoustic_spaces.emission import Emission
+from acoustic_spaces.engine import run_size
 from acoustic_spaces.engine.response import LATE_ARRAYS, Deferred
-from acoustic_spaces.engine.simulate import SimulationResult, simulate
+from acoustic_spaces.engine.simulate import SimulationResult, late_need, simulate
 from acoustic_spaces.materials.bands import resolution_of
 from acoustic_spaces.parameters import EventLevels, event_levels
 from acoustic_spaces.render import (
@@ -815,7 +816,11 @@ def simulate_movement(
 
     ``listeners`` (names of listeners in use; by default, every one) are the only ones
     simulated, a moving one at each of its places, on the same moments as with every
-    listener: :func:`render_movement` hears them alone.
+    listener: :func:`render_movement` hears them alone. Where all of them at once would
+    need more memory for their late parts than the computer has
+    (:func:`~acoustic_spaces.engine.simulate.late_need`), they are simulated one at a
+    time, a moving one with all its places, each getting what a run of all would give it:
+    the rays are traced again for each.
     """
     if step_m is not None and step_m <= 0:
         raise ValueError("step_m must be positive")
@@ -936,15 +941,44 @@ def simulate_movement(
             for name in dict.fromkeys(names)
         ]
     # The moving sources' places share the parabolic equation's runs where they can.
-    result = simulate(
+    run = partial(
+        simulate,
         walked,
         settings=settings,
-        listeners=simulated,
         threads=threads,
         progress=progress,
         late_from=mixing,
         share_waves=[copy.name for copy in added["sources"]],
     )
+    groups = _listener_groups(walked, simulated, copies)
+    need = late_need(
+        walked, settings=settings, listeners=simulated, threads=threads, late_from=mixing
+    )
+    memory = run_size.machine_memory()
+    if len(groups) > 1 and memory is not None and need.bytes > memory:
+        # Each listener's response is what a run of all gives it (the rays' seeds follow
+        # the scene's order), so the listeners may be simulated one at a time, each run's
+        # late parts held where they have energy before the next.
+        if progress is not None:
+            progress(
+                f"the {len(groups)} listeners at once would need about "
+                f"{need.bytes / 2.0**30:,.1f} GiB of memory, more than this computer's "
+                f"{memory / 2.0**30:,.1f} GiB: simulating them one at a time"
+            )
+        parts = []
+        heard_by = {lis.name for lis in walked.scene.listeners}
+        for group in groups:
+            # The sources' late mixes, and those of the listeners this run hears.
+            mixed = {
+                name: mix for name, mix in mixing.items() if name not in heard_by or name in group
+            }
+            part = run(listeners=group, late_from=mixed)
+            if not mixing:
+                _held_where_heard(part)
+            parts.append(part)
+        result = _joined(parts)
+    else:
+        result = run(listeners=simulated)
     if not mixing:
         # Where a place mixes others' late parts, it reads them from what they were traced
         # in, which stays whole however the places hold theirs.
@@ -961,6 +995,42 @@ def _whole(kept: np.ndarray, first: int, shape: tuple[int, ...]) -> np.ndarray:
     whole = np.zeros(shape, dtype=kept.dtype)
     whole[..., first : first + kept.shape[-1]] = kept
     return whole
+
+
+def _listener_groups(
+    walked: Room, simulated: Sequence[str] | None, copies: Mapping[tuple[str, str], Sequence[str]]
+) -> list[list[str]]:
+    """The listeners a movement's simulation hears (``simulated``, or every one in use in
+    ``walked``), one at a time: each still listener alone, each moving one with its
+    copies at all its places."""
+    names = (
+        list(dict.fromkeys(simulated))
+        if simulated is not None
+        else [lis.name for lis in walked.scene.listeners if lis.in_use]
+    )
+    mover_of = {
+        copy: mover
+        for (kind, mover), places in copies.items()
+        if kind == "listeners"
+        for copy in places
+    }
+    groups: dict[str, list[str]] = {}
+    for name in names:
+        groups.setdefault(mover_of.get(name, name), []).append(name)
+    return list(groups.values())
+
+
+def _joined(parts: Sequence[SimulationResult]) -> SimulationResult:
+    """The runs of one movement at listeners apart, as one: their responses, insertion
+    losses and spreads together, the run details of the first (every run traces the same
+    sources with the same rays)."""
+    first = parts[0]
+    return dataclasses.replace(
+        first,
+        responses={key: r for part in parts for key, r in part.responses.items()},
+        insertion_loss={key: v for part in parts for key, v in part.insertion_loss.items()},
+        spreads={key: v for part in parts for key, v in part.spreads.items()},
+    )
 
 
 def _held_where_heard(result: SimulationResult) -> None:
