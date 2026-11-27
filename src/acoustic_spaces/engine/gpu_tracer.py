@@ -1398,12 +1398,13 @@ fn deposit(k: u32, factor: f32, travel: f32, absorbing: f32, arrival: vec3<f32>)
 
 // With face groups: adds counted[b] * factor * air(absorbing) at `time` to listener
 // k's moments, times each term of the ray's counts (as the CPU's add, ray_tracer.hpp).
-// The energy is rounded to whole steps once, and each term takes it times its counts
-// exactly, so that the sums stay the moments of one set of arrivals. Re-weighting takes
-// their ratios (reweight.moment_exponent): rounded each on its own, the terms of a slot
-// far down the tail, where an arrival brings less than a step, were those of no set of
-// arrivals (counts whose variance is below zero), and the slot's energy could come out
-// up to e**50 times what it was re-weighted.
+// The energy is rounded to whole steps once, and each term takes it times its counts (a
+// whole number of steps, exact below 2**24 and to single precision above), so that the
+// sums stay the moments of one set of arrivals. Re-weighting takes their ratios
+// (reweight.moment_exponent): rounded each on its own, the terms of a slot far down the
+// tail, where an arrival brings less than a step, were those of no set of arrivals
+// (counts whose variance is below zero), and the slot's energy could come out up to
+// e**50 times what it was re-weighted.
 fn moments(k: u32, factor: f32, absorbing: f32, time: f32) {
     let mbin = min(run.moment_bins - 1u, u32(max(time, 0.0) / run.moment_step));
     let mb = run.moment_bins;

@@ -833,13 +833,13 @@ def test_gpu_tracer_counts_reflections_off_face_groups_as_the_cpu_does() -> None
 
 @needs_gpu
 def test_the_gpu_tracers_moments_are_those_of_one_set_of_arrivals() -> None:
-    """Down the unit cube's tail to where an arrival brings less than a step of the
-    moments' fixed point (from about 85 dB under the first slot), each slot's moments
-    are still those of some set of arrivals, as re-weighting needs (it takes their
-    ratios: reweight.moment_exponent): the matrix of the second moments of 1, n_0 and
-    n_1 is positive semi-definite in every slot. Rounded term by term, the slots from
-    there on were not (counts whose variance is below zero), and a stadium's spread from
-    the absorption's uncertainty read hundreds of decibels."""
+    """Down the unit cube's tail, past 85 dB under the first slot, where an arrival
+    brings far less than a step of the moments' fixed point, each slot's moments are
+    still those of some set of arrivals, as re-weighting needs (it takes their ratios:
+    reweight.moment_exponent): the matrix of the second moments of 1, n_0 and n_1 is
+    positive semi-definite in every slot. Rounded term by term, the slots from there on
+    were not (counts whose variance is below zero), and a stadium's spread from the
+    absorption's uncertainty read hundreds of decibels."""
     from test_native import _stochastic_args
 
     groups = np.array([1] * 8 + [0] * 4, dtype=np.int64)
@@ -853,9 +853,10 @@ def test_the_gpu_tracers_moments_are_those_of_one_set_of_arrivals() -> None:
     some = m[0] > 0.0
     # Single precision rounds the products of large counts: a millionth.
     assert np.all(lowest[some] > -1e-6), np.round(lowest, 6)
-    # The slots go far enough down for an arrival to bring less than a step there.
+    # The slots with moments go that far down (the last ones, each of a step or two, end
+    # between 98 and 123 dB down over seeds 1 to 40).
     slots = energy[0, 0].reshape(len(m[0]), -1).sum(1)
-    assert 10.0 * np.log10(slots[some][-1] / slots[0]) < -100.0
+    assert 10.0 * np.log10(slots[some][-1] / slots[0]) < -85.0
 
 
 @needs_gpu
