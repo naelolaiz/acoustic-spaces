@@ -224,6 +224,8 @@
   plays (the train's horn with `train_horn`).
 - Fixed: a police car's or a fire engine's walk was simulated again on every run, and
   the tram's credit named a pantograph it does not have.
+- Fixed: a demo's video footer and its run's record gave `--again` and `--no-mp4` in the
+  command the run was made with; they say how a step ran, not what the run is.
 - Removed: the pass-by demos' own engine, now that every example's demo is a preset of
   the demo of its scene: `demos.passby`'s `Vehicle` and its road vehicles,
   `demos.passby_pictures`, `demos.rail.TrainVehicle`, `demos.siren`'s police car, fire

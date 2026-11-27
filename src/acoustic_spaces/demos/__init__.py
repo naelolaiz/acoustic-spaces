@@ -446,6 +446,10 @@ class Option:
     #: the loudest part's peak at -1 dBFS, as the pieces of one recording are, so that
     #: a symphony's movements keep their dynamics; otherwise each part is at its own.
     one_level: bool = False
+    #: Whether it says only how a step runs (``--again``, ``--no-mp4``), not what the run
+    #: plays or how it sounds: the command a video's footer and the run's record give
+    #: (:meth:`Demo.arguments` with ``names_only``) leaves it out.
+    step_only: bool = False
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -823,6 +827,7 @@ def common_options(work: str = "demo") -> list[Option]:
             False,
             "flag",
             named="never",
+            step_only=True,
         ),
         Option(
             "no_mp4",
@@ -830,6 +835,7 @@ def common_options(work: str = "demo") -> list[Option]:
             False,
             "flag",
             named="never",
+            step_only=True,
         ),
     ]
 
@@ -1542,8 +1548,9 @@ class Demo:
         script moved out of its folder (not :attr:`in_place`, which says where it would
         count its paths from) is given every path that has a default, in full, even one
         at its default or left empty (its :meth:`default_path`).
-        ``names_only`` gives a path by its file name, for a caption, and leaves out a
-        path named as its default is, wherever it lies, or at its default counted from
+        ``names_only`` gives a path by its file name, for a caption, leaves out the
+        options that only say how a step runs (:attr:`Option.step_only`) and a path
+        named as its default is, wherever it lies, or at its default counted from
         the working folder, where the editor runs a moved script (a folder whose default
         is ``.`` has no name of its own); ``relative_to`` gives a path under that folder
         relative to it."""
@@ -1552,6 +1559,8 @@ class Demo:
         lead: list[str] = []
         own = None if args is None else getattr(args, "run_folder", None)
         for option in self.options:
+            if names_only and option.step_only:
+                continue
             value = getattr(args, option.name, option.default) if args is not None else None
             if option.in_run is not None and own is not None and value is not None:
                 if Path(value) == Path(own) / option.in_run:  # where the run writes it

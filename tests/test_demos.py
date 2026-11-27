@@ -990,6 +990,23 @@ def test_a_caption_leaves_out_a_path_at_its_default_where_the_demo_runs(
     assert demo.arguments(values, names_only=True) == ["--zips", "copy of orchestra"]
 
 
+def test_a_caption_leaves_out_how_a_step_ran() -> None:
+    """``--again`` and ``--no-mp4`` say how a step runs, not what the run is: the
+    command a video's footer and the run's record give leaves them out, and says every
+    option is at its default when they are all that was given; the editor still runs
+    them."""
+    from acoustic_spaces.demos.pictures import settings_lines
+
+    demo = demo_for("stadium_concert")
+    assert demo is not None
+    values = demo.resolved(demo.parser().parse_args(["video", "--again", "--no-mp4"]))
+    assert {"--again", "--no-mp4"} <= set(demo.arguments(values))
+    assert demo.arguments(values, names_only=True) == []
+    assert demo.command("all", values, names_only=True) == "python stadium_demo.py all"
+    footer = settings_lines(demo, values, {})[1]
+    assert footer.endswith("Run as: python stadium_demo.py all (every option at its default)")
+
+
 # --------------------------------------------------------------------------- the mixes
 
 
@@ -1916,7 +1933,7 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     assert "stochastic ray tracing for the late sound, 500 rays per band" in first
     assert run.startswith("acoustic-spaces ") and run.endswith(
         " at 16 kHz, mixed binaural through a spherical head model. "
-        "Run as: acoustic-spaces demo scene.yaml all --seconds 0.8 --no-mp4"
+        "Run as: acoustic-spaces demo scene.yaml all --seconds 0.8"  # --no-mp4 left out
     )
     # A scene changed since is fed and simulated again (later than both, however long
     # the simulation took).
