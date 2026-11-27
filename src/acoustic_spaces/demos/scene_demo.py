@@ -2754,9 +2754,9 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     from acoustic_spaces.walkthrough import (
         head_turners,
         knots,
+        movements_in_turn,
         movers,
         render_movement,
-        simulate_movement,
     )
 
     table = feeds_table(args, demo)
@@ -2783,129 +2783,158 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
     trailing = trailing_of(sounding)
     fmt = format_of(args, scene)
     print(f"simulating the movement of {', '.join(moving)}, on one clock")
-    # The run's listeners alone, and where their rooms take their level outdoors.
+    # The run's listeners alone, and where their rooms take their level outdoors. Where
+    # they would not fit in memory all at once, each is simulated and mixed in turn.
     heard = [*names, *(indoors.front_name(name) for name in fronts)]
-    movement = simulate_movement(
-        room, progress=print, head_tracked=head_turners(scene, fmt), listeners=heard
-    )
-    for source in trailing:
-        if not all(movement.moves_with_doppler(source.name, name) for name in names):
-            raise SystemExit(f"error: {trailing_problem(source)}")
-    # Every listener may be heard until what moves is over and FADE_OUT_S more
-    # (heard_for): a recording shorter than that plays again from its start.
-    over = float(movement.times[-1])
-    followers, leads = {}, {}
-    for source in trailing:
-        # Its points behind its first, a column each, as long as its first's feed; a
-        # source of one point (a train's pantograph) has its lead behind the front alone.
-        lead, behind = models.trail(source)
-        leads[source.name] = lead
-        if not behind and not table["sources"][source.name].get("behind"):
-            continue
-        y, r = read(feeds_folder(args) / BEHIND / f"{source.name}.wav")
-        y = np.asarray(y).reshape(len(y), -1)
-        if table["sources"][source.name].get("behind") != len(behind) or y.shape[1] != len(behind):
-            raise SystemExit(
-                f"error: the feeds of {source.name} are not of its {len(behind) + 1} points; "
-                f"run first: {(demo or DEMO).command('feeds', args)} --again"
-            )
-        made = table["sources"][source.name].get("made")
-        followers[source.name] = [
-            (lag, (lasting(y[:, k], r, over + FADE_OUT_S) if made else y[:, k], r))
-            for k, (lag, _offset) in enumerate(behind)
-        ]
-    each_way = {}
-    for source in sounding:
-        if table["sources"][source.name].get("each_way"):
-            # A helicopter's rotors' sound, sent each way down each early path.
-            from acoustic_spaces.demos.helicopter import flight_emission
-
-            each_way[source.name] = flight_emission(
-                source, rate, scene.air.temperature_c, scene.air.pressure_kpa
-            )
-    for name, (x, r) in list(feeds.items()):
-        if name in each_way:
-            continue
-        if table["sources"][name].get("made"):  # a made sound: silent after its pass
-            feeds[name] = (lasting(x, r, over + FADE_OUT_S), r)
-        elif len(x) and len(x) < (over + FADE_OUT_S) * r:
-            feeds[name] = (played_until(x, r, over + FADE_OUT_S), r)
-            print(
-                f"{name} plays {len(x) / r:.1f} s, and what moves goes on for {over:.1f} s: "
-                f"played again from its start, {AGAIN_S:g} s after it ends"
-            )
-    with_doppler = ", each early path through its changing delay" if movement.doppler else ""
-    print(f"mixing {len(names)} listeners through {len(movement.times)} moments{with_doppler}")
-    mixes = render_movement(
-        movement,
-        feeds | each_way,
-        fmt,
-        sample_rate=rate,
-        followers=followers,
-        leads=leads,
-        listeners=names,
-        dtype=np.float32,  # as the mixes are written
-    )
-    times, places = movement.times, movement.places
-    now_and_then = {
-        name: feeds[name] for name in feeds if table["sources"][name].get("now_and_then")
-    }
-    along = {}  # a made sound whose level its model sets: as loud as it says
-    for source in sounding:
-        gains = models.gains_along(source) if source.model is not None else None
-        if gains is not None and table["sources"][source.name].get("made"):
-            now_and_then[source.name] = along[source.name] = gains
-    walking = [s for s in sounding if ("sources", s.name) in movement.copies]
-    shaking = shaking_of(walking)
-    houses = None
-    if house is not None or shaking:
-        # The vibration is worked out until the last wheels leave the trajectory's end.
-        ends = [float(each.path.times[-1]) + each.wheels.length_s for each in shaking]
-        houses = indoors.MovingHouses(
-            house,
-            str(getattr(args, "indoors", None) or indoors.OFF),
-            inside,
-            {lis.name: tuple(lis.position) for lis in scene.listeners},
-            pass_heard(movement, sounding, now_and_then),
-            frozenset(fronts),
-            shaking,
-            indoors.grid(max([over, *ends])),
-            max(s.sound_power_db for s in sounding),
-            fmt,
-        )
-    levels = {}
-    for name in names:
-        facing = houses.house_of(name) if houses is not None else None
-        if facing is None or house is None:
-            levels[name] = {
-                s.name: levels_along(movement, s, name, gains=along.get(s.name)) for s in sounding
-            }
-        elif house.airborne:
-            # The room's: the level 2 m in front of its wall, through the window.
-            at = indoors.front_name(name) if name in fronts else name
-            through = house.facade.indoor_db()
-            levels[name] = {
-                s.name: levels_along(movement, s, at, through, gains=along.get(s.name))
-                for s in sounding
-            }
-        else:  # the rumble alone: nothing of the sources comes in
-            levels[name] = {s.name: [None] * len(times) for s in sounding}
+    together = {name: [indoors.front_name(name)] for name in fronts}
     talkers = [s for s in sounding if s.spectrum != "flat"]
-    speech = {
-        name: {s.name: speech_along(movement, scene, s, name) for s in talkers} for name in names
-    }
-    passes = passes_of(
-        movement,
-        sounding,
-        names,
-        room.speed_of_sound(),
-        scene.air.temperature_c,
-        now_and_then,
-        houses,
-    )
-    if houses is not None:
-        for name in names:
-            mixes[name] = houses.heard(name, mixes[name], rate, seed=names.index(name))
+
+    def played_with(movement) -> tuple[dict, dict, dict]:
+        """The signals, the followers and the leads the movement plays, its feeds as long
+        as what moves goes on."""
+        # Every listener may be heard until what moves is over and FADE_OUT_S more
+        # (heard_for): a recording shorter than that plays again from its start.
+        over = float(movement.times[-1])
+        followers, leads = {}, {}
+        for source in trailing:
+            # Its points behind its first, a column each, as long as its first's feed; a
+            # source of one point (a train's pantograph) has its lead behind the front
+            # alone.
+            lead, behind = models.trail(source)
+            leads[source.name] = lead
+            if not behind and not table["sources"][source.name].get("behind"):
+                continue
+            y, r = read(feeds_folder(args) / BEHIND / f"{source.name}.wav")
+            y = np.asarray(y).reshape(len(y), -1)
+            count = table["sources"][source.name].get("behind")
+            if count != len(behind) or y.shape[1] != len(behind):
+                raise SystemExit(
+                    f"error: the feeds of {source.name} are not of its {len(behind) + 1} "
+                    f"points; run first: {(demo or DEMO).command('feeds', args)} --again"
+                )
+            made = table["sources"][source.name].get("made")
+            followers[source.name] = [
+                (lag, (lasting(y[:, k], r, over + FADE_OUT_S) if made else y[:, k], r))
+                for k, (lag, _offset) in enumerate(behind)
+            ]
+        each_way = {}
+        for source in sounding:
+            if table["sources"][source.name].get("each_way"):
+                # A helicopter's rotors' sound, sent each way down each early path.
+                from acoustic_spaces.demos.helicopter import flight_emission
+
+                each_way[source.name] = flight_emission(
+                    source, rate, scene.air.temperature_c, scene.air.pressure_kpa
+                )
+        for name, (x, r) in list(feeds.items()):
+            if name in each_way:
+                continue
+            if table["sources"][name].get("made"):  # a made sound: silent after its pass
+                feeds[name] = (lasting(x, r, over + FADE_OUT_S), r)
+            elif len(x) and len(x) < (over + FADE_OUT_S) * r:
+                feeds[name] = (played_until(x, r, over + FADE_OUT_S), r)
+                print(
+                    f"{name} plays {len(x) / r:.1f} s, and what moves goes on for {over:.1f} "
+                    f"s: played again from its start, {AGAIN_S:g} s after it ends"
+                )
+        return feeds | each_way, followers, leads
+
+    mixes: dict[str, np.ndarray] = {}
+    levels: dict[str, dict] = {}
+    speech: dict[str, dict] = {}
+    passes: dict[str, dict] = {}
+    house_at: dict = {}
+    played = None
+    for movement in movements_in_turn(
+        room,
+        progress=print,
+        head_tracked=head_turners(scene, fmt),
+        listeners=heard,
+        together=together,
+    ):
+        here = [name for name in names if movement.heard is None or name in movement.heard]
+        for source in trailing:
+            if not all(movement.moves_with_doppler(source.name, name) for name in here):
+                raise SystemExit(f"error: {trailing_problem(source)}")
+        if played is None:
+            played = played_with(movement)
+            times, places = movement.times, movement.places
+            now_and_then = {
+                name: feeds[name] for name in feeds if table["sources"][name].get("now_and_then")
+            }
+            along = {}  # a made sound whose level its model sets: as loud as it says
+            for source in sounding:
+                gains = models.gains_along(source) if source.model is not None else None
+                if gains is not None and table["sources"][source.name].get("made"):
+                    now_and_then[source.name] = along[source.name] = gains
+            walking = [s for s in sounding if ("sources", s.name) in movement.copies]
+            shaking = shaking_of(walking)
+        signals, followers, leads = played
+        with_doppler = ", each early path through its changing delay" if movement.doppler else ""
+        noun = "listener" if len(here) == 1 else "listeners"
+        print(f"mixing {len(here)} {noun} through {len(movement.times)} moments{with_doppler}")
+        mixes |= render_movement(
+            movement,
+            signals,
+            fmt,
+            sample_rate=rate,
+            followers=followers,
+            leads=leads,
+            listeners=here,
+            dtype=np.float32,  # as the mixes are written
+        )
+        houses = None
+        if house is not None or shaking:
+            # The vibration is worked out until the last wheels leave the trajectory's end.
+            ends = [float(each.path.times[-1]) + each.wheels.length_s for each in shaking]
+            houses = indoors.MovingHouses(
+                house,
+                str(getattr(args, "indoors", None) or indoors.OFF),
+                inside,
+                {lis.name: tuple(lis.position) for lis in scene.listeners},
+                pass_heard(movement, sounding, now_and_then),
+                frozenset(name for name in fronts if name in here),
+                shaking,
+                indoors.grid(max([float(times[-1]), *ends])),
+                max(s.sound_power_db for s in sounding),
+                fmt,
+            )
+        for name in here:
+            house_at[name] = houses
+            facing = houses.house_of(name) if houses is not None else None
+            if facing is None or house is None:
+                levels[name] = {
+                    s.name: levels_along(movement, s, name, gains=along.get(s.name))
+                    for s in sounding
+                }
+            elif house.airborne:
+                # The room's: the level 2 m in front of its wall, through the window.
+                at = indoors.front_name(name) if name in fronts else name
+                through = house.facade.indoor_db()
+                levels[name] = {
+                    s.name: levels_along(movement, s, at, through, gains=along.get(s.name))
+                    for s in sounding
+                }
+            else:  # the rumble alone: nothing of the sources comes in
+                levels[name] = {s.name: [None] * len(times) for s in sounding}
+            speech[name] = {s.name: speech_along(movement, scene, s, name) for s in talkers}
+        passes |= passes_of(
+            movement,
+            sounding,
+            here,
+            room.speed_of_sound(),
+            scene.air.temperature_c,
+            now_and_then,
+            houses,
+        )
+        if houses is not None:
+            for name in here:
+                mixes[name] = houses.heard(name, mixes[name], rate, seed=names.index(name))
+        del movement  # let its responses go before the next run is simulated
+    # In the listeners' order, whichever run each was simulated in.
+    levels = {name: levels[name] for name in names}
+    speech = {name: speech[name] for name in names}
+    passes = {name: passes[name] for name in names if name in passes}
     for name, heard in passes.items():
         print(
             f"{name}: L_Amax {heard['max_a_db']:.1f} dB(A), SEL {heard['sel_a_db']:.1f} dB(A), "
@@ -2925,6 +2954,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
         x = mixes[name] * gain
         file = pipeline.mix_file(args, name)
         write(folder / file, x, rate)
+        houses = house_at[name]
         if houses is not None and shaking:
             shakers[mix_stem(args, name)] = houses.shaker(name, rate, len(x), names.index(name))
         moves = sources_move or name in moving

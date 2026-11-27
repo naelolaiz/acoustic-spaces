@@ -63,7 +63,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -820,8 +820,52 @@ def simulate_movement(
     need more memory for their late parts than the computer has
     (:func:`~acoustic_spaces.engine.simulate.late_need`), they are simulated one at a
     time, a moving one with all its places, each getting what a run of all would give it:
-    the rays are traced again for each.
+    the rays are traced again for each (:func:`movements_in_turn` gives each run as it
+    ends, to be mixed and let go before the next).
     """
+    parts = list(
+        movements_in_turn(
+            room,
+            step_m=step_m,
+            step_deg=step_deg,
+            late_step_m=late_step_m,
+            settings=settings,
+            threads=threads,
+            progress=progress,
+            head_tracked=head_tracked,
+            listeners=listeners,
+        )
+    )
+    if len(parts) == 1:
+        return parts[0]
+    return dataclasses.replace(
+        parts[0],
+        result=_joined([part.result for part in parts]),
+        turning={name: knots for part in parts for name, knots in part.turning.items()},
+        heard=None if listeners is None else frozenset(listeners),
+    )
+
+
+def movements_in_turn(
+    room: Room,
+    *,
+    step_m: float | None = None,
+    step_deg: float = STEP_DEG,
+    late_step_m: float | None = LATE_STEP_M,
+    settings: SimulationSettings | None = None,
+    threads: int | None = None,
+    progress: Callable[[str], None] | None = None,
+    head_tracked: Iterable[str] = (),
+    listeners: Iterable[str] | None = None,
+    together: Mapping[str, Sequence[str]] | None = None,
+) -> Iterator[Movement]:
+    """The movement :func:`simulate_movement` gives, as one :class:`Movement`, or, where
+    all its listeners at once would need more memory for their late parts than the
+    computer has, as one for each listener (a moving one with all its places), each
+    given as its run ends, its late parts held where they have energy: a caller may mix
+    one and let it go before the next is simulated. Each listener gets what a run of all
+    would give it. ``together`` names, for a listener, those simulated in its run then
+    (where the demo of a scene takes a room's level outdoors, 2 m in front of its wall)."""
     if step_m is not None and step_m <= 0:
         raise ValueError("step_m must be positive")
     if step_deg <= 0:
@@ -950,43 +994,55 @@ def simulate_movement(
         late_from=mixing,
         share_waves=[copy.name for copy in added["sources"]],
     )
-    groups = _listener_groups(walked, simulated, copies)
+    groups = _listener_groups(walked, simulated, copies, together or {})
     need = late_need(
         walked, settings=settings, listeners=simulated, threads=threads, late_from=mixing
     )
     memory = run_size.machine_memory()
-    if len(groups) > 1 and memory is not None and need.bytes > memory:
-        # Each listener's response is what a run of all gives it (the rays' seeds follow
-        # the scene's order), so the listeners may be simulated one at a time, each run's
-        # late parts held where they have energy before the next.
-        if progress is not None:
-            progress(
-                f"the {len(groups)} listeners at once would need about "
-                f"{need.bytes / 2.0**30:,.1f} GiB of memory, more than this computer's "
-                f"{memory / 2.0**30:,.1f} GiB: simulating them one at a time"
-            )
-        parts = []
-        heard_by = {lis.name for lis in walked.scene.listeners}
-        for group in groups:
-            # The sources' late mixes, and those of the listeners this run hears.
-            mixed = {
-                name: mix for name, mix in mixing.items() if name not in heard_by or name in group
-            }
-            part = run(listeners=group, late_from=mixed)
-            if not mixing:
-                _held_where_heard(part)
-            parts.append(part)
-        result = _joined(parts)
-    else:
+    if len(groups) == 1 or memory is None or need.bytes <= memory:
         result = run(listeners=simulated)
-    if not mixing:
-        # Where a place mixes others' late parts, it reads them from what they were traced
-        # in, which stays whole however the places hold theirs.
-        _held_where_heard(result)
-    turning = {name: paths[name] for name in sorted(tracked) if heard is None or name in heard}
-    return Movement(
-        room, times, result, copies, late_places, bool(with_doppler), turning, with_doppler, heard
-    )
+        if not mixing:
+            # Where a place mixes others' late parts, it reads them from what they were
+            # traced in, which stays whole however the places hold theirs.
+            _held_where_heard(result)
+        turning = {name: paths[name] for name in sorted(tracked) if heard is None or name in heard}
+        yield Movement(
+            room,
+            times,
+            result,
+            copies,
+            late_places,
+            bool(with_doppler),
+            turning,
+            with_doppler,
+            heard,
+        )
+        return
+    # Each listener's response is what a run of all gives it (the rays' seeds follow the
+    # scene's order), so the listeners may be simulated one at a time.
+    if progress is not None:
+        progress(
+            f"the {len(groups)} listeners at once would need about "
+            f"{need.bytes / 2.0**30:,.1f} GiB of memory, more than this computer's "
+            f"{memory / 2.0**30:,.1f} GiB: simulating them one at a time"
+        )
+    heard_by = {lis.name for lis in walked.scene.listeners}
+    in_scene = {lis.name for lis in scene.listeners}
+    for name, group in groups.items():
+        # The sources' late mixes, and those of the listeners this run hears.
+        mixed = {
+            place: mix for place, mix in mixing.items() if place not in heard_by or place in group
+        }
+        part = run(listeners=group, late_from=mixed)
+        if not mixed:
+            _held_where_heard(part)
+        # By their names in the scene: a moving listener's, and those still in its run.
+        named = frozenset([name, *(place for place in group if place in in_scene)])
+        turning = {name: paths[name]} if name in tracked else {}
+        yield Movement(
+            room, times, part, copies, late_places, bool(with_doppler), turning, with_doppler, named
+        )
+        del part  # held by the caller alone, who may let it go before the next run
 
 
 def _whole(kept: np.ndarray, first: int, shape: tuple[int, ...]) -> np.ndarray:
@@ -998,11 +1054,15 @@ def _whole(kept: np.ndarray, first: int, shape: tuple[int, ...]) -> np.ndarray:
 
 
 def _listener_groups(
-    walked: Room, simulated: Sequence[str] | None, copies: Mapping[tuple[str, str], Sequence[str]]
-) -> list[list[str]]:
+    walked: Room,
+    simulated: Sequence[str] | None,
+    copies: Mapping[tuple[str, str], Sequence[str]],
+    together: Mapping[str, Sequence[str]],
+) -> dict[str, list[str]]:
     """The listeners a movement's simulation hears (``simulated``, or every one in use in
-    ``walked``), one at a time: each still listener alone, each moving one with its
-    copies at all its places."""
+    ``walked``), one at a time, by their names in the scene: each still listener alone,
+    each moving one with its copies at all its places, and with each those ``together``
+    names for it."""
     names = (
         list(dict.fromkeys(simulated))
         if simulated is not None
@@ -1017,7 +1077,11 @@ def _listener_groups(
     groups: dict[str, list[str]] = {}
     for name in names:
         groups.setdefault(mover_of.get(name, name), []).append(name)
-    return list(groups.values())
+    for name, others in together.items():
+        for other in others:
+            if name in groups and other in groups and other != name:
+                groups[name] += groups.pop(other)
+    return groups
 
 
 def _joined(parts: Sequence[SimulationResult]) -> SimulationResult:
@@ -1796,6 +1860,7 @@ __all__ = [
     "render_movement",
     "render_trajectory",
     "save_movement",
+    "movements_in_turn",
     "simulate_movement",
     "simulate_trajectory",
     "stays_in_place",

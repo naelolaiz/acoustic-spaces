@@ -1829,6 +1829,57 @@ def test_a_demo_simulates_the_output_its_mixes_are_named_by() -> None:
     assert "--output" not in argv("speakers")
 
 
+def test_a_demo_too_big_to_simulate_at_once_mixes_its_listeners_in_turn(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Where the listeners of a run where something moves would need more memory all at
+    once than the computer has, the demo of any scene simulates and mixes them one at a
+    time: the same mixes and the same levels along the way as a run of all."""
+    import dataclasses
+    import shutil
+
+    from acoustic_spaces import walkthrough
+    from acoustic_spaces.cli import main as cli
+    from acoustic_spaces.demos import audio
+    from acoustic_spaces.engine import run_size
+
+    scene = _any_scene(tmp_path)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["sources"][1]["trajectory"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 2.0}
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    apart = tmp_path / "apart"
+    shutil.copytree(scene.parent, apart)
+    steps = ("feeds", "simulate", "render")
+    monkeypatch.chdir(scene.parent)
+    for step in steps:
+        assert cli(["demo", "scene.yaml", step, "--seconds", "0.8"]) == 0
+    capsys.readouterr()
+    monkeypatch.chdir(apart)
+    monkeypatch.setattr(run_size, "machine_memory", lambda: 8 * 2**30)
+    need = walkthrough.late_need
+    monkeypatch.setattr(
+        walkthrough,
+        "late_need",
+        lambda *args, **kwargs: dataclasses.replace(need(*args, **kwargs), bytes=9.0 * 2**30),
+    )
+    for step in steps:
+        assert cli(["demo", "scene.yaml", step, "--seconds", "0.8"]) == 0
+    said = capsys.readouterr().out
+    assert "the 2 listeners at once would need about 9.0 GiB" in said
+    assert said.count("mixing 1 listener through") == 2
+    run = Path("demo") / "scene_seconds-0p8_binaural" / "moving"
+    together, alone = (
+        pipeline.read_json(folder / run / pipeline.SEATS) for folder in (scene.parent, apart)
+    )
+    assert alone["movement"] == together["movement"] and alone["gain"] == together["gain"]
+    for name in ("seat-a", "seat-b"):
+        file = together["seats"][name]["file"]
+        assert alone["seats"][name]["file"] == file
+        np.testing.assert_array_equal(
+            audio.read(apart / run / file)[0], audio.read(scene.parent / run / file)[0]
+        )
+
+
 def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, capsys) -> None:
     """``acoustic-spaces demo``: each source that plays gets a feed at one gated RMS and
     the scene's rate, the silent ones are listed, every listener gets a mix and the

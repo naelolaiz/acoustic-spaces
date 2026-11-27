@@ -419,7 +419,8 @@ move along it while the recordings play, all on one clock from their start, as
 **render** simulates the scene with every mover at each moment of its trajectory, in one
 simulation, and mixes every listener hearing the movers go by, or walking itself, with
 one gain for all; the still simulation stays for what the stills say where nothing
-moves. The video is a moving picture: the trajectories dotted, every mover where it is
+moves. Where all the listeners at once would need more memory than the computer has,
+it simulates and mixes them one at a time, each as a run of all would, and says so. The video is a moving picture: the trajectories dotted, every mover where it is
 at that moment, and the level of the sources that play in the stop (each at the level
 it plays at over it) and the STI as simulated at that moment; the arrival time is left
 out where something moves, and T30 is the one where the trajectories start. A stop
@@ -1802,7 +1803,11 @@ the scene.
   through the direct sound and its reflection off the ground. Places 4 m apart follow
   the exact field of a flyover closely from 100 m away and more
   ([validation](validation.md#moving-sources-against-the-exact-field)). A flight of 6.5
-  km is some 1600 places, which takes a while.
+  km is some 1600 places, which takes a while. The listeners stand kilometres apart, so
+  the responses last as long as the sound takes over the farthest, up to 26 s: all
+  three at once would need about 65 GiB of memory for their late parts, and the
+  farthest alone about 22 GiB, so the run simulates and mixes them one at a time where
+  the computer has less.
 
 The stills give the pass's L_Amax, the highest level of the jet's places, each as heard
 with the jet standing there, and its SEL over the whole flight. They also give it as
