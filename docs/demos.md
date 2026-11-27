@@ -1463,10 +1463,10 @@ scene with the train taken in, `walk` the mixes), `--from` names the scene, and 
 
   | | regional, 160 km/h | S-Bahn, 120 km/h | intercity, 200 km/h | freight, 100 km/h |
   |---|---:|---:|---:|---:|
-  | 7.5 m | 94.4 (98.4) | 88.6 (90.7) | 97.3 (103.6) | 90.3 (101.6) |
-  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.8) | 88.5 (96.0) | 81.8 (93.6) |
-  | behind the barrier, 25 m | 78.2 (79.2) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (82.6) |
-  | house, 18 m | 92.5 (97.8) | 87.2 (90.1) | 95.4 (103.0) | 89.1 (100.9) |
+  | 7.5 m | 94.4 (98.4) | 88.6 (90.7) | 97.4 (103.6) | 90.4 (101.7) |
+  | meadow, 25 m | 85.2 (90.5) | 79.5 (82.6) | 88.4 (95.8) | 81.5 (93.4) |
+  | behind the barrier, 25 m | 78.2 (79.2) | 66.2 (69.7) | 82.3 (83.3) | 74.8 (82.6) |
+  | house, 18 m | 91.8 (96.8) | 86.4 (89.1) | 94.9 (102.2) | 88.2 (100.0) |
 
   The scene fixes no seed, so each run draws its own late rays: over five runs the peaks
   by the house vary by up to 0.2 dB and their SELs by 0.04 dB, over four runs those on
@@ -1478,7 +1478,7 @@ scene with the train taken in, `walk` the mixes), `--from` names the scene, and 
   3 m high and 4 m from the track, hides the rail top from the listener behind it, but
   not the roof (4 m up) or the pantograph (5 m up): behind it the regional train peaks
   7.1 dB(A) under its level on the meadow's side, the S-Bahn, whose rail top is 20 dB
-  over its roof in sound power (the regional train's 16 dB), 13.3 dB(A) under.
+  over its roof in sound power (the regional train's 16 dB), 13.2 dB(A) under.
 - **The tram in the street**: the tram runs down the middle of the street at 50 km/h, 4.0 m from the
   pavement's listener, and peaks at 95.8 dB(A) on the pavement (SEL 99.5), 91.2 on the
   balcony (95.6) and 74.0 in the garden (80.5): louder than the bus, which passes 2.5 m
