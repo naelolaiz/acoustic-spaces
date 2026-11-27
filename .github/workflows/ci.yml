@@ -42,7 +42,9 @@ jobs:
         run: mypy
 
   test:
-    name: Test (${{ matrix.os }}, Python ${{ matrix.python }})
+    name: >-
+      Test (${{ matrix.os }}, Python ${{ matrix.python }}${{ matrix.os == 'windows-latest'
+      && format(', part {0} of 2', matrix.part) || '' }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -50,6 +52,11 @@ jobs:
         # macos-latest is Apple silicon; macos-26-intel is an Intel Mac (see the wheels job).
         os: [ubuntu-24.04, macos-latest, macos-26-intel, windows-latest]
         python: ["3.10", "3.14"]
+        # Windows runs the tests in two parts side by side, one job each (the option
+        # --shard of tests/conftest.py, as the sanitizer jobs run them): with all of them
+        # one job took 112 minutes of the Test step's 120 on main in late November 2026,
+        # and a pull request's ran out of them. The other systems run them whole.
+        part: [1, 2]
         # Five macOS jobs run at a time for the whole account, and those on the Intel Mac
         # take the longest (two thirds of a run's macOS time in November 2026, when jobs
         # waited for hours). A pull request runs one job there, these tests with Python
@@ -58,6 +65,9 @@ jobs:
         exclude:
           - os: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'none' }}
             python: "3.14"
+          - {os: ubuntu-24.04, part: 2}
+          - {os: macos-latest, part: 2}
+          - {os: macos-26-intel, part: 2}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -88,6 +98,7 @@ jobs:
           python -m pytest -q -W error
           ${{ matrix.os == 'ubuntu-24.04' && matrix.python == '3.14'
           && '--cov=acoustic_spaces --cov-report=term --cov-report=html' || '' }}
+          ${{ matrix.os == 'windows-latest' && format('--shard {0}/2', matrix.part) || '' }}
       - name: Keep the coverage report
         if: matrix.os == 'ubuntu-24.04' && matrix.python == '3.14'
         uses: actions/upload-artifact@v6
@@ -95,6 +106,7 @@ jobs:
           name: coverage
           path: htmlcov/
       - name: Smoke-test the command line
+        if: matrix.part == 1  # once on each system and Python
         shell: bash  # stops at the first failing command on every platform
         run: |
           acoustic-spaces info
