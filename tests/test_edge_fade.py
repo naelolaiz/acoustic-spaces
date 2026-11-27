@@ -512,6 +512,138 @@ def test_a_corner_on_a_clipping_line_adds_no_side() -> None:
     assert share.max() < 1.1
 
 
+def _leg(engine: _Engine, points, edges, seqs=()) -> np.ndarray:
+    """(B,) the share of the legs of a path over ``edges`` (2,) through ``points``, off
+    the planes ``seqs`` (:meth:`EdgeFade._leg_shares`), at each band's first frequency."""
+    model, fade = engine.model, engine.fade
+    points = np.asarray(points, dtype=float)
+    seqs = np.asarray(seqs, dtype=np.int64)
+    sources, targets = [points[0]], [points[-1]]
+    for plane in seqs.tolist():
+        sources.append(model.mirror(sources[-1][None], np.array([plane]))[0])
+    for plane in seqs[::-1].tolist():
+        targets.insert(0, model.mirror(targets[0][None], np.array([plane]))[0])
+    wavelength = (2.0 * np.pi / engine.diffraction.wavenumber).reshape(-1)
+    share = fade._leg_shares(
+        points, np.stack(sources), np.stack(targets), seqs, np.asarray(edges), wavelength
+    )
+    return share.reshape(engine.diffraction.wavenumber.shape)[:, 0]
+
+
+def _far_plate() -> list:
+    """A plate far off whose upright edges stand in for the edges a path goes over."""
+    return [[(-1.0, 60.0, -50.0), (1.0, 60.0, -50.0), (1.0, 60.0, -49.0), (-1.0, 60.0, -49.0)]]
+
+
+def _far_edges(engine: _Engine) -> np.ndarray:
+    edges = engine.diffraction.edges
+    upright = np.isclose(edges.start[:, 1], 60.0) & np.isclose(edges.end[:, 1], 60.0)
+    upright &= np.isclose(edges.start[:, 0], edges.end[:, 0])
+    return np.flatnonzero(upright)[:2]
+
+
+def test_a_leg_lets_by_what_kirchhoff_s_integral_over_the_planes_it_passes_does(
+    tmp_path: Path,
+) -> None:
+    """A leg of a path over two edges lets by what the faces in each plane it passes
+    through leave free of the Fresnel integral over the plane: a quarter of it at the
+    corner of a quarter plane, from either side of either edge; a half where it grazes
+    the top of a long screen, from above and below; next to all of it past a square 6 cm
+    wide on a leg 10 m long; and all of it beside a shelf it runs along. A face the leg
+    passed through let by the half-plane past the nearest edge of its plane, and an edge
+    it passed by only the strip of the half-plane beside it, so that the level stepped by
+    3 to 7 dB where a small panel moved a tenth of a millimetre across a leg."""
+    a, h = EXTENT, 0.03
+    cases = {
+        "quarter plane": [[(0.0, 0.0, 0.0), (0.0, a, 0.0), (0.0, a, a), (0.0, 0.0, a)]],
+        "long screen": [[(0.0, -a, -a), (0.0, a, -a), (0.0, a, 0.0), (0.0, -a, 0.0)]],
+        "small square": [[(0.0, -h, -h), (0.0, h, -h), (0.0, h, h), (0.0, -h, h)]],
+        "shelf": [[(-2.0, -0.5, 0.05), (1.0, -0.5, 0.05), (1.0, 0.5, 0.05), (-2.0, 0.5, 0.05)]],
+    }
+    shares = {}
+    for name, faces in cases.items():
+        MODELS[name] = lambda faces=faces: faces + _far_plate()
+        engine = _Engine(tmp_path, name, (-5.0, -1.0, 1.0))
+        del MODELS[name]
+        edges = _far_edges(engine)
+        shares[name] = {
+            (y, z): _leg(engine, [(-5.0, y, z), (5.0, y, z)], edges)
+            for y, z in ((1e-6, 1e-6), (-1e-6, -1e-6), (1e-6, -1e-6), (0.0, 0.0))
+        }
+    for y, z in ((1e-6, 1e-6), (-1e-6, -1e-6), (1e-6, -1e-6)):
+        assert np.abs(shares["quarter plane"][y, z] - 0.75).max() < 1e-3
+    for y, z in ((1e-6, 1e-6), (-1e-6, -1e-6)):
+        assert np.abs(shares["long screen"][y, z] - 0.5).max() < 1e-3
+    assert np.abs(shares["small square"][0.0, 0.0] - 1.0).max() < 0.005
+    assert np.allclose(shares["shelf"][0.0, 0.0], 1.0)
+
+
+def test_a_small_panel_across_a_leg_moves_the_level_smoothly(tmp_path: Path) -> None:
+    """Under the ceiling over two screens, a panel 6 cm wide and 2 m long stands across
+    the leg from the first top to the ceiling of the path over both tops: as its end
+    moves a tenth of a millimetre across the leg, the level changes by less than 0.01 dB
+    in every band (it stepped by 3 to 7 dB)."""
+    corner = np.array([-0.5, 0.0, 0.5])
+    across = np.array([1.0, 0.0, -1.0]) / np.sqrt(2.0)
+
+    def panel(end: float) -> list:
+        return [
+            tuple(corner + s * across + (0.0, y, 0.0))
+            for s, y in ((-0.03, end), (0.03, end), (0.03, end + 2.0), (-0.03, end + 2.0))
+        ]
+
+    levels = []
+    for end in (5e-5, -5e-5):
+        MODELS["panel"] = lambda end=end: _ceiling(1.0) + _two_screens(-1.0, 1.0) + [panel(end)]
+        engine = _Engine(tmp_path, "panel", (-3.0, 0.0, -3.0), "second_order")
+        del MODELS["panel"]
+        levels.append(engine.level((3.0, 0.0, -3.0)))
+    assert np.abs(levels[1] - levels[0]).max() < 0.01
+
+
+def test_a_leg_leaves_out_what_lies_inside_its_edge_and_past_its_mirror(
+    tmp_path: Path,
+) -> None:
+    """A block's end wall lies behind its front and under its top: a leg from the edge
+    between the front and the top that passes the end wall's plane in front of the
+    block leaves the end wall out, as the waves the edge bends are those of a wedge
+    that goes on there; so does a leg from a reflection off the front near its end, as
+    the path goes on straight through the mirror there. Taken from the far plate's edge
+    instead, the same leg counts the end wall."""
+    a = 30.0
+    MODELS["block"] = lambda: [
+        [(-a, -6.0, 0.0), (a, -6.0, 0.0), (a, -6.0, 15.0), (-a, -6.0, 15.0)],
+        [(-a, -6.0, 15.0), (a, -6.0, 15.0), (a, -20.0, 15.0), (-a, -20.0, 15.0)],
+        [(a, -6.0, 0.0), (a, -20.0, 0.0), (a, -20.0, 15.0), (a, -6.0, 15.0)],
+        [(-a, -6.0, 0.0), (-a, -6.0, 15.0), (-a, -20.0, 15.0), (-a, -20.0, 0.0)],
+        [(-a, -20.0, 0.0), (-a, -20.0, 15.0), (a, -20.0, 15.0), (a, -20.0, 0.0)],
+        *_far_plate(),
+    ]
+    engine = _Engine(tmp_path, "block", (0.0, 0.0, 1.0))
+    del MODELS["block"]
+    edges, model = engine.diffraction.edges, engine.model
+    far = _far_edges(engine)
+    level = np.isclose(edges.start[:, 2], 15.0) & np.isclose(edges.end[:, 2], 15.0)
+    top = int(np.flatnonzero(level & np.isclose(edges.start[:, 1], -6.0))[0])
+    leg = [(-14.4, -6.0, 15.0) + 1e-3 * engine.fade._bisector[top], (44.0, 6.0, 1.3)]
+    assert np.allclose(_leg(engine, leg, [top, far[0]]), 1.0)
+    assert np.abs(_leg(engine, leg, far) - 1.0).max() > 0.1
+    front = int(
+        np.flatnonzero(
+            np.isclose(np.abs(model.plane_normal[:, 1]), 1.0)
+            & np.isclose(np.abs(model.plane_offset), 6.0)
+        )[0]
+    )
+    # Off the front near its end, on to beyond the end wall.
+    start, end = np.array([0.0, 0.0, 2.0]), np.array([40.0, -3.0, 2.0])
+    image = model.mirror(start[None], np.array([front]))[0]
+    t = (-6.0 - image[1]) / (end[1] - image[1])
+    at = image + t * (end - image)
+    assert at[0] < a
+    assert np.allclose(_leg(engine, [start, at, end], far, [front]), 1.0)
+    assert np.abs(_leg(engine, [at, end], far) - 1.0).max() > 0.1
+
+
 def test_diffract_adds_the_fade_with_the_plane_sequences(tmp_path: Path) -> None:
     """``diffract`` with the plane sequences the early stage tested adds the fade's terms
     to the edge diffraction's, as a simulation does; without them it is the edge
