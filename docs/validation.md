@@ -1857,7 +1857,7 @@ theory gives +6.0 dB on both sides.
   path, the fade multiplies their terms, each found with the other event's leg straight,
   and weighs the product by the path from one edge to the other that it stands for: for
   each reflection on it, the magnitude of the Fresnel integral over the faces there, as a
-  share of the whole plane's, less what the plane gives back past the two edges
+  share of the whole plane's, less what those faces give back past the two edges
   themselves (none between the tops of two screens, off the front of one and the back of
   the other), at an inside corner a face going on as its image in the face it meets and
   hiding what lies past it; and for each plane a leg passes through, Kirchhoff's integral

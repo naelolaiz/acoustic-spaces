@@ -1611,19 +1611,21 @@ class EdgeFade:
             given += area(polygons, rows)
         out = np.full(count, float(inside))
         # Near the edges themselves, the path would come back to an edge it bends at:
-        # what the faces give back, less what the plane gives back on the side of each
-        # edge's face, past a line along the edge as far from the reflection as the
-        # edge is. Past the edge, that is the face the edge bounds, whose zone's tail
-        # the faces' share holds there and which so counts for nothing (the reflection
-        # off the plane past the top of the first of two screens of unequal heights),
-        # while another face of the plane further on counts in full. On the face, it is
-        # the mirror image of what lies past the edge, as far past the reflection away
-        # from the edge as the edge lies in front of it: what a face that goes on gives
-        # back of the strip that wide on either side of the reflection, none where the
-        # reflection meets the edge for a zone of any shape (those of the long waves
-        # near a source lie off centre, where a half-plane through the reflection gives
-        # back more or less than half), and all of it a few zones away. Beside an end of
-        # the edge, the line lies as far as the end, so that it moves away smoothly.
+        # what the faces give back, less what they give back on the side of each edge's
+        # face, past a line along the edge as far from the reflection as the edge is.
+        # Past the edge, that is the face the edge bounds, whose zone's tail the faces'
+        # share holds there and which so counts for nothing (the reflection off the
+        # plane past the top of the first of two screens of unequal heights), while
+        # another face of the plane further on counts in full. On the face, it is the
+        # mirror image of what lies past the edge, as far past the reflection away from
+        # the edge as the edge lies in front of it: what the faces give back of the
+        # strip that wide on either side of the reflection, none where the reflection
+        # meets the edge for a zone of any shape (those of the long waves near a source
+        # lie off centre, where a half-plane through the reflection gives back more or
+        # less than half) and a face of any extent (a wall that ends at its foot on a
+        # ground, where a half-plane taken off would take off too what no face gives
+        # back), and all of it a few zones away. Beside an end of the edge, the line
+        # lies as far as the end, so that it moves away smoothly.
         regions = []  # each edge's (polygon, normal n, offset c), where n . x >= c
         own = np.unique(own)
         geometric = model.geometric_plane[plane]
@@ -1645,12 +1647,26 @@ class EdgeFade:
             polygon = np.stack([line + wide, line - wide, line - wide + deep, line + wide + deep])
             regions.append((polygon, across, gap))
         removed = np.zeros(len(rows), dtype=complex)
-        for polygon, _, _ in regions:
-            removed += _level_integral(area(polygon[None], rows))
+        pieces = [p for group in held for p in group]
+
+        def kept(cuts):
+            """The level integral of the faces given back on the face side of each of
+            the lines ``cuts`` (n, c)."""
+            parts = pieces
+            for n, c in cuts:
+                parts = [q for q in (_clip(p, n, c) for p in parts) if len(q) >= 3]
+            by: dict[int, list] = {}
+            for q in parts:
+                by.setdefault(len(q), []).append(q)
+            total = np.zeros((len(rows), len(levels) + 1))
+            for qs in by.values():
+                total += area(np.stack(qs), rows)
+            return _level_integral(total)
+
+        for _, n, c in regions:
+            removed += kept([(n, c)])
         if len(regions) == 2:  # what both take off counts once
-            both = _clip(regions[0][0], regions[1][1], regions[1][2])
-            if len(both) >= 3:
-                removed -= _level_integral(area(both[None], rows))
+            removed -= kept([(n, c) for _, n, c in regions])
         out[rows] = np.abs(_level_integral(given) - removed) / np.abs(_level_integral(whole))
         return out
 

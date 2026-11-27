@@ -431,7 +431,7 @@ in the way of a leg next to it, say. Of several edges that explain a run, the on
 term there is the strongest does, and of several pairs, the one whose terms' product
 is. A product of two edges' terms takes as much of the path from one edge to the other
 as the model gives back: for each reflection on it, the Fresnel integral over the faces
-there, as a share of the whole plane's, less what the plane gives back past the two
+there, as a share of the whole plane's, less what those faces give back past the two
 edges themselves, and for each plane a leg of it passes through, the Fresnel integral
 over the plane less that over the faces there the leg enters by (Kirchhoff's, as past a
 screen: a half where the leg grazes an edge); so the reflections in the gap between two

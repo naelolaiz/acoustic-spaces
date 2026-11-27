@@ -345,6 +345,48 @@ def test_a_reflection_by_its_own_edge_gives_back_none_where_they_meet(tmp_path: 
     assert 0.05 < share(0.3)[0] < share(3.0)[0]
 
 
+def test_a_reflection_by_its_own_edge_gives_back_none_on_a_face_that_ends(
+    tmp_path: Path,
+) -> None:
+    """The same on a wall 1 m high that stands on a ground, as a face of its own: the
+    long waves' zones reach past the wall's foot, and what is taken off near the top is
+    what the faces give back past the line, so the reflection gives back none where it
+    meets the top, and the share of the strip on either side of it away from there.
+    Taking off the half-plane past the line, which takes off too what lies below the
+    foot, where no face gives anything back, left 0.53 of the whole plane at 63 Hz
+    where the reflection meets the top: over two roofs on a ground a path reflecting
+    in the gap between them at their tops, which no path over both tops can take,
+    counted one way round and not the other (0.7 dB at 63 Hz)."""
+    a = EXTENT
+    MODELS["wall on a ground"] = lambda: [
+        [(-a, -a, 0.0), (a, -a, 0.0), (a, a, 0.0), (-a, a, 0.0)],
+        [(0.0, -a, 0.0), (0.0, a, 0.0), (0.0, a, 1.0), (0.0, -a, 1.0)],
+    ]
+    engine = _Engine(tmp_path, "wall on a ground", (-3.0, 0.0, 1.5), "second_order")
+    del MODELS["wall on a ground"]
+    model, edges = engine.model, engine.diffraction.edges
+    level = np.isclose(edges.start[:, 2], 1.0) & np.isclose(edges.end[:, 2], 1.0)
+    top = int(np.flatnonzero(level & np.isclose(edges.start[:, 0], 0.0))[0])
+    upright = np.isclose(np.abs(model.plane_normal[:, 0]), 1.0)
+    plane = int(np.flatnonzero(upright & np.isclose(model.plane_offset, 0.0))[0])
+    wavelength = (2.0 * np.pi / engine.diffraction.wavenumber).reshape(-1)
+
+    def share(gap: float, own=None) -> np.ndarray:
+        own = np.array([top, top]) if own is None else own
+        at = np.array([0.0, 0.0, 1.0 - gap])
+        before, after = (
+            at + 0.3 * np.array([-1.0, 0.0, 0.3]),
+            at + 3.0 * np.array([-1.0, 0.0, -0.3]),
+        )
+        return engine.fade._zone_share(plane, at, before, after, own, wavelength)
+
+    assert 0.3 < share(1e-6, np.zeros(0, dtype=np.int64))[0] < 0.7
+    for gap in (-1e-6, 1e-6):
+        assert np.abs(share(gap)).max() < 1e-4
+    assert np.abs(share(1e-3)).max() < 0.05
+    assert 0.05 < share(0.1)[0] < share(0.3)[0] < share(0.6)[0]
+
+
 def test_a_path_that_leaves_an_edge_off_its_own_face_carries_nothing(tmp_path: Path) -> None:
     """Under a ceiling over a block 1 m wide, the path from one top edge of the block
     to the other by way of the block's top and the ceiling leaves the first off the
