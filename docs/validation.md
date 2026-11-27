@@ -1859,11 +1859,13 @@ theory gives +6.0 dB on both sides.
   each reflection on it, the magnitude of the Fresnel integral over the faces there, as a
   share of the whole plane's, less what the plane gives back past the two edges
   themselves (none between the tops of two screens, off the front of one and the back of
-  the other), and over each leg what the faces and the edges near it leave free (at an
-  inside corner a face goes on as its image in the face it meets, and hides what lies
-  past it). The weight moves smoothly with the geometry and is about a half where the
-  path reflects at a face's edge, but the product is no path over both edges by way of
-  the reflections: under a whole ceiling over two screens the level is 1.4 to 5.2 dB
+  the other), at an inside corner a face going on as its image in the face it meets and
+  hiding what lies past it; and for each plane a leg passes through, Kirchhoff's integral
+  over what the faces the leg enters by leave free there, but for what lies past the
+  mirrors at the leg's ends or inside the edges it leaves and comes to. The weight moves
+  smoothly with the geometry and is about a half where the path reflects at a face's
+  edge or a leg grazes one, but the product is no path over both edges by way of the
+  reflections: under a whole ceiling over two screens the level is 1.4 to 5.2 dB
   high, over a strip of ceiling about one Fresnel zone wide the integral gives back more
   than the whole plane, and where the ceiling ends at the point the path reflects at the
   level steps by up to 6.6 dB, as the path over the ceiling's end (a third edge) is not
