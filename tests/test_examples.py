@@ -342,6 +342,17 @@ def test_stadium_arrays_near_their_listeners(
     assert "main_left, far field above the elements added up (dB)" in capsys.readouterr().out
 
 
+def test_every_example_source_that_moves_has_a_step_of_its_own() -> None:
+    """A source that moves is simulated every ``step_m`` along its trajectory; without
+    one it takes a walking listener's 0.25 m, far more places than a vehicle's or an
+    aircraft's pass needs: the airport's departure had 26,229, and its run was refused
+    for the memory its late parts would need."""
+    for path in sorted(EXAMPLES.glob("*/scene.yaml")):
+        for source in Scene.from_yaml(path).sources:
+            if source.trajectory is not None:
+                assert source.trajectory.step_m is not None, (path.parent.name, source.name)
+
+
 def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
     """stadium_concert has concert_stage's sources and listeners as they are, and the two
     share their scripts, their arrays and make_model.py, which writes each one's files as

@@ -37,6 +37,9 @@ sources:
     trajectory:
       to: [[6500, 0, 1]]
       doppler: true
+      # Simulated every 4 m along its flight: from 100 m away and more, places 4 m apart
+      # follow the exact field closely (validation/doppler.py).
+      step_m: 4
   - name: arrival
     enabled: false
     position: [-4000, 0, 225]
@@ -46,6 +49,7 @@ sources:
       # ends where Doc 29's does, 1583 m along the runway.
       to: [[290, 0, 1], [1600, 0, 1]]
       doppler: true
+      step_m: 4
 listeners:
   - name: departure_4km
     position: [4000, 0, 1.2]
