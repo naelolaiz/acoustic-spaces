@@ -3360,13 +3360,18 @@ class EdgeDiffraction:
         points = edges.start[edge] + t[:, None] * edges.direction[edge]
         _, rho_s, phi_s, _ = edges.frame(edge, np.broadcast_to(self.source, points.shape))
         _, _, phi_r, _ = edges.frame(edge, np.broadcast_to(listener, points.shape))
+        # The source or the listener behind the edge's own faces (the way passes the
+        # edge on its blocked side): the edge's wave goes to it along its nearer face,
+        # past the row's other nodes (a top's other edge among them), and comes from it
+        # so; its angle is that face's.
+        n = edges.wedge[edge]
+        phi_s, phi_r = _onto_faces(phi_s, n), _onto_faces(phi_r, n)
         r1 = np.linalg.norm(points - self.source, axis=1)
         r2 = np.linalg.norm(listener - points, axis=1)
         distance = r1 + r2
         sin_beta = np.clip(rho_s / np.maximum(r1, 1e-300), 1e-12, 1.0)
         length_param = r1 * r2 / distance * sin_beta**2
         kl = k[None] * length_param[:, None, None]
-        n = edges.wedge[edge]
         terms = wedge_terms(n[:, None, None], phi_r[:, None, None], phi_s[:, None, None], kl)
         factors = self._face_factors(edge, sin_beta, phi_s)
         # The incident wave's term away from its boundary (_term_angles): the first where
@@ -3566,6 +3571,14 @@ def _on_own_face(
     own = candidates[joined == joined[np.flatnonzero(candidates == face)[0]]]
     vertices = np.asarray(model.room.mesh.vertices, dtype=float)
     return _on_triangles(np.asarray(point, dtype=float), vertices[faces[own]], tolerance)
+
+
+def _onto_faces(phi: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """The angles ``phi`` round edges of open angle ``n`` pi (from face 0, as
+    :meth:`Edges.frame` has them), those within the solid (beyond n pi) on the nearer
+    face: n pi, or 0."""
+    solid = n * np.pi
+    return np.where(phi <= solid, phi, np.where(phi - solid < 2.0 * np.pi - phi, solid, 0.0))
 
 
 def _off_row(row: Row, waves: np.ndarray, edge, planes, points) -> tuple:
