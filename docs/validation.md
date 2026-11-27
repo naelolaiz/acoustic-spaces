@@ -1728,8 +1728,8 @@ where 1 kHz swings by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; with
 fade the garden's level steps by up to 12.2 dB(A) from one 10 cm to the next. The steps
 left that stand out by more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a
 centimetre is a quarter of a wavelength and the level swings by up to 0.72 dB from one
-to the next (five more at 4 kHz in the garden, at x = 19.40, 19.51, 28.69, 28.72 and
-28.88 m, are swings too: in a one-off check 1 mm apart the level there changed by at
+to the next (four more at 4 kHz in the garden, at x = 19.40, 28.69, 28.72 and 28.88 m,
+are swings too: in a one-off check 1 mm apart the level there changed by at
 most 0.08 dB a millimetre at 4 kHz), each the step from 1 cm before x to x, and how far
 it stands out in dB(A) and in the same band without the fade (`validation/walks.py`):
 
@@ -1737,11 +1737,11 @@ it stands out in dB(A) and in the same band without the fade (`validation/walks.
 |---:|---|---:|---|---:|---:|
 | -41.39 | garden | 1.12 | 1 kHz | 0.52 | 0.00 |
 | -39.92 | balcony | 0.17 | 63 Hz | 0.01 | 0.00 |
-| -39.92 | garden | 0.45 | 63 Hz | 0.01 | 0.00 |
+| -39.92 | garden | 0.51 | 63 Hz | 0.02 | 0.00 |
 | -14.07 | garden | 0.82 | 125 Hz | 0.30 | 0.00 |
 | 9.99 | garden | 0.83 | 63 Hz | 0.03 | 0.97 |
 | 10.01 | balcony_2m | 0.10 | 125 Hz | 0.00 | 0.08 |
-| 10.02 | garden | 1.05 | 63 Hz | 0.10 | 0.96 |
+| 10.02 | garden | 1.06 | 63 Hz | 0.10 | 0.96 |
 | 14.28 | balcony_2m | 0.16 | 125 Hz | 0.00 | 0.04 |
 | 15.98 | balcony_2m | 0.15 | 125 Hz | 0.00 | 0.03 |
 | 18.93 | balcony_2m | 0.17 | 125 Hz | 0.03 | 0.00 |
