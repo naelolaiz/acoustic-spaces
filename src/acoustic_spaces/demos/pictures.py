@@ -374,18 +374,48 @@ def tour_column(
     title: str = "The tour",
 ) -> None:
     """The tour's stops (label, start s) with their times under ``title``, the current
-    one bright, the ones to come faint, in rows of ``row`` pixels, closer when they
-    would pass ``bottom``."""
+    one bright, the ones to come faint, in rows of ``row`` pixels. Where they would pass
+    ``bottom``, as many as fit, the current one among them, with how many stops come
+    before and after them (:func:`tour_window`)."""
     text(draw, (x, y), title, font("SemiBold", 22), MUTED)
     y += 36
-    row = min(row, (bottom - y) // max(1, len(entries)))
-    for j, (label, t0) in enumerate(entries):
+    first, last = tour_window(len(entries), current, max(1, int((bottom - y) // row)))
+    if first > 0:
+        text(draw, (x, y), f"   … {_stops(first)} before", font("Regular", size), FAINT)
+        y += row
+    for j in range(first, last):
+        label, t0 = entries[j]
         colour = LISTENER if j == current else (MUTED if j < current else FAINT)
         weight = "SemiBold" if j == current else "Regular"
         mark = "▶ " if j == current else "   "
         text(draw, (x, y), mark + label, font(weight, size), colour)
         text(draw, (right, y), mmss(t0), font(weight, size), colour, "ra")
         y += row
+    if last < len(entries):
+        more = len(entries) - last
+        text(draw, (x, y), f"   … {_stops(more)} after", font("Regular", size), FAINT)
+
+
+def _stops(n: int) -> str:
+    """``1 stop``, ``3 stops``."""
+    return f"{n} stop" if n == 1 else f"{n} stops"
+
+
+def tour_window(count: int, current: int, rows: int) -> tuple[int, int]:
+    """Which of ``count`` stops a tour column of ``rows`` rows lists (first, end): all
+    where they fit; else as many as fit with a row saying how many come before them and
+    one how many after (where some do), the ``current`` one among them, as near their
+    middle as the ends let it be."""
+    if count <= rows:
+        return 0, count
+    shown = max(1, rows - 2)
+    first = min(max(current - shown // 2, 0), count - shown)
+    # At either end no row says what is hidden there: one more stop takes it.
+    if first == 0:
+        return 0, shown + 1
+    if first + shown == count:
+        return count - shown - 1, count
+    return first, first + shown
 
 
 #: The smallest size a footer line is set in to fit the width; a line that does not fit
@@ -471,9 +501,10 @@ def thumbnail_badge(draw, x: float, y: float, label: str = "BINAURAL", size: int
     text(draw, (x + pad, y + height / 2), label, pill, BG, "lm")
 
 
-#: What each kind of diffraction (``simulation.early.diffraction``) bends round edges.
+#: What each kind of diffraction (``simulation.early.diffraction``) bends round edges;
+#: without it, a path an edge blocks is cut off at once as something moves.
 DIFFRACTION = {
-    "none": "",
+    "none": ", without diffraction round edges",
     "direct": ", the direct sound diffracted round edges",
     "first_order": ", the direct sound and first reflections diffracted round edges",
     "second_order": (
@@ -627,4 +658,5 @@ __all__ = [
     "title_card",
     "tool_line",
     "tour_column",
+    "tour_window",
 ]

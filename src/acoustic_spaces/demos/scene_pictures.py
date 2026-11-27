@@ -128,6 +128,17 @@ def pass_levels(heard: dict) -> np.ndarray:
     return np.asarray([-math.inf if v is None else v for v in heard["levels_a_db"]], dtype=float)
 
 
+def turned_up_line(gain_db: float) -> str:
+    """What a still says of a stop the video turns up by ``gain_db``
+    (:func:`~acoustic_spaces.demos.pipeline.gains_of`): to the loudness of the tour's
+    loudest stop, or by the most it turns one up."""
+    from acoustic_spaces.demos.pipeline import MOST_GAIN_DB
+
+    if gain_db >= MOST_GAIN_DB:
+        return f"Turned up {gain_db:.0f} dB in the video, the most it turns a stop up"
+    return f"Turned up {gain_db:.0f} dB in the video, as loud as its loudest stop"
+
+
 def counted(n: int, word: str) -> str:
     """``1 source``, ``3 sources``."""
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
@@ -728,19 +739,27 @@ class Pictures:
         if level is not None:
             lines.append(f"{level:.0f} dB(A) here{' now' if heard else ''}, as simulated")
         if heard is not None:
+            who = self.passing_name()
             lines += [
-                f"Loudest {heard['max_a_db']:.1f} dB(A) (L_Amax), {heard['max_s']:.1f} s in",
-                f"Sound exposure level {heard['sel_a_db']:.1f} dB(A) (SEL)",
+                f"{who}: loudest {heard['max_a_db']:.1f} dB(A) (L_Amax), {heard['max_s']:.1f} s in",
+                f"{who}: sound exposure level {heard['sel_a_db']:.1f} dB(A) (SEL)",
             ]
             if "max_as_db" in heard:
                 lines.append(
                     f"As Doc 29 measures it: L_ASmax {heard['max_as_db']:.1f}, SEL "
                     f"{heard['sel_10db_down_a_db']:.1f} dB(A)"
                 )
-            lines.append(f"Closest {heard['closest_m']:.1f} m away")
+            lines.append(f"{who}: closest {heard['closest_m']:.1f} m away")
             if "pitch_semitones" in heard:
                 lines.append(
-                    f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)"
+                    f"{who}: its direct sound falls {heard['pitch_semitones']:.1f} semitones "
+                    "(Doppler)"
+                )
+            under = self.under_the_rest(stop.key)
+            if under is not None:
+                side = "under" if under >= 0.0 else "over"
+                lines.append(
+                    f"{who} at its loudest: {abs(under):.0f} dB {side} the other sources here"
                 )
         speech = (
             None if stop.key in self.indoors.get("about", {}) else self.speech_at(stop.key, t, k)
@@ -773,7 +792,7 @@ class Pictures:
             rumble = self.indoors.get("rumble_a_db", {}).get(stop.key)
             lines.append(shaking_line(shaking, about is not None, rumble))
         if stop.gain_db > 0.5:
-            lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
+            lines.append(turned_up_line(stop.gain_db))
         if stop.key in self.where:
             lines.append(("In still air: the scene without its wind and weather", MUTED))
             lines.append(("Turned up as much as in the scene's weather", MUTED))
@@ -800,13 +819,13 @@ class Pictures:
 
     def title(self, listener: str) -> tuple[str, str]:
         """The listener's name, in still air for its mix in still air, and where its stop
-        comes in the tour."""
+        comes in the tour (a listener the tour visits twice has two stops)."""
         names = [stop.key for stop in self.stops]
         k = names.index(listener) + 1 if listener in names else 0
         name = self.where.get(listener, listener).replace("_", " ")
         if listener in self.where:
             name = f"{name}, in still air"
-        return name, f"Stop {k} of {len(names)}" if self.where else f"Listener {k} of {len(names)}"
+        return name, f"Stop {k} of {len(names)}"
 
     def chapters(self) -> list[str]:
         """The video's chapters: when each stop starts (m:ss), what plays then of a
@@ -916,6 +935,30 @@ class Pictures:
         footer(draw, self.credit, self.tool)
         return img
 
+    def passing_name(self) -> str:
+        """The sources whose pass the stills give, in words: 'Helicopter', 'Police car
+        and siren'."""
+        playing = {s["name"] for s in self.playing}
+        moving = [name for kind, name in self.paths if kind == "sources"]
+        names = [n.replace("_", " ") for n in moving if n in playing] or ["the pass"]
+        words = names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" and {names[-1]}"
+        return words[:1].upper() + words[1:]
+
+    def under_the_rest(self, listener: str) -> float | None:
+        """How far the pass heard at ``listener`` is under the other sources that play
+        there at its loudest (dB; negative where it is over them): its L_Amax against
+        the A-weighted level of the others together then, each as loud as it plays in
+        the stop of the tour then, as simulated; None where no other is heard then."""
+        heard = self.passes[listener]
+        t = heard["max_s"]
+        k = max((j for j, stop in enumerate(self.stops) if stop.start <= t), default=0)
+        moving = {name for kind, name in self.paths if kind == "sources"}
+        others = [v for name, v in self.levels_of(listener, t, k).items() if name not in moving]
+        energy = sum(10.0 ** (v / 10.0) for v in others)
+        if energy <= 0.0:
+            return None
+        return 10.0 * math.log10(energy) - heard["max_a_db"]
+
     def heard_at(self, listener: str, t: float) -> float | None:
         """The A-weighted level of the pass heard at ``listener`` at ``t`` (s of the
         trajectories), as simulated; None before its sound arrives and after its last
@@ -949,7 +992,7 @@ class Pictures:
         text(
             draw,
             (left - 64, top - 34),
-            "Level heard here, dB(A), as simulated",
+            f"{self.passing_name()}: level here, dB(A), as simulated",
             font("Medium", 18),
             MUTED,
         )

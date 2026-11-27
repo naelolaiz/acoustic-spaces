@@ -1908,13 +1908,13 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
         stops,
         playing=["talker", "radio"],
     )
-    assert drawing.title("seat-b") == ("seat-b", "Listener 2 of 2")
+    assert drawing.title("seat-b") == ("seat-b", "Stop 2 of 2")
     assert drawing.level_at("seat-a") == pytest.approx(70.0)
     assert drawing.lines(0)[0] == "70 dB(A) here, as simulated"
     seat_b = drawing.lines(1)
     assert seat_b[0] == "73 dB(A) here, as simulated"
     assert "Reverberation time T30 1.5 s (mean of 500 Hz and 1 kHz)" in seat_b
-    assert "Turned up 6 dB here so you can hear it" in seat_b
+    assert "Turned up 6 dB in the video, as loud as its loudest stop" in seat_b
     made["responses"] = [
         {**e, "spl_a_db": None} if e["listener"] == "seat-a" else e for e in made["responses"]
     ]
@@ -2127,6 +2127,35 @@ def test_a_demo_of_any_scene_plays_a_walk_with_doppler(tmp_path: Path, monkeypat
         np.abs(audio.read(work / "moving" / s["file"])[0]).max() for s in seats["seats"].values()
     ]
     assert max(peaks) == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
+    # A still says whose pass it gives, and how far it is under the talker, who plays on.
+    from acoustic_spaces.demos import scene_pictures
+    from acoustic_spaces.demos.scene_demo import DEMO, moving_scene
+    from acoustic_spaces.walkthrough import knots, movers
+
+    demo = DEMO.at(scene.parent)
+    resolved = demo.resolved(argparse.Namespace(**vars(demo.defaults()) | {"scene": scene}))
+    moving = moving_scene(resolved)
+    stops = [pipeline.TourStop("seat-a", 0.0, 0.0, 0.8), pipeline.TourStop("seat-b", 0.8, 0.8, 1.6)]
+    drawing = scene_pictures.Pictures(
+        moving.to_data(),
+        np.zeros((0, 2, 2)),
+        pipeline.read_json(work.parent / "results" / "scene" / "binaural" / pipeline.PARAMETERS),
+        seats["seats"],
+        stops,
+        playing=["talker", "radio"],
+        paths={(kind, item.name): knots(item) for kind, item in movers(moving)},
+        movement=seats["movement"],
+    )
+    heard = seats["movement"]["passes"]["seat-a"]
+    talker = seats["movement"]["levels_a_db"]["seat-a"]["talker"][drawing.moment(heard["max_s"])]
+    under = drawing.under_the_rest("seat-a")
+    assert under == pytest.approx(talker - heard["max_a_db"])
+    words = [str(line) for line in drawing.lines(0, 0.1)]
+    loudest = f"Radio: loudest {heard['max_a_db']:.1f} dB(A) (L_Amax), {heard['max_s']:.1f} s in"
+    assert loudest in words
+    side = "under" if under >= 0.0 else "over"
+    assert f"Radio at its loudest: {abs(under):.0f} dB {side} the other sources here" in words
+    assert drawing.title("seat-b") == ("seat-b", "Stop 2 of 2")
 
 
 def test_a_demo_of_any_scene_gives_a_level_along_a_walk_wherever_sound_arrives(
@@ -2786,6 +2815,23 @@ def test_a_long_credit_takes_two_lines_read_whole() -> None:
     assert image.getbbox()[3] <= pictures.SIZE[1]
 
 
+def test_a_tour_column_lists_the_stops_that_fit_round_the_current_one() -> None:
+    """A tour too long for its column keeps its rows apart: as many stops as fit, the
+    current one among them, with a row for how many come before and one for after where
+    some do; all of them where they fit."""
+    from acoustic_spaces.demos.pictures import tour_window
+
+    assert tour_window(11, 3, 11) == (0, 11)
+    assert tour_window(11, 0, 5) == (0, 4)  # 4 stops and "7 stops after"
+    assert tour_window(11, 3, 5) == (2, 5)  # "2 before", 3 stops, "6 after"
+    assert tour_window(11, 10, 5) == (7, 11)  # "7 before" and the last 4
+    for current in range(11):
+        for rows in range(1, 12):
+            first, end = tour_window(11, current, rows)
+            hidden = (first > 0) + (end < 11)
+            assert first <= current < end and end - first + hidden <= max(rows, 3)
+
+
 def test_the_stills_say_how_the_sound_was_made(tmp_path: Path) -> None:
     """The lines under every still state the simulation as it ran, the engine's defaults
     for what a scene leaves out, the wave solver and, outdoors in wind, what the weather
@@ -2814,7 +2860,8 @@ def test_the_stills_say_how_the_sound_was_made(tmp_path: Path) -> None:
     }
     first, _mixed = pictures.settings_lines(demo, args, {"simulation": simulation})
     assert first.endswith(
-        "image sources to order 2; a statistical late sound; the bands up to 250 Hz from "
+        "image sources to order 2, without diffraction round edges; a statistical late sound; "
+        "the bands up to 250 Hz from "
         "the wave solver"
     )
     # Outdoors in wind: the paths, the late rays and the parabolic equation.

@@ -250,8 +250,8 @@ def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypat
         stops,
         playing=["radio"],
     )
-    assert drawing.title("seat-b") == ("seat-b", "Listener 1 of 2")
-    assert drawing.title("seat-a") == ("seat-a", "Listener 2 of 2")
+    assert drawing.title("seat-b") == ("seat-b", "Stop 1 of 2")
+    assert drawing.title("seat-a") == ("seat-a", "Stop 2 of 2")
     assert [s["name"] for s in drawing.playing] == ["radio"]
     assert drawing.level_at("seat-b") == pytest.approx(70.0)  # the radio's alone
     assert drawing.shown(0) == "radio -> seat-b"
@@ -263,7 +263,7 @@ def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypat
         stops[1:],
         playing=["talker", "radio"],
     )
-    assert one.title("seat-a") == ("seat-a", "Listener 1 of 1")
+    assert one.title("seat-a") == ("seat-a", "Stop 1 of 1")
 
 
 def test_the_timeline_is_shared_or_from_each_listener_s_start(tmp_path: Path) -> None:

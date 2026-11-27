@@ -226,6 +226,12 @@
   the tram's credit named a pantograph it does not have.
 - Fixed: a demo's video footer and its run's record gave `--again` and `--no-mp4` in the
   command the run was made with; they say how a step ran, not what the run is.
+- Fixed: a still where a source moves past named neither it in its level plot ("Level
+  heard here") nor in its L_Amax, SEL and Doppler lines, though other sources play;
+  they name it now, with how far it is under or over the others at its loudest. A tour
+  too long for its column printed its stops over each other; it lists those round the
+  current one now. A still says "Stop 4 of 11" (a listener may have two stops), how
+  much the video turns a stop up and why, and its footer says when nothing diffracts.
 - Removed: the pass-by demos' own engine, now that every example's demo is a preset of
   the demo of its scene: `demos.passby`'s `Vehicle` and its road vehicles,
   `demos.passby_pictures`, `demos.rail.TrainVehicle`, `demos.siren`'s police car, fire
