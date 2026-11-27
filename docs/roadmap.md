@@ -567,6 +567,10 @@ Examples:
   and each source's `channel` of it (left, right or mono), on the scene's and the
   source's pages in the editor; every example with a stage, a sound system or a talker
   plays one out of the box, its talkers at the normal vocal effort of IEC 60268-16.
+- [x] One demo per scene: every example's demo is a preset of the demo of its scene,
+  whose script's command lines and steps still work; a scene's source of a model
+  (`model:`, as `cnossos-eu`, `schall-03` or `doc-29`) has its sound power and the sound
+  the demo makes for it, and the pass-by demos' own engine is gone.
 
 Movement:
 
