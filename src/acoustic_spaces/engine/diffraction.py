@@ -2311,12 +2311,13 @@ class EdgeDiffraction:
             wave = -2.0 * n[row, None, None] * np.sqrt(2.0 * np.pi * kl[row])
             waves[row, 0] += rest * wave * np.exp(0.25j * np.pi)
         in_row = np.zeros(len(edge), dtype=bool)
+        taken = None
         if edge_row is not None:
             planes = np.column_stack([c["plane"], c["plane2"]])
             planes = np.where((kind == 0)[:, None], -1, planes)
             planes[kind < 3, 1] = -1
             bounces = np.stack([c["bounce"], c["bounce2"]], axis=1)
-            in_row = _off_row(edge_row, waves, edge, planes, bounces)
+            in_row, taken = _off_row(edge_row, waves, edge, planes, bounces)
         waves *= common[:, None]  # (C, 3, B, M): incident, off face 0, off face n
         for g, factor in on_ground:
             waves[g] *= factor
@@ -2395,12 +2396,22 @@ class EdgeDiffraction:
             alone = ~front[rows, cols]
             keys[alone] = clusters.private(int(alone.sum()))
             clusters.add(start + rows, keys, kept[rows, cols] * carried[rows, cols], distance[rows])
+            # The share of a term the row's field takes is one wave with the row's
+            # (_lined): of the rest's diffracted piece that much goes to the row's wave.
+            joined = 0.0 if taken is None else np.sqrt(taken[:, :, late])
             clusters.add(
                 start + np.arange(len(edge)),
                 clusters.diffracted(*(self._mirror(side) for side in _sides(c))),
-                np.sum(share * carried, axis=1),
+                np.sum(np.sqrt(1.0 - joined**2) * share * carried, axis=1),
                 distance,
             )
+            if taken is not None:
+                clusters.add(
+                    start + np.arange(len(edge)),
+                    self._row_wave(clusters, len(edge)),
+                    np.sum(joined * share * carried, axis=1),
+                    distance,
+                )
 
         def corners(i: int) -> list[np.ndarray]:
             if kind[i] == 1:
@@ -2929,8 +2940,9 @@ class EdgeDiffraction:
             * loss
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
+        taken = None
         if edge_row is not None:
-            _off_row_pairs(edge_row, waves, e1, e2)
+            taken = _off_row_pairs(edge_row, waves, e1, e2)
             _back_past_row(edge_row, waves, e1, e2, (self.source, p1, p2, listener))
         pressure = np.zeros((paths, *self.wavenumber.shape), dtype=complex)
         np.add.at(pressure, ways, (waves * carried[..., None, None]).sum(axis=(1, 2)))
@@ -3002,18 +3014,31 @@ class EdgeDiffraction:
                         both = first_part[same, i, j] ** 2 + second_part[same, i, j] ** 2
                         first_part[same, i, j] = np.sqrt(both)
                         second_part[same, i, j] = 0.0
+            # The share of a term the row's field takes is one wave with the row's
+            # (_lined): of each of the rest's diffracted pieces that much goes to the
+            # row's wave, as one piece by their energy.
+            twice = s1[:, :, None] * s2[:, None, :]
+            joined = 0.0 if taken is None else np.sqrt(taken[..., late, :])
+            stay = np.sqrt(1.0 - joined**2)
+            kept1, kept2 = stay * first_part * t, stay * second_part * t
             for j in range(3):
-                clusters.add(
-                    rows, bent1[j], np.sum(first_part[:, :, j] * t[:, :, j], axis=1), distance
-                )
+                clusters.add(rows, bent1[j], np.sum(kept1[:, :, j], axis=1), distance)
             for i in range(3):
-                clusters.add(rows, bent2[i], np.sum(second_part[:, i] * t[:, i], axis=1), distance)
+                clusters.add(rows, bent2[i], np.sum(kept2[:, i], axis=1), distance)
             clusters.add(
                 rows,
                 clusters.private(paths)[ways],
-                np.einsum("cibm,cjbm,cijbm->cbm", s1, s2, t),
+                np.sum(stay * twice * t, axis=(1, 2)),
                 distance,
             )
+            if taken is not None:
+                together = np.sqrt(first_part**2 + second_part**2 + twice**2)
+                clusters.add(
+                    rows,
+                    self._row_wave(clusters, len(rows)),
+                    np.sum(joined * together * t, axis=(1, 2)),
+                    distance,
+                )
         return {
             "energy": energy,
             "spectrum": self._spectrum(pressure, out_distance),
@@ -3254,9 +3279,7 @@ class EdgeDiffraction:
             images = _image_sources(listener, paths)
             for pressure, distance, at in pieces:
                 if at < 0:
-                    key = clusters.geometric(
-                        self._mirror(np.full((1, 1), -1)), 0, self.source[None], True
-                    )
+                    key = self._row_wave(clusters, 1)
                 else:
                     key = clusters.geometric(
                         self._mirror(sequence[at : at + 1]),
@@ -3277,6 +3300,13 @@ class EdgeDiffraction:
             "faces": lambda i: np.zeros(0, dtype=np.int64),
             "cosines": lambda i: np.zeros(0),
         }
+
+    def _row_wave(self, clusters: Clusters, count: int) -> np.ndarray:
+        """(count,) the wave of the field of a row along the way (:meth:`_lined`) in the
+        bands where the paths add in energy: the direct sound's, which it continues."""
+        return clusters.geometric(
+            self._mirror(np.full((count, 1), -1)), 0, np.tile(self.source, (count, 1)), True
+        )
 
     def _rests(self, listener: np.ndarray, row: Row) -> np.ndarray:
         """(B, M) the terms of the paths over each edge of ``row`` alone that its paraxial
@@ -3501,35 +3531,39 @@ def _on_own_face(
     return _on_triangles(np.asarray(point, dtype=float), vertices[faces[own]], tolerance)
 
 
-def _off_row(row: Row, waves: np.ndarray, edge, planes, points) -> np.ndarray:
+def _off_row(row: Row, waves: np.ndarray, edge, planes, points) -> tuple:
     """Take off the terms ``waves`` (C, 3, B, M, :func:`_waves`) of the paths over the
     edges ``edge`` (C,) that reflect off ``planes`` (C, 2; -1 for none) at ``points``
     (C, 2, 3) the share that the field of ``row`` stands for
     (:meth:`~acoustic_spaces.engine.paraxial.Row.members`,
     :meth:`~acoustic_spaces.engine.paraxial.Row.weight`), in place. (C,) which paths
-    have such terms."""
+    have such terms, and (C, 3, B, M) that share of each term."""
     out = np.zeros(len(edge), dtype=bool)
     shape = waves.shape[2:]
-    kept: dict[frozenset, np.ndarray] = {}
+    taken = np.zeros(waves.shape)
+    weights: dict[frozenset, np.ndarray] = {}
     for c in np.flatnonzero(np.isin(edge, row.edge)):
         for column in range(3):
             members = row.members(int(edge[c]), column, planes[c], points[c])
             if members is None:
                 continue
-            if members not in kept:
-                kept[members] = 1.0 - row.weight(members).reshape(shape)
-            waves[c, column] *= kept[members]
+            if members not in weights:
+                weights[members] = row.weight(members).reshape(shape)
+            waves[c, column] *= 1.0 - weights[members]
+            taken[c, column] = weights[members]
             out[c] = True
-    return out
+    return out, taken
 
 
-def _off_row_pairs(row: Row, waves: np.ndarray, e1: np.ndarray, e2: np.ndarray) -> None:
+def _off_row_pairs(row: Row, waves: np.ndarray, e1: np.ndarray, e2: np.ndarray) -> np.ndarray:
     """As :func:`_off_row`, for the terms ``waves`` (C, 3, 3, B, M) of the paths of the
     direct sound over two edges ``e1`` and then ``e2`` (C,): those over two edges of
     ``row`` in turn along the way, or over the top and the end of a screen's corner in
-    the row, for each pair of their waves along the way, in place."""
+    the row, for each pair of their waves along the way, in place. (C, 3, 3, B, M) that
+    share of each term."""
     shape = waves.shape[3:]
-    kept: dict[frozenset, np.ndarray] = {}
+    taken = np.zeros(waves.shape)
+    weights: dict[frozenset, np.ndarray] = {}
     for c in np.flatnonzero(np.isin(e1, row.edge) & np.isin(e2, row.edge)):
         i, j = row.node(e1[c]), row.node(e2[c])
         if i == j or not (row.along[i] < row.along[j] or row.together(i, j)):
@@ -3541,9 +3575,11 @@ def _off_row_pairs(row: Row, waves: np.ndarray, e1: np.ndarray, e2: np.ndarray) 
                 if first is None or second is None:
                     continue
                 members = first | second
-                if members not in kept:
-                    kept[members] = 1.0 - row.weight(members).reshape(shape)
-                waves[c, a, b] *= kept[members]
+                if members not in weights:
+                    weights[members] = row.weight(members).reshape(shape)
+                waves[c, a, b] *= 1.0 - weights[members]
+                taken[c, a, b] = weights[members]
+    return taken
 
 
 def _back_past_row(row: Row, waves: np.ndarray, e1, e2, corners) -> None:
