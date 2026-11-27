@@ -2311,16 +2311,25 @@ class EdgeDiffraction:
             wave = -2.0 * n[row, None, None] * np.sqrt(2.0 * np.pi * kl[row])
             waves[row, 0] += rest * wave * np.exp(0.25j * np.pi)
         in_row = np.zeros(len(edge), dtype=bool)
-        taken = None
+        taken = whole = None
         if edge_row is not None:
             planes = np.column_stack([c["plane"], c["plane2"]])
             planes = np.where((kind == 0)[:, None], -1, planes)
             planes[kind < 3, 1] = -1
             bounces = np.stack([c["bounce"], c["bounce2"]], axis=1)
+            whole = waves.copy()
             in_row, taken = _off_row(edge_row, waves, edge, planes, bounces)
+            whole = whole[in_row]
         waves *= common[:, None]  # (C, 3, B, M): incident, off face 0, off face n
         for g, factor in on_ground:
             waves[g] *= factor
+        if whole is not None:
+            # The terms of the paths whose share the row takes, with that share.
+            whole *= common[in_row, None]
+            for g, factor in on_ground:
+                mine = np.zeros(len(edge), dtype=bool)
+                mine[g] = True
+                whole[mine[in_row]] *= factor[in_row[g]]
 
         # The waves' terms add up coherently, as one diffracted wave, except in the
         # transition zone round each wave's boundary: there its terms stand in for the
@@ -2365,6 +2374,12 @@ class EdgeDiffraction:
         energy = np.zeros((len(edge), self.wavenumber.shape[0]))
         pressure = (waves * counted[:, :, None, None]).sum(axis=1)
         energy[:, : self.coherent] = np.mean(np.abs(pressure[:, : self.coherent]) ** 2, axis=2)
+        # The energy of each path with the share of its terms that the row takes: the
+        # path is kept by that (_emit), as without the row.
+        with_row = np.zeros_like(energy)
+        if whole is not None:
+            summed = (whole * counted[in_row, :, None, None]).sum(axis=1)
+            with_row[in_row] = np.mean(np.abs(summed) ** 2, axis=2)
         if clusters is not None:
             late = slice(self.coherent, None)
             carried = (waves * counted[:, :, None, None])[:, :, late]
@@ -2448,6 +2463,7 @@ class EdgeDiffraction:
             "cosines": cosines,
             "in_line": on_ways,
             "row": in_row,
+            "with_row": with_row,
             "found": found,
         }
 
@@ -2941,9 +2957,21 @@ class EdgeDiffraction:
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
         taken = None
+        with_row = np.zeros((paths, self.wavenumber.shape[0]))
         if edge_row is not None:
+            whole = waves.copy()
             taken = _off_row_pairs(edge_row, waves, e1, e2)
             _back_past_row(edge_row, waves, e1, e2, (self.source, p1, p2, listener))
+            # The energy of each path with the share of its terms that the row takes:
+            # the path is kept by that (_emit), as without the row.
+            some = np.flatnonzero(taken.any(axis=(1, 2, 3, 4)))
+            if len(some):
+                summed = np.zeros((paths, *self.wavenumber.shape), dtype=complex)
+                terms = (whole[some] * carried[some, ..., None, None]).sum(axis=(1, 2))
+                np.add.at(summed, ways[some], terms)
+                has = np.unique(ways[some])
+                with_row[has] = np.mean(np.abs(summed[has]) ** 2, axis=2)
+            del whole
         pressure = np.zeros((paths, *self.wavenumber.shape), dtype=complex)
         np.add.at(pressure, ways, (waves * carried[..., None, None]).sum(axis=(1, 2)))
         energy = np.zeros((paths, self.wavenumber.shape[0]))
@@ -3049,6 +3077,7 @@ class EdgeDiffraction:
             "corners": lambda i: [out_p1[i], out_p2[i]],
             "faces": lambda i: np.zeros(0, dtype=np.int64),
             "cosines": lambda i: np.zeros(0),
+            "with_row": with_row,
         }
 
     def _along_faces(self, factors1, factors2, e1, e2, leave, graze, distance) -> np.ndarray:
@@ -3175,12 +3204,18 @@ class EdgeDiffraction:
     def _emit(self, listener, found: dict, floor: float, max_delay_s: float, rows=None):
         """The paths in ``found`` (from :meth:`_single` or :meth:`_double`) that carry
         at least ``floor`` in some band (or those of ``rows``, whatever they carry) and
-        arrive by ``max_delay_s``, and their rows there."""
+        arrive by ``max_delay_s``, and their rows there. A path whose terms a row's
+        field takes in part carries what it does with that part (``with_row``): the
+        row's field and the path share its terms, and the path is kept or left out by
+        all of them, as it is without the row."""
         energy, distance = found["energy"], found["distance"]
         bands = self.model.absorption.shape[1]
         keep = distance / self.speed_of_sound <= max_delay_s
         if rows is None:
-            keep &= energy.max(axis=1) >= floor
+            loudest = energy.max(axis=1)
+            if "with_row" in found:
+                loudest = np.maximum(loudest, found["with_row"].max(axis=1))
+            keep &= loudest >= floor
         else:
             keep &= np.isin(np.arange(len(distance)), rows)
         idx = np.flatnonzero(keep)

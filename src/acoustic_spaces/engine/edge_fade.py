@@ -847,7 +847,7 @@ class EdgeFade:
         if parts:
             offset = np.cumsum([0] + [len(p["edge"]) for p in parts])
             # The parts keep only what _points needs.
-            for key in ("edge", "order", "distance", "energy", "spectrum"):
+            for key in ("edge", "order", "distance", "energy", "with_row", "spectrum"):
                 values = [p.pop(key) for p in parts]
                 if key != "spectrum" or self.d.coherent:
                     out[key] = np.concatenate(values)
@@ -900,7 +900,9 @@ class EdgeFade:
             resolved, has = clusters.resolve(base + terms["count"])
             paths = self.d.settled(paths, resolved[:base], has[:base])
             energy[:, late] = resolved[base:]
-        idx = np.flatnonzero(energy.max(axis=1) >= terms["floor"])
+        # A path whose terms a row's field takes in part is kept by what it carries with
+        # that part (_combine), as it is without the row.
+        idx = np.flatnonzero(np.maximum(energy, terms["with_row"]).max(axis=1) >= terms["floor"])
         if len(idx) == 0:
             return paths
         listener = terms["listener"]
@@ -2431,10 +2433,15 @@ class EdgeFade:
         """The paths over the edges for the terms ``t`` of the paths ``go``: each term
         with its share of its path's product over the events (see the module notes),
         less what the edge diffraction adds for it; without those that :meth:`join`
-        would leave out, under ``floor`` in every band and with no cross terms."""
+        would leave out, under ``floor`` in every band and with no cross terms. Where a
+        row's field takes a share of the terms (:meth:`_off_row`), the products of terms
+        are made, kept and left out by what they carry with that share (``with_row``),
+        as they are without the row: the row's field and the terms share it."""
         d, edges = self.d, self.edges
         wavenumber = d.wavenumber  # (B, M)
+        whole = t
         t = self._off_row(listener, go, t)
+        rowed = t is not whole
         ids, path = np.unique(t["go"], return_inverse=True)
         path = path.reshape(-1)
         fail, fail2 = go["fail"][ids], go["fail2"][ids]
@@ -2462,6 +2469,13 @@ class EdgeFade:
         term = t["pressure"] + t["others"]
         less = added.astype(float)[:, None, None] * t["pressure"]
         less += bent.astype(float)[:, None, None] * t["others"]
+        # The terms with the share the row's field takes, which decide which products
+        # are made and kept.
+        term_whole, less_whole = term, less
+        if rowed:
+            term_whole = whole["pressure"] + whole["others"]
+            less_whole = added.astype(float)[:, None, None] * whole["pressure"]
+            less_whole += bent.astype(float)[:, None, None] * whole["others"]
         # The paths' own energy, and the faces they reflect off: a path that reflects off
         # its faces takes the face of the edge whose term explains that most.
         faces = go["faces"][ids].copy()
@@ -2503,7 +2517,7 @@ class EdgeFade:
         # coherent bands. A product with nothing in the bands where paths add in energy
         # (where it would take cross terms) that stays under the floor with that is one
         # that :meth:`join` would leave out, and so are the products made from it.
-        size = np.abs(term[:, :coherent]).max(axis=2)  # (T, coherent)
+        size = np.abs(term_whole[:, :coherent]).max(axis=2)  # (T, coherent)
         most = np.ones((len(ids), events, coherent))
         np.maximum.at(most, (path, t["at"]), size)
         later = np.ones_like(most)
@@ -2524,7 +2538,8 @@ class EdgeFade:
             bound = size[r] * top[which] * size[q] * later[mine, event]
             sel = np.flatnonzero((bound**2 * loudest[mine]).max(axis=1, initial=0.0) >= floor)
             r, mine = r[sel], mine[sel]
-            p = term[r, :coherent] * factor[which[sel], :coherent] * term[q[sel], :coherent]
+            p = term_whole[r, :coherent] * factor_whole[which[sel], :coherent]
+            p = p * term_whole[q[sel], :coherent]
             if spectrum is not None:
                 p = p * spectrum[mine]
             level = np.mean(np.abs(p) ** 2, axis=2) * energy[mine, :coherent]
@@ -2538,6 +2553,7 @@ class EdgeFade:
         late = slice(coherent, None)
         row = np.flatnonzero(~second)
         factor, detour = np.ones_like(term[row, :coherent]), t["detour"][row]
+        factor_whole = factor
         top = np.ones((len(row), coherent))  # the largest of each factor
         plain = np.ones(len(row), dtype=bool)
         stop = np.full((len(row), 2), -1, dtype=np.int64)
@@ -2557,6 +2573,7 @@ class EdgeFade:
                 # A term at the second stop takes the share of its product with the
                 # term at the first (the row's own, or the one it took there).
                 taken_term = term[q, :coherent]
+                taken_whole = term_whole[q, :coherent]
                 then = np.flatnonzero(~at_first)
                 if len(then) and go.get("joint") is not None:
                     own = t["at"][row[which[then]]] == fail[path[row[which[then]]]]
@@ -2564,8 +2581,17 @@ class EdgeFade:
                     share = self._product_weight(go["joint"], ids, path[q[then]], one, q[then], t)
                     taken_term = taken_term.copy()
                     taken_term[then] *= share[:, :coherent]
+                    if rowed:
+                        taken_whole = taken_whole.copy()
+                        taken_whole[then] *= share[:, :coherent]
                 row = np.concatenate([row[keep], row[which]])
                 factor = np.concatenate([factor[keep], factor[which] * taken_term])
+                if rowed:
+                    factor_whole = np.concatenate(
+                        [factor_whole[keep], factor_whole[which] * taken_whole]
+                    )
+                else:
+                    factor_whole = factor
                 top = np.concatenate([top[keep], top[which] * size[q]])
                 detour = np.concatenate([detour[keep], detour[which] + t["detour"][q]])
                 plain = np.concatenate([plain[keep], np.zeros(len(which), dtype=bool)])
@@ -2581,17 +2607,24 @@ class EdgeFade:
                 kept = heard(which, q, event, True)
                 which, q = which[kept], q[kept]
                 more = factor[which] * term[q, :coherent]
-                big = np.abs(term[row[which], :coherent] * more).max(axis=(1, 2)) >= _NEGLIGIBLE
+                more_whole = factor_whole[which] * term_whole[q, :coherent] if rowed else more
+                big = term_whole[row[which], :coherent] * more_whole
+                big = np.abs(big).max(axis=(1, 2)) >= _NEGLIGIBLE
                 which, q, more = which[big], q[big], more[big]
                 row = np.concatenate([row, row[which]])
                 factor = np.concatenate([factor, more])
+                factor_whole = np.concatenate([factor_whole, more_whole[big]]) if rowed else factor
                 top = np.concatenate([top, top[which] * size[q]])
                 detour = np.concatenate([detour, detour[which] + t["detour"][q]])
                 plain = np.concatenate([plain, np.zeros(len(which), dtype=bool)])
                 stop = np.concatenate([stop, stop[which]])
                 alone = np.concatenate([alone, np.ones(len(which), dtype=bool)])
         pressure = term[row, :coherent] * factor
-        factor = top = None  # heard() is done with them
+        pressure_whole = None
+        if rowed:
+            pressure_whole = term_whole[row, :coherent] * factor_whole
+            pressure_whole[plain] -= less_whole[row[plain], :coherent]
+        factor = factor_whole = top = None  # heard() is done with them
         # What the edge diffraction adds comes off each term once, at its own detour.
         pressure[plain] -= less[row[plain], :coherent]
         own_row = np.zeros(len(path), dtype=bool)
@@ -2608,6 +2641,15 @@ class EdgeFade:
 
         bands = wavenumber.shape[0]
         out_energy = np.zeros((len(row), bands))
+        with_row = out_energy
+        if rowed:
+            with_row = np.zeros((len(row), bands))
+            if coherent:
+                p = np.concatenate([pressure_whole, -less_whole[rows, :coherent]])
+                p = p if spectrum is None else spectrum[mine] * p
+                with_row[:, :coherent] = energy[mine, :coherent] * np.mean(np.abs(p) ** 2, axis=2)
+                del p
+        del pressure_whole
         out_spectrum = None
         if coherent:
             p = pressure if spectrum is None else spectrum[mine] * pressure
@@ -2621,7 +2663,8 @@ class EdgeFade:
         # Each row's pieces in the waves of the bands where the paths add in energy; a
         # row with any is kept for them, the others only where they reach the floor.
         heard_late = ~alone & (energy[mine, late].max(axis=1, initial=0.0) > 0.0)
-        keep = np.flatnonzero((out_energy.max(axis=1) >= floor) | heard_late)
+        loudest = np.maximum(out_energy, with_row).max(axis=1)
+        keep = np.flatnonzero((loudest >= floor) | heard_late)
         row, at, mine, detour = row[keep], at[keep], mine[keep], detour[keep]
         plain, stop, less_only, heard_late = (
             plain[keep],
@@ -2635,6 +2678,7 @@ class EdgeFade:
             "order": np.where(at % 2 == 0, k, k - 1).astype(np.int64),
             "distance": distance,
             "energy": out_energy[keep],
+            "with_row": with_row[keep],
             "spectrum": None if out_spectrum is None else out_spectrum[keep],
             "pieces": [],
             # For the points of the paths over the edges that join keeps (_points): each
@@ -2648,7 +2692,7 @@ class EdgeFade:
             "path_cosines": cosines,
         }
         # The pieces of a room of many facets take gigabytes: what made the rest goes first.
-        del out_energy, out_spectrum
+        del out_energy, out_spectrum, with_row
         if coherent < bands:
             out["pieces"] = self._pieces(
                 go,
