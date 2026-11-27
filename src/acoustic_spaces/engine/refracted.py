@@ -1023,7 +1023,7 @@ class Refraction(Section):
         :meth:`_edge_side` gives in line with an end or a corner), crosses no barrier or
         building, an object of the model file stands in the listener's straight line,
         the source or the listener stands inside a building (over its footprint, not
-        above its roof), the listener is nearer than
+        above its roof), or would along that way, the listener is nearer than
         the open ground's parabolic equation goes (``WAVE_MIN_RANGE``), stands on a
         barrier's line or a building's wall seen from above (``ON_OBSTACLE_M``), the
         paths have no order, or none lies in the plane."""
@@ -1039,6 +1039,11 @@ class Refraction(Section):
         own = self._above(layout.obstacles_along(self.source[:2], towards, edge))
         own = tuple(o for o in own if o[0] < reach)
         if not own or _at(own, reach):
+            return None
+        # Along a way that is not the listener's own (past an end, :meth:`_past_ends`),
+        # its place there can lie inside a building, under the roof: the march gives no
+        # sound there to scale by.
+        if any(near < reach < far and zr <= top + 1e-9 for near, far, top in own):
             return None
         ends = np.array([self.source, listener])
         for _, footprint, roof in self.layout.buildings:
@@ -1201,7 +1206,10 @@ class Refraction(Section):
         along_edge`), and reflecting off nothing but the ground: by edge and end, the
         paths and the request that changes them as the weather changes the sound behind
         the barrier just inside that end (:meth:`_barrier`, along the way from the source
-        to it), as the paths over the edge just inside it change."""
+        to it), as the paths over the edge just inside it change. Where that way puts
+        the listener inside a building (a top edge of a building's wall past its corner,
+        the listener in front of the wall) they keep their legs, as those just inside the
+        end do there."""
         edges = self._edge_set()
         laid = self._laid_edges()
         groups: dict[tuple, list[int]] = {}

@@ -551,6 +551,34 @@ def test_a_listener_beside_a_building_takes_the_open_ground_s_effect(towards) ->
     np.testing.assert_allclose(effects[0][:4], effects[1][:4], atol=0.7)
 
 
+def test_paths_over_a_wall_s_top_past_its_corner_keep_their_legs_in_front_of_it() -> None:
+    """A source and a listener 10 cm in front of a building's wall (x 10 to 20 m, 6 m
+    high), the source 7 m before its corner: the paths over the wall's top past that
+    corner, which fades, would take the runs behind the building just inside the
+    corner, along the way from the source there, which runs along the wall into the
+    building and puts the listener's place under its roof, where the equation gives no
+    sound (the run stopped with an error). They keep their legs, as those just inside
+    the corner do, and the wind changes the level from still air as over the open
+    ground, within 0.05 dB from 63 to 500 Hz (0.003 dB measured)."""
+    building = {"name": "h", "footprint": [[10, 0], [20, 0], [20, -10], [10, -10]], "height": 6}
+    effects = []
+    for buildings in ((building,), ()):
+        levels = []
+        for atmosphere in (None, WINDY):
+            room = Room.from_scene(
+                scene(
+                    atmosphere=atmosphere,
+                    sources=((2.9, 0.1, 1.5),),
+                    listeners=((11.1, 0.1, 1.9),),
+                    barriers=(),
+                    buildings=buildings,
+                )
+            )
+            levels.append(10 * np.log10(total_energy(early_paths(room, listener="l0"))))
+        effects.append(levels[1] - levels[0])
+    np.testing.assert_allclose(effects[0][:4], effects[1][:4], atol=0.05)
+
+
 #: A building 6 m high, 10 m by 20 m, with a point 1 m above the middle of its roof.
 ROOF = {"name": "h", "footprint": [[15, -10], [25, -10], [25, 10], [15, 10]], "height": 6}
 ON_ROOF = (20.0, 0.0, 7.0)
