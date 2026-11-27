@@ -230,8 +230,10 @@
   heard here") nor in its L_Amax, SEL and Doppler lines, though other sources play;
   they name it now, with how far it is under or over the others at its loudest. A tour
   too long for its column printed its stops over each other; it lists those round the
-  current one now, the facts above it set smaller where it would lose its room. A still says "Stop 4 of 11" (a listener may have two stops), how
-  much the video turns a stop up and why, and its footer says when nothing diffracts.
+  current one now, the facts above it set smaller where it would lose its room. A
+  still says "Stop 4 of 11" (the tour's last still, back at its first listener, said
+  "Stop 1"), how much the video turns a stop up and why, and its footer says when
+  nothing diffracts.
 - Removed: the pass-by demos' own engine, now that every example's demo is a preset of
   the demo of its scene: `demos.passby`'s `Vehicle` and its road vehicles,
   `demos.passby_pictures`, `demos.rail.TrainVehicle`, `demos.siren`'s police car, fire

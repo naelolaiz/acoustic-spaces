@@ -820,11 +820,15 @@ class Pictures:
         parts = [what for start, what in self.sections if start <= t + 1.0]
         return parts[-1] if parts else None
 
-    def title(self, listener: str) -> tuple[str, str]:
+    def title(self, listener: str, k: int | None = None) -> tuple[str, str]:
         """The listener's name, in still air for its mix in still air, and where its stop
-        comes in the tour (a listener the tour visits twice has two stops)."""
+        comes in the tour: stop ``k`` (from 0), else the listener's first (a listener
+        the tour visits twice has two stops)."""
         names = [stop.key for stop in self.stops]
-        k = names.index(listener) + 1 if listener in names else 0
+        if k is not None:
+            k += 1
+        else:
+            k = names.index(listener) + 1 if listener in names else 0
         name = self.where.get(listener, listener).replace("_", " ")
         if listener in self.where:
             name = f"{name}, in still air"
@@ -931,7 +935,7 @@ class Pictures:
         x = 1010
         if self.fmt == "binaural":
             badge(draw, x, 172)
-        y = place(draw, x, 244, *self.title(stop.key))
+        y = place(draw, x, 244, *self.title(stop.key, k))
         entries = [(self.title(s.key)[0], s.at) for s in self.stops]
         # The facts as large as leaves the tour its title and three rows at the least.
         y = fitted_facts(draw, x, y, self.lines(k, t), TOUR_BOTTOM - tour_room(len(entries)))

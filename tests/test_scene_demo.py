@@ -252,6 +252,17 @@ def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypat
     )
     assert drawing.title("seat-b") == ("seat-b", "Stop 1 of 2")
     assert drawing.title("seat-a") == ("seat-a", "Stop 2 of 2")
+    # A listener the tour comes back to: its second stop is counted as such.
+    again = scene_pictures.Pictures(
+        Scene.from_yaml(scene).to_data(),
+        np.zeros((0, 2, 2)),
+        report,
+        seats["seats"],
+        [*stops, stops[0]],
+        playing=["radio"],
+    )
+    assert again.title("seat-b", 2) == ("seat-b", "Stop 3 of 3")
+    assert again.title("seat-b") == ("seat-b", "Stop 1 of 3")
     assert [s["name"] for s in drawing.playing] == ["radio"]
     assert drawing.level_at("seat-b") == pytest.approx(70.0)  # the radio's alone
     assert drawing.shown(0) == "radio -> seat-b"
