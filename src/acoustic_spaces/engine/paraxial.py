@@ -403,6 +403,9 @@ class Row:
     #: at each of its nodes.
     top_planes: list[int]
     top_sides: dict[int, int]
+    #: The model's planes of the nodes' faces that cross the way between its ends (a
+    #: block's wall across it), but those of tops, each with the nodes it is a face of.
+    walls: dict[int, list[int]]
     #: The source and the unit vector along the way.
     origin: np.ndarray
     direction: np.ndarray
@@ -464,6 +467,16 @@ class Row:
         """Whether nodes ``i`` and ``j`` are the top and the end of one screen's corner."""
         return frozenset([int(i), int(j)]) in self._together
 
+    def wall_of(self, plane: int, point: np.ndarray) -> int:
+        """The node of the row with a face in ``plane`` (a model plane) that crosses the
+        way (:attr:`walls`) nearest ``point`` (a reflection off the plane) along the way,
+        -1 if none has."""
+        nodes = self.walls.get(int(plane), [])
+        if not nodes:
+            return -1
+        x = float(np.einsum("i,i->", np.asarray(point, dtype=float) - self.origin, self.direction))
+        return int(min(nodes, key=lambda i: abs(self.along[i] - x)))
+
     def top_of(self, plane: int, point: np.ndarray) -> int:
         """The top of the row in ``plane`` (a model plane) whose stretch along the way
         is nearest ``point`` (a reflection off the plane), -1 if no top lies in it."""
@@ -484,10 +497,13 @@ class Row:
         edge ``edge`` on a path along the way that reflects off ``planes`` at ``points``
         in turn (-1 for no more): the two of a top for the reflection off that top, its
         node for the incident wave and the reflection off any other face (which the
-        row's field has from the edge on its own, :meth:`past`), and those of the tops
-        the path reflects off. None where the term is not one of the row's field: over
-        an edge not in the row, or on a path that reflects off a plane without a top of
-        the row."""
+        row's field has from the edge on its own, :meth:`past`), those of the tops the
+        path reflects off, and the node of each face it reflects off that crosses the
+        way (:attr:`walls`): off such a face the path runs back along the way, and the
+        row's field, which goes on from each node towards the listener, has none of it.
+        None where the term is not one of the row's field: over an edge not in the row,
+        or on a path that reflects off a plane with neither a top of the row nor a face
+        of a node that crosses the way."""
         node = self.node(edge)
         if node < 0:
             return None
@@ -499,9 +515,13 @@ class Row:
             if plane < 0:
                 break
             q = self.top_of(int(plane), point)
-            if q < 0:
+            if q >= 0:
+                out |= {self.tops[q][0], self.tops[q][1]}
+                continue
+            wall = self.wall_of(int(plane), point)
+            if wall < 0:
                 return None
-            out |= {self.tops[q][0], self.tops[q][1]}
+            out.add(wall)
         return frozenset(out)
 
     def contains(self, members) -> np.ndarray:
@@ -733,6 +753,11 @@ class Row:
                 top_planes.append(plane)
                 top_sides[index[front]] = self.top_sides[front]
                 top_sides[index[back]] = self.top_sides[back]
+        walls = {}
+        for plane, owners in self.walls.items():
+            kept = [index[i] for i in owners if i in index]
+            if kept:
+                walls[plane] = kept
         part = Row(
             edge=self.edge[inside],
             along=along,
@@ -748,6 +773,7 @@ class Row:
             tops=tops,
             top_planes=top_planes,
             top_sides=top_sides,
+            walls=walls,
             origin=start,
             direction=self.direction,
             axes=self.axes,
@@ -1113,6 +1139,17 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
                 break
             if i in top_sides:
                 break
+    # The nodes' faces whose planes cross the way between its ends, but tops'.
+    walls: dict[int, list[int]] = {}
+    for i in range(count):
+        e = nodes[i]
+        for side in (0, 1):
+            plane = int(edges.plane[e, side])
+            if plane < 0 or top_sides.get(i) == side or i in walls.get(plane, []):
+                continue
+            normal, offset = model.plane_normal[plane], float(model.plane_offset[plane])
+            if (_dot(normal, source) - offset) * (_dot(normal, listener) - offset) < 0.0:
+                walls.setdefault(plane, []).append(i)
     if len({round(float(v), 9) for v in along}) < 2:
         return None
     row = Row(
@@ -1130,6 +1167,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         tops=tops,
         top_planes=top_planes,
         top_sides=top_sides,
+        walls=walls,
         origin=source,
         direction=u,
         axes=np.stack([q, p]),
