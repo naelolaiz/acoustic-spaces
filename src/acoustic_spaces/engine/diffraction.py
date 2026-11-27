@@ -3261,15 +3261,17 @@ class EdgeDiffraction:
 
     def _lined(self, listener, paths: EarlyReflections, row: Row, clusters, start: int):
         """The path of the field of the edges of ``row`` over the rows of two of them or
-        more (:meth:`~acoustic_spaces.engine.paraxial.Row.branches`) with the terms of
-        the paths over each edge alone that the paraxial field leaves out (:meth:`_rests`),
-        less the share of the specular paths along the way that it stands for (the direct
-        sound, and the reflections off the row's tops in turn): one path along the way, as
+        more (:meth:`~acoustic_spaces.engine.paraxial.Row.field`, with the bridge's
+        reflections off the row's tops) with the terms of the paths over each edge alone
+        that the paraxial field leaves out (:meth:`_rests`), less the share of the
+        specular paths along the way that it stands for (the direct sound, and the
+        reflections off the row's tops in turn): one path along the way, as
         :meth:`_single` gives the paths over one edge, as row ``start``. In the bands
-        where the paths add in energy the row's field is one wave, the direct sound's, its
-        branches off the tops coming from the source's images in them, which lie as close
-        to the source as the way passes the tops' plane; the share of each specular path
-        it stands for is taken off in that path's wave."""
+        where the paths add in energy the row's field is one wave, the direct sound's,
+        at the way's length (its reflections off the tops come from the source's images
+        in them, which lie as close to the source as the way passes the tops' planes);
+        the share of each specular path it stands for is taken off in that path's
+        wave."""
         k = self.wavenumber
         length = row.length
         way = (listener - self.source) / length
@@ -3292,18 +3294,18 @@ class EdgeDiffraction:
             if carried and -1 not in tops and tops == sorted(set(tops)):
                 along_way.setdefault(tuple(tops), []).append(at)
         # (pressure (B, M), distance, the wave's index in rows or -1 for the direct sound's)
-        pieces: list[tuple[np.ndarray, float, int]] = []
-        for flips, image, part in row.branches(k.reshape(-1)):
-            pieces.append((free * part.reshape(k.shape), image, -1))
-            if flips in along_way:
-                share = row.weight([i for q in flips for i in row.tops[q][:2]]).reshape(k.shape)
-                for at in along_way[flips]:
-                    r = rows[at]
-                    wave = np.sqrt(paths.energy[r])[:, None]
-                    wave = wave * np.exp(-1j * k * paths.distance_m[r])
-                    if paths.spectrum is not None:
-                        wave[: self.coherent] *= paths.spectrum[r]
-                    pieces.append((-share * wave, float(paths.distance_m[r]), at))
+        pieces: list[tuple[np.ndarray, float, int]] = [
+            (free * row.field(k.reshape(-1)).reshape(k.shape), length, -1)
+        ]
+        for flips, ats in along_way.items():
+            share = row.weight([i for q in flips for i in row.tops[q][:2]]).reshape(k.shape)
+            for at in ats:
+                r = rows[at]
+                wave = np.sqrt(paths.energy[r])[:, None]
+                wave = wave * np.exp(-1j * k * paths.distance_m[r])
+                if paths.spectrum is not None:
+                    wave[: self.coherent] *= paths.spectrum[r]
+                pieces.append((-share * wave, float(paths.distance_m[r]), at))
         # The edges' terms that the paraxial field leaves out, past the other nodes.
         pieces.append((free * self._rests(listener, row), length, -1))
         total = np.sum([pressure for pressure, _, _ in pieces], axis=0)

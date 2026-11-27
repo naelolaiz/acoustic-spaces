@@ -39,10 +39,12 @@ where the two coordinates correlate by the cosine of the angle between the nodes
 normals times that (:func:`_lean_error`). A screen whose top and end are both in the
 row stops the bridge where it is on the screen's side of both: the product of the two
 edges' conditions, which the two chains give as the difference of two products
-(:meth:`Row.branches`). A rigid flat top between two edges of the
+(:meth:`Row._splits`). A rigid flat top between two edges of the
 first family (a block's top) reflects the bridge: by Neumann's images, the field over
-it is the bridge's plus that of the bridge from the source's image in the top's plane,
-which crosses the edges before the top mirrored in it.
+it from its front edge to the next node is the bridge's plus that to the node's image
+in the top's plane, the plane through the two edges' lines, whether it lies level or
+slopes along the way; the fields over every set of tops the bridge reflects off are
+worked out together, node by node along the chain (:func:`_reflected`).
 
 Each edge is in the row by how close the way passes it (:func:`membership`): far from
 the way the edges' paths of the uniform theory of diffraction hold, and the bridge's
@@ -312,6 +314,179 @@ def _quadrature(
     return density.sum(axis=1)
 
 
+def _reflected(
+    h: np.ndarray,
+    rho: np.ndarray,
+    clear: np.ndarray,
+    blocked: np.ndarray,
+    hard: tuple[np.ndarray, np.ndarray],
+    tops: list[tuple[int, int, np.ndarray, np.ndarray]],
+) -> np.ndarray:
+    """:func:`bridge_chain` over a chain some of whose links cross rigid tops, over each
+    of which the field adds, by the top's own share, that of the bridge reflected off
+    it: (F,) for the thresholds and weights (n, F) and correlations (n - 1,) of
+    :func:`bridge_chain`, ``hard`` the weights (on the clear side, on the blocked side;
+    (n, F) each) of the nodes where a top reflects (its two edges, then in the row),
+    and ``tops`` (front node, back node, the top's share (F,): the probability that
+    both its edges are in the row times its face's reflection factor, and each node's
+    offset from the top's plane (n, F), in the chain's terms: its sign times its scale
+    times its level less the plane's there, the plane through the two edges' lines).
+
+    By Neumann's images, over a rigid plane the paraxial field from one point to the
+    next is that from the point and from its image in the plane. In the bridge's terms
+    the image's kernel from node a to node b is the free one times exp(-2 rho (A_a +
+    v_a) (A_b + v_b) / (1 - rho^2)), v the bridge's place from each node's threshold, A
+    the node's offset from the plane (none at the top's own edges, whose plane it is,
+    whether it lies level or slopes along the way) and rho the correlation from a to
+    b. The bridge reflects off a top on the link from its front node to the next node,
+    its two nodes taking their hard weights; the fields over every set of tops it
+    reflects off are summed together, node by node (the chain is Markov), the field
+    from a top's front node to its back node in two parts, with and without the
+    reflection. Nodes that weigh both sides alike leave the chain as in
+    :func:`bridge_chain`, the hard weight of a top's node taking the place of its weight
+    in the top's part; a top whose front node has left reflects on the link of the
+    nodes left on either side of it, by the plane's offsets there, and adds nothing
+    where no node is left on one side. Two tops on one link reflect there each alone.
+    Every step is to be at least _APART wide (:func:`_chain`) where there are tops; with
+    none, it is :func:`bridge_chain`'s (which takes narrow steps as it does)."""
+    if not tops:
+        return bridge_chain(h, rho, clear, blocked)
+    h = np.asarray(h, dtype=complex)
+    count, frequencies = h.shape
+    out = np.ones(frequencies, dtype=complex)
+    if count == 0:
+        return out
+    rho = np.asarray(rho, dtype=float)
+    clear = np.broadcast_to(np.asarray(clear, dtype=complex), h.shape)
+    blocked = np.broadcast_to(np.asarray(blocked, dtype=complex), h.shape)
+    hard_clear = np.broadcast_to(np.asarray(hard[0], dtype=complex), h.shape)
+    hard_blocked = np.broadcast_to(np.asarray(hard[1], dtype=complex), h.shape)
+    even = clear == blocked
+    alike = np.where(even, clear, 1.0)
+    out = out * np.prod(alike, axis=0)
+    patterns, which = np.unique(~even.T, axis=0, return_inverse=True)
+    for chain, pattern in enumerate(patterns):
+        columns = np.flatnonzero((which.reshape(-1) == chain) & (out != 0.0))
+        nodes = np.flatnonzero(pattern)
+        if len(columns) == 0 or len(nodes) == 0:
+            continue
+        link = np.array([np.prod(rho[a:b]) for a, b in itertools.pairwise(nodes)])
+        # Each top's link (from the last node left at or before its front), whether
+        # its front and back are left, and its share with the hard weights of those
+        # that are not in place of their weights.
+        reflections = []
+        for front, back, share, offset in tops:
+            start = int(np.searchsorted(nodes, front, side="right")) - 1
+            if start < 0 or start + 1 >= len(nodes):
+                continue
+            factor = np.asarray(share, dtype=complex)[columns]
+            for node in (front, back):
+                if not pattern[node]:
+                    same = hard_clear[node, columns] == hard_blocked[node, columns]
+                    factor = np.where(
+                        same, factor * hard_clear[node, columns] / alike[node, columns], 0.0
+                    )
+            end = int(np.searchsorted(nodes, back, side="left"))
+            reflections.append(
+                (
+                    start,
+                    bool(nodes[start] == front),
+                    end,
+                    bool(end < len(nodes) and nodes[end] == back),
+                    factor,
+                    np.asarray(offset)[np.ix_(nodes, columns)],
+                )
+            )
+        out[columns] *= _marched(
+            h[np.ix_(nodes, columns)],
+            link,
+            (clear[np.ix_(nodes, columns)], blocked[np.ix_(nodes, columns)]),
+            (hard_clear[np.ix_(nodes, columns)], hard_blocked[np.ix_(nodes, columns)]),
+            reflections,
+        )
+    return out
+
+
+def _marched(h: np.ndarray, rho: np.ndarray, free: tuple, hard: tuple, tops: list) -> np.ndarray:
+    """:func:`_reflected` for its nodes left in the chain (thresholds ``h`` (n, F),
+    correlations ``rho`` (n - 1,), the weights ``free`` and ``hard``, each (clear side,
+    blocked side)), by Gauss-Legendre quadrature as :func:`_quadrature` (its points as
+    the chain without the tops' reflections takes them), the tops (the node their
+    link starts from, whether that is the front, the first node at or after the back,
+    whether that is the back, the top's share (F,) and offsets (n, F)) by the parts of
+    the field in turn: each part the field with the reflections off a set of tops whose
+    links have begun and whose backs have not been passed."""
+    count = len(h)
+    points = int(min(max(_FEWEST, math.ceil(_points(h, rho))), _MOST))
+    x, w = np.polynomial.legendre.leggauss(points)
+    u, du = 0.5 * _REACH * (x + 1.0), 0.5 * _REACH * w
+    # The bridge's place from the threshold on the ray up, then on the one down.
+    v = np.concatenate([u, -u])
+
+    def weights(j: int, pair: tuple) -> np.ndarray:
+        return np.concatenate([pair[0][j][:, None] * du, pair[1][j][:, None] * du], axis=1)
+
+    y = h[0][:, None] + v[None, :]
+    parts: dict[frozenset, np.ndarray] = {
+        frozenset(): np.exp(-0.5 * y**2) / math.sqrt(2.0 * math.pi)
+    }
+    for j in range(count):
+        # The parts of the tops whose backs have left the chain before this node join
+        # the others.
+        for t, (_, _, end, at_back, _, _) in enumerate(tops):
+            if end == j and not at_back:
+                parts = _closed(parts, t)
+        # The parts that reflect off the tops whose links begin here.
+        for t, (start, _, _, _, _, _) in enumerate(tops):
+            if start == j:
+                for key in list(parts):
+                    if not any(tops[other][0] == j for other in key):
+                        parts[key | {t}] = parts[key]
+        for key in list(parts):
+            hard_here = any(
+                (tops[t][0] == j and tops[t][1]) or (tops[t][2] == j and tops[t][3]) for t in key
+            )
+            parts[key] = parts[key] * weights(j, hard if hard_here else free)
+        for t, (_, _, end, at_back, _, _) in enumerate(tops):
+            if end == j and at_back:
+                parts = _closed(parts, t)
+        if j == count - 1:
+            break
+        r = float(rho[j])
+        spread = 1.0 - r * r
+        following = h[j + 1][:, None] + v[None, :]
+        step = following[:, None, :] - r * y[:, :, None]
+        exponent = -0.5 * step**2 / spread
+        norm = 1.0 / math.sqrt(2.0 * math.pi * spread)
+        moved: dict[frozenset, np.ndarray] = {}
+        for key, density in parts.items():
+            reflecting = [t for t in key if tops[t][0] == j]
+            if reflecting:
+                (t,) = reflecting
+                offset = tops[t][5]
+                here = offset[j][:, None, None] + v[None, :, None]
+                there = offset[j + 1][:, None, None] + v[None, None, :]
+                kernel = np.exp(exponent - 2.0 * r * here * there / spread) * norm
+                field = products.product(density[:, None, :], kernel)[:, 0, :]
+                field = field * tops[t][4][:, None]
+            else:
+                kernel = np.exp(exponent) * norm
+                field = products.product(density[:, None, :], kernel)[:, 0, :]
+            moved[key] = moved[key] + field if key in moved else field
+        parts, y = moved, following
+    return np.sum([density.sum(axis=1) for density in parts.values()], axis=0)
+
+
+def _closed(parts: dict, top: int) -> dict:
+    """``parts`` (:func:`_marched`) with that of each set of tops with ``top`` added to
+    that of the set without it."""
+    out: dict[frozenset, np.ndarray] = {}
+    for key, density in parts.items():
+        key = key - {top}
+        out[key] = out[key] + density if key in out else density
+    return out
+
+
 def _chain_cost(
     t: np.ndarray, rho: np.ndarray, active: np.ndarray, merged: float = 0.0, join=None
 ) -> tuple:
@@ -419,7 +594,7 @@ class Row:
     both; each (F,)). The field over the edges is that of the uniform theory of
     diffraction over those not in the row, the row's paraxial field over those in it
     where they are two or more: :meth:`weight` is the share of a term over some edges
-    that the row takes, and :meth:`branches` the row's field.
+    that the row takes, and :meth:`field` the row's field.
 
     ``tops`` (front node, back node, level of the face's plane along q, the face's
     reflection factor (F,)) are the rigid flat tops between two nodes of family 0, in
@@ -492,6 +667,8 @@ class Row:
         grouped = frozenset().union(*groups)
         groups += [frozenset([i]) for i in range(len(self.edge)) if i not in grouped]
         self._groups = groups
+        # The legs worked out by :meth:`_passing`, by their two ends.
+        self._legs: dict[tuple[bytes, bytes], tuple[np.ndarray, np.ndarray]] = {}
 
     @property
     def frequencies(self) -> int:
@@ -620,10 +797,12 @@ class Row:
 
     def _steps(self, family: int, source: float, items: list, scale: np.ndarray) -> tuple:
         """The chain over ``items`` (node, level, clear side, weight on the clear side, on
-        the blocked side) of ``family``, the bridge from ``source`` (that family's
-        coordinate of the source or its image) to the listener, in the terms of
+        the blocked side, and with two more, the hard weights on the clear and the
+        blocked side) of ``family``, the bridge from ``source`` (that family's coordinate
+        of the source or its image) to the listener, in the terms of
         :func:`bridge_chain`: its thresholds (n, F), correlations (n - 1,) and weights
-        on the clear and the blocked side (n, F), in order along the way."""
+        on the clear and the blocked side (n, F), in order along the way, and with hard
+        weights, those (n, F each) and the nodes in that order."""
         items = sorted(items, key=lambda item: self.along[item[0]])
         nodes = np.array([item[0] for item in items])
         listener = self.way[family, 1]
@@ -632,19 +811,26 @@ class Row:
         sign = np.array([item[2] for item in items], dtype=float)
         thresholds = (sign * (level - mean))[:, None] * scale[nodes]
         rho = sign[:-1] * sign[1:] * correlations(self.along[nodes], self.length)
+        columns = range(3, len(items[0]))
         weights = [
             np.array([np.broadcast_to(item[c], (self.frequencies,)) for item in items])
-            for c in (3, 4)
+            for c in columns
         ]
         if self.limit_far:
             # The side the bridge's mean lies on, towards which a far node weighs.
-            limit = np.where(thresholds.real < 0.0, weights[0], weights[1])
             near = membership(np.abs(thresholds))
-            weights = [limit + near * (weight - limit) for weight in weights]
+            for c in range(0, len(weights), 2):
+                limit = np.where(thresholds.real < 0.0, weights[c], weights[c + 1])
+                weights[c : c + 2] = [
+                    limit + near * (weight - limit) for weight in weights[c : c + 2]
+                ]
+        if len(weights) > 2:
+            return thresholds, rho, *weights[:2], tuple(weights[2:]), nodes
         return thresholds, rho, *weights
 
     def _layouts(self, k: np.ndarray):
-        """For each set of tops the bridge reflects off: the set (their indices in order
+        """For each set of tops the bridge reflects off, as :meth:`field` takes them where
+        a step of the chain is narrow (:meth:`_narrow`): the set (their indices in order
         along the way), the distance from the source's image in their planes in turn to
         the listener, the set's weight (F,) and the image's spreading and delay relative
         to those of the straight line from the source (F,), and the chains whose sum is
@@ -652,10 +838,7 @@ class Row:
         :meth:`_steps`)."""
         count = len(self.edge)
         frequencies = self.frequencies
-        across = self.along * (self.length - self.along) / self.length
-        scale = np.sqrt(np.asarray(k, dtype=float)[None, :] / across[:, None]) * np.exp(
-            0.25j * np.pi
-        )
+        scale = self._scale(k)
         order = np.argsort(-self.along, kind="stable")
         for flips in itertools.product((False, True), repeat=len(self.tops)):
             chosen = [top for top, on in zip(self.tops, flips, strict=True) if on]
@@ -718,25 +901,99 @@ class Row:
             yield tuple(q for q, on in enumerate(flips) if on), image, weight, ratio, chains
 
     def growth(self) -> np.ndarray:
-        """(F,) the largest, over the row's chains at the frequencies where their set of
-        tops has a share and the chain is not none, of the exponent by which the
-        integrand of :func:`bridge_chain` grows along a chain of the nodes that weigh
-        their two sides differently (_GROWTH_NEAR, :func:`_chain_cost`), and of
-        _GROWTH_FAR in proportion to the points its quadrature takes over _MOST."""
+        """(F,) the largest, over the row's chains (:meth:`_splits`, those of the bridge
+        that reflects off no top) at the frequencies where the chain is not none, of the
+        exponent by which the integrand of :func:`bridge_chain` grows along a chain of
+        the nodes that weigh their two sides differently (_GROWTH_NEAR,
+        :func:`_chain_cost`), and of _GROWTH_FAR in proportion to the points its
+        quadrature takes over _MOST."""
         out = np.zeros(self.frequencies)
-        for _, _, weight, _, chains in self._layouts(self.wavenumber):
-            for _, *families in chains:
-                steps_of = [steps for steps in families if steps is not None]
-                # A chain with a node that weighs both sides by none is none there.
-                some = weight != 0.0
-                for _, _, clear, blocked in steps_of:
-                    some &= ~((clear == 0.0) & (blocked == 0.0)).any(axis=0)
-                for thresholds, rho, clear, blocked in steps_of:
-                    t = np.abs(thresholds) * np.sign(thresholds.real)
-                    active = (clear != blocked) & some
-                    growth, points = _chain_cost(t, rho, active, _APART)
-                    out = np.maximum(out, np.maximum(growth, _GROWTH_FAR * points / _MOST))
+        for _, *families in self._splits(self.wavenumber):
+            steps_of = [steps[:4] for steps in families if steps is not None]
+            # A chain with a node that weighs both sides by none is none there.
+            some = np.ones(self.frequencies, dtype=bool)
+            for _, _, clear, blocked in steps_of:
+                some &= ~((clear == 0.0) & (blocked == 0.0)).any(axis=0)
+            for thresholds, rho, clear, blocked in steps_of:
+                t = np.abs(thresholds) * np.sign(thresholds.real)
+                active = (clear != blocked) & some
+                growth, points = _chain_cost(t, rho, active, _APART)
+                out = np.maximum(out, np.maximum(growth, _GROWTH_FAR * points / _MOST))
         return out
+
+    def _scale(self, k: np.ndarray) -> np.ndarray:
+        """(n, F) each node's chain variable per metre across the way at wavenumbers
+        ``k`` (F,): sqrt(k / d) exp(i pi / 4), d = x (D - x) / D."""
+        across = self.along * (self.length - self.along) / self.length
+        return np.sqrt(np.asarray(k, dtype=float)[None, :] / across[:, None]) * np.exp(
+            0.25j * np.pi
+        )
+
+    def _splits(self, k: np.ndarray):
+        """For each split of the screens' corners (see :meth:`_layouts`), the chains of the
+        bridge from the source, whose sum over the splits is the row's field over the
+        tops' reflections too (:func:`_reflected`): (coefficient, the steps of family
+        0 with the hard weights of the tops' nodes, those of family 1; :meth:`_steps`,
+        none where a family has no node)."""
+        count = len(self.edge)
+        scale = self._scale(k)
+        hard = {i for front, back, _, _ in self.tops for i in (front, back)}
+        for split in itertools.product((False, True), repeat=len(self.corners)):
+            coefficient = 1.0
+            items: list[list] = [[], []]
+            for i in range(count):
+                if i not in self._cornered:
+                    item = (i, self.level[i], self.clear[i], 1.0, 1.0 - self.share[i])
+                    if self.family[i] == 0:
+                        # The hard weights, those of the tops' nodes in the tops' parts.
+                        item += (1.0, 0.0) if i in hard else (1.0, 1.0 - self.share[i])
+                    items[self.family[i]].append(item)
+            for (first, second, (_, one, other, both)), part in zip(
+                self.corners, split, strict=True
+            ):
+                if part:
+                    coefficient = -coefficient
+                    items[0].append(
+                        (first, self.level[first], self.clear[first], 0.0, 1.0, 0.0, 1.0)
+                    )
+                    items[1].append(
+                        (second, self.level[second], self.clear[second], one, one + both)
+                    )
+                else:
+                    items[1].append(
+                        (second, self.level[second], self.clear[second], 1.0, 1.0 - other)
+                    )
+            yield (
+                coefficient,
+                self._steps(0, self.way[0, 0], items[0], scale) if items[0] else None,
+                self._steps(1, self.way[1, 0], items[1], scale) if items[1] else None,
+            )
+
+    def _reflections(self, nodes: np.ndarray, scale: np.ndarray) -> list:
+        """The tops of the chain of family 0 over ``nodes`` (in order along the way), in
+        the terms of :func:`_reflected`: (front node, back node, share (F,), offsets of
+        the nodes from the top's plane (n, F))."""
+        place = {int(node): j for j, node in enumerate(nodes)}
+        out = []
+        for front, back, _, reflection in self.tops:
+            # The plane through the two edges' lines, as its level along the way.
+            slope = (self.level[back] - self.level[front]) / (self.along[back] - self.along[front])
+            plane = self.level[front] + slope * (self.along[nodes] - self.along[front])
+            offset = (self.clear[nodes] * (self.level[nodes] - plane))[:, None] * scale[nodes]
+            share = self.share[front] * self.share[back] * reflection
+            out.append((place[int(front)], place[int(back)], share, offset))
+        return out
+
+    def _narrow(self) -> bool:
+        """Whether a step of the chain of family 0 is narrower than _APART, where its
+        quadrature takes nodes as one (:func:`_chain`), which the tops' reflections
+        (:func:`_reflected`) do not: the row's field is then worked out over each set of
+        tops apart (:meth:`_layouts`)."""
+        along = np.sort(self.along[self.family == 0])
+        if not self.tops or len(along) < 2:
+            return False
+        rho = correlations(along, self.length)
+        return bool((np.sqrt(np.maximum(1.0 - rho**2, 0.0)) < _APART).any())
 
     def computable(self) -> Row:
         """The row with its hold at each frequency taken down by :func:`_fade` of its
@@ -830,7 +1087,7 @@ class Row:
         """(F,) the field at the end of each of ``legs`` (pairs of points in turn, the
         path's) of a point source at its start relative to the free field, past the nodes
         of the row between the two along the way (not those at either), over every row
-        of them (:meth:`branches`), each node in the row by how close the straight line
+        of them (:meth:`field`), each node in the row by how close the straight line
         between the two passes it (:func:`membership`, by its ends as :func:`find_row`
         has them), multiplied along the legs. The legs of one path pass one row: where it
         holds on one leg it does on each that holds by as much or more (the row on each
@@ -854,7 +1111,17 @@ class Row:
 
     def _passing(self, start: np.ndarray, end: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """(F,) how much the row of the nodes between ``start`` and ``end`` holds for the
-        bridge between them, and (F,) its field there where it holds (:meth:`passing`)."""
+        bridge between them, and (F,) its field there where it holds (:meth:`passing`;
+        where it does not, 1). The legs of the paths over two edges come again and again
+        (on a way at right angles to the edges, from the source to each edge and from
+        each edge to the listener): each pair of ends is worked out once."""
+        key = (start.tobytes(), end.tobytes())
+        if key not in self._legs:
+            self._legs[key] = self._passing_once(start, end)
+        return self._legs[key]
+
+    def _passing_once(self, start: np.ndarray, end: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """:meth:`_passing`, worked out."""
         a = float(np.einsum("i,i->", start - self.origin, self.direction))
         b = float(np.einsum("i,i->", end - self.origin, self.direction))
         if b < a:
@@ -865,20 +1132,19 @@ class Row:
         if len(inside) == 0 or b - a <= margin:
             return ones, ones.astype(complex)
         part = self._part(inside, start, end, own=False)
-        held = dataclasses.replace(part, hold=ones)
-        fields = [field for _, _, field in held.branches(self.wavenumber, every=True)]
-        return part.hold, np.sum(fields, axis=0)
+        held = dataclasses.replace(part, hold=(part.hold > 0.0).astype(float))
+        return part.hold, held.field(self.wavenumber, every=True)
 
     def _leg(self, inside: np.ndarray, start: np.ndarray, end: np.ndarray) -> np.ndarray:
         """(F,) the field at ``end`` of a point source at ``start`` relative to the free
         field past the nodes ``inside`` (ascending, between the two), each in the row by
         its share in this row, those the straight line passes far from at their
-        geometric limit (``limit_far``), over every row of them (:meth:`branches`)."""
+        geometric limit (``limit_far``), over every row of them (:meth:`field`)."""
         if len(inside) == 0:
             return np.ones(self.frequencies, dtype=complex)
         part = self._part(inside, start, end, own=True)
         part = dataclasses.replace(part, limit_far=True).computable()
-        return np.sum([field for _, _, field in part.branches(self.wavenumber, every=True)], axis=0)
+        return part.field(self.wavenumber, every=True)
 
     def past(self, node: int, point: np.ndarray) -> np.ndarray:
         """(F,) the share the row's field stands for of a wave that the edge of ``node``
@@ -909,55 +1175,67 @@ class Row:
         within = self._empty(group) * alone[0] * alone[1]
         return held * (legs[0] * legs[1] - within)
 
-    def branches(
-        self, k: np.ndarray, every: bool = False
-    ) -> list[tuple[tuple[int, ...], float, np.ndarray]]:
-        """The row's field relative to the free field at wavenumbers ``k`` (F,), over the
-        rows of two nodes or more in proportion to their probability (with ``every``,
-        over every row, of any number of nodes, and the free field where the row does not
-        hold), by the tops the bridge reflects off: for
-        each set of ``tops`` (their indices, in order along the way), the distance from
-        the source's image in their planes in turn to the listener and (F,) that part of
-        the field, the image's spreading and delay relative to the straight line's
-        included. Where a set of tops has no share (their edges are in no row), its part
-        is none: its chains, far from the bridge there, are not worked out."""
-        out = []
-        for flips, image, weight, ratio, chains in self._layouts(k):
-            live = np.flatnonzero((weight != 0.0) & (self.hold != 0.0))
-            total = np.zeros(len(live), dtype=complex)
-            for coefficient, *families in chains:
+    def field(self, k: np.ndarray, every: bool = False) -> np.ndarray:
+        """(F,) the row's field relative to the free field at wavenumbers ``k`` (F,), over
+        the rows of two nodes or more in proportion to their probability (with
+        ``every``, over every row, of any number of nodes, and the free field where the
+        row does not hold), with the bridge's reflections off every set of tops
+        (:func:`_reflected` over the chains of :meth:`_splits`; where a step is narrow,
+        :meth:`_narrow`, over each set apart, :meth:`_layouts`)."""
+        live = np.flatnonzero(self.hold != 0.0)
+        total = np.zeros(len(live), dtype=complex)
+        if self._narrow():
+            for _, _, weight, ratio, chains in self._layouts(k):
+                # Where a set of tops has no share (their edges are in no row), its part
+                # is none: its chains, far from the bridge there, are not worked out.
+                mine = np.flatnonzero(weight[live] != 0.0)
+                columns = live[mine]
+                part = np.zeros(len(columns), dtype=complex)
+                for coefficient, *families in chains:
+                    term = np.full(len(columns), coefficient, dtype=complex)
+                    for steps in families:
+                        if steps is not None:
+                            thresholds, rho, clear, blocked = steps
+                            term *= bridge_chain(
+                                thresholds[:, columns], rho, clear[:, columns], blocked[:, columns]
+                            )
+                    part += term
+                total[mine] += (weight * ratio)[columns] * part
+        else:
+            scale = self._scale(k)
+            for coefficient, *families in self._splits(k):
                 term = np.full(len(live), coefficient, dtype=complex)
-                for steps in families:
-                    if steps is not None:
-                        thresholds, rho, clear, blocked = steps
-                        term *= bridge_chain(
-                            thresholds[:, live], rho, clear[:, live], blocked[:, live]
-                        )
+                if families[0] is not None:
+                    thresholds, rho, clear, blocked, hard, nodes = families[0]
+                    tops = [
+                        (front, back, np.asarray(share)[live], offset[:, live])
+                        for front, back, share, offset in self._reflections(nodes, scale)
+                    ]
+                    term *= _reflected(
+                        thresholds[:, live],
+                        rho,
+                        clear[:, live],
+                        blocked[:, live],
+                        (hard[0][:, live], hard[1][:, live]),
+                        tops,
+                    )
+                if families[1] is not None:
+                    thresholds, rho, clear, blocked = families[1]
+                    term *= bridge_chain(thresholds[:, live], rho, clear[:, live], blocked[:, live])
                 total += term
-            if not flips and not every:
-                # The row of no node is the way's free field.
-                total -= self._empty()[live]
-            field = np.zeros(self.frequencies, dtype=complex)
-            field[live] = (self.hold * weight * ratio)[live] * total
-            if not flips and every:
-                # Where the row does not hold, no node is in it: the free field.
-                field = field + (1.0 - self.hold)
-            out.append((flips, image, field))
         if not every:
-            # The rows of the nodes of one obstacle are the edges' paths'.
-            places = {flips: q for q, (flips, _, _) in enumerate(out)}
-            for group in self._groups:
-                inside = np.array(sorted(group))
-                part = self._part(
-                    inside, self.origin, self.origin + self.length * self.direction, True
-                )
-                rest = self._empty(group)
-                tops = [self.tops.index(top) for top in self.tops if {top[0], top[1]} <= group]
-                for flips, _, field in part.branches(k, every=True):
-                    if not flips:
-                        field = field - part._empty()
-                    q = places[tuple(tops[f] for f in flips)]
-                    out[q] = (out[q][0], out[q][1], out[q][2] - self.hold * rest * field)
+            # The row of no node is the way's free field.
+            total -= self._empty()[live]
+        out = np.zeros(self.frequencies, dtype=complex)
+        out[live] = self.hold[live] * total
+        if every:
+            # Where the row does not hold, no node is in it: the free field.
+            return out + (1.0 - self.hold)
+        # The rows of the nodes of one obstacle are the edges' paths'.
+        for group in self._groups:
+            inside = np.array(sorted(group))
+            part = self._part(inside, self.origin, self.origin + self.length * self.direction, True)
+            out = out - self.hold * self._empty(group) * (part.field(k, every=True) - part._empty())
         return out
 
 
