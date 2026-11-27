@@ -1431,7 +1431,9 @@ def test_tops_in_a_row_are_one_wave_in_the_bands_that_add_in_energy(
     # top's reflection takes off the incident wave's term what it would add: one wave,
     # in the bands that add in energy too. As two waves they read 6.5 to 9.4 dB above
     # the same bands in pressure; without the path over two lit edges, 4.2 to 5.7 dB
-    # above the free field.
+    # above the free field. The two-dimensional wave calculation (validation/rows.py's)
+    # puts the slotted top at -5.2 to -5.8 dB from 63 to 500 Hz, and the 10 m top
+    # without the slot at -5.2 to -5.7 dB.
     width = 5.0 if gap == 5.0 else 5.0 - gap / 2.0
     second = [
         [(x + width + gap, y, z) for x, y, z in quad]
@@ -1446,7 +1448,7 @@ def test_tops_in_a_row_are_one_wave_in_the_bands_that_add_in_energy(
         levels.append(edge_diffraction.whole_early_stage(room))
     pressure, energy = levels
     assert np.abs(energy[:4] - pressure[:4]).max() < 1.2, energy - pressure
-    assert -8.0 < min(pressure.min(), energy.min()) and max(pressure.max(), energy.max()) < -5.5
+    assert -8.0 < min(pressure.min(), energy.min()) and max(pressure.max(), energy.max()) < -4.5
 
 
 def _screen_from(x: float, y: float) -> list:

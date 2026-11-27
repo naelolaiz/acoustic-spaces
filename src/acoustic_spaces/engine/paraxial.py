@@ -74,14 +74,20 @@ _REACH = 8.0
 #: from a complex threshold is a wave, :func:`_chain_cost`), up to _MOST. On 435 chains
 #: of two to four nodes within 3 standard deviations, at random, that the row takes
 #: (:meth:`Row.growth` below _GROWTH_FAR), they are within 5e-8 of the 400-point integral.
-#: A step narrower than _PER_WIDTH / _MOST (two edges of one family 5 cm apart half way
-#: along 25 m) would take more than _MOST points: the row takes nothing at the
-#: frequencies where its chain has one, and it fades out as the step narrows towards it
-#: (:meth:`Row.growth`).
 _FEWEST = 24
 _PER_WIDTH = 10.0
 _TURN = 3.0
 _MOST = 128
+#: A step narrower than _APART takes more than _MOST / 2 points, and one narrower than
+#: _CLOSE more than _MOST (two edges of one family 5 cm apart half way along 25 m). Over
+#: so narrow a step the bridge hardly moves: the chain takes the two nodes as one, the
+#: bridge at the second at the first's place (Y_j = +-Y_i), whose weight is the product
+#: of theirs, below _CLOSE, and goes over from the two to the one between _APART and
+#: _CLOSE (:func:`_chain`). One node for two knife edges at the bridge's mean lets
+#: through 1/2 for 1/4 + asin(rho) / (2 pi) = 1/2 - asin(sqrt(1 - rho^2)) / (2 pi):
+#: within _CLOSE / pi (2.5 %) of it.
+_APART = 2.0 * _PER_WIDTH / _MOST
+_CLOSE = _PER_WIDTH / _MOST
 #: An edge is in the row where the way passes it within ROW_NEAR standard deviations of
 #: the bridge there, and not beyond ROW_FAR: the bridge's density at the edge is then
 #: within exp(-1/2) of its peak, and below exp(-9/2) (1 %), where the edge's paths over
@@ -124,7 +130,21 @@ def bridge_chain(
     along the real direction from their thresholds, where the Gaussian along one of the
     two rays grows as exp(|h| u / sqrt 2) before it falls: within _REACH for thresholds
     of a few standard deviations, as those of the row's nodes are (:func:`membership`),
-    but not for an edge far from the way, which is in the row by none of its share."""
+    but not for an edge far from the way, which is in the row by none of its share.
+    Nodes across a step narrower than the quadrature resolves are taken as one
+    (:func:`_chain`)."""
+    return _bridge(thresholds, correlations, clear, blocked, True)
+
+
+def _bridge(
+    thresholds: np.ndarray,
+    correlations: np.ndarray,
+    clear: np.ndarray,
+    blocked: np.ndarray,
+    merge: bool,
+) -> np.ndarray:
+    """:func:`bridge_chain`, with the nodes across narrow steps taken as one (``merge``,
+    :func:`_chain`) or each by the quadrature however narrow its steps."""
     h = np.asarray(thresholds, dtype=complex)
     count, frequencies = h.shape
     out = np.ones(frequencies, dtype=complex)
@@ -141,12 +161,99 @@ def bridge_chain(
         nodes = np.flatnonzero(pattern)
         if len(columns) and len(nodes):
             link = np.array([np.prod(rho[a:b]) for a, b in itertools.pairwise(nodes)])
-            out[columns] *= _quadrature(
+            out[columns] *= (_chain if merge else _quadrature)(
                 h[np.ix_(nodes, columns)],
                 link,
                 clear[np.ix_(nodes, columns)],
                 blocked[np.ix_(nodes, columns)],
             )
+    return out
+
+
+def _chain(h: np.ndarray, rho: np.ndarray, clear: np.ndarray, blocked: np.ndarray) -> np.ndarray:
+    """:func:`bridge_chain` for nodes that each weigh the two sides of their thresholds
+    differently: by :func:`_quadrature` where every step is at least _APART wide; the
+    nodes across the steps narrower than that taken as one (:func:`_merged`) below
+    _CLOSE, and between the two by half a cosine's period in the step's width (in the
+    product of those over the chain's steps), the quadrature's part also taken down by
+    :func:`_fade` of its growth and its points over those steps, as :meth:`Row.growth`
+    has them."""
+    width = np.sqrt(np.maximum(1.0 - rho**2, 0.0))
+    narrow = width < _APART
+    if not narrow.any():
+        return _quadrature(h, rho, clear, blocked)
+    x = np.clip((width[narrow] - _CLOSE) / (_APART - _CLOSE), 0.0, 1.0)
+    apart = float(np.prod(0.5 * (1.0 - np.cos(np.pi * x))))
+    one = _merged(h, rho, clear, blocked, narrow)
+    if apart == 0.0:
+        return one
+    close = width < _CLOSE
+    t = np.abs(h) * np.sign(h.real)
+    growth, points = _chain_cost(t, rho, np.ones(t.shape, dtype=bool), _CLOSE)
+    share = apart * _fade(np.maximum(growth, _GROWTH_FAR * points / _MOST))
+    if close.any():
+        two = _merged(h, rho, clear, blocked, close)
+    else:
+        two = _quadrature(h, rho, clear, blocked)
+    return share * two + (1.0 - share) * one
+
+
+def _merged(
+    h: np.ndarray, rho: np.ndarray, clear: np.ndarray, blocked: np.ndarray, narrow: np.ndarray
+) -> np.ndarray:
+    """:func:`bridge_chain` with the nodes across each of the steps ``narrow`` (n - 1,)
+    taken as one, at the first of them, the bridge at the others where it is there (the
+    sign of the correlations across, Y_j = +-Y_i): the product of their weights, a weight
+    that steps at each of their thresholds (in the order of the thresholds' real
+    coefficient of exp(i pi / 4), the phase they share), which is its value below them
+    all and its step at each (a node of weights 1 and 0) in turn; the chain over the
+    others and those (each by the quadrature, :func:`_bridge`), summed."""
+    count = len(h)
+    # The runs of nodes across narrow steps: each from its first node.
+    runs, start = [], 0
+    for j in range(1, count + 1):
+        if j == count or not narrow[j - 1]:
+            runs.append(list(range(start, j)))
+            start = j
+    options = []
+    for run in runs:
+        if len(run) == 1:
+            i = run[0]
+            options.append([(np.ones(h.shape[1], dtype=complex), i, h[i], clear[i], blocked[i])])
+            continue
+        # Each node's weight at the first's place: above and below its threshold there.
+        sign = np.cumprod(np.concatenate([[1.0], np.sign(rho[run[0] : run[-1]])]))
+        at = sign[:, None] * h[run]
+        above = np.where(sign[:, None] > 0.0, clear[run], blocked[run])
+        below = np.where(sign[:, None] > 0.0, blocked[run], clear[run])
+        order = np.argsort((at * np.exp(-0.25j * np.pi)).real, axis=0, kind="stable")
+        rank = np.argsort(order, axis=0, kind="stable")
+        value = [
+            np.prod(np.where(rank < passed, above, below), axis=0) for passed in range(len(run) + 1)
+        ]
+        steps = np.take_along_axis(at, order, axis=0)
+        ones, nothing = np.ones(h.shape[1], dtype=complex), np.zeros(h.shape[1], dtype=complex)
+        option = [(value[0], -1, None, None, None)]
+        for passed in range(1, len(run) + 1):
+            step = value[passed] - value[passed - 1]
+            option.append((step, run[0], steps[passed - 1], ones, nothing))
+        options.append(option)
+    out = np.zeros(h.shape[1], dtype=complex)
+    for choice in itertools.product(*options):
+        coefficient = np.prod([c[0] for c in choice], axis=0)
+        kept = [c for c in choice if c[1] >= 0]
+        if not kept:
+            out += coefficient
+            continue
+        places = [c[1] for c in kept]
+        link = np.array([np.prod(rho[a:b]) for a, b in itertools.pairwise(places)])
+        out += coefficient * _bridge(
+            np.array([c[2] for c in kept]),
+            link,
+            np.array([c[3] for c in kept]),
+            np.array([c[4] for c in kept]),
+            False,
+        )
     return out
 
 
@@ -179,7 +286,7 @@ def _quadrature(
     return density.sum(axis=1)
 
 
-def _chain_cost(t: np.ndarray, rho: np.ndarray, active: np.ndarray) -> tuple:
+def _chain_cost(t: np.ndarray, rho: np.ndarray, active: np.ndarray, merged: float = 0.0) -> tuple:
     """For the chain of the nodes ``active`` (n, F) of thresholds ``t`` (n, F, in
     standard deviations, the clear side up) and correlations ``rho`` (n - 1,), from one
     active node to the next by the product of the correlations between: (F,) the
@@ -189,16 +296,19 @@ def _chain_cost(t: np.ndarray, rho: np.ndarray, active: np.ndarray) -> tuple:
     _TURN): over the width of the narrowest kernel, and over the fastest turn of a
     node's integrand along its ray, by the step into it (sqrt(2 E) radians over the
     kernel's width, the first node's |t| / sqrt 2 over its density's) and the kernel
-    out of it in proportion to the correlation; none where no node is active."""
+    out of it in proportion to the correlation; none where no node is active. A node a
+    step narrower than ``merged`` from the active node before is one with it
+    (:func:`_merged`): it adds no step, and the next step is from that node."""
     count, frequencies = t.shape
     growth, fastest = np.zeros(frequencies), np.zeros(frequencies)
     narrowest = np.ones(frequencies)
     last, link, into = np.zeros(frequencies), np.ones(frequencies), np.zeros(frequencies)
     seen = np.zeros(frequencies, dtype=bool)
     for j in range(count):
-        on = active[j]
         spread = np.maximum(1.0 - link**2, 1e-12)
         width = np.sqrt(spread)
+        joined = active[j] & seen & (width < merged)
+        on = active[j] & ~joined
         offset = np.abs(t[j] - link * last)
         step = np.where(seen, offset**2 / (4.0 * spread), t[j] ** 2 / 4.0)
         turn = np.where(seen, offset / (math.sqrt(2.0) * spread), np.abs(t[j]) / math.sqrt(2.0))
@@ -561,7 +671,8 @@ class Row:
                     some &= ~((clear == 0.0) & (blocked == 0.0)).any(axis=0)
                 for thresholds, rho, clear, blocked in steps_of:
                     t = np.abs(thresholds) * np.sign(thresholds.real)
-                    growth, points = _chain_cost(t, rho, (clear != blocked) & some)
+                    active = (clear != blocked) & some
+                    growth, points = _chain_cost(t, rho, active, _APART)
                     out = np.maximum(out, np.maximum(growth, _GROWTH_FAR * points / _MOST))
         return out
 
@@ -645,23 +756,48 @@ class Row:
         )
         return part if own else part.computable()
 
-    def passing(self, start: np.ndarray, end: np.ndarray) -> np.ndarray:
-        """(F,) the field at ``end`` of a point source at ``start`` relative to the free
-        field past the nodes of the row between the two along the way (not those at
-        either), over every row of them (:meth:`branches`), each node in the row by how
-        close the straight line between the two passes it (:func:`membership`, by its
-        ends as :func:`find_row` has them)."""
-        start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
+    def passing(self, legs) -> np.ndarray:
+        """(F,) the field at the end of each of ``legs`` (pairs of points in turn, the
+        path's) of a point source at its start relative to the free field, past the nodes
+        of the row between the two along the way (not those at either), over every row
+        of them (:meth:`branches`), each node in the row by how close the straight line
+        between the two passes it (:func:`membership`, by its ends as :func:`find_row`
+        has them), multiplied along the legs. The legs of one path pass one row: where it
+        holds on one leg it does on each that holds by as much or more (the row on each
+        leg holds by the largest of its nodes' shares there, :func:`_held`)."""
+        holds, fields = [], []
+        for start, end in legs:
+            hold, field = self._passing(
+                np.asarray(start, dtype=float), np.asarray(end, dtype=float)
+            )
+            holds.append(hold)
+            fields.append(field)
+        holds, fields = np.array(holds), np.array(fields)
+        order = np.argsort(-holds, axis=0, kind="stable")
+        holds = np.take_along_axis(holds, order, axis=0)
+        fields = np.take_along_axis(fields, order, axis=0)
+        ones, nothing = np.ones((1, self.frequencies)), np.zeros((1, self.frequencies))
+        # Where the row holds on the first k legs (by its hold on them) and on no other.
+        share = np.concatenate([ones, holds]) - np.concatenate([holds, nothing])
+        field = np.concatenate([ones.astype(complex), np.cumprod(fields, axis=0)])
+        return np.sum(share * field, axis=0)
+
+    def _passing(self, start: np.ndarray, end: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """(F,) how much the row of the nodes between ``start`` and ``end`` holds for the
+        bridge between them, and (F,) its field there where it holds (:meth:`passing`)."""
         a = float(np.einsum("i,i->", start - self.origin, self.direction))
         b = float(np.einsum("i,i->", end - self.origin, self.direction))
         if b < a:
             start, end, a, b = end, start, b, a
         margin = 1e-6 * self.length
         inside = np.flatnonzero((self.along > a + margin) & (self.along < b - margin))
+        ones = np.ones(self.frequencies)
         if len(inside) == 0 or b - a <= margin:
-            return np.ones(self.frequencies, dtype=complex)
+            return ones, ones.astype(complex)
         part = self._part(inside, start, end, own=False)
-        return np.sum([field for _, _, field in part.branches(self.wavenumber, every=True)], axis=0)
+        held = dataclasses.replace(part, hold=ones)
+        fields = [field for _, _, field in held.branches(self.wavenumber, every=True)]
+        return part.hold, np.sum(fields, axis=0)
 
     def _leg(self, inside: np.ndarray, start: np.ndarray, end: np.ndarray) -> np.ndarray:
         """(F,) the field at ``end`` of a point source at ``start`` relative to the free
@@ -886,7 +1022,10 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
     # The two edges of one obstacle across the way (a strip between its top and its
     # foot, a panel between its ends): faces in one plane across the way from each
     # towards the other. The chain takes each edge's obstacle to stand to infinity on
-    # its side, which these do not: no row.
+    # its side, which these do not: no row. Faces in one plane across the way that run
+    # the same way from two edges are those of two solids that touch (a step from one
+    # roof up to the next): the edge where they meet is no edge of the solid they make,
+    # and the chain would take it for one: no row either.
     turn = np.pi * edges.wedge[:, None]
     facing = np.stack(
         [edges.along, np.cos(turn) * edges.along + np.sin(turn) * edges.normal], axis=1
@@ -901,7 +1040,9 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
             sides = np.flatnonzero(edges.plane[f] == plane)
             if len(sides) == 0 or abs(_dot(model.plane_normal[plane], u)) <= _CROSSING:
                 continue
-            if _dot(facing[e, side], apart) > 0.0 and _dot(facing[f, sides[0]], apart) < 0.0:
+            towards = _dot(facing[e, side], apart) > 0.0
+            back = _dot(facing[f, sides[0]], apart) < 0.0
+            if towards or back:
                 return None
     level = np.einsum("ij,ij->i", on_edge[nodes], constraint[nodes])
     clear = -np.sign(stands[nodes])

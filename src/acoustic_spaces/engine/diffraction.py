@@ -3564,8 +3564,7 @@ def _back_past_row(row: Row, waves: np.ndarray, e1, e2, corners) -> None:
         if not row.along[j] < row.along[i] or row.together(i, j):
             continue
         legs = (source, p1[c], p2[c], listener)
-        factor = np.prod([row.passing(a, b) for a, b in itertools.pairwise(legs)], axis=0)
-        waves[c] *= factor.reshape(shape)
+        waves[c] *= row.passing(itertools.pairwise(legs)).reshape(shape)
 
 
 def _subset(part: dict, keep: np.ndarray) -> dict:
