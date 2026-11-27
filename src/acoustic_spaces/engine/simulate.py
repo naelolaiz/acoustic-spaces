@@ -188,7 +188,8 @@ def _candidates(
     diffracting edge (``edges``) that ``source`` lies in front of, in its sight or not:
     the terms at an edge continue the reflections off its faces, and the rays miss a
     face the source sees nearly edge-on, such as a wall whose plane it stands close to,
-    or one behind an obstacle."""
+    or one behind an obstacle; outdoors also the ground's copies of the reflections off
+    those of walls (:meth:`_Edges.with_faces`)."""
     # Outdoors in still air the ground's bounces count for no order, as for the curved
     # paths in wind and temperature gradients (which start from straight ones here).
     kinds = None if _bends(model) else plane_kinds(model)
@@ -196,7 +197,7 @@ def _candidates(
         return early_stage.exhaustive_candidates(model, source, order, kinds=kinds)
     found = early_stage.ray_traced_candidates(model, source, order, rays, threads, kinds)
     if found and edges is not None and diffraction != "none":
-        found[0] = edges.with_faces(source, found[0])
+        found = edges.with_faces(source, found, order, kinds)
     return found
 
 
@@ -207,21 +208,39 @@ class _Edges:
         self.model = model
         self._edges: Edges | None = None
 
-    def with_faces(self, source: np.ndarray, first: np.ndarray) -> np.ndarray:
-        """``first`` (n, 1), the planes of the first reflections the rays found, with
-        the planes of the diffracting edges' faces that ``source`` lies in front of, as
-        an edge's terms take it (round the edge from face 0, less than half a turn off
-        the face), and off its plane. Whether the source sees the face is not tested:
-        where something hides it, the reflection off it is a path that an edge cuts off,
-        which the edge fade's terms then stand for. No such face is open sky: the edges
-        the sky meets diffract nothing
-        (:func:`~acoustic_spaces.engine.diffraction.find_edges`)."""
+    def with_faces(
+        self,
+        source: np.ndarray,
+        found: list[np.ndarray],
+        max_order: int,
+        kinds: np.ndarray | None = None,
+    ) -> list[np.ndarray]:
+        """``found``, the plane sequences the rays found (entry k-1 has shape (n, k),
+        :func:`~acoustic_spaces.engine.early.ray_traced_candidates`), with the planes of
+        the diffracting edges' faces that ``source`` lies in front of, as an edge's terms
+        take it (round the edge from face 0, less than half a turn off the face), and off
+        its plane. Whether the source sees the face is not tested: where something hides
+        it, the reflection off it is a path that an edge cuts off, which the edge fade's
+        terms then stand for. No such face is open sky: the edges the sky meets diffract
+        nothing (:func:`~acoustic_spaces.engine.diffraction.find_edges`).
+
+        Outdoors (``kinds``, :func:`~acoustic_spaces.engine.model.plane_kinds`), each
+        such plane at right angles to the ground comes too with a bounce off the ground
+        that ``source`` lies in front of, before the reflection off it and after it,
+        where the early stage holds the two with ``max_order``
+        (:func:`~acoustic_spaces.engine.early.held`): the ground's copy of the
+        reflection off a wall. The source's image in the ground lies as near the wall's
+        plane as the source, so the rays miss that path where they miss the wall, and
+        an edge's terms continue it (those with the source side or the listener side in
+        the ground): with a source 0.1 mm off a wall's plane 7 m before the wall and a
+        listener just off the wall, the term at the wall's near end took 4.7 to 5.1 dB
+        off the level, as the wave's own path was missing."""
         model = self.model
         if self._edges is None:
             self._edges = find_edges(model)
         edges = self._edges
         if not len(edges):
-            return first
+            return found
         source = np.asarray(source, dtype=float)
         _, rho, phi, inside = edges.frame(
             np.arange(len(edges)), np.broadcast_to(source, (len(edges), 3))
@@ -234,9 +253,21 @@ class _Edges:
             ]
         )
         planes = np.unique(planes)
-        distance = products.product(model.plane_normal[planes], source) - model.plane_offset[planes]
-        planes = planes[np.abs(distance) > early_stage._ON_PLANE]
-        return np.unique(np.concatenate([first[:, 0], planes]))[:, None]
+        distance = products.product(model.plane_normal, source) - model.plane_offset
+        planes = planes[np.abs(distance[planes]) > early_stage._ON_PLANE]
+        out = list(found)
+        out[0] = np.unique(np.concatenate([found[0][:, 0], planes]))[:, None]
+        if kinds is None or len(found) < 2 or not len(planes):
+            return out
+        ground = np.flatnonzero((kinds == 1) & model.in_front(distance, early_stage._ON_PLANE))
+        face, across = np.repeat(planes, len(ground)), np.tile(ground, len(planes))
+        square = early_stage._perpendicular(model, face, across)
+        face, across = face[square], across[square]
+        pairs = np.concatenate([np.column_stack([across, face]), np.column_stack([face, across])])
+        pairs = pairs[early_stage.held(kinds, pairs, max_order)]
+        if len(pairs):
+            out[1] = np.unique(np.concatenate([found[1], pairs]), axis=0)
+        return out
 
     def diffraction(
         self,

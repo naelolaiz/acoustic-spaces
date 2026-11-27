@@ -12,8 +12,10 @@ default; cost grows with `rays`, not with the number of surfaces) or from every
 sequence of planes (`method: image_sources`; complete, but grows as planes to the
 power of the order). With edge diffraction the rays' first reflections come with the
 faces of every diffracting edge that the source stands in front of, in its sight or
-not: a ray misses a face the source sees nearly edge-on, and a reflection that an
-obstacle cuts off still fades at the obstacle's edges. Every candidate is then traced back from the listener, so the
+not, and outdoors those of walls with the ground's copies (a bounce off the ground
+before or after): a ray misses a face the source sees nearly edge-on, and its ground
+copy too, and a reflection that an obstacle cuts off still fades at the obstacle's
+edges. Every candidate is then traced back from the listener, so the
 paths found are exact either way, including paths that reflect exactly on an edge
 or in a corner: a face reflects as far as its edges, to within a billionth of the
 model's diagonal. Faces that face one way with planes less than 0.01 mm and 0.0006
