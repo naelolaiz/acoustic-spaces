@@ -1136,6 +1136,71 @@ The textbook UTD for two edges, with the second edge's distance parameter for a
 wave from a line, was up to 6 dB low there; the engine takes it from the curvature of
 the first edge's wave where it reaches the second.
 
+BTM's second order leaves out the waves bent back and forth between two edges, so for two
+screens close together `validation/edge_diffraction.py --close-screens` also checks the
+engine against the two-dimensional wave calculation of [Rows of roofs and barriers
+against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation),
+turned into a point source's field (its levels stored in
+`validation/close_screens_wave.json`): two thin rigid screens 0.5 to 4 m apart, their
+tops at z = 0, the source 3 m before the first and the listener 3 m past the second, 1
+and 1.5 m below the tops unless named, `second_order`, by default. Ray tracing and image
+sources give the same level:
+
+| two screens close together, engine - waves (dB) | 63 | 125 | 250 | 500 |
+|---|---:|---:|---:|---:|
+| 0.5 m apart, waves -9.8 to -19.5 dB | -2.41 | -2.17 | -2.77 | -2.16 |
+| 1 m apart | -1.59 | -1.50 | -2.11 | -1.29 |
+| 2 m apart | -1.12 | -1.18 | -1.32 | -0.56 |
+| 4 m apart | -0.85 | -0.70 | -0.73 | -0.10 |
+| 1 m apart, the source and the listener 0.3 and 0.5 m below the first top | -2.06 | -2.40 | -3.91 | -3.46 |
+| 1 m apart, both 3 m below the tops | -1.02 | -0.53 | -0.77 | +0.02 |
+| 1 m apart, the second 0.4 m lower | -1.00 | -1.11 | -1.97 | -1.44 |
+| 2 m apart, the second 0.4 m higher | -0.99 | -1.03 | -1.38 | -0.77 |
+
+The engine is low, as BTM's second order is (up to 2.38 dB below the waves): the second
+top stands in the first's transition zone, and paths over one edge or two leave out the
+rest of what passes between them (see [Known issues](#known-issues)). In the 63 and
+125 Hz bands, which add in pressure, the engine is within 0.36 dB of BTM's second order;
+from 250 Hz up, where it adds its paths in energy, up to 1.53 dB below it. Image sources
+also test the reflections off the second screen's front and then the first's back, in
+the gap between them, which both screens stop; the fade multiplies the two tops' terms
+for such a path, and weighs the product by the path from one top to the other that it
+stands for (see [Known issues of the edge fade](#known-issues-of-the-edge-fade)), which
+is none in the gap. Taken whole, that product put image sources up to 3.2 dB from ray
+tracing here (0.5 m apart, at 125 Hz).
+
+Where such a path can be, the product stays: under a thin ceiling 1 m above the tops of
+two screens 2 m apart (the source 2 m before the first and the listener 2 m past the
+second, 3 m below the tops) the reflection off the ceiling is stopped by both screens, and the product of
+the tops' terms stands for the path over both by way of the ceiling. `--ceiling` checks
+it against the same wave calculation (`validation/ceiling_wave.json`), with the ceiling
+whole, ending near the point where that path reflects, or a strip round that point; ray
+tracing by default (image sources give the same but over the strip 0.5 m wide: +0.28,
++0.08, -0.67 and -1.10 dB):
+
+| a ceiling 1 m over two screens, engine - waves (dB) | 63 | 125 | 250 | 500 |
+|---|---:|---:|---:|---:|
+| whole, waves -11.0 to -22.6 dB | +1.38 | +2.72 | +5.17 | +3.53 |
+| ending 1.01 m past the point | +0.81 | +1.06 | +3.07 | +1.92 |
+| ending 0.25 m past it | -0.07 | -0.65 | +4.15 | +0.96 |
+| ending 1 cm past it | -0.38 | -1.12 | +4.51 | -0.29 |
+| ending 1 cm short of it | -4.33 | -4.65 | +0.82 | -6.86 |
+| ending 0.25 m short of it | -3.95 | -3.78 | +2.23 | -4.86 |
+| ending 0.99 m short of it | +1.23 | -2.30 | +2.79 | +2.55 |
+| a strip 0.5 m wide round it | +0.04 | -0.26 | -1.74 | -3.20 |
+| a strip 1 m wide round it | +3.67 | -2.57 | +0.25 | -0.39 |
+| a strip 2 m wide round it | +2.85 | -0.69 | -0.28 | +1.18 |
+
+Under the whole ceiling the engine is 1.4 to 5.2 dB high: each of the two terms is found
+with the other's leg straight, and their product is not the path over both by way of the
+ceiling. Where the ceiling's end crosses the point the path reflects at, the level steps
+by 4.0, 3.5, 3.7 and 6.6 dB from 63 to 500 Hz (the waves move by 0.17 dB at most): just
+past the point the ceiling gives back about half the path, as at a reflector's edge, and
+short of it nothing does, as the path over the ceiling's end, a third edge, is not
+followed. Over these ten cases the engine is 2.2 dB from the waves on average and 6.9 dB
+at most; with the product taken whole wherever the ceiling held its point it was 2.8 dB
+on average and 8.9 dB at most, and the step 6.7 to 11.7 dB.
+
 A thin strip 2 m wide (a screen from z = -2 m to its top at z = 0), the source and the
 listener in its shadow on either side: the paths over its top and its foot run along the
 strip, along each of its faces, each way with half the coefficient at grazing incidence,
@@ -1663,8 +1728,8 @@ where 1 kHz swings by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; with
 fade the garden's level steps by up to 12.2 dB(A) from one 10 cm to the next. The steps
 left that stand out by more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a
 centimetre is a quarter of a wavelength and the level swings by up to 0.72 dB from one
-to the next (five more at 4 kHz in the garden, at x = 19.40, 19.51, 28.69, 28.72 and
-28.88 m, are swings too: in a one-off check 1 mm apart the level there changed by at
+to the next (four more at 4 kHz in the garden, at x = 19.40, 28.69, 28.72 and 28.88 m,
+are swings too: in a one-off check 1 mm apart the level there changed by at
 most 0.08 dB a millimetre at 4 kHz), each the step from 1 cm before x to x, and how far
 it stands out in dB(A) and in the same band without the fade (`validation/walks.py`):
 
@@ -1672,11 +1737,11 @@ it stands out in dB(A) and in the same band without the fade (`validation/walks.
 |---:|---|---:|---|---:|---:|
 | -41.39 | garden | 1.12 | 1 kHz | 0.52 | 0.00 |
 | -39.92 | balcony | 0.17 | 63 Hz | 0.01 | 0.00 |
-| -39.92 | garden | 0.45 | 63 Hz | 0.01 | 0.00 |
+| -39.92 | garden | 0.51 | 63 Hz | 0.02 | 0.00 |
 | -14.07 | garden | 0.82 | 125 Hz | 0.30 | 0.00 |
 | 9.99 | garden | 0.83 | 63 Hz | 0.03 | 0.97 |
 | 10.01 | balcony_2m | 0.10 | 125 Hz | 0.00 | 0.08 |
-| 10.02 | garden | 1.05 | 63 Hz | 0.10 | 0.96 |
+| 10.02 | garden | 1.06 | 63 Hz | 0.10 | 0.96 |
 | 14.28 | balcony_2m | 0.16 | 125 Hz | 0.00 | 0.04 |
 | 15.98 | balcony_2m | 0.15 | 125 Hz | 0.00 | 0.03 |
 | 18.93 | balcony_2m | 0.17 | 125 Hz | 0.03 | 0.00 |
@@ -1782,12 +1847,49 @@ theory gives +6.0 dB on both sides.
   reflection before or after it stop where that reflection leaves its face, which the
   fade makes up for where it follows the path. A leg that two obstacles block, or two
   sides of one, is one event, which no one edge explains: behind two barriers 4 m
-  apart, a U-shaped or a Z-shaped one, on a rigid ground, the level steps by up to
-  2.5 dB (`first_order`; 1.3 dB with `second_order`) in a band from 63 to 250 Hz, along
-  the one line of listeners measured, where the reflection off the ground crosses the
-  first one's foot, and behind the U by 2.0 dB (`second_order`; 4.8 dB with
-  `first_order`) where it lies just behind the first side's foot and the path round that
-  side's end leaves its foot.
+  apart, a U-shaped or a Z-shaped one, on a rigid ground, along the one line of
+  listeners measured, the level steps in a band from 63 to 250 Hz where the reflection
+  off the ground crosses the first one's foot, by up to 2.4 dB with `second_order`
+  (2.1 dB with image sources), and behind the U by 2.1 dB (`second_order`, either
+  method) where it lies just behind the first side's foot and the path round that
+  side's end leaves its foot. With `first_order`, which has no path over two edges, the
+  level past those points is what the paths over one edge leave: it steps by up to
+  4.3 dB behind the U and the Z (2.1 dB with image sources), and behind two barriers
+  and the U's end ray tracing finds no sound past them (image sources 6.8 and 33 dB
+  less at 63 Hz).
+- **Products of two edges' terms.** Where two edges explain the events that stop a
+  path, the fade multiplies their terms, each found with the other event's leg straight,
+  and weighs the product by the path from one edge to the other that it stands for: for
+  each reflection on it, the magnitude of the Fresnel integral over the faces there, as a
+  share of the whole plane's, less what those faces give back past the two edges
+  themselves (none between the tops of two screens, off the front of one and the back of
+  the other), at an inside corner a face going on as its image in the face it meets and
+  hiding what lies past it; and for each plane a leg passes through, Kirchhoff's integral
+  over what the faces the leg enters by leave free there, but for what lies past the
+  mirrors at the leg's ends or inside the edges it leaves and comes to. The weight moves
+  smoothly with the geometry and is about a half where the path reflects at a face's
+  edge or a leg grazes one (behind barriers in a U or a Z of one height, along the line
+  of listeners of the bullet above, the path reflects at the top of the wall that joins
+  them: with `first_order` ray tracing gives 4.2 to 4.3 dB less there at 63 Hz than
+  with the product taken whole, and 6.0 dB less from 250 Hz up behind the U and from
+  1 kHz up behind the Z, where at 250 and 500 Hz the product interferes with a path it
+  does not change and the level falls by up to 8.0 dB; with `second_order` up to 0.7
+  and 1.9 dB less), but the product is no path over both edges by way of the
+  reflections: under a whole ceiling over two screens the level is 1.4 to 5.2 dB
+  high, over a strip of ceiling about one Fresnel zone wide the integral gives back more
+  than the whole plane, and where the ceiling ends at the point the path reflects at the
+  level steps by up to 6.6 dB, as the path over the ceiling's end (a third edge) is not
+  followed (see [Edge diffraction against the exact
+  solution](#edge-diffraction-against-the-exact-solution)). One edge's term takes no
+  share for its legs, so where a path that two edges stop turns into one that one edge
+  stops, the level steps by what the product's legs took: in the street's garden by
+  0.23 dB at 125 Hz (the car at x = -41.61 m), where the legs pass 1.1 m beside the
+  houses' corner and keep 0.65 to 0.71 at 63 Hz, the knife-edge's share at that
+  clearance, and behind the archway's wall by up to 0.25 dB at 125 Hz and 0.23 dB at
+  250 Hz, where the legs pass through the arch and Kirchhoff's integral over the opening
+  gives back up to 2.6 times the whole plane's (the ripple of a field through an
+  opening). Taking such a share for one edge's terms too is an open item on the
+  [roadmap](roadmap.md).
 - **Corners of edges.** Over the edge of a thin screen (a barrier's top and ends, a
   face's free edge) a path's term takes the part of its Fresnel zone that the edge
   covers, as BTM's integral over a finite edge has it (at a free end, a corner or a
@@ -1854,7 +1956,9 @@ theory gives +6.0 dB on both sides.
   proportion. Walking the `archway`'s listener behind the wall 1 cm at a time
   (x = 7.6 m, y = 5.3 to 7.8 m), where the reflection off the arch's jamb, 40 cm deep,
   appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz, between y = 5.39
-  and 5.40 m (see the next item), and by at most 0.16 dB from 2 kHz up. The edge
+  and 5.40 m (see the next item), but for the steps where a path that two edges stop
+  turns into one that one edge stops (0.23 dB at 250 Hz, see [Products of two edges'
+  terms](#known-issues-of-the-edge-fade)), and by at most 0.14 dB from 2 kHz up. The edge
   diffraction's own paths, without the fade, step there by up to 0.73 dB at 63 Hz,
   1.46 dB at 125 Hz and 1.88 dB from 250 Hz up. Averaged over the walk, in a one-off
   check, the level was 0.15 dB below that with every band in pressure
@@ -1873,13 +1977,17 @@ theory gives +6.0 dB on both sides.
   that other corner explain them removed the step but made one of 1.75 dB at y = 5.90 m,
   where a reflection point of one of those paths also leaves its face and the path,
   stopped at two events, is left out at once; so it is not done. The other steps along
-  the walk, of up to 0.20 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up, were there in
-  pressure too (a one-off check); at y = 6.83 to 6.84 m and 7.00 to 7.01 m, terms of
-  cut-off second- and third-order reflections come or go, and why is not traced. The fix would take a term
+  the walk are of up to 0.16 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up (at y =
+  7.00 to 7.01 m terms of cut-off second- and third-order reflections come or go, and
+  why is not traced), but where a path that two edges stop turns into one that one edge
+  stops: 0.25, 0.23 and 0.11 dB at 125, 250 and 500 Hz between y = 6.83 and 6.84 m, and
+  0.20 and 0.09 dB at 250 and 500 Hz between 6.53 and 6.54 m (see the products of two
+  edges' terms below). The fix would take a term
   over both corners of the end in turn, as `second_order` has for the direct sound,
   which the fade does not have (an open item on the [roadmap](roadmap.md)).
   `tests/test_walks.py` walks the whole line in CI and holds the steps to 0.65 dB at
-  63 Hz, 0.5 dB at 125 Hz, 0.1 dB from 250 Hz to 2 kHz and 0.2 dB above.
+  63 Hz, 0.5 dB at 125 Hz, 0.25 dB at 250 Hz, 0.15 dB at 500 Hz, 0.1 dB at 1 and 2 kHz
+  and 0.2 dB above.
 - **Products of terms.** The terms of a path's events multiply, as the path must get
   past each in turn, an approximation for terms at different edges. Each product is a
   path that arrives later by the detours of all its terms, an approximation too for
@@ -4037,17 +4145,17 @@ x = 10 m:
 
 | rows | cases | march alone | the solver | simulation, `second_order` | simulation, `first_order` |
 |---|---|---|---|---|---|
-| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.64 | -21.72 to +14.16, or no sound |
-| free space, 22° down to the listener | 8 | -2.26 to -0.88 | -0.16 to +0.14 | -20.57 to +1.09 | -1.22 to +8.42 |
-| roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -11.79 to +7.99 |
-| the same, 13 to 24° up from the source | 8 | -2.70 to -1.43 | -0.74 to +0.41 | -6.22 to +7.86 | -0.93 to +9.05, or no sound |
-| the same, 42° down to the listener | 12 | -5.29 to -2.19 | -0.71 to +1.24 | -4.69 to +7.35 | -1.94 to +8.21, or no sound |
-| three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.27 to +2.21 | -3.35 to +5.66 |
-| three screens on a ground, 24° | 2 | -6.19 to -2.90 | -2.55 to -0.30 | -1.97 to +4.59 | +3.53 to +6.51, or no sound |
-| three screens on a ground, 42° | 3 | -9.20 to -4.06 | -3.42 to -0.09 | -2.65 to +4.57 | +2.01 to +7.61, or no sound |
+| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.42 | -21.72 to +14.18, or no sound |
+| free space, 22° down to the listener | 8 | -2.26 to -0.88 | -0.16 to +0.14 | -20.57 to +0.14 | -1.58 to +7.63 |
+| roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -11.79 to +7.68 |
+| the same, 13 to 24° up from the source | 8 | -2.70 to -1.43 | -0.74 to +0.41 | -6.22 to +5.37 | -0.93 to +7.73, or no sound |
+| the same, 42° down to the listener | 12 | -5.29 to -2.19 | -0.71 to +1.24 | -4.69 to +7.35 | -1.94 to +7.77, or no sound |
+| three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.24 to +2.48 | -3.27 to +5.63 |
+| three screens on a ground, 24° | 2 | -6.19 to -2.90 | -2.55 to -0.30 | -1.97 to +3.86 | +3.76 to +5.81, or no sound |
+| three screens on a ground, 42° | 3 | -9.20 to -4.06 | -3.42 to -0.09 | -2.65 to +4.15 | +2.39 to +7.45, or no sound |
 | a roof under the source, to its edge | 8 | -2.16 to +0.81 | -0.18 to +0.05 | -0.10 to +0.23 | -0.10 to +0.23 |
-| the same, a parapet 1.1 m high on the edge | 8 | -9.90 to +0.33 | -0.82 to +0.48 | -1.10 to +1.13 | -1.12 to +1.17 |
-| the same, the parapet 0.1 or 0.3 m high | 16 | -5.75 to +1.02 | -1.13 to +1.13 | -1.06 to +1.95 | -0.98 to +1.56 |
+| the same, a parapet 1.1 m high on the edge | 8 | -9.90 to +0.33 | -0.82 to +0.48 | -1.12 to +1.17 | -1.12 to +1.17 |
+| the same, the parapet 0.1 or 0.3 m high | 16 | -5.75 to +1.02 | -1.13 to +1.13 | -0.98 to +1.56 | -0.98 to +1.56 |
 | a screen 1.1 m high on a roof under both ends | 4 | -8.75 to +0.88 | -0.05 to +0.42 | -3.43 to +2.68 | -3.43 to +2.68 |
 | the same, the screen 0.1 or 0.3 m high | 8 | -4.85 to +0.93 | -0.13 to +0.50 | -2.91 to +1.38 | -2.91 to +1.38 |
 
@@ -4069,7 +4177,12 @@ band, where the parapet is a fifth of a wavelength high; 0.48 dB in the others),
 with one 0.1 or 0.3 m high within 1.13 dB. A screen on a roof that goes on under the
 listener, which the solver takes as a strip, is within 0.42 dB at 1.1 m and 0.50 dB
 at 0.1 and 0.3 m, where the simulation's paths over its top are up to 3.43 dB off:
-see the barriers lower than a wavelength below.
+see the barriers lower than a wavelength below. The simulation's two ways round give
+the same level within 0.05 dB in 271 of the 298 runs (each case with `second_order` and
+`first_order`); the others differ by up to 5.39 dB with `second_order` (two roofs 2 m
+apart, the source 0.5 m above their tops and the listener 0.5 m below) and 20.61 dB with
+`first_order` (two roofs side by side, the second 0.2 m higher, both ends 0.21 m above
+the first), which is not traced.
 
 In an outdoor scene the early stage takes the solver's sound for the row, in still air
 and in wind (`simulation.early.rows: solver`, the default). With `--engine` the 45 cases
@@ -4086,9 +4199,9 @@ the edges alone:
 |---|---|---|---|
 | one screen | 9 | -0.15 to +0.47 | -0.87 to +0.54 |
 | one roof 10 m wide | 9 | -0.16 to +0.14 | -3.81 to +3.37 |
-| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +5.87 |
-| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +8.03 |
-| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.85 |
+| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +4.42 |
+| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +7.35 |
+| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.15 |
 
 The simulation gives the solver the early paths' eight frequencies in each octave band,
 as the solver's own check does. Against 72 in a band, at nine places behind one screen 3
@@ -6237,7 +6350,12 @@ Results:
   that leaves too little at high frequencies: a quarter of the free field just below
   the line of two tops 10 m apart, where two knife edges leave 0.317 of it, 2.1 dB low
   from 2 kHz up, and 1.0 to 1.3 dB low just above it. As the source or the listener
-  alone crosses the line of the tops, the level steps by 0.5 and 1.0 dB at 63 Hz. The
+  alone crosses the line of the tops, the level steps by 0.5 and 1.0 dB at 63 Hz. Two
+  screens close together leave too little at low frequencies too: against a wave
+  calculation the level is 2.4 dB low at 63 Hz with the tops 0.5 m apart and 0.9 dB
+  with them 4 m apart, and up to 3.9 dB low at 250 Hz just below two tops 1 m apart, as
+  BTM's second order is low by up to 2.4 dB (see [Edge diffraction against the exact
+  solution](#edge-diffraction-against-the-exact-solution)). The
   corners of one block or wall, joined by a face, are not affected, but where the face
   is narrow against the wavelength (the next item).
 - **Thin slabs.** A desk screen, a door leaf or a pane drawn with its thickness is a slab

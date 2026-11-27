@@ -1,6 +1,7 @@
 """Check edge diffraction against the exact Biot-Tolstoy-Medwin (BTM) solution.
 
-    python validation/edge_diffraction.py [--json results.json]
+    python validation/edge_diffraction.py [--json results.json] [--close-screens | --ceiling]
+    python validation/edge_diffraction.py --wave-references
 
 The BTM solution writes the sound diffracted by a rigid wedge as an integral along its
 edge (Svensson, Fred and Vanderkooy, 1999): first order, the pressure at R from a source
@@ -28,6 +29,17 @@ half-plane, which is exact far from the edge, and the engine against it:
   and the same block absorbing 0.02, against BTM for the rigid one and the Weyl-van der
   Pol field's loss along its top (|F(w)|, by hand);
 - two thin screens in a row, second order;
+- two thin screens 0.5 to 4 m apart, second order: BTM to the second order and the engine,
+  with ray tracing (the default) and with image sources, against a wave calculation
+  that holds every order of diffraction and reflection (``validation/rows.py``'s: a
+  two-dimensional run by finite differences on a 2 cm grid, turned into a point
+  source's), whose levels are stored in ``close_screens_wave.json`` (63 to 500 Hz;
+  ``--wave-references`` computes them again, a few minutes a case on one core, and
+  ``--close-screens`` runs this check alone);
+- a thin ceiling 1 m over two thin screens 2 m apart, whole, ending near the point where
+  the path over both tops reflects off it, or a strip round that point, second order:
+  the engine with both methods, by default and with every band in pressure, against
+  the same wave calculation (``ceiling_wave.json``; ``--ceiling`` runs it alone);
 - a thin strip, second order: the source and the listener in its shadow on either
   side, the paths over both its edges along each of its faces, against BTM;
 - a thin strip standing free, 1, 2 and 4 m high: the listener crosses the line of sight
@@ -494,6 +506,203 @@ def second_order(folder: Path) -> list[dict]:
             row["ground_wave_db"] = ground_wave(ABSORBING, float(np.linalg.norm(p2 - p1)))
         rows.append(row)
     return rows
+
+
+#: Two thin screens close together, against the wave calculation: the gap (m), the top
+#: of the second screen (the first's is at z = 0), and the heights of the source, 3 m
+#: before the first, and of the listener, 3 m past the second.
+CLOSE_SCREENS = (
+    (0.5, 0.0, -1.0, -1.5),
+    (1.0, 0.0, -1.0, -1.5),
+    (2.0, 0.0, -1.0, -1.5),
+    (4.0, 0.0, -1.0, -1.5),
+    (1.0, 0.0, -0.3, -0.5),
+    (1.0, 0.0, -3.0, -3.0),
+    (1.0, -0.4, -1.0, -1.5),
+    (2.0, 0.4, -1.0, -1.5),
+)
+#: The wave calculation's levels for :data:`CLOSE_SCREENS` (:func:`close_screen_references`).
+WAVE_STORED = Path(__file__).with_name("close_screens_wave.json")
+
+
+def _close_name(gap: float, rise: float, zs: float, zl: float) -> str:
+    name = f"two screens {gap:g} m apart"
+    if rise:
+        name += f", the second {abs(rise):g} m {'higher' if rise > 0 else 'lower'}"
+    if (zs, zl) != (-1.0, -1.5):
+        name += f", source and listener {-zs:g} and {-zl:g} m below the first top"
+    return name
+
+
+def close_screen_references() -> None:
+    """Runs the wave calculation for :data:`CLOSE_SCREENS` and stores its levels in
+    :data:`WAVE_STORED`, with the places of its source's and listener's cells as the
+    engine's model has them: each screen one cell thick, its plane at the cell's
+    middle."""
+    import rows  # the wave calculation; it imports this module
+
+    h = rows.GRID_M
+    stored = {}
+    for gap, rise, zs, zl in CLOSE_SCREENS:
+        started = time.time()
+        solids = [(0.0, h, -math.inf, 0.0), (gap, gap + h, -math.inf, rise)]
+        frame = dict(
+            x_range=(-4.0, gap + 4.0), z_range=(min(zs, zl, 0.0) - 2.0, max(rise, 0.0) + 2.0)
+        )
+        source, listener = (-3.0 + 0.5 * h, rows._cell(zs)), (gap + 3.0 + 0.5 * h, rows._cell(zl))
+        # By reciprocity, from the listener's place.
+        traces, dt, at, heard = rows.fdtd(solids, listener, [source], **frame)
+        free = rows.fdtd([], listener, [source], **frame)[0]
+        distance = math.hypot(at[0] - heard[0][0], at[1] - heard[0][1])
+        pressure = rows.point_source(traces[:, 0], free[:, 0], distance, dt)
+        stored[_close_name(gap, rise, zs, zl)] = {
+            "source": [heard[0][0] - 0.5 * h, 0.0, heard[0][1]],
+            "listener": [at[0] - 0.5 * h, 0.0, at[1]],
+            "wave_db": [round(float(v), 3) for v in rows.band_levels(pressure, distance)],
+        }
+        print(f"{_close_name(gap, rise, zs, zl)} ({time.time() - started:.0f} s)", flush=True)
+        WAVE_STORED.write_text(json.dumps(stored, indent=1) + "\n")
+
+
+def _passes_above(a, b, x: float, top: float) -> bool:
+    """Whether the line from ``a`` to ``b`` passes above ``top`` at ``x``."""
+    t = (x - a[0]) / (b[0] - a[0])
+    return bool(a[2] + t * (b[2] - a[2]) > top)
+
+
+def close_screens(folder: Path) -> list[dict]:
+    """Two thin screens close together (:data:`CLOSE_SCREENS`): BTM to the second order
+    (over both tops, and over one where an end sees past the other screen's top) and the
+    engine with ``second_order``, by default (the 63 and 125 Hz bands in pressure) with
+    ray tracing and with image sources, against the wave calculation."""
+    stored = json.loads(WAVE_STORED.read_text())
+    out = []
+    bands = len(next(iter(stored.values()))["wave_db"])
+    for gap, rise, zs, zl in CLOSE_SCREENS:
+        name = _close_name(gap, rise, zs, zl)
+        entry = stored[name]
+        source, receiver = np.array(entry["source"]), np.array(entry["listener"])
+        wave = np.array(entry["wave_db"])
+        e1 = Edge([0, 0, 0], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
+        e2 = Edge([gap, 0, rise], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
+        quads = screen_quads() + screen_quads(gap, rise)
+        room = _room(folder, "close", quads, source, receiver)
+        p1, p2 = _double_path(engine(room, "second_order", fade=False)[0])
+        centres = (float((p1 - e1.origin) @ e1.direction), float((p2 - e2.origin) @ e2.direction))
+        btm = btm_second(e1, e2, source, receiver, centres, False)
+        # Where one end sees past the other screen's top to an edge, BTM's first order
+        # over that edge too: with the second screen 0.4 m lower the listener sees the
+        # first top 2.5 cm above the second.
+        if _passes_above(e1.origin, receiver, gap, rise):
+            btm = btm + btm_first(e1, source, receiver)
+        if _passes_above(source, e2.origin, 0.0, 0.0):
+            btm = btm + btm_first(e2, source, receiver)
+        distance = float(np.linalg.norm(receiver - source))
+        row = {
+            "case": name,
+            "source": source.tolist(),
+            "receiver": receiver.tolist(),
+            "wave_db": wave.tolist(),
+            "btm_minus_wave_db": (band_level(btm, distance)[:bands] - wave).tolist(),
+        }
+        for method in ("ray_tracing", "image_sources"):
+            settings = {"early": {"method": method}}
+            room = _room(folder, "close", quads, source, receiver, settings)
+            level = engine(room, "second_order", coherent=COHERENT)[1]
+            row[f"{method}_minus_wave_db"] = (level[:bands] - wave).tolist()
+        out.append(row)
+    return out
+
+
+#: A thin ceiling 1 m over two thin screens 2 m apart (tops at z = 0, x = -1 and 1),
+#: the source 2 m before the first and the listener 2 m past the second (x = -3 and 3),
+#: 3 m below the tops, against the wave calculation: the path over both tops reflects
+#: off the ceiling at x = 0, and the ceiling runs from ``start`` to ``end`` in the wave
+#: calculation's grid (each a cell boundary there, 1 cm past the place the engine has:
+#: see :func:`ceiling_references`).
+CEILING = (
+    ("whole", -math.inf, math.inf),
+    ("ending 1.01 m past the reflection", -math.inf, 1.02),
+    ("ending 0.25 m past it", -math.inf, 0.26),
+    ("ending 1 cm past it", -math.inf, 0.02),
+    ("ending 1 cm short of it", -math.inf, 0.0),
+    ("ending 0.25 m short of it", -math.inf, -0.24),
+    ("ending 0.99 m short of it", -math.inf, -0.98),
+    ("a strip 0.5 m wide round it", -0.24, 0.26),
+    ("a strip 1 m wide round it", -0.48, 0.52),
+    ("a strip 2 m wide round it", -0.98, 1.02),
+)
+#: The ceiling's height over the tops (m).
+CEILING_M = 1.0
+#: The wave calculation's levels for :data:`CEILING` (:func:`ceiling_references`).
+CEILING_STORED = Path(__file__).with_name("ceiling_wave.json")
+
+
+def ceiling_references() -> None:
+    """Runs the wave calculation for :data:`CEILING` and stores its levels in
+    :data:`CEILING_STORED`, the places as the engine's model has them: each screen and
+    the ceiling one cell thick, their planes at the cells' middles (the ceiling's at
+    z = 1.01 m, its ends half a cell before their cells' boundaries)."""
+    import rows  # the wave calculation; it imports this module
+
+    h = rows.GRID_M
+    stored = json.loads(CEILING_STORED.read_text()) if CEILING_STORED.exists() else {}
+    frame = dict(x_range=(-4.0, 4.0), z_range=(-5.0, CEILING_M + 2.0))
+    source, listener = (-3.0 + 0.5 * h, rows._cell(-3.0)), (3.0 + 0.5 * h, rows._cell(-3.0))
+    free = None
+    for name, start, end in CEILING:
+        started = time.time()
+        solids = [
+            (-1.0, -1.0 + h, -math.inf, 0.0),
+            (1.0, 1.0 + h, -math.inf, 0.0),
+            (start, end, CEILING_M, CEILING_M + h),
+        ]
+        # By reciprocity, from the listener's place.
+        traces, dt, at, heard = rows.fdtd(solids, listener, [source], **frame)
+        if free is None:
+            free = rows.fdtd([], listener, [source], **frame)[0]
+        distance = math.hypot(at[0] - heard[0][0], at[1] - heard[0][1])
+        pressure = rows.point_source(traces[:, 0], free[:, 0], distance, dt)
+        stored[name] = {
+            "source": [heard[0][0] - 0.5 * h, 0.0, heard[0][1]],
+            "listener": [at[0] - 0.5 * h, 0.0, at[1]],
+            "ceiling": [start - 0.5 * h, end - 0.5 * h, CEILING_M + 0.5 * h],
+            "wave_db": [round(float(v), 3) for v in rows.band_levels(pressure, distance)],
+        }
+        print(f"ceiling {name} ({time.time() - started:.0f} s)", flush=True)
+        CEILING_STORED.write_text(json.dumps(stored, indent=1) + "\n")
+
+
+def ceiling(folder: Path) -> list[dict]:
+    """A thin ceiling over two thin screens (:data:`CEILING`), whole, ending near the
+    point the path over both tops reflects at or a strip round it: the engine with
+    ``second_order``, by default (the 63 and 125 Hz bands in pressure) and with every
+    band in pressure, with ray tracing and with image sources, against the wave
+    calculation. The reflection off the ceiling is stopped by both screens, and the
+    edge fade's product of the two tops' terms stands in for the path over both by way
+    of the ceiling, as much of it as the ceiling gives back there."""
+    stored = json.loads(CEILING_STORED.read_text())
+    out = []
+    for name, _, _ in CEILING:
+        entry = stored[name]
+        source, receiver = np.array(entry["source"]), np.array(entry["listener"])
+        wave = np.array(entry["wave_db"])
+        bands = len(wave)
+        start, end, height = entry["ceiling"]
+        start, end = max(start, -EXTENT), min(end, EXTENT)
+        quads = [[(start, -EXTENT, height), (start, EXTENT, height), (end, EXTENT, height),
+                  (end, -EXTENT, height)]]  # fmt: skip
+        quads += screen_quads(-1.0) + screen_quads(1.0)
+        row = {"case": name, "wave_db": wave.tolist()}
+        for method in ("ray_tracing", "image_sources"):
+            settings = {"early": {"method": method}}
+            room = _room(folder, "ceiling", quads, source, receiver, settings)
+            model = TraceModel.from_room(room)
+            for coherent, tag in ((COHERENT, ""), (len(OCTAVE_BANDS_HZ), "_in_pressure")):
+                level = engine(room, "second_order", model=model, coherent=coherent)[1]
+                row[f"{method}{tag}_minus_wave_db"] = (level[:bands] - wave).tolist()
+        out.append(row)
+    return out
 
 
 #: A thin strip (:func:`strip_quads`) and the source and the listener in its shadow on
@@ -1279,13 +1488,65 @@ def _row(values) -> str:
     return " | ".join(f"{v:+.2f}" for v in values)
 
 
+def _print_close_screens(rows: list[dict]) -> None:
+    bands = len(rows[0]["wave_db"])
+    header = " | ".join(f"{f:g}" for f in OCTAVE_BANDS_HZ[:bands])
+    print(f"\n| two screens close together, against the waves (dB) | {header} |")
+    print("|---|" + "---:|" * bands)
+    for row in rows:
+        print(f"| {row['case']}: wave calculation | {_row(row['wave_db'])} |")
+        print(f"| BTM to second order - waves | {_row(row['btm_minus_wave_db'])} |")
+        for method in ("ray_tracing", "image_sources"):
+            print(f"| engine, {method} - waves | {_row(row[f'{method}_minus_wave_db'])} |")
+
+
+def _print_ceiling(rows: list[dict]) -> None:
+    bands = len(rows[0]["wave_db"])
+    header = " | ".join(f"{f:g}" for f in OCTAVE_BANDS_HZ[:bands])
+    print(f"\n| a ceiling 1 m over two screens, against the waves (dB) | {header} |")
+    print("|---|" + "---:|" * bands)
+    for row in rows:
+        print(f"| ceiling {row['case']}: wave calculation | {_row(row['wave_db'])} |")
+        for method in ("ray_tracing", "image_sources"):
+            print(f"| engine, {method} - waves | {_row(row[f'{method}_minus_wave_db'])} |")
+            pressure = row[f"{method}_in_pressure_minus_wave_db"]
+            print(f"| engine, {method}, in pressure - waves | {_row(pressure)} |")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--json", help="write the numbers to this file")
+    parser.add_argument(
+        "--close-screens", action="store_true", help="only two screens against the waves"
+    )
+    parser.add_argument(
+        "--ceiling", action="store_true", help="only a ceiling over two screens against the waves"
+    )
+    parser.add_argument(
+        "--wave-references", action="store_true", help="run the wave calculation again"
+    )
     args = parser.parse_args()
+    if args.wave_references:
+        close_screen_references()
+        ceiling_references()
+        return
     header = " | ".join(f"{f:g}" for f in OCTAVE_BANDS_HZ)
     rule = "|---|" + "---:|" * len(OCTAVE_BANDS_HZ)
     results: dict = {}
+    if args.close_screens:
+        with tempfile.TemporaryDirectory() as tmp:
+            results["close_screens"] = close_screens(Path(tmp))
+        _print_close_screens(results["close_screens"])
+        if args.json:
+            Path(args.json).write_text(json.dumps(results, indent=2))
+        return
+    if args.ceiling:
+        with tempfile.TemporaryDirectory() as tmp:
+            results["ceiling"] = ceiling(Path(tmp))
+        _print_ceiling(results["ceiling"])
+        if args.json:
+            Path(args.json).write_text(json.dumps(results, indent=2))
+        return
 
     results["half_plane"] = half_plane_reference()
     print(f"| BTM against the UTD for a half-plane (dB) | {header} |\n{rule}")
@@ -1317,6 +1578,12 @@ def main() -> None:
                 print(f"| 20 lg abs F(w) over the top | {_row(row['ground_wave_db'])} |")
         seconds = max(row["btm_seconds"] for row in results["second_order"])
         print(f"\n(BTM takes up to {seconds:.0f} s per case)")
+
+        results["close_screens"] = close_screens(folder)
+        _print_close_screens(results["close_screens"])
+
+        results["ceiling"] = ceiling(folder)
+        _print_ceiling(results["ceiling"])
 
         results["thin_strip"] = thin_strip(folder)
         print(f"\n| a thin strip, level re free field (dB) | {header} |\n{rule}")
