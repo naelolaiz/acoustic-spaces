@@ -4120,12 +4120,12 @@ x = 10 m:
 
 | rows | cases | march alone | the solver | simulation, `second_order` | simulation, `first_order` |
 |---|---|---|---|---|---|
-| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.53 | -21.72 to +14.16, or no sound |
+| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.42 | -21.72 to +14.18, or no sound |
 | free space, 22° down to the listener | 8 | -2.26 to -0.88 | -0.16 to +0.14 | -20.57 to +0.14 | -1.58 to +7.63 |
 | roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -11.79 to +7.68 |
 | the same, 13 to 24° up from the source | 8 | -2.70 to -1.43 | -0.74 to +0.41 | -6.22 to +5.37 | -0.93 to +7.73, or no sound |
 | the same, 42° down to the listener | 12 | -5.29 to -2.19 | -0.71 to +1.24 | -4.69 to +7.35 | -1.94 to +7.77, or no sound |
-| three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.21 to +2.48 | -3.27 to +5.63 |
+| three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.24 to +2.48 | -3.27 to +5.63 |
 | three screens on a ground, 24° | 2 | -6.19 to -2.90 | -2.55 to -0.30 | -1.97 to +3.86 | +3.76 to +5.81, or no sound |
 | three screens on a ground, 42° | 3 | -9.20 to -4.06 | -3.42 to -0.09 | -2.65 to +4.15 | +2.39 to +7.45, or no sound |
 | a roof under the source, to its edge | 8 | -2.16 to +0.81 | -0.18 to +0.05 | -0.10 to +0.23 | -0.10 to +0.23 |
@@ -4152,7 +4152,12 @@ band, where the parapet is a fifth of a wavelength high; 0.48 dB in the others),
 with one 0.1 or 0.3 m high within 1.13 dB. A screen on a roof that goes on under the
 listener, which the solver takes as a strip, is within 0.42 dB at 1.1 m and 0.50 dB
 at 0.1 and 0.3 m, where the simulation's paths over its top are up to 3.43 dB off:
-see the barriers lower than a wavelength below.
+see the barriers lower than a wavelength below. The simulation's two ways round give
+the same level within 0.05 dB in 271 of the 298 runs (each case with `second_order` and
+`first_order`); the others differ by up to 5.39 dB with `second_order` (two roofs 2 m
+apart, the source 0.5 m above their tops and the listener 0.5 m below) and 20.61 dB with
+`first_order` (two roofs side by side, the second 0.2 m higher, both ends 0.21 m above
+the first), which is not traced.
 
 In an outdoor scene the early stage takes the solver's sound for the row, in still air
 and in wind (`simulation.early.rows: solver`, the default). With `--engine` the 45 cases

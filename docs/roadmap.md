@@ -148,8 +148,10 @@ Edge diffraction:
   as paths over both (they take the share of such a path that the faces give back, but
   each term is found with the other's leg straight, and none goes on past the end of a
   face the path reflects off: under a ceiling over two screens the level is up to 5.2 dB
-  high, and steps by up to 6.6 dB where the ceiling ends at the path's reflection), and
-  with `second_order` giving way to the paths over two edges.
+  high, and steps by up to 6.6 dB where the ceiling ends at the path's reflection), one
+  edge's term taking what a solid beside its legs lets by as those products do (where
+  a path that two edges stop turns into one that one edge stops, the level steps by up
+  to 0.23 dB), and with `second_order` giving way to the paths over two edges.
   Over a roof and a screen 1 m past it, both ends 1 m above the roof, the level steps by
   up to 5.3 dB at 63 Hz where the screen's top passes a way, and is 4.4 to 4.6 dB low
   with `first_order` and 4.9 to 5.2 dB low with `second_order` between such places (see
