@@ -230,16 +230,20 @@ def test_a_building_under_the_source_reaches_back_to_its_wall(asked) -> None:
 
 def test_paths_between_the_rows_own_walls_give_way() -> None:
     """The edges' terms that reflect between the two walls of the gap between the
-    buildings are the row's, and give way to the solver's sound (the scene is
-    validation/rows.py's two roofs on a ground, from the street up to roof level:
-    left beside the solver's sound, with reflections up to the third order, they
-    raised its 125 Hz band by 5.6 dB)."""
-    street = {"listener": (25.0, 0.0, 6.01), "barriers": (), "source": (0.0, 0.0, 1.51)}
+    buildings are the row's, and give way to the solver's sound. The buildings are 2 m
+    apart on a ground, the first 9 m high and the second 6 m, from the street up to
+    the first's roof level: the terms off the walls of the gap hold a third of the
+    edges' energy at 63 and 125 Hz, and left beside the solver's sound they would
+    lower its 63 Hz band by 2.4 dB and raise its 125 Hz band by 1.8 dB. With both 6 m
+    high the edges leave nothing off those walls: no path over two tops of one height
+    reflects in the gap between them (as
+    tests/test_edge_fade.py::test_no_reflection_in_the_gap_between_two_screens has it)."""
+    street = {"listener": (25.0, 0.0, 9.01), "barriers": (), "source": (0.0, 0.0, 1.51)}
     buildings = [
-        {"name": "a", "footprint": [[10, -250], [14, -250], [14, 250], [10, 250]], "height": 6},
+        {"name": "a", "footprint": [[10, -250], [14, -250], [14, 250], [10, 250]], "height": 9},
         {"name": "b", "footprint": [[16, -250], [20, -250], [20, 250], [16, 250]], "height": 6},
     ]
-    row = [(10.0, 14.0, 6.0), (16.0, 20.0, 6.0)]
+    row = [(10.0, 14.0, 9.0), (16.0, 20.0, 6.0)]
     room = Room.from_scene(scene(buildings=buildings, **street))
     paths = early_paths(room)
     without = early_paths(Room.from_scene(scene(buildings=buildings, rows="edges", **street)))
@@ -252,7 +256,7 @@ def test_paths_between_the_rows_own_walls_give_way() -> None:
 
     assert off_walls(without) and without.energy[off_walls(without)][:, :2].any()
     assert off_walls(paths) and not paths.energy[off_walls(paths)][:, :2].any()
-    own = own_level(room, solver, [0, 1], None, 1.51, 25.0, 6.01, row)
+    own = own_level(room, solver, [0, 1], None, 1.51, 25.0, 9.01, row)
     np.testing.assert_allclose(levels(room, paths)[:2], own, atol=0.01)
 
 
