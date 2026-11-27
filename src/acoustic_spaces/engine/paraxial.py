@@ -184,30 +184,44 @@ def _bridge(
 
 def _chain(h: np.ndarray, rho: np.ndarray, clear: np.ndarray, blocked: np.ndarray) -> np.ndarray:
     """:func:`bridge_chain` for nodes that each weigh the two sides of their thresholds
-    differently: by :func:`_quadrature` where every step is at least _APART wide; the
-    nodes across the steps narrower than that taken as one (:func:`_merged`) below
-    _CLOSE, and between the two by half a cosine's period in the step's width (in the
-    product of those over the chain's steps), the quadrature's part also taken down by
-    :func:`_fade` of its growth and its points over those steps, as :meth:`Row.growth`
-    has them."""
+    differently: by :func:`_quadrature` where every step is at least _APART wide, and
+    with the nodes across each step narrower than that taken as one (:func:`_merged`)
+    by a share of its own, all of it below _CLOSE and none at _APART, half a cosine's
+    period in the step's width between. The narrower steps are taken as one first (a
+    step is where a uniform number lies at or above the share it keeps apart): the
+    chain is the mean, over that number, of the chains with the narrow steps taken as
+    one from the narrowest on, one more at a time. Each of those but the one with every
+    narrow step taken as one is taken down by :func:`_fade` of its growth and its points
+    (:func:`_chain_cost`, as :meth:`Row.growth` has them) towards the next."""
     width = np.sqrt(np.maximum(1.0 - rho**2, 0.0))
     narrow = width < _APART
     if not narrow.any():
         return _quadrature(h, rho, clear, blocked)
-    x = np.clip((width[narrow] - _CLOSE) / (_APART - _CLOSE), 0.0, 1.0)
-    apart = float(np.prod(0.5 * (1.0 - np.cos(np.pi * x))))
-    one = _merged(h, rho, clear, blocked, narrow)
-    if apart == 0.0:
-        return one
-    close = width < _CLOSE
+    x = np.clip((width - _CLOSE) / (_APART - _CLOSE), 0.0, 1.0)
+    apart = 0.5 * (1.0 - np.cos(np.pi * x))
+    # The steps taken as one in part, the narrowest (the least kept apart) first.
+    partial = np.flatnonzero(narrow & (apart > 0.0))
+    partial = partial[np.argsort(apart[partial], kind="stable")]
+    sets = [narrow & (apart == 0.0)]
+    for step in partial:
+        sets.append(sets[-1].copy())
+        sets[-1][step] = True
+    # Where the uniform number lies between the shares of two steps in turn.
+    shares = np.diff(np.concatenate([[0.0], apart[partial], [1.0]]))
     t = np.abs(h) * np.sign(h.real)
-    growth, points = _chain_cost(t, rho, np.ones(t.shape, dtype=bool), _CLOSE)
-    share = apart * _fade(np.maximum(growth, _GROWTH_FAR * points / _MOST))
-    if close.any():
-        two = _merged(h, rho, clear, blocked, close)
-    else:
-        two = _quadrature(h, rho, clear, blocked)
-    return share * two + (1.0 - share) * one
+    active = np.ones(t.shape, dtype=bool)
+    value = _merged(h, rho, clear, blocked, sets[-1])
+    out = shares[-1] * value
+    for steps, share in zip(sets[-2::-1], shares[-2::-1], strict=True):
+        if steps.any():
+            own = _merged(h, rho, clear, blocked, steps)
+        else:
+            own = _quadrature(h, rho, clear, blocked)
+        growth, points = _chain_cost(t, rho, active, join=steps)
+        fade = _fade(np.maximum(growth, _GROWTH_FAR * points / _MOST))
+        value = fade * own + (1.0 - fade) * value
+        out = out + share * value
+    return out
 
 
 def _merged(
@@ -298,7 +312,9 @@ def _quadrature(
     return density.sum(axis=1)
 
 
-def _chain_cost(t: np.ndarray, rho: np.ndarray, active: np.ndarray, merged: float = 0.0) -> tuple:
+def _chain_cost(
+    t: np.ndarray, rho: np.ndarray, active: np.ndarray, merged: float = 0.0, join=None
+) -> tuple:
     """For the chain of the nodes ``active`` (n, F) of thresholds ``t`` (n, F, in
     standard deviations, the clear side up) and correlations ``rho`` (n - 1,), from one
     active node to the next by the product of the correlations between: (F,) the
@@ -310,7 +326,9 @@ def _chain_cost(t: np.ndarray, rho: np.ndarray, active: np.ndarray, merged: floa
     kernel's width, the first node's |t| / sqrt 2 over its density's) and the kernel
     out of it in proportion to the correlation; none where no node is active. A node a
     step narrower than ``merged`` from the active node before is one with it
-    (:func:`_merged`): it adds no step, and the next step is from that node."""
+    (:func:`_merged`), and so is each node after a step of ``join`` (n - 1,) where that
+    is given (every node active): it adds no step, and the next step is from that
+    node."""
     count, frequencies = t.shape
     growth, fastest = np.zeros(frequencies), np.zeros(frequencies)
     narrowest = np.ones(frequencies)
@@ -319,7 +337,10 @@ def _chain_cost(t: np.ndarray, rho: np.ndarray, active: np.ndarray, merged: floa
     for j in range(count):
         spread = np.maximum(1.0 - link**2, 1e-12)
         width = np.sqrt(spread)
-        joined = active[j] & seen & (width < merged)
+        if join is None:
+            joined = active[j] & seen & (width < merged)
+        else:
+            joined = active[j] & seen & bool(j > 0 and join[j - 1])
         on = active[j] & ~joined
         offset = np.abs(t[j] - link * last)
         step = np.where(seen, offset**2 / (4.0 * spread), t[j] ** 2 / 4.0)
