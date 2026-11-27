@@ -2337,6 +2337,7 @@ class EdgeDiffraction:
             "faces": faces,
             "cosines": cosines,
             "in_line": on_ways,
+            "found": found,
         }
 
     def _double(self, listener, max_delay_s: float, single: dict | None, clusters, start: int):
@@ -2393,8 +2394,10 @@ class EdgeDiffraction:
                 ((fade[:, 0] > 0.0) & (t < 0.0) & (t >= -reach))
                 | ((fade[:, 1] > 0.0) & (t > length) & (t <= length + reach))
             )
-            close = ((fade[:, 0] > 0.0) & (t < reach)) | ((fade[:, 1] > 0.0) & (length - t < reach))
-            near.append((close, reach, s[0]))
+            ends = np.column_stack(
+                [(fade[:, 0] > 0.0) & (t < reach), (fade[:, 1] > 0.0) & (length - t < reach)]
+            )
+            near.append((ends.any(axis=1), reach, s[0], ends))
         # Each edge lies in the open side of the other, where the path touches it.
         _, rho_21, phi_21, in_21 = edges.frame(e1, p2)
         _, rho_12, phi_12, in_12 = edges.frame(e2, p1)
@@ -2433,9 +2436,10 @@ class EdgeDiffraction:
         # (corner_shares). Where the two edges of a corner rise unequally and the one
         # that rises more leaves the corner on the other's face side (a screen's top and
         # its end edge, upright or not, a hanging screen's foot), the path over that one
-        # passes level with its end as just past it, where a path over two edges is
-        # gone: it is left out (the path over that edge alone is there, by the share of
-        # its end). The other edge's path is then as just past that end too: its term
+        # passes level with its end as just past it: it touches its line a tolerance
+        # past the end, where it fades out by its share of the end (along_edge) as the
+        # path over that edge alone does there (_alone), not at the end, whose share the
+        # corner gives. The other edge's path is then as just past that end too: its term
         # on its boundary takes half the wave the path over the next edge alone carries
         # off it (half, on the lit side), or gives the rest of it (3/2, on the dark
         # side, where that path is missing), as at a square corner, whatever the
@@ -2443,9 +2447,12 @@ class EdgeDiffraction:
         # of the other goes on past the way, and each edge gives the corner's share.
         at_end = []
         listeners = np.broadcast_to(listener, p2.shape)
-        for before, point, after, t, e in (
-            (np.broadcast_to(self.source, p1.shape), p1, p2, t1, e1),
-            (p1, p2, listeners, t2, e2),
+        lines = [line1, line2]
+        for q, (before, point, after, t, e) in enumerate(
+            (
+                (np.broadcast_to(self.source, p1.shape), p1, p2, t1, e1),
+                (p1, p2, listeners, t2, e2),
+            )
         ):
             ends = np.column_stack([t == 0.0, t == edges.length[e]]) & (self.fades[e] > 0.0)
             at = ends.any(axis=1)
@@ -2456,13 +2463,17 @@ class EdgeDiffraction:
             behind = np.einsum("ij,ij->i", into, edges.along[o]) > 0.0
             behind_other = np.einsum("ij,ij->i", onward, edges.along[e]) > 0.0
             rise, rise_other = np.abs(into[:, 2]), np.abs(onward[:, 2])
-            ok &= ~((other >= 0) & (rise > rise_other + _LEVEL) & behind)
+            past = (other >= 0) & (rise > rise_other + _LEVEL) & behind
+            length = edges.length[e]
+            lines[q] = np.where(past, np.where(end == 0, -tolerance, length + tolerance), lines[q])
+            at &= ~past
             kept = (other >= 0) & (rise_other > rise + _LEVEL) & behind_other
             hidden = np.where(other >= 0, corner_shares(edges, e, end, after - point), 0.5)
             hidden = np.where(kept, 0.25, hidden)
             through = _through(model, edges, e, before, point, after, tolerance)
             through &= (other >= 0)[:, None]
             at_end.append((at, hidden, np.where(kept, 2.0, 1.0), through))
+        line1, line2 = lines
         sel = np.flatnonzero(ok)
         if len(sel) == 0:
             return None
@@ -2513,13 +2524,58 @@ class EdgeDiffraction:
 
         # Which side of each edge's boundaries the path is on, and the path over the
         # other edge alone that each geometric wave continues there.
-        has1, has2 = self._alone(single, e1, e2, phi_s1, phi_12, leave, graze)
+        # Past a fading end of an edge, where the path is admitted above, the wave a term
+        # continues is the path over that edge alone past the same end: both fade out
+        # there alike (has1, has2; within1 and within2 leave those paths out).
+        has1, has2, within1, within2 = self._alone(
+            single, e1, e2, phi_s1, phi_12, leave, graze, near[0][3], near[1][3]
+        )
         # The path over the other edge alone, which the source (or the listener) sees
         # round a screen's end, continues the wave along the screen's face on its side,
         # not along the other face: that one carries no geometric wave of theirs.
-        for has, n, point, end in ((has1, n1, p1, self.source), (has2, n2, p2, listener)):
+        for has, n, point, end in (
+            (has1, n1, p1, self.source),
+            (has2, n2, p2, listener),
+            (within1, n1, p1, self.source),
+            (within2, n2, p2, listener),
+        ):
             beyond = np.einsum("ij,ij->i", end - point, side) < -tolerance
             has[along & np.isclose(n, 2.0) & beyond] = -1
+        # The listener exactly in the plane of a face of the second edge, beyond the
+        # face, with the path's point on the first edge in that plane too, lies behind
+        # the face where the path over the first edge alone (the straight way between
+        # them) is not there, as for a path over one edge (_in_front, _past_face): as
+        # just off the plane on that side, inside the wedge, where the second edge has
+        # no path. Likewise the source at the first edge, the same both ways round. A
+        # listener or a source on the face itself has only the side in front of it. In
+        # line with a building's wall past its end, the path over the near corner and
+        # then the wall's top past its end was there on the line only: 0.24 dB at
+        # 125 Hz.
+        sources = np.broadcast_to(self.source, p1.shape)
+        beyond_face = _past_face(
+            model, edges, e2, phi_r2, phi_12, np.broadcast_to(listener, p2.shape), tolerance
+        )
+        # The paths over one edge leave out only a listener side behind a face
+        # (_in_front). With the two swapped, the path over the second edge alone whose
+        # source side lies past a face of that edge, the straight way not found, would
+        # be left out, and here it counts as missing: on the wall's plane, swapped, the
+        # path past the end of the top was there, 0.26 dB at 125 Hz.
+        missing1 = has1[:, 0] < 0
+        rows = np.flatnonzero(~missing1)
+        if len(rows):
+            alone, over = has1[rows, 0], single["c"]
+            missing1[rows] = _past_face(
+                model,
+                edges,
+                over["edge"][alone],
+                over["phi_s"][alone],
+                over["phi_r"][alone],
+                sources[rows],
+                tolerance,
+            ) & (single["found"][alone, 0] < 0)
+        beyond_face = (beyond_face & (has2[:, 0] < 0)) | (
+            _past_face(model, edges, e1, phi_s1, phi_21, sources, tolerance) & missing1
+        )
         angle1 = boundary_angles(n1, phi_21, phi_s1)
         angle2 = boundary_angles(n2, phi_r2, phi_12)
         # The rays that look for the path over one edge start just off it, so within
@@ -2542,10 +2598,38 @@ class EdgeDiffraction:
         angle2 = boundary_angles(n2, phi_r2, phi_12)
         lit1 = (angle1 > _ON_BOUNDARY) | ((np.abs(angle1) <= _ON_BOUNDARY) & (has1 >= 0))
         lit2 = (angle2 > _ON_BOUNDARY) | ((np.abs(angle2) <= _ON_BOUNDARY) & (has2 >= 0))
+        inner1 = (angle1 > _ON_BOUNDARY) | ((np.abs(angle1) <= _ON_BOUNDARY) & (within1 >= 0))
+        inner2 = (angle2 > _ON_BOUNDARY) | ((np.abs(angle2) <= _ON_BOUNDARY) & (within2 >= 0))
         # A face's reflection that is one wave with the incident wave shares its side,
         # also exactly on their common boundary.
-        for lit, faces in ((lit1, leave), (lit2, graze)):
+        for lit, faces in ((lit1, leave), (lit2, graze), (inner1, leave), (inner2, graze)):
             lit[:, 1:] = np.where(faces, lit[:, :1], lit[:, 1:])
+
+        # Near an end that fades, a term counts whether the path over the other edge alone
+        # is there or not, as a path over one edge does there (_single).
+        counted = ((lit1 == (has1 >= 0)) | near[0][0][:, None])[:, :, None] & (
+            (lit2 == (has2 >= 0)) | near[1][0][:, None]
+        )[:, None, :]
+        counted &= ~beyond_face[:, None, None]
+        # Where the first edge's wave is lit, the path continues the path over the second
+        # edge alone, and its waves at the second edge are one with that path's; and
+        # likewise where the second edge's wave is lit. Where both are, both paths over
+        # one edge take their terms off the wave they pass on (the source's, also where
+        # something else hides the source from the listener), and this path gives back
+        # what they take twice. Not with the source exactly in the plane of a face of
+        # the first edge that the path leaves along, or the listener in that of a face
+        # of the second that it arrives along (whether or not the face reaches the other
+        # edge), the incident wave on its boundary there: the paths over one edge count
+        # once then (_in_front), and this one is left out; by the sides the paths over
+        # one edge within their edges give it, as the paths past an end of their edge
+        # only fade out there (on a wall's plane, a path from past the end of its top
+        # round its corner was 14 dB off the one 10 um in front of the plane).
+        # In the coherent bands all the waves the path carries add in pressure, and add
+        # to the paths over one edge in the impulse response.
+        exact = ((np.abs(angle1[:, 0]) <= _ON_BOUNDARY) & leave.any(axis=1)) | (
+            (np.abs(angle2[:, 0]) <= _ON_BOUNDARY) & graze.any(axis=1)
+        )
+        carried = counted & ~(inner1[:, :, None] & inner2[:, None, :] & exact[:, None, None])
 
         # The distance parameters: the source's wave at the first edge, and at the second
         # the first edge's wave, whose radii of curvature are r1 across the path and
@@ -2595,18 +2679,38 @@ class EdgeDiffraction:
         # On a boundary of each (the source, both edges and the listener in the plane of
         # the face they share) it is as just off the second's, the listener side moved
         # off it, as _in_front decides the side there.
-        near1 = _share(kl1, angle1).min(axis=1)
-        near2 = _share(kl2, angle2).min(axis=1)
+        # Only the waves the path carries at an edge count: not one whose terms are all
+        # left out, nor one on its boundary at an edge the path touches past its end,
+        # whose terms there come from the path's point alone, which is off the edge
+        # (along_edge). At the end itself the corner gives such a term its share.
+        beyond1 = ((line1 < 0.0) | (line1 > edges.length[e1])) & ~at_end[0][0]
+        beyond2 = ((line2 < 0.0) | (line2 > edges.length[e2])) & ~at_end[1][0]
+        off1 = ~carried.any(axis=2) | ((np.abs(angle1) <= _ON_BOUNDARY) & beyond1[:, None])
+        off2 = ~carried.any(axis=1) | ((np.abs(angle2) <= _ON_BOUNDARY) & beyond2[:, None])
+        near1 = np.where(off1[..., None, None], 1.0, _share(kl1, angle1)).min(axis=1)
+        near2 = np.where(off2[..., None, None], 1.0, _share(kl2, angle2)).min(axis=1)
         bend1 = np.maximum(bend1, (1.0 - near1) * (flat - 1.0 / along[:, None, None]))
         bend2 = np.maximum(bend2, (1.0 - near2) * (flat - 1.0 / (r1 + r2)[:, None, None]))
         part = np.where(near1 + near2 > 0.0, near2 / np.maximum(near1 + near2, 1e-300), 1.0)
         radius2 = 1.0 / (flat - part * bend1)
         radius1 = 1.0 / (flat - (1.0 - part) * bend2)
+        # The first edge's wave at the second, its radius across the first edge being
+        # radius2, has in the plane through the path and the second edge the radius
+        # ``bent``: the second edge's distance parameter and its wave's spreading both
+        # take that one (Kouyoumjian and Pathak), so that where the first edge's wave
+        # continues the source's the second spreads it as the source's.
+        across = qa[:, None, None]
+        whole = along[:, None, None]
+        bent = 1.0 / (across / radius2 + (1.0 - across) / whole)
+        out2 = r2[:, None, None]
         kl2 = (
-            kl2
+            k
+            * out2
+            * (bent + out2)
             * radius2
-            * (r1 + r2)[:, None, None]
-            / (r1[:, None, None] * (radius2 + r2[:, None, None]))
+            * whole
+            * (sin2**2)[:, None, None]
+            / (bent * (radius2 + out2) * (whole + out2))
         )
         kl1 = (
             kl1
@@ -2623,7 +2727,7 @@ class EdgeDiffraction:
         # the next point, or the rest of it, as for a path over one edge: so the paths
         # over the two pieces of a bent edge, at their joint, are one path, not two.
         shares = []
-        for corner, (close, reach, curve), n, phi, phi_from, lit, e, t, sin, kl in (
+        for corner, (close, reach, curve, _), n, phi, phi_from, lit, e, t, sin, kl in (
             (at_end[0], near[0], n1, phi_21, phi_s1, lit1, e1, line1, sin1, kl1),
             (at_end[1], near[1], n2, phi_r2, phi_12, lit2, e2, line2, sin2, kl2),
         ):
@@ -2689,34 +2793,13 @@ class EdgeDiffraction:
         amplitude /= np.sqrt(r0 * r1 * (r0 + r1))[:, None]
         common = (
             amplitude[:, :, None]
-            * np.sqrt(rho_e / (r2 * (rho_e + r2)))[:, None, None]
+            * np.sqrt(bent / (out2 * (bent + out2)))
             * wedge_prefactor(n1[:, None, None], k, sin1[:, None, None])
             * wedge_prefactor(n2[:, None, None], k, sin2[:, None, None])
             * np.exp(-1j * k * distance[:, None, None])
             * loss
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
-        # Near an end that fades, a term counts whether the path over the other edge alone
-        # is there or not, as a path over one edge does there (_single).
-        counted = ((lit1 == (has1 >= 0)) | near[0][0][:, None])[:, :, None] & (
-            (lit2 == (has2 >= 0)) | near[1][0][:, None]
-        )[:, None, :]
-        # Where the first edge's wave is lit, the path continues the path over the second
-        # edge alone, and its waves at the second edge are one with that path's; and
-        # likewise where the second edge's wave is lit. Where both are, both paths over
-        # one edge take their terms off the wave they pass on (the source's, also where
-        # something else hides the source from the listener), and this path gives back
-        # what they take twice. Not with the source exactly in the plane of a face of
-        # the first edge that the path leaves along, or the listener in that of a face
-        # of the second that it arrives along (whether or not the face reaches the other
-        # edge), the incident wave on its boundary there: the paths over one edge count
-        # once then (_in_front), and this one is left out.
-        # In the coherent bands all the waves the path carries add in pressure, and add
-        # to the paths over one edge in the impulse response.
-        exact = ((np.abs(angle1[:, 0]) <= _ON_BOUNDARY) & leave.any(axis=1)) | (
-            (np.abs(angle2[:, 0]) <= _ON_BOUNDARY) & graze.any(axis=1)
-        )
-        carried = counted & ~(lit1[:, :, None] & lit2[:, None, :] & exact[:, None, None])
         pressure = np.zeros((paths, *self.wavenumber.shape), dtype=complex)
         np.add.at(pressure, ways, (waves * carried[..., None, None]).sum(axis=(1, 2)))
         energy = np.zeros((paths, self.wavenumber.shape[0]))
@@ -2848,15 +2931,19 @@ class EdgeDiffraction:
                 loss[rows] *= 0.5 * (1.0 + ground_wave_factors(model, face, distance[rows]))
         return loss
 
-    def _alone(self, single, e1, e2, phi_1, phi_2, leave, graze):
+    def _alone(self, single, e1, e2, phi_1, phi_2, leave, graze, close1, close2):
         """(C, 3) each for the waves at the first edge and at the second (the incident
         wave and the reflections off face 0 and face n): the index in ``single`` of the
-        path over the other edge alone that the geometric wave continues, or -1."""
+        path over the other edge alone that the geometric wave continues, or -1. A path
+        over one edge past an end of it counts where the path over both is within the
+        reach of the fade at that end of the edge (``close1`` and ``close2``, (C, 2), at
+        the start and the end of the first edge and of the second, :meth:`_double`).
+        Then the same two without the paths past an end of their edge."""
         count = len(e1)
         has1 = np.full((count, 3), -1, dtype=np.int64)
         has2 = np.full((count, 3), -1, dtype=np.int64)
         if single is None:
-            return has1, has2
+            return has1, has2, has1.copy(), has2.copy()
         c, plane, n = single["c"], self.edges.plane, self.edges.wedge
         planes = len(self.model.plane_normal) + 1
 
@@ -2864,28 +2951,44 @@ class EdgeDiffraction:
             return (np.asarray(edge) * 4 + kind) * planes + np.asarray(through) + 1
 
         known = key(c["edge"], c["kind"], c["plane"])
-        # Not the paths past the ends of their edges, which only fade out there.
-        known = np.where((c["t_k"] < 0.0) | (c["t_k"] > self.edges.length[c["edge"]]), -1, known)
-        order = np.argsort(known)
+        # The end of its edge each path lies past (0 the start, 1 the end), or -1. Past
+        # an end a path over one edge only fades out, as the path over both does near
+        # that end: both are there by the share of the edge's line their points take
+        # (along_edge), which on the boundary of the wave they share is one point.
+        length = self.edges.length[c["edge"]]
+        past = np.where(c["t_k"] < 0.0, 0, np.where(c["t_k"] > length, 1, -1))
+        order = np.lexsort((past >= 0, known))
         ranked = known[order]
 
-        def find(edge, kind, through):
+        def find(edge, kind, through, close):
             wanted = key(edge, kind, through)
             at = np.minimum(np.searchsorted(ranked, wanted), len(ranked) - 1)
-            return np.where(ranked[at] == wanted, order[at], -1)
+            index = np.where(ranked[at] == wanted, order[at], -1)
+            end = past[np.maximum(index, 0)]
+            fading = close[np.arange(count), np.maximum(end, 0)]
+            return np.where((end < 0) | fading, index, -1), np.where(end < 0, index, -1)
 
+        within1, within2 = has1.copy(), has2.copy()
         # The source's wave reaches the second edge, or its reflection off a face of the
         # first does (the source in front of that face).
-        has1[:, 0] = find(e2, 0, -1)
-        has1[:, 1] = np.where((phi_1 < np.pi) & ~leave[:, 0], find(e2, 1, plane[e1, 0]), -1)
+        front_0 = (phi_1 < np.pi) & ~leave[:, 0]
         front_n = (phi_1 > (n[e1] - 1.0) * np.pi) & ~leave[:, 1]
-        has1[:, 2] = np.where(front_n, find(e2, 1, plane[e1, 1]), -1)
+        for wave, (kind, through, front) in enumerate(
+            ((0, -1, True), (1, plane[e1, 0], front_0), (1, plane[e1, 1], front_n))
+        ):
+            found, inside = find(e2, kind, through, close2)
+            has1[:, wave] = np.where(front, found, -1)
+            within1[:, wave] = np.where(front, inside, -1)
         # The first edge's wave reaches the listener, or off a face of the second.
-        has2[:, 0] = find(e1, 0, -1)
-        has2[:, 1] = np.where((phi_2 < np.pi) & ~graze[:, 0], find(e1, 2, plane[e2, 0]), -1)
+        front_0 = (phi_2 < np.pi) & ~graze[:, 0]
         front_n = (phi_2 > (n[e2] - 1.0) * np.pi) & ~graze[:, 1]
-        has2[:, 2] = np.where(front_n, find(e1, 2, plane[e2, 1]), -1)
-        return has1, has2
+        for wave, (kind, through, front) in enumerate(
+            ((0, -1, True), (2, plane[e2, 0], front_0), (2, plane[e2, 1], front_n))
+        ):
+            found, inside = find(e1, kind, through, close1)
+            has2[:, wave] = np.where(front, found, -1)
+            within2[:, wave] = np.where(front, inside, -1)
+        return has1, has2, within1, within2
 
     def _edge_pairs(self) -> np.ndarray:
         """(P, 2) ordered pairs of edges each with part of the other in its open side,
@@ -3269,7 +3372,9 @@ def _two_edge_curvatures(d1, d2, p1, p2, source, listener):
     other line free (the second derivative less what the other line's takes of it), and
     the square of the sine of the angle the path meets the line at."""
     u, v, w = p1 - source, p2 - p1, listener - p2
-    r0, r1, r2 = (np.maximum(np.linalg.norm(x, axis=1), 1e-300) for x in (u, v, w))
+    # No nearer than 1e-150 m, so that the squares stay finite where two edges meet at
+    # the path's points (those paths are left out).
+    r0, r1, r2 = (np.maximum(np.linalg.norm(x, axis=1), 1e-150) for x in (u, v, w))
     u1 = np.einsum("ij,ij->i", d1, u) / r0
     v1 = np.einsum("ij,ij->i", d1, v) / r1
     v2 = np.einsum("ij,ij->i", d2, v) / r1
