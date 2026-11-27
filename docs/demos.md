@@ -1422,8 +1422,8 @@ scene with the train taken in, `walk` the mixes), `--from` names the scene, and 
   D_2m,nT = R + 10 lg(V / (6 T0 S)), the window's sound reduction index plus 9.6 dB
   (`acoustic_spaces.facade`); for traffic's spectrum that is Rw + Ctr + 9.6 = 29 - 4 +
   9.6 = 34.6 dB, with ISO 717-1's rating of AGC's values in octave bands, 29 (-1; -4) dB
-  (AGC's 30 is rated from third octaves); the S-Bahn's, higher in frequency, loses 39.6
-  dB(A) at the railway's house (87.2 dB(A) outdoors, 47.6 in the room). That level is
+  (AGC's 30 is rated from third octaves); the S-Bahn's, higher in frequency, loses 39.0
+  dB(A) at the railway's house (86.4 dB(A) outdoors, 47.4 in the room). That level is
   the listener's own where it stands 2 m out, as `house_18m` and the pavement do;
   nearer, where the wall's reflection makes the 63 to 250 Hz bands louder or quieter,
   the vehicle is simulated once more, as one more listener (`balcony_2m`, the street example's, ticked off), at the point
