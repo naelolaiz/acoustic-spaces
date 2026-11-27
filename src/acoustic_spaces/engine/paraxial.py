@@ -74,14 +74,14 @@ _REACH = 8.0
 #: from a complex threshold is a wave, :func:`_chain_cost`), up to _MOST. On 435 chains
 #: of two to four nodes within 3 standard deviations, at random, that the row takes
 #: (:meth:`Row.growth` below _GROWTH_FAR), they are within 5e-8 of the 400-point integral.
+#: A step narrower than _PER_WIDTH / _MOST (two edges of one family 5 cm apart half way
+#: along 25 m) would take more than _MOST points: the row takes nothing at the
+#: frequencies where its chain has one, and it fades out as the step narrows towards it
+#: (:meth:`Row.growth`).
 _FEWEST = 24
 _PER_WIDTH = 10.0
 _TURN = 3.0
 _MOST = 128
-#: The narrowest step the chain takes: two edges of one family closer along the way
-#: than that (6 cm apart half way along 25 m) make no row, as the quadrature of
-#: _MOST points does not resolve the step.
-_NARROWEST = 0.1
 #: An edge is in the row where the way passes it within ROW_NEAR standard deviations of
 #: the bridge there, and not beyond ROW_FAR: the bridge's density at the edge is then
 #: within exp(-1/2) of its peak, and below exp(-9/2) (1 %), where the edge's paths over
@@ -261,13 +261,17 @@ class Row:
     the listener's coordinates), and the bridge passes it on the side ``clear[i]``
     (+1: above its level, -1: below). ``point[i]`` is the way's point nearest the edge.
 
-    Which edges are in the row is uncertain: each node of ``share`` (n, F) is in it by
-    that share, alone of the others; the two nodes of each of ``corners`` (the top and
-    the end of one screen, in families 0 and 1) are in it together by the states
-    (none, the first, the second, both; each (F,)). The field over the edges is that of
-    the uniform theory of diffraction over those not in the row, the row's paraxial field
-    over those in it where they are two or more: :meth:`weight` is the share of a term
-    over some edges that the row takes, and :meth:`branches` the row's field.
+    Which edges are in the row is uncertain. The row holds by ``hold`` (F,), and where it
+    does not, no node is in it: the field is then the uniform theory of diffraction's
+    over every edge, so that where the row's share of the field is taken down at once
+    (:meth:`computable`) the field goes over from the row's to that one, each whole.
+    Where the row holds, each node of ``share`` (n, F) is in it by that share, alone of
+    the others; the two nodes of each of ``corners`` (the top and the end of one screen,
+    in families 0 and 1) are in it together by the states (none, the first, the second,
+    both; each (F,)). The field over the edges is that of the uniform theory of
+    diffraction over those not in the row, the row's paraxial field over those in it
+    where they are two or more: :meth:`weight` is the share of a term over some edges
+    that the row takes, and :meth:`branches` the row's field.
 
     ``tops`` (front node, back node, level of the face's plane along q, the face's
     reflection factor (F,)) are the rigid flat tops between two nodes of family 0, in
@@ -282,6 +286,7 @@ class Row:
     way: np.ndarray
     length: float
     share: np.ndarray
+    hold: np.ndarray
     corners: list[tuple[int, int, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]]
     tops: list[tuple[int, int, float, np.ndarray]]
     #: The model's plane of each of ``tops``, and the side of the face that is the top
@@ -392,6 +397,13 @@ class Row:
     def contains(self, members) -> np.ndarray:
         """(F,) the probability that the nodes ``members`` are all in the row."""
         members = frozenset(members)
+        if not members:
+            return np.ones(self.frequencies)
+        return self.hold * self._contains(members)
+
+    def _contains(self, members: frozenset) -> np.ndarray:
+        """(F,) the probability that the nodes ``members`` are all in the row where it
+        holds."""
         out = np.ones(self.frequencies)
         for unit in self._units:
             mine = members & frozenset().union(*unit)
@@ -400,7 +412,8 @@ class Row:
         return out
 
     def _empty(self, group: frozenset = frozenset()) -> np.ndarray:
-        """(F,) the probability that no node but those of ``group`` is in the row."""
+        """(F,) the probability that no node but those of ``group`` is in the row where it
+        holds."""
         out = np.ones(self.frequencies)
         for unit in self._units:
             if not frozenset().union(*unit) & group:
@@ -409,7 +422,7 @@ class Row:
 
     def _within(self, group: frozenset, members: frozenset) -> np.ndarray:
         """(F,) the probability that the nodes ``members`` are in the row and none but
-        those of ``group``."""
+        those of ``group``, where it holds."""
         out = self._empty(group)
         for unit in self._units:
             mine = frozenset().union(*unit)
@@ -419,19 +432,19 @@ class Row:
 
     def weight(self, members) -> np.ndarray:
         """(F,) the share of a term over the nodes ``members`` (none: the way's own
-        wave) that the row's field stands for: the probability that they are in the row
-        and that the row's nodes are of two obstacles or more (the paths over the edges
-        of one obstacle, a block's top or a screen's corner, are those of the uniform
-        theory of diffraction)."""
+        wave) that the row's field stands for: the probability that the row holds, that
+        they are in it and that its nodes are of two obstacles or more (the paths over
+        the edges of one obstacle, a block's top or a screen's corner, are those of the
+        uniform theory of diffraction)."""
         members = frozenset(members)
-        out = self.contains(members)
+        out = self._contains(members)
         if not members:
             out = out - self._empty()
         for group in self._groups:
             if members <= group:
                 within = self._within(group, members)
                 out = out - (within - self._empty() if not members else within)
-        return out
+        return self.hold * out
 
     def _steps(self, family: int, source: float, items: list, scale: np.ndarray) -> tuple:
         """The chain over ``items`` (node, level, clear side, weight on the clear side, on
@@ -553,28 +566,21 @@ class Row:
         return out
 
     def computable(self) -> Row:
-        """The row with its shares at each frequency taken down by :func:`_fade` of its
-        :meth:`growth`, its corners' states again from them (as :func:`find_row` has
-        them)."""
+        """The row with its hold at each frequency taken down by :func:`_fade` of its
+        :meth:`growth`: where its chains cannot be computed, the field goes over to the
+        uniform theory of diffraction's over every edge."""
         fade = _fade(self.growth())
         if (fade == 1.0).all():
             return self
-        share = self.share * fade
-        ends = self.way[self.family]
-        mean = ends[:, 0] + self.along / self.length * (ends[:, 1] - ends[:, 0])
-        corners = []
-        for first, second, _ in self.corners:
-            beside = self.clear[first] * (mean[first] - self.level[first]) > 0.0
-            aside = self.clear[second] * (mean[second] - self.level[second]) > 0.0
-            states = _corner_states(share[first], share[second], beside, aside)
-            corners.append((first, second, states))
-        return dataclasses.replace(self, share=share, corners=corners)
+        return dataclasses.replace(self, hold=self.hold * fade)
 
     def _part(self, inside: np.ndarray, start, end, own: bool) -> Row:
         """The row of the nodes ``inside`` (ascending) alone for the bridge from ``start``
         to ``end`` (``start`` first along the way), each node in it by its share in this
-        row (``own``) or by how close the straight line between the two passes it
-        (:func:`membership`, by its ends as :func:`find_row` has them)."""
+        row where it holds (``own``: the part holds in full), or by how close the straight
+        line between the two passes it (:func:`membership`, by its ends as
+        :func:`find_row` has them, the part holding by the largest of those shares,
+        :func:`_held`)."""
         index = {int(old): new for new, old in enumerate(inside)}
         a = float(np.einsum("i,i->", start - self.origin, self.direction))
         b = float(np.einsum("i,i->", end - self.origin, self.direction))
@@ -591,11 +597,13 @@ class Row:
         clear = self.clear[inside]
         mean = way[family, 0] + along / length * (way[family, 1] - way[family, 0])
         if own:
-            share = self.share[inside]
+            share, hold = self.share[inside], np.ones(self.frequencies)
         else:
             across = (along * (length - along) / length)[:, None]
             sigma = np.sqrt(across / self.wavenumber[None, :])
-            share = membership(np.abs(level - mean)[:, None] / sigma) * self.ends[inside]
+            hold, share = _held(
+                membership(np.abs(level - mean)[:, None] / sigma) * self.ends[inside]
+            )
         corners = []
         for first, second, states in self.corners:
             if first in index and second in index:
@@ -624,6 +632,7 @@ class Row:
             way=way,
             length=length,
             share=share,
+            hold=hold,
             corners=corners,
             tops=tops,
             top_planes=top_planes,
@@ -671,7 +680,8 @@ class Row:
         on to the listener past the row's other nodes (but the other edge of a screen's
         corner with it, which stands at ``point``): over the rows that hold the node and
         are of two obstacles or more (as :meth:`weight` has them), in proportion to
-        their probability, the field of each along the two legs."""
+        their probability, the field of each along the two legs (the row holding, as it
+        does where the node is in it)."""
         held = self.contains([node])
         if not held.any():
             return np.zeros(self.frequencies, dtype=complex)
@@ -698,7 +708,8 @@ class Row:
     ) -> list[tuple[tuple[int, ...], float, np.ndarray]]:
         """The row's field relative to the free field at wavenumbers ``k`` (F,), over the
         rows of two nodes or more in proportion to their probability (with ``every``,
-        over every row, of any number of nodes), by the tops the bridge reflects off: for
+        over every row, of any number of nodes, and the free field where the row does not
+        hold), by the tops the bridge reflects off: for
         each set of ``tops`` (their indices, in order along the way), the distance from
         the source's image in their planes in turn to the listener and (F,) that part of
         the field, the image's spreading and delay relative to the straight line's
@@ -706,7 +717,7 @@ class Row:
         is none: its chains, far from the bridge there, are not worked out."""
         out = []
         for flips, image, weight, ratio, chains in self._layouts(k):
-            live = np.flatnonzero(weight != 0.0)
+            live = np.flatnonzero((weight != 0.0) & (self.hold != 0.0))
             total = np.zeros(len(live), dtype=complex)
             for coefficient, *families in chains:
                 term = np.full(len(live), coefficient, dtype=complex)
@@ -721,7 +732,10 @@ class Row:
                 # The row of no node is the way's free field.
                 total -= self._empty()[live]
             field = np.zeros(self.frequencies, dtype=complex)
-            field[live] = (weight * ratio)[live] * total
+            field[live] = (self.hold * weight * ratio)[live] * total
+            if not flips and every:
+                # Where the row does not hold, no node is in it: the free field.
+                field = field + (1.0 - self.hold)
             out.append((flips, image, field))
         if not every:
             # The rows of the nodes of one obstacle are the edges' paths'.
@@ -737,8 +751,20 @@ class Row:
                     if not flips:
                         field = field - part._empty()
                     q = places[tuple(tops[f] for f in flips)]
-                    out[q] = (out[q][0], out[q][1], out[q][2] - rest * field)
+                    out[q] = (out[q][0], out[q][1], out[q][2] - self.hold * rest * field)
         return out
+
+
+def _held(share: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(F,) how much a row of nodes in it by ``share`` (n, F) each holds, the largest of
+    the shares at each frequency, and (n, F) their shares where it holds (each over that,
+    none where it does not): a row whose nodes are all in it by less than in full holds
+    by that much as a whole (its field goes over to the uniform theory of diffraction's
+    over every edge), not by each node apart from the others."""
+    hold = share.max(axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        relative = np.where(hold > 0.0, share / np.where(hold > 0.0, hold, 1.0), 0.0)
+    return hold, relative
 
 
 def _corner_states(a: np.ndarray, b: np.ndarray, beside: bool, aside: bool) -> tuple:
@@ -857,12 +883,6 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
     node_of = {int(e): i for i, e in enumerate(nodes)}
     fam = family[nodes]
     along = x[nodes]
-    for f in (0, 1):
-        mine = along[fam == f]
-        if len(mine) > 1:
-            rho = correlations(mine, length)
-            if np.sqrt(np.maximum(1.0 - rho**2, 0.0)).min() < _NARROWEST:
-                return None
     # The two edges of one obstacle across the way (a strip between its top and its
     # foot, a panel between its ends): faces in one plane across the way from each
     # towards the other. The chain takes each edge's obstacle to stand to infinity on
@@ -917,7 +937,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
                 ends[i] = 0.0
             else:
                 ends[i] *= 1.0 - membership(-past / sigma[i])
-    share = own * ends
+    hold, share = _held(own * ends)
     units = []
     for first, second in corners:
         beside = clear[first] * (mean[first] - level[first]) > 0.0
@@ -954,7 +974,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
                 break
     if len({round(float(v), 9) for v in along}) < 2:
         return None
-    return Row(
+    row = Row(
         edge=nodes,
         along=along,
         family=fam,
@@ -964,6 +984,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         way=way_coordinates,
         length=length,
         share=share,
+        hold=hold,
         corners=units,
         tops=tops,
         top_planes=top_planes,
@@ -974,6 +995,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         ends=ends,
         wavenumber=k,
     ).computable()
+    return row if row.hold.any() else None
 
 
 __all__ = ["ROW_FAR", "ROW_NEAR", "Row", "bridge_chain", "correlations", "find_row", "membership"]
