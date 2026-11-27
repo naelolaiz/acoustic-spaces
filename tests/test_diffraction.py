@@ -1529,19 +1529,25 @@ def _upright(start: tuple, end: tuple, top: float = 0.0, top_end: float | None =
 def test_a_way_through_the_end_of_a_screen_in_a_row(tmp_path: Path) -> None:
     # A long screen and, behind it, an oblique one that ends where the way passes, the
     # source and the listener exactly level with both tops. At its end the oblique
-    # top's term is half the whole edge's, and the path over both tops counts by half:
-    # the level is the one a millimetre above the tops, between those with the way a
-    # millimetre inside the end and outside it (it was that outside the end, 5.5 to
-    # 6.0 dB above the level a millimetre above the tops). From 3 mm above the tops the
-    # path over both no longer touches the end to within the rounding and counts whole
-    # or not at all, as the screen turns: a known issue.
+    # top's term is half the whole edge's, and the path over both tops fades through
+    # the end as the paths over each top alone do: the level is the one a millimetre
+    # above the tops, and those with the way a millimetre inside the end and outside
+    # it, as Kirchhoff's approximation has the field (-7.78 dB at all three from 63 to
+    # 500 Hz, a millimetre being far below the Fresnel zone's size there). It was that
+    # outside the end, 5.5 to 6.0 dB above the level a millimetre above the tops, and,
+    # with the path over both stopping at the end, 1.3 to 3.5 dB from either side.
     far = edge_diffraction.EXTENT
     quads = edge_diffraction.screen_quads(0.0) + _upright((10.0, 0.0), (10.0 - far, far))
     ends = np.array([[-10.0, 0.0, 0.0], [15.0, 0.0, 0.0]])
     level = _past(tmp_path, quads, *ends)
     np.testing.assert_allclose(level, _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3])), atol=0.1)
-    inside, outside = (_past(tmp_path, quads, *(ends + [0.0, y, 0.0])) for y in (1e-3, -1e-3))
-    assert np.all(level < inside - 1.0) and np.all(level > outside + 1.0), (level, inside, outside)
+    for y in (1e-3, -1e-3):
+        np.testing.assert_allclose(
+            _past(tmp_path, quads, *(ends + [0.0, y, 0.0])), level, atol=0.05
+        )
+    # At 250 and 500 Hz; below, the rigid screens' faces, which Kirchhoff leaves out,
+    # put the level up to 1.3 dB higher.
+    np.testing.assert_allclose(level[2:4], -7.78, atol=0.5)
 
 
 def test_a_way_between_the_ends_of_two_screens_on_either_side(tmp_path: Path) -> None:
@@ -1570,12 +1576,14 @@ def test_a_way_through_the_corners_of_two_screens(tmp_path: Path, mode: str, slo
     # they do for it (as for a sound that the screens hide, the level is up to 4.1 dB
     # lower at 63 Hz with first_order). With first_order the level is the one a
     # millimetre clear of both screens, half the direct sound, each corner taking a
-    # quarter (it was 8.2 to 9.5 dB above that); with second_order the path over both
-    # tops counts by half at each end, between the levels a millimetre clear of the
-    # screens and a millimetre inside them. A path touches the end of an oblique top to
+    # quarter (it was 8.2 to 9.5 dB above that). A path touches the end of an oblique top to
     # within the rounding: it counts as one that touches the end, and the scene and its
     # mirror image give one level (without that, 2.2 dB apart with second_order, as the
-    # rounding fell; 0.7 dB at 63 Hz before the change).
+    # rounding fell; 0.7 dB at 63 Hz before the change). With second_order the path over
+    # both tops fades through the ends as the paths over each top alone do, so the level
+    # is that a millimetre clear of the screens and a millimetre inside them, as
+    # Kirchhoff's approximation has it (-4.43 dB at all three from 63 to 500 Hz); it was
+    # 0.6 to 2.6 dB from those, the path over both stopping at the ends.
     far = edge_diffraction.EXTENT
     quads = _upright((0.0, 0.0), (-slope * far, far)) + _upright(
         (10.0, 0.0), (10.0 + slope * far, far)
@@ -1590,7 +1598,11 @@ def test_a_way_through_the_corners_of_two_screens(tmp_path: Path, mode: str, slo
         np.testing.assert_allclose(level[4:], 20.0 * math.log10(0.5), atol=0.05)
     else:
         inside = _past(tmp_path, quads, *(ends + [0.0, 1e-3, 0.0]), mode)
-        assert np.all(level > clear + 0.2) and np.all(level < inside - 1.0), (level, clear, inside)
+        np.testing.assert_allclose(clear, level, atol=0.15)
+        np.testing.assert_allclose(inside, level, atol=0.15)
+        # At 250 and 500 Hz; below, the rigid screens' faces, which Kirchhoff leaves out,
+        # put the level up to 0.9 dB higher.
+        np.testing.assert_allclose(level[2:4], -4.43, atol=0.5)
 
 
 def test_a_way_that_something_else_hides_beside_the_ends_of_two_screens(tmp_path: Path) -> None:
