@@ -1870,7 +1870,16 @@ theory gives +6.0 dB on both sides.
   than the whole plane, and where the ceiling ends at the point the path reflects at the
   level steps by up to 6.6 dB, as the path over the ceiling's end (a third edge) is not
   followed (see [Edge diffraction against the exact
-  solution](#edge-diffraction-against-the-exact-solution)).
+  solution](#edge-diffraction-against-the-exact-solution)). One edge's term takes no
+  share for its legs, so where a path that two edges stop turns into one that one edge
+  stops, the level steps by what the product's legs took: in the street's garden by
+  0.23 dB at 125 Hz (the car at x = -41.61 m), where the legs pass 1.1 m beside the
+  houses' corner and keep 0.65 to 0.71 at 63 Hz, the knife-edge's share at that
+  clearance, and behind the archway's wall by up to 0.25 dB at 125 Hz and 0.23 dB at
+  250 Hz, where the legs pass through the arch and Kirchhoff's integral over the opening
+  gives back up to 2.6 times the whole plane's (the ripple of a field through an
+  opening). Taking such a share for one edge's terms too is an open item on the
+  [roadmap](roadmap.md).
 - **Corners of edges.** Over the edge of a thin screen (a barrier's top and ends, a
   face's free edge) a path's term takes the part of its Fresnel zone that the edge
   covers, as BTM's integral over a finite edge has it (at a free end, a corner or a
@@ -1937,7 +1946,9 @@ theory gives +6.0 dB on both sides.
   proportion. Walking the `archway`'s listener behind the wall 1 cm at a time
   (x = 7.6 m, y = 5.3 to 7.8 m), where the reflection off the arch's jamb, 40 cm deep,
   appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz, between y = 5.39
-  and 5.40 m (see the next item), and by at most 0.16 dB from 2 kHz up. The edge
+  and 5.40 m (see the next item), but for the steps where a path that two edges stop
+  turns into one that one edge stops (0.23 dB at 250 Hz, see [Products of two edges'
+  terms](#known-issues-of-the-edge-fade)), and by at most 0.14 dB from 2 kHz up. The edge
   diffraction's own paths, without the fade, step there by up to 0.73 dB at 63 Hz,
   1.46 dB at 125 Hz and 1.88 dB from 250 Hz up. Averaged over the walk, in a one-off
   check, the level was 0.15 dB below that with every band in pressure
@@ -1956,13 +1967,17 @@ theory gives +6.0 dB on both sides.
   that other corner explain them removed the step but made one of 1.75 dB at y = 5.90 m,
   where a reflection point of one of those paths also leaves its face and the path,
   stopped at two events, is left out at once; so it is not done. The other steps along
-  the walk, of up to 0.20 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up, were there in
-  pressure too (a one-off check); at y = 6.83 to 6.84 m and 7.00 to 7.01 m, terms of
-  cut-off second- and third-order reflections come or go, and why is not traced. The fix would take a term
+  the walk are of up to 0.16 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up (at y =
+  7.00 to 7.01 m terms of cut-off second- and third-order reflections come or go, and
+  why is not traced), but where a path that two edges stop turns into one that one edge
+  stops: 0.25, 0.23 and 0.11 dB at 125, 250 and 500 Hz between y = 6.83 and 6.84 m, and
+  0.20 and 0.09 dB at 250 and 500 Hz between 6.53 and 6.54 m (see the products of two
+  edges' terms below). The fix would take a term
   over both corners of the end in turn, as `second_order` has for the direct sound,
   which the fade does not have (an open item on the [roadmap](roadmap.md)).
   `tests/test_walks.py` walks the whole line in CI and holds the steps to 0.65 dB at
-  63 Hz, 0.5 dB at 125 Hz, 0.1 dB from 250 Hz to 2 kHz and 0.2 dB above.
+  63 Hz, 0.5 dB at 125 Hz, 0.25 dB at 250 Hz, 0.15 dB at 500 Hz, 0.1 dB at 1 and 2 kHz
+  and 0.2 dB above.
 - **Products of terms.** The terms of a path's events multiply, as the path must get
   past each in turn, an approximation for terms at different edges. Each product is a
   path that arrives later by the detours of all its terms, an approximation too for
