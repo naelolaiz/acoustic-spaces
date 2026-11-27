@@ -57,20 +57,21 @@ atmosphere:
       polygon: [[520, -120], [700, -120], [700, 120], [520, 120]]
       roughness_m: 0.5
       wind: {speed_m_s: 1}
-# In a demo of the scene (acoustic-spaces demo) the stage plays the recording below,
-# downloaded the first time: the stereo mix of "Spicy Funk Cake" by the
-# Rhythmussportgruppe (CC BY 4.0), both channels mixed down; give `recording:` a file
-# of yours to hear that instead. Ticked, the PA group plays it as lakeside_demo.py
-# does: main_left, on the audience's left, the left channel, main_right the right
-# one and the subwoofers both mixed down.
+# In a demo of the scene (acoustic-spaces demo, or lakeside_demo.py) the stage's sound
+# system plays the recording below, downloaded the first time: the stereo mix of
+# "Spicy Funk Cake" by the Rhythmussportgruppe (CC BY 4.0), main_left, on the
+# audience's left, its left channel, main_right its right one and the subwoofers both
+# mixed down; give `recording:` a file of yours to hear that instead.
 recording: spicy_funk_cake
 sources:
+  # One source in the middle of the stage, 120 dB sound power, for a quick look at the
+  # weather without the sound system: left out of the scene's simulations until ticked.
   - name: stage
+    enabled: false
     channel: mono
     position: [0, 0, 6]
     level_db: 120
-  # The stage's sound system that lakeside_demo.py plays in place of the stage, left out
-  # of the scene's simulations until ticked, as a lawn concert hangs it: two line arrays
+  # The stage's sound system, as a lawn concert hangs it: two line arrays
   # of eight boxes (lake_array.yaml, the box's own pattern in box.csv, both made with
   # the stadium example's make_model.py) flown 6.5 m up on the audience's left (-y: the
   # audience looks towards -x) and right, aimed straight down the lawn and, box by box,
@@ -88,7 +89,6 @@ sources:
   - name: main_left
     channel: left
     group: PA
-    enabled: false
     position: [0, -6, 6.5]
     orientation: {yaw: 0}
     level_db: 124
@@ -97,7 +97,6 @@ sources:
   - name: main_right
     channel: right
     group: PA
-    enabled: false
     position: [0, 6, 6.5]
     orientation: {yaw: 0}
     level_db: 124
@@ -106,7 +105,6 @@ sources:
   - name: subs
     channel: mono
     group: PA
-    enabled: false
     position: [1, 0, 0.6]
     level_db: 130
     eq_db: [0, 0, -18, -40, -40, -40, -40, -40]
@@ -125,15 +123,30 @@ listeners:
   - name: bedroom_window
     position: [568, -16, 5]
     orientation: {yaw: 180}
-  # Behind the stage, as far upwind as the park reaches: lakeside_demo.py's, left out of
-  # the scene's simulations until ticked.
+  # Behind the stage, as far upwind as the park reaches.
   - name: behind_stage
-    enabled: false
     position: [-140, 0, 1.5]
     orientation: {yaw: 0}
+# The tour a demo of the scene plays, each stop for phrases of 8 bars of the song: the
+# audience, behind the stage, the boat, the garden, and the bedroom window in the
+# evening's weather, in still air (the scene without its atmosphere, simulated beside
+# it) and in the evening's again, so that the difference the weather makes is heard;
+# then back to the audience.
+tour:
+  - {listener: audience, phrases: 2}
+  - {listener: behind_stage, phrases: 1}
+  - {listener: boat, phrases: 1}
+  - {listener: garden, phrases: 1}
+  - {listener: bedroom_window, phrases: 1}
+  - {listener: bedroom_window, atmosphere: still, phrases: 1}
+  - {listener: bedroom_window, phrases: 1}
+  - {listener: audience, phrases: 2}
 simulation:
   early: {method: image_sources, max_order: 2, diffraction: none}
   late: {method: stochastic_ray_tracing}
-  seed: 1                 # the same random draws every run, in both weathers of the demo
+  # The responses run 3.5 s past the latest direct sound, the far shore's, 1.6 s late:
+  # outdoors the simulation counts ir_length_s from there (5.2 s in all).
+  ir_length_s: 3.5
+  seed: 1                 # the same random draws every run, in the weather and in still air
 outputs:
   - mono

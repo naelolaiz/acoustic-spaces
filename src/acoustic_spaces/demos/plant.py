@@ -1,6 +1,8 @@
-"""The road works of the street example: construction plant as the Defra noise database
-measured it, a lorry's reversing alarm, and the sounds made to them; the street's works
-demo (:mod:`acoustic_spaces.demos.works`) plays them. Nothing of the simulation uses it.
+"""Construction plant as the Defra noise database measured it, a lorry's reversing alarm,
+and the sounds made to them: a scene source's ``defra`` and ``sae-j994`` models
+(:class:`~acoustic_spaces.scene.PlantModel`, :class:`~acoustic_spaces.scene.AlarmModel`)
+take their sound power from here, and the demo of any scene plays the sounds made to it
+(the street's road works).
 
 Each machine is a row of Defra's *Update of noise database for prediction of noise on
 construction and open sites* (Hepworth Acoustics for the Department for Environment,

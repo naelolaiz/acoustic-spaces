@@ -1,13 +1,13 @@
-"""Check the flight demo's aircraft (:mod:`acoustic_spaces.demos.aircraft`) against Doc
-29's own levels: its NPD curves in the scene's air, and Doc 29's sum over the flight's
-segments.
+"""Check a scene's Doc 29 aircraft (a source of ``model: {method: doc-29}``,
+:mod:`acoustic_spaces.demos.aircraft`) against Doc 29's own levels: its NPD curves in
+the scene's air, and Doc 29's sum over the flight's segments.
 
     python validation/aircraft_noise.py [--json results.json] [--step 20] [--rays 50000]
 
 - **The source against its NPD curves.** JETW flying straight and level at 160 kt (the
   NPD curves' speed) and at one power over a microphone 1.2 m above grass, as its NPD
   curves are measured, at the NPD distances from 200 to 4000 ft right over it: its
-  sound power and directivity as the demo gives them
+  sound power and directivity as its model gives them
   (:mod:`acoustic_spaces.doc29.source`), simulated in the engine
   (:func:`~acoustic_spaces.walkthrough.simulate_walk`, its places ``STEP`` of the
   distance apart, 4 m at 200 ft). Its maximum level and sound exposure level, measured
@@ -18,9 +18,10 @@ segments.
   distance checks the closure (the spectrum, the slow time weighting, the ground taken
   out and put back, the air); the others show how far the NPD curves' shapes differ
   from a point source with one spectrum in the engine's air and ground.
-- **The airport example's flights.** The demo's departure and arrival, each simulated
-  at every listener of the example every ``--step`` along its flight, its level
-  following its thrust (:meth:`~acoustic_spaces.demos.aircraft.Aircraft.sounding`):
+- **The airport example's flights.** Its departure and arrival as their Doc 29 model
+  flies them, each simulated at every listener of the example every ``--step`` along
+  its flight, its level following its thrust
+  (:meth:`~acoustic_spaces.scene.model.AircraftModel.gains_db`):
   L_ASmax and SEL against Doc 29's at the same receivers, summed over the same flight
   path's segments with the NPD curves in the scene's air, the engines' installation,
   the lateral attenuation and the start-of-roll directivity
@@ -52,7 +53,7 @@ import numpy as np
 import yaml
 
 from acoustic_spaces import Room
-from acoustic_spaces.demos import aircraft, load
+from acoustic_spaces.demos import aircraft
 from acoustic_spaces.demos.passby import sounded
 from acoustic_spaces.directivity import write_directivity_csv
 from acoustic_spaces.doc29 import atmosphere, noise, source
@@ -87,9 +88,8 @@ def _flyover_scene(
     folder: Path, operation: str, feet: float, power: float, rays: int | None = None
 ) -> Path:
     """A scene of JETW flying level at 160 kt ``feet`` over a microphone 1.2 m above
-    grass, at ``power``, its sound power and directivity the demo's."""
-    plane = aircraft.Aircraft(operation)
-    maximum, spectrum = plane.curves()
+    grass, at ``power``, its sound power and directivity its Doc 29 model's."""
+    maximum, spectrum = aircraft._curves(operation)
     installation = aircraft._data()[0].installation
     thirds = source.sound_power_db(maximum, spectrum, power, TEMPERATURE_C, HUMIDITY_PERCENT)
     level = power_levels(thirds, "octave") + source.below_offset_db(installation)
@@ -112,7 +112,7 @@ def _flyover_scene(
                 "position": [-reach, 0.0, height],
                 "level_db": [round(float(v), 3) for v in level],
                 "directivity": {"file": table.name},
-                "walk": {
+                "trajectory": {
                     "to": [[reach, 0.0, height]],
                     "speed_m_s": noise.REFERENCE_SPEED_M_S,
                     "face_forward": True,
@@ -137,8 +137,7 @@ def _flyover_scene(
 def _doc29_curves(operation: str):
     """JETW's NPD curves of ``operation`` (SEL, L_Amax) in the scene's air, and the
     impedance adjustment there (dB)."""
-    plane = aircraft.Aircraft(operation)
-    maximum, spectrum = plane.curves()
+    maximum, spectrum = aircraft._curves(operation)
     jet, npd, *_ = aircraft._data()
     exposure = npd[(jet.npd, "SEL", operation)]
     adjust = (TEMPERATURE_C, HUMIDITY_PERCENT, 101.325)
@@ -202,38 +201,43 @@ def _compared(row: dict) -> str:
 
 
 def check_flights(folder: Path, step_m: float, rays: int | None = None) -> list[dict]:
-    """The airport example's departure and arrival at each of its listeners, the late
-    rays seeded."""
-    from acoustic_spaces.scene import Scene
-
+    """The airport example's departure and arrival at each of its listeners, each alone
+    in the scene as its Doc 29 model flies it, the late rays seeded."""
     work = folder / "airport"
     shutil.copytree(Path(example_path("airport")).parent, work)
-    path = work / "scene.yaml"
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = yaml.safe_load((work / "scene.yaml").read_text(encoding="utf-8"))
     data["simulation"].update({"late": _late(rays), "seed": SEED})
-    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    demo = load(work / "flight_demo.py").at(work)
     rows = []
-    for plane in (aircraft.DEPARTURE, aircraft.ARRIVAL):
-        run = ["scene", "--vehicle", plane.name]
-        assert demo.main(run) == 0
-        room = Room.from_yaml(demo.run_folder(demo.parser().parse_args(run)) / "scene_demo.yaml")
-        args = argparse.Namespace(source=work / "scene.yaml")
-        exposure, maximum, impedance = _doc29_curves(plane.operation)
-        segments = plane.segments_of(Scene.from_yaml(work / "scene.yaml"))
+    for name, operation in aircraft.OPERATIONS.items():
+        for each in data["sources"]:
+            each["enabled"] = each["name"] == name
+        path = work / f"scene_{name}.yaml"
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        room = Room.from_yaml(path)
+        jet = next(s for s in room.scene.sources if s.name == name)
+        given = next(s for s in data["sources"] if s["name"] == name)
+        air = room.scene.air
+        segments = aircraft.flight_segments(
+            name,
+            [given["position"], *given["trajectory"]["to"]],
+            air.temperature_c,
+            air.pressure_kpa,
+        )
+        exposure, maximum, impedance = _doc29_curves(operation)
         listeners = [lis for lis in room.scene.listeners if lis.in_use]
         receivers = np.array([lis.position for lis in listeners], dtype=float)
         doc29 = noise.event(
             aircraft._data()[0], exposure, maximum, segments, receivers, impedance=impedance
         )
+        flight = jet.model_flight()
         for k, listener in enumerate(listeners):
-            walked = simulate_walk(room, plane.name, listener=listener.name, step_m=step_m)
-            loud = 10.0 ** (plane.gains_db(args, walked.points.times) / 10.0)
+            walked = simulate_walk(room, name, listener=listener.name, step_m=step_m)
+            loud = 10.0 ** (jet.model.gains_db(flight, walked.points.times) / 10.0)
             heard = sounded(pass_by(walked), loud)
-            row = {"operation": plane.operation, "listener": listener.name}
+            row = {"operation": operation, "listener": listener.name}
             row.update(_measured(heard, float(doc29.lamax[k]), float(doc29.sel[k])))
             rows.append(row)
-            print(f"  {plane.name:9s} {listener.name:15s} " + _compared(row))
+            print(f"  {name:9s} {listener.name:15s} " + _compared(row))
     return rows
 
 

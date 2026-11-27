@@ -39,7 +39,7 @@ The editor works on the same scene files as the command line.
   it is left out of simulations, maps and checks, and is saved as `enabled: false` (the
   form's **Use in simulations** does the same). The eye beside it hides it in the 3D
   view and the plan, or shows it again, without changing the scene. What a scene leaves
-  out starts hidden (the stadium's helicopter, band and singer's microphone), and an
+  out starts hidden (the stadium's helicopter and singer's microphone), and an
   eye follows its tick when that changes, by a click, undo or redo; shown again by its
   eye, an item left out is drawn faded. See
   [Groups, and sources left out](scenes.md#groups-and-sources-left-out).
@@ -60,14 +60,15 @@ The editor works on the same scene files as the command line.
   results (see [Materials](scenes.md#materials)).
 - **Edit > Edit movement…**, or **Edit movement…** in a source's or listener's form,
   opens the **Movement** panel on the selected point source's or listener's
-  [walk](scenes.md#walks): a table of keyframes, where it is and how it faces at each
-  time, or, for a walk through points at one speed, a row per point and the speed. Drag
-  a keyframe's or a point's handle in the plan or the 3D view, or type its values; every
-  change can be undone. The slider and **Play** move every mover along its walk, nothing
-  simulated. **Moves** keeps a walk but leaves its mover standing, and **Doppler** has
-  it play as a passing vehicle does (`doppler: true`; it then moves alone). A line or a
-  surface source does not move. **Render movement…** simulates every mover on one clock
-  and writes what each listener hears as a WAV file, as `walkthrough --all` does (see
+  [trajectory](scenes.md#trajectories): a table of keyframes, where it is and how it
+  faces at each time, or, for a trajectory through points at one speed, a row per point
+  and the speed. Drag a keyframe's or a point's handle in the plan or the 3D view, or
+  type its values; every change can be undone. The slider and **Play** move every mover
+  along its trajectory, nothing simulated. **Moving** keeps a trajectory but leaves its
+  mover standing, and **Doppler** has it play as a passing vehicle does (`doppler:
+  true`; a listener's then moves alone, and no listener moves beside a source's). A line or a surface source does not move. **Render
+  movement…** simulates every mover on one clock and writes what each listener hears as
+  a WAV file, as `walkthrough --all` does (see
   [Walkthroughs](spatial-audio.md#walkthroughs)).
 - The scene tree's **Simulation** entry has the settings of
   [Simulation](simulation.md). The scene's own entry sets the air's temperature,
@@ -143,12 +144,16 @@ The editor works on the same scene files as the command line.
   height and spacing), its directivity (a pattern, a SOFA or CSV file of measured data,
   or an array file, whose elements **Add up the array's elements one by one** sums near
   its listeners), its sound power per band, its **Spectrum** (flat, or male or female
-  speech) and the **Gain**, **Equalizer** and **Delay** of its feed. It shows the
-  directivity index per band, opens the polar patterns, and the selected source shows
-  its balloon in the 3D view. **Plays** says what the source plays in a demo of the
-  scene: **Choose WAV…** picks a dry recording, **Silent** takes it away, and without
-  one it plays its **Channel** (left, right or mono) of the scene's **Recording**.
-  The channel of a file of its own is picked the same way; *(none)* mixes it down.
+  speech), a talker's **Vocal effort** (which then gives the sound power), the
+  **Model** that gives a road vehicle's, a siren's, a horn's or a train's sound power
+  (set in the scene file:
+  [sources](scenes.md#sources-and-directivity)) and the **Gain**, **Equalizer** and
+  **Delay** of its feed. It shows the directivity index per
+  band, opens the polar patterns, and the selected source shows its balloon in the 3D
+  view. **Plays** says what the source plays in a demo of the scene: **Choose WAV…**
+  picks a dry recording, **Silent** takes it away, and without one it plays its
+  **Channel** (left, right or mono) of the scene's **Recording**. The channel of a file
+  of its own is picked the same way; *(none)* mixes it down.
 - A listener's form sets its **Microphone**, what its mono output picks up through,
   aimed where it faces: omni, a first-order pattern, or an XY pair (with its **Angle**
   and **Capsules**), a Blumlein pair or an MS pair (with its **Mid** capsule and its
@@ -174,15 +179,15 @@ The editor works on the same scene files as the command line.
   the status bar.
 - **View > Follow the run** (on by default) rings, in the 3D view and the plan, the
   sources and listeners that the latest step of a run (a demo's too) names, hidden ones
-  included. While a walking source is simulated place by place (a pass-by demo's
-  vehicle, **Render movement…**), every walker of the run is drawn where it is at that
-  place's time, on the walks the run simulates: a demo's own scene when it has one, the
-  vehicle at `--speed`, say. When only listeners walk, each source is traced to all their
-  places at once, so the views do not move them. While a demo encodes its video, the
-  views show what the video shows at that moment: the listener of each pass of the
-  tour in turn, the sources that play, and the walkers where the video has them. A
-  head a demo turns (the gallery walk's look round) faces as it does then, as it is
-  rendered and in the video; arrows and directivity balloons turn with it.
+  included. While a moving source is simulated place by place (a pass-by demo's vehicle,
+  **Render movement…**), every mover of the run is drawn where it is at that place's
+  time, on the trajectories the run simulates: a demo's own scene when it has one, the
+  vehicle at `--speed`, say. When only listeners move, each source is traced to all
+  their places at once, so the views do not move them. While a demo encodes its video,
+  the views show what the video shows at that moment: the listener of each pass of the
+  tour in turn, the sources that play, and the movers where the video has them. A head a
+  demo turns (the gallery walk's look round) faces as it does then, as it is rendered
+  and in the video; arrows and directivity balloons turn with it.
 - **View > Show leaks** traces rays from the sources and shows where they escape from a
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It
@@ -225,7 +230,7 @@ room every corner is a handle:
   hold Shift to place them freely. A move that would make walls cross is refused, with
   the reason under **Messages**.
 - The wheel zooms, dragging empty space pans and **Fit** shows the whole room again,
-  with every source and listener and the places their walks go through.
+  with every source and listener and the places their trajectories go through.
 
 Rooms from model files show their outline, and their sources and listeners move the
 same way. Every change can be undone.

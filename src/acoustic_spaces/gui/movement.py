@@ -1,12 +1,12 @@
-"""The Movement panel: the walk of one source or listener as a table of keyframes, where
+"""The Movement panel: the trajectory of one source or listener as a table of keyframes, where
 it is and how it faces at each time, edited in place, and a timeline every mover is
 previewed along in the 3D view and the plan.
 
 A keyframe needs no speed: it says where the mover is at a time, and the speed to the
 next one follows, the distance over the time between them, shown beside it. The
-timeline runs to the longest walk, or as far as **End** says, so that a keyframe can go
+timeline runs to the longest trajectory, or as far as **End** says, so that a keyframe can go
 past the end: **Add keyframe** puts one at the playhead, where the mover would be then,
-to drag into place in the plan or the 3D view. A walk through points at one speed
+to drag into place in the plan or the 3D view. A trajectory through points at one speed
 (``to``, a car's along a road) is edited the other way round: its points are typed or
 dragged and its speed typed, and the times follow. Every change is one step of the
 document's history, as the forms' are, and shows at once. **Render movement…** plays
@@ -64,7 +64,7 @@ HEADERS = (
 SLIDER_STEPS = 1000
 #: How often the playhead moves while playing (ms).
 TICK_MS = 30
-#: Past the longest walk, where a keyframe goes when the playhead is on one already (s).
+#: Past the longest trajectory, where a keyframe goes when the playhead is on one already (s).
 STEP_S = 1.0
 
 
@@ -92,17 +92,17 @@ def output_text(output) -> str:
 
 
 def corner_times(item) -> np.ndarray:
-    """When ``item``'s walk through points (``to``) is at its position and at each point
+    """When ``item``'s trajectory through points (``to``) is at its position and at each point
     (s): the distance along over its one speed."""
-    corners = np.array([item.position, *item.walk.to], dtype=float)
+    corners = np.array([item.position, *item.trajectory.to], dtype=float)
     along = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(corners, axis=0), axis=1))])
-    return along / item.walk.speed_m_s
+    return along / item.trajectory.speed_m_s
 
 
 def path_of(item) -> Knots | None:
-    """The knots of ``item``'s walk, None when it has no walk or its walk goes nowhere
-    (which the scene's checks report)."""
-    if item.walk is None:
+    """The knots of ``item``'s trajectory, None when it has none or its trajectory goes
+    nowhere (which the scene's checks report)."""
+    if item.trajectory is None:
         return None
     try:
         return knots(item)
@@ -112,27 +112,27 @@ def path_of(item) -> Knots | None:
 
 def handles_of(item) -> np.ndarray:
     """Where ``item``'s keyframes can be dragged: its own position (row 0 of the table)
-    and each keyframe's, or each point of a walk along ``to``, (K, 3); only its position
-    without a walk."""
-    walk = item.walk
-    if walk is None:
+    and each keyframe's, or each point of a trajectory along ``to``, (K, 3); only its position
+    without a trajectory."""
+    trajectory = item.trajectory
+    if trajectory is None:
         places = []
-    elif walk.keyframes is not None:
-        places = [frame.position for frame in walk.keyframes]
+    elif trajectory.keyframes is not None:
+        places = [frame.position for frame in trajectory.keyframes]
     else:
-        places = list(walk.to)
+        places = list(trajectory.to)
     return np.array([item.position, *places], dtype=float)
 
 
 def moves_at(item, time_s: float | None) -> bool:
     """Whether the views show ``item`` away from its position at ``time_s``: it moves (in
-    use, its walk enabled) and the time is past the start."""
+    use, its trajectory enabled) and the time is past the start."""
     return (
         time_s is not None
         and time_s > 0.0
         and item.in_use
-        and item.walk is not None
-        and item.walk.enabled
+        and item.trajectory is not None
+        and item.trajectory.enabled
         and path_of(item) is not None
     )
 
@@ -146,7 +146,7 @@ def pose_at(item, time_s: float | None):
 
 
 def on_path(item, path: Knots, time_s: float):
-    """``item`` where ``path`` (:class:`~acoustic_spaces.walkthrough.Knots`, its own walk's
+    """``item`` where ``path`` (:class:`~acoustic_spaces.walkthrough.Knots`, its own trajectory's
     or another's) has it at ``time_s``, facing as it does then."""
     position, angles = path.at(time_s)
     orientation = Orientation(yaw=angles[0], pitch=angles[1], roll=angles[2])
@@ -154,7 +154,7 @@ def on_path(item, path: Knots, time_s: float):
 
 
 def movement_duration(scene) -> float:
-    """How long the longest walk of ``scene`` lasts (s), enabled or not; 0 with none."""
+    """How long the longest trajectory of ``scene`` lasts (s), enabled or not; 0 with none."""
     longest = 0.0
     for kind in KINDS:
         for item in getattr(scene, kind):
@@ -209,7 +209,7 @@ class MovementPanel(QWidget):
         self.mover.currentIndexChanged.connect(self._mover_picked)
         head.addWidget(label_for(_("Mover"), self.mover))
         head.addWidget(self.mover, 1)
-        self.moves = QCheckBox(_("Moves"))
+        self.moves = QCheckBox(_("Moving"))
         self.moves.setToolTip(
             _(
                 "Tick to have it go along its keyframes in a movement; untick to keep them "
@@ -223,8 +223,9 @@ class MovementPanel(QWidget):
             _(
                 "Tick for a vehicle or an aircraft: the early sound goes through delays that "
                 "change as it goes, so its pitch shifts as it passes (doppler in the scene "
-                "file). A walk with Doppler moves alone: Render movement… and the demos play "
-                "it while every other walk is off"
+                "file). Sources with Doppler move together, beside other sources that move, "
+                "while no listener moves; a listener with Doppler moves alone: Render "
+                "movement… and the demos play them so"
             )
         )
         self.doppler.toggled.connect(self._doppler)
@@ -289,7 +290,7 @@ class MovementPanel(QWidget):
             _(
                 "How fast it goes from this keyframe to the next: the distance between them "
                 "over the time between them (m/s; 3.6 km/h each). Nothing to set: change a "
-                "time or a position and the speed follows. A walk through points goes at one "
+                "time or a position and the speed follows. A trajectory through points goes at one "
                 "speed: type it here and the times follow"
             ),
         )
@@ -303,7 +304,7 @@ class MovementPanel(QWidget):
         layout.addWidget(self.table, 1)
 
         buttons = QHBoxLayout()
-        # Their texts and tips say keyframes or points, as the walk shown has.
+        # Their texts and tips say keyframes or points, as the trajectory shown has.
         self.add = QPushButton()
         self.add.clicked.connect(self.add_keyframe)
         self.remove = QPushButton()
@@ -312,11 +313,11 @@ class MovementPanel(QWidget):
         self.convert = QPushButton(_("Convert to keyframes"))
         self.convert.setToolTip(
             _(
-                "Turn a walk along points at a speed (to, speed_m_s) into keyframes that move "
-                "the same way, timed, so that they can be edited here"
+                "Turn a trajectory along points at a speed (to, speed_m_s) into keyframes that "
+                "move the same way, timed, so that they can be edited here"
             )
         )
-        self.convert.clicked.connect(self.convert_walk)
+        self.convert.clicked.connect(self.convert_to_keyframes)
         for button in (self.add, self.remove, self.convert):
             buttons.addWidget(button)
         self.hint = QLabel()
@@ -360,9 +361,9 @@ class MovementPanel(QWidget):
         self.end_box.setKeyboardTracking(False)
         self.end_box.setToolTip(
             _(
-                "Where the timeline ends: at least the longest walk; make it longer to add "
+                "Where the timeline ends: at least the longest trajectory; make it longer to add "
                 "keyframes past the end, and the movers that have ended stand where their "
-                "walks end"
+                "trajectories end"
             )
         )
         self.end_box.valueChanged.connect(self._end_changed)
@@ -403,7 +404,7 @@ class MovementPanel(QWidget):
         return self._outputs[max(self.output.currentIndex(), 0)]
 
     def reset(self) -> None:
-        """Another scene was opened: the playhead at 0, the timeline as long as its walks,
+        """Another scene was opened: the playhead at 0, the timeline as long as its trajectories,
         its own first output picked."""
         self.pause()
         self.key = None
@@ -484,23 +485,23 @@ class MovementPanel(QWidget):
         self.selected.emit(*self.key)
 
     def _fill(self) -> None:
-        """The table from the mover's walk: row 0 where it starts, a row per keyframe, or
-        per point of a walk along ``to``."""
+        """The table from the mover's trajectory: row 0 where it starts, a row per keyframe, or
+        per point of a trajectory along ``to``."""
         item = self.item
         self._loading = True
         try:
             self.table.setRowCount(0)
-            walk = item.walk if item is not None else None
+            trajectory = item.trajectory if item is not None else None
             path = path_of(item) if item is not None else None
-            timed = walk is not None and walk.keyframes is not None
-            along = walk is not None and not timed
-            self.moves.setEnabled(walk is not None)
-            self.moves.setChecked(walk is not None and walk.enabled)
-            self.doppler.setEnabled(walk is not None)
-            self.doppler.setChecked(walk is not None and walk.doppler)
+            timed = trajectory is not None and trajectory.keyframes is not None
+            along = trajectory is not None and not timed
+            self.moves.setEnabled(trajectory is not None)
+            self.moves.setChecked(trajectory is not None and trajectory.enabled)
+            self.doppler.setEnabled(trajectory is not None)
+            self.doppler.setChecked(trajectory is not None and trajectory.doppler)
             self._label_buttons(along)
             self.add.setEnabled(item is not None)
-            self.remove.setEnabled(walk is not None)
+            self.remove.setEnabled(trajectory is not None)
             self.convert.setVisible(along)
             self.convert.setEnabled(path is not None)
             if item is None:
@@ -521,7 +522,7 @@ class MovementPanel(QWidget):
                 angles = (path.angles + 180.0) % 360.0 - 180.0
                 angles[0] = _angles(item.orientation)
                 given = [True] * len(times)
-                for row, frame in enumerate(walk.keyframes, start=1):
+                for row, frame in enumerate(trajectory.keyframes, start=1):
                     if frame.orientation is None:
                         given[row] = False
                     else:
@@ -530,13 +531,13 @@ class MovementPanel(QWidget):
             legs = np.linalg.norm(np.diff(positions, axis=0), axis=1)
             taken = np.diff(times)
             dim = self.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
-            if along and walk.face_forward:
+            if along and trajectory.face_forward:
                 kept = fmt(
                     _(
                         "Faces the way it goes, turning at {turn:.0f}°/s through the corners "
                         "(face_forward in the scene file)"
                     ),
-                    turn=walk.turn_deg_s,
+                    turn=trajectory.turn_deg_s,
                 )
             elif along:
                 kept = _("Keeps its own orientation all along (face_forward: false)")
@@ -545,7 +546,7 @@ class MovementPanel(QWidget):
             self.table.setRowCount(len(times))
             for row in range(len(times)):
                 if along:
-                    speed = number(walk.speed_m_s, ".2f") if row < len(legs) else ""
+                    speed = number(trajectory.speed_m_s, ".2f") if row < len(legs) else ""
                 elif row < len(legs) and taken[row] > 0:
                     speed = number(legs[row] / taken[row], ".2f")
                 else:
@@ -587,12 +588,12 @@ class MovementPanel(QWidget):
                         _(
                             "{name} goes through its points at one speed, {speed:.2f} m/s "
                             "({kmh:.1f} km/h): type or drag a point to move it, type a speed "
-                            "for the whole walk, and the times follow. Convert to keyframes to "
-                            "time each point yourself."
+                            "for the whole trajectory, and the times follow. Convert to "
+                            "keyframes to time each point yourself."
                         ),
                         name=item.name,
-                        speed=walk.speed_m_s,
-                        kmh=3.6 * walk.speed_m_s,
+                        speed=trajectory.speed_m_s,
+                        kmh=3.6 * trajectory.speed_m_s,
                     )
                 )
             elif timed:
@@ -614,13 +615,13 @@ class MovementPanel(QWidget):
 
     @staticmethod
     def _along(item) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """The rows of a walk through points: when it is at its position and each point,
+        """The rows of a trajectory through points: when it is at its position and each point,
         where they are, and how it faces there (its own orientation where it starts; at
         each point, facing forward, the way the leg into it goes)."""
         times = corner_times(item)
-        corners = np.array([item.position, *item.walk.to], dtype=float)
+        corners = np.array([item.position, *item.trajectory.to], dtype=float)
         angles = np.tile(_angles(item.orientation), (len(corners), 1))
-        if item.walk.face_forward:
+        if item.trajectory.face_forward:
             for row in range(1, len(corners)):
                 dx, dy = corners[row, :2] - corners[row - 1, :2]
                 level = math.hypot(dx, dy) < 1e-9  # straight up or down: as before
@@ -628,7 +629,7 @@ class MovementPanel(QWidget):
         return times, corners, angles
 
     def _label_buttons(self, along: bool) -> None:
-        """Add and Remove for keyframes, or for the points of a walk along ``to``."""
+        """Add and Remove for keyframes, or for the points of a trajectory along ``to``."""
         if along:
             self.add.setText(_("Add point"))
             self.add.setToolTip(
@@ -642,7 +643,7 @@ class MovementPanel(QWidget):
             self.remove.setToolTip(
                 _(
                     "Remove the selected point; the mover goes straight from the one before to "
-                    "the one after. With the last one, the walk goes too"
+                    "the one after. With the last one, the trajectory goes too"
                 )
             )
             return
@@ -650,7 +651,7 @@ class MovementPanel(QWidget):
         self.add.setToolTip(
             _(
                 "Add a keyframe at the playhead, where the mover is then (on a keyframe "
-                "already, or at 0 s: a second past the end of its walk, where it ends), then "
+                "already, or at 0 s: a second past the end of its trajectory, where it ends), then "
                 "drag it into place or type where it is"
             )
         )
@@ -658,7 +659,7 @@ class MovementPanel(QWidget):
         self.remove.setToolTip(
             _(
                 "Remove the selected keyframe; the mover goes straight from the one before to "
-                "the one after. With the last one, the walk goes too"
+                "the one after. With the last one, the trajectory goes too"
             )
         )
 
@@ -682,43 +683,45 @@ class MovementPanel(QWidget):
 
     def _edit_keyframes(self, description: str, change: Callable[[list[dict]], None]) -> bool:
         """Change the keyframes of the mover shown with ``change`` (on the list of their
-        YAML entries, in order of time afterwards); none left takes the walk away."""
+        YAML entries, in order of time afterwards); none left takes the trajectory away."""
         kind, index = self.key
 
         def change_data(data: dict) -> None:
             entry = data[kind][index]
-            walk = entry.get("walk") or {}
-            frames = list(walk.get("keyframes") or [])
+            trajectory = entry.get("trajectory") or {}
+            frames = list(trajectory.get("keyframes") or [])
             change(frames)
             if not frames:
-                entry.pop("walk", None)
+                entry.pop("trajectory", None)
                 return
             frames.sort(key=lambda frame: frame["time_s"])
-            walk["keyframes"], walk["to"] = frames, []
-            entry["walk"] = walk
+            trajectory["keyframes"], trajectory["to"] = frames, []
+            entry["trajectory"] = trajectory
 
         return self._run(lambda: self.document.edit(description, change_data))
 
     def _edit_points(self, description: str, change: Callable[[dict], None]) -> bool:
-        """Change the walk through points of the mover shown with ``change`` (on its YAML
-        entry, ``to`` a list of points); no point left takes the walk away."""
+        """Change the trajectory through points of the mover shown with ``change`` (on its YAML
+        entry, ``to`` a list of points); no point left takes the trajectory away."""
         kind, index = self.key
 
         def change_data(data: dict) -> None:
             entry = data[kind][index]
-            walk = entry["walk"]
-            walk["to"] = [list(point) for point in walk.get("to") or []]
-            change(walk)
-            if not walk["to"]:
-                entry.pop("walk", None)
+            trajectory = entry["trajectory"]
+            trajectory["to"] = [list(point) for point in trajectory.get("to") or []]
+            change(trajectory)
+            if not trajectory["to"]:
+                entry.pop("trajectory", None)
 
         return self._run(lambda: self.document.edit(description, change_data))
 
     @property
     def _along_shown(self) -> bool:
-        """Whether the mover shown walks through points (``to``)."""
+        """Whether the mover shown goes through points (``to``)."""
         item = self.item
-        return item is not None and item.walk is not None and item.walk.keyframes is None
+        return (
+            item is not None and item.trajectory is not None and item.trajectory.keyframes is None
+        )
 
     def _cell_changed(self, cell: QTableWidgetItem) -> None:
         if self._loading or self.item is None:
@@ -736,12 +739,12 @@ class MovementPanel(QWidget):
         item = self.item
         if col == SPEED and self._along_shown:
             if value <= 0.0:
-                self.failed.emit(_("a walk goes at a speed above 0 m/s"))
+                self.failed.emit(_("a trajectory goes at a speed above 0 m/s"))
                 self._fill()
                 return
 
-            def speed(walk: dict) -> None:
-                walk["speed_m_s"] = round(value, DECIMALS)
+            def speed(trajectory: dict) -> None:
+                trajectory["speed_m_s"] = round(value, DECIMALS)
 
             self._edit_points(_("change speed"), speed)
             return
@@ -759,10 +762,10 @@ class MovementPanel(QWidget):
         if self._along_shown:
             if X <= col <= Z:
 
-                def displace_point(walk: dict) -> None:
-                    point = list(walk["to"][k])
+                def displace_point(trajectory: dict) -> None:
+                    point = list(trajectory["to"][k])
                     point[col - X] = value
-                    walk["to"][k] = _place(point)
+                    trajectory["to"][k] = _place(point)
 
                 self._edit_points(_("move point"), displace_point)
             return
@@ -802,8 +805,8 @@ class MovementPanel(QWidget):
             return self._run(lambda: self.document.move_point(kind, index, position))
         if self._along_shown:
 
-            def displace_point(walk: dict) -> None:
-                walk["to"][row - 1] = _place(position)
+            def displace_point(trajectory: dict) -> None:
+                trajectory["to"][row - 1] = _place(position)
 
             return self._edit_points(_("move point"), displace_point)
 
@@ -814,7 +817,7 @@ class MovementPanel(QWidget):
 
     def add_keyframe(self) -> None:
         """A keyframe at the playhead, where the mover is then; on a keyframe already (or
-        at 0 s), :data:`STEP_S` past the end of its walk, where it ends."""
+        at 0 s), :data:`STEP_S` past the end of its trajectory, where it ends."""
         item = self.item
         if item is None:
             return
@@ -848,12 +851,12 @@ class MovementPanel(QWidget):
             self.set_time(time)
 
     def _add_point(self) -> None:
-        """A point of a walk through points at the playhead, where the mover is then,
+        """A point of a trajectory through points at the playhead, where the mover is then,
         splitting the leg it is on; at 0 s, on a point or past the end, :data:`STEP_S`
         further on past the end, along the last leg."""
         item = self.item
         times = corner_times(item)
-        corners = np.array([item.position, *item.walk.to], dtype=float)
+        corners = np.array([item.position, *item.trajectory.to], dtype=float)
         time = self._time
         if time <= 0.0 or time >= times[-1] or np.any(np.abs(times - time) < 1e-6):
             leg = corners[-1] - corners[-2]
@@ -865,25 +868,25 @@ class MovementPanel(QWidget):
                     )
                 )
                 return
-            point, k = corners[-1] + leg / length * item.walk.speed_m_s * STEP_S, len(corners)
+            point, k = corners[-1] + leg / length * item.trajectory.speed_m_s * STEP_S, len(corners)
         else:
             k = int(np.searchsorted(times, time))  # the row it takes
             point = path_of(item).at(time)[0]
 
-        def add(walk: dict) -> None:
-            walk["to"].insert(k - 1, _place(point))
+        def add(trajectory: dict) -> None:
+            trajectory["to"].insert(k - 1, _place(point))
 
         if self._edit_points(_("add point"), add):
             self.table.setCurrentCell(k, X)
 
     def remove_keyframe(self) -> None:
-        """Take the selected keyframe (or point) away; the last one takes the walk with
+        """Take the selected keyframe (or point) away; the last one takes the trajectory with
         it."""
         row = self.table.currentRow()
         item = self.item
-        if item is None or item.walk is None:
+        if item is None or item.trajectory is None:
             return
-        along = item.walk.keyframes is None
+        along = item.trajectory.keyframes is None
         if row < 1:
             text = (
                 _("Select a point to remove; the first row is where {name} starts.")
@@ -894,8 +897,8 @@ class MovementPanel(QWidget):
             return
         if along:
 
-            def drop_point(walk: dict) -> None:
-                del walk["to"][row - 1]
+            def drop_point(trajectory: dict) -> None:
+                del trajectory["to"][row - 1]
 
             if self._edit_points(_("remove point"), drop_point):
                 self.table.setCurrentCell(min(row, self.table.rowCount() - 1), X)
@@ -907,13 +910,13 @@ class MovementPanel(QWidget):
         if self._edit_keyframes(_("remove keyframe"), drop):
             self.table.setCurrentCell(min(row, self.table.rowCount() - 1), X)
 
-    def convert_walk(self) -> None:
-        """Keyframes for a walk along ``to``: each knot of the walk as it goes, its turns
-        through the corners included, so that it moves the same way; facing forward, it
+    def convert_to_keyframes(self) -> None:
+        """Keyframes for a trajectory along ``to``: each knot of the trajectory as it goes, its
+        turns through the corners included, so that it moves the same way; facing forward, it
         faces its first leg from the start, so its own orientation turns that way too."""
         item = self.item
         path = path_of(item) if item is not None else None
-        if path is None or item.walk.keyframes is not None:
+        if path is None or item.trajectory.keyframes is not None:
             return
         kind, index = self.key
         angles = (path.angles + 180.0) % 360.0 - 180.0
@@ -929,24 +932,24 @@ class MovementPanel(QWidget):
         def convert(data: dict) -> None:
             entry = data[kind][index]
             entry["orientation"] = dict(zip(ANGLES, _place(angles[0]), strict=True))
-            entry["walk"]["keyframes"], entry["walk"]["to"] = frames, []
+            entry["trajectory"]["keyframes"], entry["trajectory"]["to"] = frames, []
 
-        self._run(lambda: self.document.edit(_("convert walk to keyframes"), convert))
+        self._run(lambda: self.document.edit(_("convert trajectory to keyframes"), convert))
 
     def _moves(self, on: bool) -> None:
         if not self._loading and self.key is not None:
             kind, index = self.key
-            self._run(lambda: self.document.set_walk_enabled(kind, index, on))
+            self._run(lambda: self.document.set_trajectory_enabled(kind, index, on))
 
     def _doppler(self, on: bool) -> None:
         if not self._loading and self.key is not None:
             kind, index = self.key
-            self._run(lambda: self.document.set_walk_doppler(kind, index, on))
+            self._run(lambda: self.document.set_trajectory_doppler(kind, index, on))
 
     # -- the timeline -------------------------------------------------------------------
 
     def _set_range(self) -> None:
-        """The timeline runs to the longest walk at least, and to End."""
+        """The timeline runs to the longest trajectory at least, and to End."""
         longest = movement_duration(self.document.scene)
         self._end = max(self._end, longest)
         self._loading = True

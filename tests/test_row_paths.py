@@ -17,7 +17,7 @@ from acoustic_spaces.engine.row_paths import MAX_BAND_HZ, ROW, RowPaths
 from acoustic_spaces.engine.simulate import coherent_bands, early_paths
 from acoustic_spaces.geometry.outdoor import Layout
 from acoustic_spaces.scene import Coverage
-from acoustic_spaces.walkthrough import simulate_movement, simulate_walk
+from acoustic_spaces.walkthrough import simulate_movement, simulate_trajectory
 
 #: A barrier 3 m high across the x axis, 5 m from the source, 500 m long.
 LONG = {"name": "screen", "path": [[5, -250], [5, 250]], "height": 3}
@@ -488,9 +488,9 @@ def test_walks_take_the_paths_over_the_edges(asked) -> None:
     assert np.any(early_paths(Room.from_scene(data)).edge == ROW) and asked
     asked.clear()
     walking = data.model_dump()
-    walking["listeners"][0]["walk"] = {"to": [[12.0, 1.0, 1.5]], "speed_m_s": 1.0}
+    walking["listeners"][0]["trajectory"] = {"to": [[12.0, 1.0, 1.5]], "speed_m_s": 1.0}
     room = Room.from_scene(Scene.model_validate(walking))
-    walked = simulate_walk(room, step_m=0.5)
+    walked = simulate_trajectory(room, step_m=0.5)
     assert len(walked.names) == 3 and not asked
     simulate_movement(room, step_m=0.5)
     assert not asked

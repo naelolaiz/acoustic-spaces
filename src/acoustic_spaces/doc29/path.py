@@ -29,7 +29,7 @@ SPEED_STEP_M_S = 10.0
 NEAREST_POINTS_M = 10.0
 LOWEST_SOURCE_M = 1.0
 #: How near two consecutive points of a ground track may be before the later one goes
-#: (m): a walk's places one above the other have one point in plan.
+#: (m): a trajectory's places one above the other have one point in plan.
 SAME_PLAN_POINT_M = 1e-6
 
 

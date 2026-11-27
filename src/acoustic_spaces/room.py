@@ -141,7 +141,15 @@ def _air_cells(
     return np.array(sorted(air), dtype=np.int64)
 
 
-def _directivity_key(spec, scene: Scene) -> str:
+def _directivity_key(source, scene: Scene) -> str:
+    """What ``source``'s directivity hangs on: its model's, for a model that gives one,
+    in the air and at the speed it takes; else its own entry."""
+    if source.model is not None and getattr(source.model, "radiates", False):
+        return (
+            f"{source.model.model_dump_json()} at {source.model_speed_m_s()} m/s, "
+            f"{source._air_c} C, {source._air_kpa} kPa"
+        )
+    spec = source.directivity
     if isinstance(spec, str):
         return spec
     # An array's phases depend on the speed of sound.
@@ -270,14 +278,15 @@ class Room:
         loaded = {}
         if reuse is not None:
             for source, directivity in zip(reuse.scene.sources, reuse.directivities, strict=True):
-                loaded[_directivity_key(source.directivity, reuse.scene)] = directivity
+                loaded[_directivity_key(source, reuse.scene)] = directivity
         directivities = []
         c = speed_of_sound(scene.air.temperature_c)
         for source in scene.sources:
-            key = _directivity_key(source.directivity, scene)
+            key = _directivity_key(source, scene)
             if key not in loaded:
                 try:
-                    loaded[key] = load_directivity(source.directivity, c)
+                    own = source.model_directivity()
+                    loaded[key] = load_directivity(source.directivity, c) if own is None else own
                 except ImportError as exc:
                     raise ValueError(f"source {source.name!r}: {exc}") from exc
                 except ValueError as exc:

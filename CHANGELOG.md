@@ -2,6 +2,274 @@
 
 ## Unreleased
 
+- Added: a source's `model`, its sound power by a method in place of `level_db`:
+  CNOSSOS-EU's road vehicles by category, at the speed of the source's trajectory in the
+  scene's air (**Model** on its page in the editor). The demo of any scene makes such a
+  vehicle's sound (tyres and an engine, `--rpm`), gives its passes on the stills
+  (L_Amax, SEL, how close, the Doppler fall), and writes its videos' chapters.
+- Changed: the roadside's `passby_demo.py` is the demo of its scene, the car and the
+  truck the scene's sources with a model; its options and steps before 4.4.0 still
+  work (`--vehicle` as `--sources`), and its runs are named as the demo of any scene's
+  (`passby_binaural`).
+- Added: a source's `model` may be a siren (`siren`: wail, yelp or two_tone, of the
+  `patterns` it can sound, as loud as the 100 W electronic siren NBS measured, `gain_db`
+  louder) or a horn (`horn`: an air horn, a car's pair of disc horns or a train horn, in
+  blasts, a train horn's two notes in turn or as a chord), its sound power that of the
+  sound the demo of any scene makes for it; `--siren` and `--horn` set how every one
+  that plays sounds. A `--siren`, `--horn` or `--rpm` that changes nothing in the run is
+  refused, saying why.
+- Added: a source's `model` may be a train or a tram of Schall 03 (`schall-03`: its
+  `train`, `track` and `height`, at the rail top, on the roof or at the pantograph): the
+  source is the train's front, and the demo of any scene plays every point of the train
+  at that height as far behind it as it is, each a noise of its own at its own sound
+  power with its own Doppler (`render_movement`'s `followers` and `leads`).
+- Added: `--indoors` in the demo of any scene hears the run in the room behind each
+  listener in front of a building's wall: `airborne` through its closed window,
+  `rumble` the rumble that a train's or a tram's wheels moving past, or construction
+  plant standing, make in it, or `airborne_and_rumble`; a run where no listener stands
+  so, or nothing that plays shakes the ground for the rumble, or plant stands shaking it
+  while something moves past, is refused, saying why.
+- Changed: the street's `passby_demo.py` is the demo of its scene, its vehicles the
+  scene's sources with a model, each in a group (`Passenger car` with its horn, `Police
+  car` with its siren, `Fire engine` with its siren and its air horn, `Tram`, its four
+  bogies and its roof's two halves) that plays in a part of its own; names joined with
+  `+` in `--sources` play together in one part (`--sources car+car_horn`). Its options
+  and steps before 4.4.0 still work (`--vehicle`, `--car`, `--police-car` and
+  `--fire-engine` as `--sources`, `--indoors tram` and `tram_and_rumble` as `airborne`
+  and `airborne_and_rumble`), and `--indoors` hears any of its vehicles.
+- Added: a source's `model` may be construction plant of Defra's database for
+  construction sites (`defra`: a breaker, a generator or a dumper, the breaker's
+  `blows_per_minute`) or a reversing alarm (`sae-j994`, SAE J994 Type B); they need no
+  trajectory, and the demo of any scene plays their made sound standing, all through
+  the run (`--blows` sets every breaker's).
+- Changed: the street's `works_demo.py` is the demo of its scene, its machines and alarm
+  the scene's sources with a model (the group `Road works`); its options and steps
+  before 4.4.0 still work but `--scene` (the scenes go to the work folder, now `demo`),
+  `--indoors works` and `works_and_rumble` read as `airborne` and
+  `airborne_and_rumble`, and its first run simulates again.
+- Changed: the railway's `passby_demo.py` is the demo of its scene, its train the
+  scene's sources with a Schall 03 model and its horn one with a horn model (the group
+  `Train`); its options and steps before 4.4.0 still work (`--indoors train` and
+  `train_and_rumble` as `airborne` and `airborne_and_rumble`), and its runs are named as
+  the demo of any scene's (`passby_train-freight_binaural`). The demo of any scene's
+  `--train` and `--track` set every train's or tram's, `--train` at its own speed, and
+  what goes along with it, unless `--speed` says; a train on a track Schall 03 does not
+  give it, or with no sources at a height that plays, is refused, saying why.
+- Added: a source's `model` may be a helicopter's rotors (`rotorcraft`: its
+  `helicopter`, the AS350 B3, and its `broadband` noise by Pegg's method or BPM),
+  trimmed for level flight at its airspeed (its trajectory's speed less the wind at its
+  height) in the scene's air: the model gives its sound power and its directivity, and
+  the demo of any scene plays what its rotors send each way (`emission.Delayed`). Its
+  trajectory faces the way it flies, with Doppler, at one height, or it is refused,
+  saying why; `--broadband` sets every helicopter's.
+- Changed: the helicopter flyover's `flyover_demo.py` is the demo of its scene, its
+  helicopter of a rotorcraft model in place of its `level_db`, `directivity` and
+  `helicopter.csv`; its options, steps and runs' names before 4.4.0 still work.
+- Added: a source's `model` may be an aircraft of ECAC Doc 29 (`doc-29`: its
+  `aircraft`, Volume 3's JETW, on an `operation`, a departure or an arrival): it flies
+  the source along its trajectory's ground track by the operation's procedure in the
+  scene's air, the trajectory taking the flight's keyframes, and gives its sound power
+  and its directivity; the demo of any scene plays its noise louder and softer as the
+  thrust changes, and gives a pass's L_ASmax and its SEL 10 dB down too. A standing
+  aircraft, a trajectory with a speed of its own or no Doppler, or an arrival that never
+  comes down to the runway, is refused, saying why.
+- Changed: the airport's `flight_demo.py` is the demo of its scene, its jets of a Doc 29
+  model in place of `jetw.csv` and the flight the script wrote into its scene; its
+  options and steps before 4.4.0 still work (`--vehicle` as `--sources`), and its runs
+  are named as the demo of any scene's (`flight_arrival_binaural`).
+- Changed: the stadium's `stadium_demo.py` is the demo of its scene, which plays the
+  scene's band and sound system as it has them; its options and steps before 4.4.0
+  still work (`--song` and `--music` as `--recording`, `music` as `recording`, `band`
+  as `simulate`) but `--scene` and `--results` (the scenes and results go to the work
+  folder), and its runs are named as the demo of any scene's (`stadium_francium_binaural`).
+- Changed: the stadium's `helicopter_demo.py` is the demo of its scene with the
+  helicopter taken in, of a rotorcraft model in place of its `level_db`, `directivity`
+  and `helicopter.csv`, on one clock with the concert: it needs no run of the stadium
+  demo first. Its options and steps before 4.4.0 still work (`--at` as `--start`) but
+  `--stadium`, `--band`, `--results` and `--flight`; it is over the centre spot halfway
+  through "Spicy Funk Cake", by its trajectory's `start_s`, and another song's halfway
+  takes `--at`.
+- Changed (results change): the stadium's direct sound bends round the edges of its
+  stands and of its stage roof (`diffraction: direct`, was `none`), so that the
+  helicopter crossing fades as an edge hides it instead of dropping by ten decibels or
+  more from one moment to the next; `--sources helicopter` flies it alone.
+- Added: the demo of any scene's `--start` (when what moves sets off) and `--height`
+  (how high every helicopter flies); outdoors the scene a run simulates has its ground
+  and its sky widened to hold every trajectory in use that goes past them. A source of a
+  model takes its sound power in the wind it is in once a run changes its height or its
+  air.
+- Added: a demo's stills draw the scene's audience where its materials are the
+  database's audiences or seating: people standing on the ground's zones or seated on
+  the model, a dot for every ten, and empty seats in rows, with how many stand and sit
+  and how much each takes up at 1 kHz. A source that moves past the scene's ground is
+  drawn at the plan's edge with how far it is. `--hide audience` leaves the audience
+  out and `--hide none` draws all; the stadium's own stills, with their stage close-up,
+  are gone. A still's lines wrap where they would run past its edge.
+- Added: a run that flies a helicopter into the scene's model is refused, naming how
+  high the model is under its trajectory (`--height 30`).
+- Added: in the Run demo window, **File…** beside the recording picks a file of yours,
+  which the window keeps for the next time.
+- Changed: an option that changes nothing in a run is refused naming it (`--rpm changes
+  nothing: no road vehicle plays a made sound`), and `--rpm` and `--blows` are refused
+  unless positive.
+- Added: in the demo of any scene and **Render movement…**, sources with Doppler move
+  together, beside other sources that move (a police car and its siren), every listener
+  hearing each early path of each through its own changing delay; a listener with
+  Doppler still moves alone.
+- Changed: a source's or listener's `walk` is its `trajectory`, in the scene file, the
+  editor (**Moving**, and **Trajectories** in Run demo) and the API (`simulate_trajectory`,
+  `render_trajectory`, `trajectory_points`, `animate_trajectory`, `walkthrough --mover`);
+  scenes, scripts and command lines with the old names still work.
+- Added: the 14 talkers of the ACE corpus as free recordings, `ace_f1` to `ace_m9`;
+  `speech_male` and `speech_female` are now `ace_m4` and `ace_f2`, still read.
+- Added: a talker's `vocal_effort` (relaxed, normal, raised or loud, ISO 9921) in
+  place of `level_db`, its sound power set through its directivity; **Vocal effort** in
+  the editor. The demo of any scene's `--vocal-effort` (`--voice`) has every talker talk
+  so, `--recording` plays another free recording, and its stills give the STI of the
+  talker heard there, with its rating (ISO 9921).
+- Added: a trajectory's `step_m` (how far apart it is simulated) and `start_s` (when it
+  sets off); the demo of any scene's `--timeline` (each listener heard from the start
+  when something moves, by default, each until what moves is over for it), `--speed`,
+  `--step`, `--stand` and `--turn` (a listener elsewhere, or turning on the spot);
+  binaurally, a listener turning on the spot is heard through the head tracker in
+  `walkthrough --all`, the demo and **Render movement…**.
+- Changed: the gallery's `walk_demo.py` is the demo of its scene with the visitor who
+  walks and the one who looks round, who now turns by keyframes in the scene; its
+  options and steps before 4.4.0 still work, its first run simulates again, and every
+  example talker speaks at normal vocal effort.
+- Added: a scene's `tour` (each stop a listener, for phrases of the recording, seconds
+  or to its end, in the scene's weather or in still air); in the demo of any scene,
+  `--tour` (no longer another name for `--listeners`), `--atmosphere still`, `--bpm`
+  and `--downbeat`.
+- Changed: the lakeside's `lakeside_demo.py` is the demo of its scene, which now plays
+  the stage's sound system and hears the place behind the stage (the stage's single
+  source left out), its tour in the scene; its options and steps before 4.4.0 still
+  work but `--scene`, `--still`, `--results` and `--still-results` (the scenes and
+  results go to the work folder). `--recording` takes a file of yours, and
+  `--last-stop` sets how long a tour's last stop lasts.
+- Added: the stills of the demo of any scene draw an outdoor scene's ground by its
+  materials and its wind, and under the plan the view from the side with the rays the
+  simulation finds to the listener (`--hide` leaves them out); indoors they add the
+  clarity C80 where something other than speech plays, and outdoors leave out T30
+  and C80 (ISO 3382-1).
+- Added: a source's `channel` may name a stem of the scene's recording or a mix of stems
+  at their gains, as a monitor's; "Spicy Funk Cake" has its 7 stems, and "Francium" and
+  "Rubidium", new free recordings, theirs, downloaded the first time a source plays one
+  and lined up with the song by their onsets; the demo of any scene's `--stem` gives the
+  stems of a recording of yours. "Spicy Funk Cake"'s phrases now run from its first
+  downbeat, 0.5 s in.
+- Changed: the stadium's and the concert stage's drum kit, singer and guitar amp are in
+  use, playing the recording's drums, vocal and guitar stems, and their vocal wedges,
+  drum fill and side fills play monitor mixes of the stems; the stadium's scene has a
+  tour, a phrase at each of its places and the mix position again to the end, and a
+  tour for each of its songs as `stadium_demo.py` has them (`tours`).
+- Added: a scene's `tours`, the tour its demo plays with a recording named (a free
+  one, or a file of yours by its name) in place of `tour`.
+- Added: multitrack recordings, a stem per singer or player at the level each plays at,
+  which a source plays as it is (`channel: singer_f1`), and recordings built the first
+  time from what they are made of: `dona_nobis_pacem`, the round "Dona nobis pacem" by
+  19 singers of VocalSet and an organ from VCSL's samples (127 MB), a stem per singer
+  and per side of the organ's divisions. The stills name the part of the music playing.
+- Added: the demo of any scene takes in the sources and listeners the scene leaves out
+  that `--sources`, `--listeners` or its tour pick, simulating a scene with them in the
+  work folder, and `--ir-length` (**Response length** in Run demo) sets how long the
+  responses run. Where `--listeners` reorders a tour whose last stop runs to the end,
+  the last stop named runs to the end.
+- Changed: the church's `church_demo.py` is the demo of its scene, the choir and the
+  organ's pipes the scene's sources (left out of the church's own simulations) playing
+  the stems of `dona_nobis_pacem`, its six places the scene's tour, its responses 9 s
+  long; its options, its `--tour` and its steps before 4.4.0 still work but `--scene`
+  and `--results` (the scenes and results go to the work folder), and its first run
+  simulates again.
+- Changed: the orchestra's `orchestra_demo.py` is the demo of its scene: Beethoven's
+  8th is `beethoven_8` in the recordings catalogue, a multitrack recording of three
+  pieces, its movements, each player a source playing their track as recorded and each
+  section a group; its tour is the scene's, each movement a part of the video at one
+  level with the others. Its `--movements` (as `--piece`), `--tour`, `--zips` and
+  `tracks` step still work; its first run simulates again into the work folder, and
+  reads the tracks it downloaded before with `--zips demo/tracks`.
+- Added: in the demo of any scene, a recording of several pieces: `--piece` plays those
+  named, each in a part of its own, by default each the tour visits, but one that every
+  source that plays rests through; a tour's stop names its piece (`IV/conductor`,
+  `piece` in a scene's tour), and the stops that give no length share the piece out,
+  each cut at its quietest moment within 10 s. The parts of one recording's pieces are
+  joined at one level. A last stop that runs to the recording's end runs on as the
+  room's reverberation dies away, until 60 dB down. A tour that names a listener the
+  scene lacks says so.
+- Added: the demo of any scene's `--levels` (**Levels between listeners** in Run demo):
+  `matched`, the default, turns each listener's stop up to the loudness of the loudest,
+  `as-simulated` plays every stop at the one gain of the mixes, as the church's, the
+  orchestra's and the gallery's scripts do. An example's script names its runs after
+  itself, by what differs from its own defaults (`church_binaural`).
+- Changed: the stills of the demo of any scene count the sources that play in each stop,
+  each at the level its signal plays at there, so the church's second verse is the
+  choir alone and its third has the organ on its quiet stops; a long credit takes two
+  lines instead of being cut.
+- Changed: the Run demo window puts the options in sections (Recording, Sources,
+  Listeners, Trajectories, Video, Output), and leaves out of view, and out of the
+  command, an option that changes nothing in the run (`--siren` with no police car
+  ticked), keeping what it is set to for when it matters again. Fixed: **Timeline**,
+  **Pieces** and the vibration scripts' options showed their flags as labels.
+- Added: in the demo of any scene, a recording shorter than what moves plays again from
+  its start; `walkthrough` walks the only listener that goes anywhere when the other
+  movers are listeners turning where they stand.
+- Added: every demo plays several of something in one video: an option that changes
+  what plays or how it sounds, and `--format`, take several values (`--vehicle
+  departure,arrival`, `--speed 50,80`), each value a run of its own played after a title
+  card, in the order `--series` sets; `--sources` picks the sources a demo plays, by
+  name or group, and `--sources-play in-turn` plays them one after another; `--series listeners`
+  gives each listener a part. In Run demo, **Several…** turns a choice into a list to
+  tick and drag, the sources' tree says what each plays and takes your WAV, and the
+  Video box lists the parts the run makes and sets their order.
+- Changed: `--listeners` sets the order of every demo's tour (a tour's timing kept),
+  and the gallery walk's parts; `--tour` keeps its own order. The orchestra's
+  `--movements` plays and downloads the movements it names, in that order.
+- Removed: the railway's pass-by demo's `--horn off`: `--sources` picks what the train
+  plays (the train's horn with `train_horn`).
+- Fixed: a police car's or a fire engine's walk was simulated again on every run, and
+  the tram's credit named a pantograph it does not have.
+- Fixed: a demo's video footer and its run's record gave `--again` and `--no-mp4` in the
+  command the run was made with; they say how a step ran, not what the run is. A
+  decimal option at a whole number is given as typed (`--height 330`, not `330.0`).
+- Fixed: a still's plan wrote labels over each other where marks crowd (the stadium's
+  stage, an orchestra's desks), and under the head of the listener of the moment; each
+  label now goes on a side clear of other words, what is past the panel and the
+  places the tour goes first, and one with no clear side is left out; each is ringed
+  in the background's colour, so that a trajectory or a ray drawn under it does not
+  strike it through.
+- Fixed: a still where a source moves past named neither it in its level plot ("Level
+  heard here") nor in its L_Amax, SEL and Doppler lines, though other sources play;
+  they name it now, with how far it is under or over the others at its loudest. A tour
+  too long for its column printed its stops over each other; it lists those round the
+  current one now, the facts above it set smaller where it would lose its room. A
+  still says "Stop 4 of 11" (the tour's last still, back at its first listener, said
+  "Stop 1"), how much the video turns a stop up and why, and its footer says when
+  nothing diffracts.
+- Removed: the pass-by demos' own engine, now that every example's demo is a preset of
+  the demo of its scene: `demos.passby`'s `Vehicle` and its road vehicles,
+  `demos.passby_pictures`, `demos.rail.TrainVehicle`, `demos.siren`'s police car, fire
+  engine and honking car, `demos.helicopter.Helicopter` and `demos.aircraft.Aircraft`.
+  What a scene's models need of them stays.
+- Changed: a movement (`simulate_movement`) with every place traced for its late part
+  holds each response's late arrays from the first time slot with energy to the last,
+  read back as they were (the stadium's helicopter 600 m out: half of them), and
+  `render_movement` gives its mixes in the `dtype` asked for, the demo of any scene's in
+  32-bit floats as it writes them. `simulate_movement(listeners=...)` simulates those
+  listeners alone, on the same moments: a run of the demo of any scene where something
+  moves simulates its own listeners (`--listeners`, a part per listener) and no others.
+- Changed: where all its listeners at once would need more memory for their late parts
+  than the computer has, `simulate_movement` simulates them one at a time (a moving one
+  with all its places), each getting what a run of all gives it, and says so;
+  `movements_in_turn` gives each run as it ends, and the demo of any scene mixes each
+  before it simulates the next. The airport's demo, its three listeners kilometres
+  apart, needed about 65 GiB at once, and needs about 22 GiB for the farthest alone, as
+  its demo did before 4.4.0.
+- Changed: the demo of any scene reads the levels of each response of a movement once,
+  however many moments and passes ask for them (a still source's is the same at every
+  moment), and then lets go of what its echograms keep of the early part, a megabyte or
+  more for a far source; `pass_by` lets go of it for each place it reads, and
+  `Response.forget()` does so for one response. The stadium's crossing kept it for
+  every place of the helicopter and every listener, and ran out of 13 GiB.
 - Fixed (results change): with the late rays on a GPU (`simulation.late.device` gpu
   or both, or auto where it takes either), the spread from the materials' absorption
   uncertainty could be far too wide, most with the CPU and the GPU sharing the rays: in
@@ -48,11 +316,9 @@
   edge diffraction alone), and near a solid block's corners they step by up to 6.2 dB at
   63 Hz, not 2.4 dB, so the error a result lists for corners of edges (`not_counted`) is
   now up to 3.9 dB.
-- Added: a `join` step in every demo plays finished runs one after another in one
-  video, each after a title card, with the chapters of every part (`--runs`, or the
-  list of finished runs to tick in Run demo).
 - Changed: every demo run is named after its settings (what it plays, the listeners,
-  the options changed, the output), and its mixes, stills and the scenes made for it go
+  the options changed, the output; a pick of sources by what it adds or leaves out,
+  `with-train_horn`), and its mixes, stills and the scenes made for it go
   to a folder of that name, its video beside it, so that a run with other settings (the
   airport's arrival after its departure) writes over nothing of another's; each output's
   simulation goes to a folder of its own in the results (`results_choir/binaural`), so

@@ -125,7 +125,7 @@ target-version = "py310"
 select = ["E", "F", "W", "I", "UP", "B"]
 
 [tool.mypy]
-# The type check CI runs (`mypy`, with the dependencies and types-PyYAML installed).
+# The type check CI runs (`mypy`, with the dependencies, Pillow and types-PyYAML installed).
 files = ["src/acoustic_spaces"]
 python_version = "3.10"
 warn_unused_configs = true
@@ -159,8 +159,6 @@ module = [
     "acoustic_spaces.compare",
     "acoustic_spaces.demos",
     "acoustic_spaces.demos.audio",
-    "acoustic_spaces.demos.passby",
-    "acoustic_spaces.demos.passby_pictures",
     "acoustic_spaces.demos.pictures",
     "acoustic_spaces.demos.pipeline",
     "acoustic_spaces.demos.scene_demo",

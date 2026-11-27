@@ -2310,7 +2310,7 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
     from acoustic_spaces.engine.coherent import FILTERED_MAX_BAND_HZ, band_count
     from acoustic_spaces.engine.coverage import coverage_map
     from acoustic_spaces.scene import Coverage
-    from acoustic_spaces.walkthrough import simulate_walk
+    from acoustic_spaces.walkthrough import simulate_trajectory
 
     runs = _open_runs(monkeypatch)
     kept, stage = {}, [""]
@@ -2330,7 +2330,7 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
         data["simulation"]["early"] = {**early, "open_ground_frequencies": choice}
         data["sources"][0]["position"] = [-145.0, 0.0, 2.0]
         still = Scene.model_validate(data)
-        data["sources"][0]["walk"] = {"to": [[-144.0, 0.0, 2.0]], "speed_m_s": 1.0}
+        data["sources"][0]["trajectory"] = {"to": [[-144.0, 0.0, 2.0]], "speed_m_s": 1.0}
         walking = Scene.model_validate(data)
         for name, run in (
             ("listener", lambda still=still: simulate(Room.from_scene(still), threads=1)),
@@ -2342,7 +2342,7 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
             ),
             (
                 "walk",
-                lambda walking=walking: simulate_walk(
+                lambda walking=walking: simulate_trajectory(
                     Room.from_scene(walking), step_m=0.5, threads=1
                 ),
             ),

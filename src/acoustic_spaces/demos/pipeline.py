@@ -503,6 +503,33 @@ def with_inputs(mixes: Sequence[Mix], inputs: dict[str, Path] | None, folder: Pa
     return out
 
 
+def only_playing(mixes: Sequence[Mix], args: argparse.Namespace) -> list[Mix]:
+    """The mixes with the feeds and weights of the sources that play in the run alone
+    (``--sources``, :func:`~acoustic_spaces.demos.playing`), the others left out; a mix
+    that keeps fewer says which in its ``info["sources"]``. An error for a mix left with
+    none."""
+    chosen = getattr(args, "playing", None)
+    if chosen is None:
+        return list(mixes)
+    out = []
+    for mix in mixes:
+        feeds = {name: file for name, file in mix.feeds.items() if name in chosen}
+        if not feeds:
+            raise SystemExit(
+                f"error: --sources picks none of the sources of the mix {mix.key}; it has "
+                f"{', '.join(mix.feeds)}"
+            )
+        if len(feeds) == len(mix.feeds):
+            out.append(mix)
+            continue
+        weights = mix.weights
+        if weights is not None:
+            weights = {name: w for name, w in weights.items() if name in feeds}
+        info = {**mix.info, "sources": list(feeds)}
+        out.append(replace(mix, feeds=feeds, weights=weights, info=info))
+    return out
+
+
 def credited(credit: str, seats: dict, sources: Sequence[str]) -> str:
     """The stills' credit line for the mixes in ``seats`` (:func:`render_mixes`):
     ``credit``, the recordings', then what the sources ``--input`` gave a file to play
@@ -537,8 +564,10 @@ def render_mixes(
     of the mix's channel powers as BS.1770 adds them (:func:`weights_of`),
     ``relative_db`` (against the loudest), length and the ``inputs`` it played.
     ``inputs`` (``--input``) replaces the feeds of the sources it names
-    (:func:`with_inputs`). ``post`` changes each mix as it is made, before the
-    gain (a house's window and rumble, :mod:`acoustic_spaces.demos.indoors`); a mix's
+    (:func:`with_inputs`); only the sources that play in the run are mixed
+    (:func:`only_playing`), a mix of some of them saying which (``sources``). ``post``
+    changes each mix as it is made, before the gain (a house's window and rumble,
+    :mod:`acoustic_spaces.demos.indoors`); a mix's
     ``info["post"]`` says how. Mixes that exist, newer than their feeds and responses
     and made with the same inputs, the same ``post`` and the same output (``label``:
     the format, through ``--hrtf``), are kept unless ``--again``, their earlier gain
@@ -548,7 +577,7 @@ def render_mixes(
     previous = read_json(seats_path) if seats_path.exists() else {}
     old_gain = float(previous.get("gain", 1.0))
     reuse = not getattr(args, "again", False)
-    mixes = with_inputs(mixes, inputs, folder.parent / INPUTS)
+    mixes = with_inputs(only_playing(mixes, args), inputs, folder.parent / INPUTS)
 
     def path_of(mix: Mix) -> Path:
         return folder / mix_file(args, mix.key)
@@ -567,6 +596,8 @@ def render_mixes(
         if before.get("inputs", {}) != mix.info.get("inputs", {}):
             return False
         if before.get("post") != mix.info.get("post"):
+            return False
+        if before.get("sources") != mix.info.get("sources"):
             return False
         made = [mix.simulation.results / PARAMETERS, *mix.feeds.values()]
         return all(out.stat().st_mtime >= path.stat().st_mtime for path in made if path.exists())
@@ -588,6 +619,11 @@ def render_mixes(
             x = post(mix, x, rate)
             audio.write(out, x, rate)
         peaks[mix.key] = float(np.abs(x).max()) / (old_gain if keep[mix.key] else 1.0)
+    if max(peaks.values()) <= 0.0:
+        raise SystemExit(
+            "error: every mix is silent: the sources that play here have nothing to play "
+            "(a song of your own given no stems for them, say)"
+        )
     gain = 10.0 ** (-1.0 / 20.0) / max(peaks.values())
     info: dict[str, dict] = {}
     lags: dict[tuple, float] = {}
@@ -663,7 +699,8 @@ def seats_of(folder: Path, hint: str, args: argparse.Namespace | None = None) ->
 class TourStop:
     """A stop of the tour: the mix ``key`` from its time ``start`` to ``stop``, playing
     at ``at`` in the tour's time, turned up by ``gain_db``, crossfaded with its
-    neighbours unless it starts or ends a piece (``joined_before``, ``joined_after``)."""
+    neighbours unless it starts or ends a piece (``joined_before``, ``joined_after``);
+    one not joined to the next fades out over its last ``fade_s``."""
 
     key: str
     at: float
@@ -672,6 +709,7 @@ class TourStop:
     gain_db: float = 0.0
     joined_before: bool = True
     joined_after: bool = True
+    fade_s: float = 0.0
 
     @property
     def length(self) -> float:
@@ -725,6 +763,16 @@ def ears_of(
     return ears
 
 
+#: The peak a tour's sound is brought to (dBFS).
+PEAK_DB = -1.0
+
+
+def peak_gain_db(x: np.ndarray, peak_db: float = PEAK_DB) -> float:
+    """The gain (dB) that brings the peak of ``x`` to ``peak_db``; 0 for silence."""
+    peak = float(np.abs(x).max()) if x.size else 0.0
+    return peak_db - 20.0 * math.log10(peak) if peak > 0 else 0.0
+
+
 def tour_audio(
     stops: Sequence[TourStop],
     folder: Path,
@@ -732,7 +780,7 @@ def tour_audio(
     *,
     crossfade_s: float = 1.0,
     fade_out_s: float = 4.0,
-    peak_db: float | None = -1.0,
+    peak_db: float | None = PEAK_DB,
     scene: str | Path | None = None,
     kind: str | None = None,
 ) -> np.ndarray:
@@ -788,12 +836,16 @@ def tour_audio(
         alone = slice(a + before, b - after)
         out[alone] += x[alone]
         previous = x if after else None
+        # A stop not joined to the next fades out at its end: silence follows, or another
+        # listener from the clock's start.
+        if not after and k < len(stops) - 1 and stop.fade_s > 0.0:
+            fade = min(round(stop.fade_s * rate), b - a)
+            out[b - fade : b] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
     fade = min(int(fade_out_s * rate), length)
     if fade:
         out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
-    peak = float(np.abs(out).max())
-    if peak > 0 and peak_db is not None and kind is None:
-        out *= 10.0 ** (peak_db / 20.0) / peak
+    if peak_db is not None and kind is None:
+        out *= 10.0 ** (peak_gain_db(out, peak_db) / 20.0)
     return out
 
 
@@ -893,7 +945,8 @@ def _finish(folder: Path, out: Path, chapters: Sequence[str] | None, no_mp4: boo
 
 def _recorded(folder: Path, out: Path, length_s: float, chapters: Sequence[str] | None) -> None:
     """The video ``out`` encoded: kept in the run's record (``run.json`` in ``folder``)
-    with its length and chapters, which the ``join`` step reads."""
+    with its length and chapters, which :func:`~acoustic_spaces.demos.join.join_parts`
+    reads when the run is a part of a run of several."""
     print(f"wrote {out}")
     record_run(
         folder, video=out.name, length_s=round(float(length_s), 3), chapters=list(chapters or [])
@@ -974,7 +1027,7 @@ def animation(
     the chapters beside ``out`` when given (:func:`chapters_file`). The run's
     ``run.json`` in ``folder`` keeps the video's file, length and chapters. As it is
     encoded, its messages begin with what the frame at ``t`` shows, ``shown(t)``: the
-    sources and listeners it is of, a walker with the moment of its walk
+    sources and listeners it is of, a mover with the moment of its trajectory
     (:func:`_encode`)."""
     pictures = _stills_folder(folder)
     for k, (name, t) in enumerate(stills):
@@ -1119,6 +1172,7 @@ __all__ = [
     "chapters_file",
     "encode",
     "credited",
+    "only_playing",
     "files_from",
     "ears_of",
     "gains_of",

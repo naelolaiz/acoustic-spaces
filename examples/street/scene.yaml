@@ -48,164 +48,195 @@ sources:
     spacing_m: 3
     level_db: 100
   # A passenger car in the lane on the offices' side, its sound power per octave band
-  # CNOSSOS-EU's at 50 km/h (Directive 2002/49/EC, Annex II, Appendix F, Table F-1, as
-  # amended in 2021); its sound comes from 0.05 m above the road, where the method
-  # places it. Its horn, a pair of disc horns (360 and 430 Hz, 110 dB(A) 2 m in front
-  # of them, as Hella's S77, their tone discs ringing near 3 kHz), 0.5 m up, goes along
-  # its walk facing the way it drives, with the directivity of siren.csv, in two short
-  # blasts every 3 s, its sound power their average (passby_demo.py --car car_and_horn
-  # sounds it).
+  # CNOSSOS-EU's at the speed of its trajectory, 50 km/h (Directive 2002/49/EC, Annex II,
+  # Appendix F, Table F-1, as amended in 2021), from 0.05 m above the road, where the
+  # method places it; a demo plays a sound made to that power, tyre noise and a
+  # four-cylinder engine at 2000 rpm. Its horn, a pair of disc horns (360 and 430 Hz,
+  # 110 dB(A) 2 m in front of them, as Hella's S77, their tone discs ringing near 3
+  # kHz), 0.5 m up, goes along its trajectory facing the way it drives, with the
+  # directivity of siren.csv, in two short blasts every 3 s, its sound power their
+  # average (passby_demo.py --sources car+car_horn sounds it with the car). Each pass is
+  # simulated every metre.
   - name: car
+    group: Passenger car
     enabled: false
     position: [-55, -2, 0.05]
-    level_db: [98.3, 91.2, 89.4, 90.7, 95.6, 92.3, 84.6, 76.1]
-    walk:
+    model: {method: cnossos-eu, category: '1', rpm: 2000, cylinders: 4}
+    trajectory:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
       doppler: true
+      step_m: 1
   - name: car_horn
+    group: Passenger car
     enabled: false
     position: [-55, -2, 0.5]
-    level_db: [56.1, 55.7, 68.8, 79.9, 91.5, 104.0, 107.6, 102.7]
+    model: {method: horn, kind: disc_horns}
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[70, -2, 0.5]]
       speed_m_s: 13.89
       face_forward: true
       doppler: true
+      step_m: 1
   # A city bus with two axles (CNOSSOS-EU's category 2) in the lane on the houses' side,
-  # the other way, at 50 km/h.
+  # the other way, at 50 km/h; its made sound's engine a six-cylinder diesel at 1500 rpm.
   - name: bus
     enabled: false
     position: [70, 2, 0.05]
-    level_db: [106.1, 99.2, 99.3, 100.2, 101.3, 96.9, 90.1, 84.2]
-    walk:
+    model: {method: cnossos-eu, category: '2', rpm: 1500, cylinders: 6}
+    trajectory:
       to: [[-55, 2, 0.05]]
       speed_m_s: 13.89
       doppler: true
+      step_m: 1
   # A motorcycle (category 4b, propulsion noise alone) behind where the car goes, at 50
-  # km/h.
+  # km/h; its made sound's engine two cylinders at 4000 rpm.
   - name: motorcycle
     enabled: false
     position: [-55, -2, 0.05]
-    level_db: [99.0, 100.2, 93.3, 91.1, 91.9, 91.1, 88.9, 85.2]
-    walk:
+    model: {method: cnossos-eu, category: 4b, rpm: 4000, cylinders: 2}
+    trajectory:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
       doppler: true
+      step_m: 1
   # A police car with its siren on, in the lane on the houses' side, the other way, at
   # 50 km/h: the car itself, a passenger car, its tyres and engine heard from 0.05 m
   # above the road with CNOSSOS-EU's sound power (as the car's); and its siren, wailing:
-  # a 100 W electronic siren on its roof, 1.5 m up, along the same walk, facing the way
-  # it drives, at the level and with the directivity the National Bureau of Standards
-  # measured (siren.csv; passby_demo.py --siren picks the pattern, --police-car siren
-  # plays the siren alone). The car is some 32 dB(A) under the siren, but under the
-  # siren's pitch, in the octaves of 63 to 250 Hz, it is all the police car's sound.
+  # a 100 W electronic siren on its roof, 1.5 m up, along the same trajectory, facing the
+  # way it drives, at the sound power and with the directivity the National Bureau of
+  # Standards measured (siren.csv; passby_demo.py --siren picks the pattern, --sources
+  # police_car_siren plays the siren alone). The car is some 32 dB(A) under the siren,
+  # but under the siren's pitch, in the octaves of 63 to 250 Hz, it is all the police
+  # car's sound.
   - name: police_car
+    group: Police car
     enabled: false
     position: [70, 2, 0.05]
-    level_db: [98.3, 91.2, 89.4, 90.7, 95.6, 92.3, 84.6, 76.1]
-    walk:
+    model: {method: cnossos-eu, category: '1', rpm: 2000, cylinders: 4}
+    trajectory:
       to: [[-55, 2, 0.05]]
       speed_m_s: 13.89
       doppler: true
+      step_m: 1
   - name: police_car_siren
+    group: Police car
     enabled: false
     position: [70, 2, 1.5]
-    level_db: [76.1, 76.1, 81.4, 123.3, 128.6, 120.5, 120.0, 118.8]
+    model: {method: siren, pattern: wail}
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[-55, 2, 1.5]]
       speed_m_s: 13.89
       face_forward: true
       doppler: true
+      step_m: 1
   # A fire engine on a call, in the lane on the offices' side, at 50 km/h: the vehicle
   # itself, a medium heavy vehicle with two axles (CNOSSOS-EU's category 2, as the
   # bus's), 0.05 m above the road; its siren, the two tones of DIN 14610, on its cab's
-  # roof, 3.0 m up, as loud as the Swiss rule lets them be on a vehicle (115 dB(A) 7 m
-  # in front of it); and its air horn, 1.2 m up, in blasts, as loud as the rule for
-  # horns lets one be on its bench (118 dB(A) 2 m away). The three go along one walk;
-  # the siren and the horn face the way it drives, with the directivity of siren.csv
-  # (passby_demo.py --fire-engine picks which play).
+  # roof, 3.0 m up, 6 dB louder than the police car's, which makes them 115 dB(A) 7 m in
+  # front of it, as loud as the Swiss rule lets them be on a vehicle
+  # (validation/urban_sources.py); and its air horn, 1.2 m up, in blasts, as loud as the
+  # rule for horns lets one be on its bench (118 dB(A) 2 m away). The three go along one
+  # trajectory; the siren and the horn face the way it drives, with the directivity of
+  # siren.csv (passby_demo.py --sources picks which play).
   - name: fire_engine
+    group: Fire engine
     enabled: false
     position: [-55, -2, 0.05]
-    level_db: [106.1, 99.2, 99.3, 100.2, 101.3, 96.9, 90.1, 84.2]
-    walk:
+    model: {method: cnossos-eu, category: '2', rpm: 1500, cylinders: 6}
+    trajectory:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
       doppler: true
+      step_m: 1
   - name: fire_engine_siren
+    group: Fire engine
     enabled: false
     position: [-55, -2, 3.0]
-    level_db: [84.0, 84.4, 93.0, 136.1, 121.6, 125.2, 122.3, 121.2]
+    model: {method: siren, pattern: two_tone, patterns: [two_tone], gain_db: 6}
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[70, -2, 3.0]]
       speed_m_s: 13.89
       face_forward: true
       doppler: true
+      step_m: 1
   - name: fire_engine_horn
+    group: Fire engine
     enabled: false
     position: [-55, -2, 1.2]
-    level_db: [89.9, 124.1, 121.4, 119.2, 117.7, 114.3, 111.1, 110.3]
+    model: {method: horn, kind: air_horn}
     directivity: {file: siren.csv}
-    walk:
+    trajectory:
       to: [[70, -2, 1.2]]
       speed_m_s: 13.89
       face_forward: true
       doppler: true
+      step_m: 1
   # A low-floor tram with air conditioning (30 m long, eight axles) on its track down
-  # the middle of the street, at 50 km/h: the sound power of its front points, at the
-  # rail top (its first bogie) and on its roof (4 m up), Schall 03's (Germany's method
-  # for the noise of railways and tramways, 2014) for a track set in the street, with
-  # its directivity round the track (tram.csv); the pass-by demo plays its other bogies
-  # and its roof behind them.
+  # the middle of the street, at 50 km/h, its front where the sources stand: its
+  # sources at the rail top (its bogies) and on its roof (4 m up), Schall 03's
+  # (Germany's method for the noise of railways and tramways, 2014) for a track set in
+  # the street, with its directivity round the track (tram.csv). The sound power of
+  # each is its first point's, its first bogie's and the front of its roof's; the demo
+  # plays the points behind them too, each as far behind as it is. Its pass is
+  # simulated every metre.
   - name: tram
+    group: Tram
     enabled: false
     position: [-55, 0, 0.05]
-    level_db: [101.5, 101.4, 99.4, 104.0, 107.2, 98.5, 91.7, 83.3]
+    model: {method: schall-03, train: tram, track: street}
     directivity: {file: tram.csv}
-    walk:
+    trajectory:
       to: [[70, 0, 0.05]]
       speed_m_s: 13.89
       face_forward: true
       doppler: true
+      step_m: 1
   - name: tram_roof
+    group: Tram
     enabled: false
     position: [-55, 0, 4.05]
-    level_db: [94.5, 95.4, 91.9, 89.5, 89.3, 87.1, 83.3, 84.4]
+    model: {method: schall-03, train: tram, track: street, height: roof}
     directivity: {file: tram.csv}
-    walk:
+    trajectory:
       to: [[70, 0, 4.05]]
       speed_m_s: 13.89
       face_forward: true
       doppler: true
+      step_m: 1
   # Road works in the lane on the houses' side, 20 m along from the pavement's
-  # listener: a 1650 kg hydraulic breaker on a 15 t excavator breaking up the road, a
-  # 6 kVA diesel generator on the pavement and a 9 t dumper reversing to them, its
-  # alarm at its back, 1.2 m up, facing the works. Each machine's sound power per octave
-  # band is its level 10 m away in Defra's noise database for construction sites (2005,
-  # the data of BS 5228-1 Annex C) plus 28 dB; the alarm's is a tonal one's at 1200 Hz,
-  # 107 dB(A) 1.2 m in front of it (SAE J994 Type B), beeping half the time, with the
-  # directivity of siren.csv (works_demo.py plays them).
+  # listener (the group Road works): a 1650 kg hydraulic breaker on a 15 t excavator
+  # breaking up the road, a 6 kVA diesel generator on the pavement and a 9 t dumper
+  # reversing to them, its alarm at its back, 1.2 m up, facing the works. Each machine's
+  # sound power per octave band is its level 10 m away in Defra's noise database for
+  # construction sites (2005, the data of BS 5228-1 Annex C) plus 28 dB; a demo plays a
+  # sound made to it, the breaker's blows (480 a minute) and the engines' firing. The
+  # alarm is a tonal one at 1200 Hz, 107 dB(A) 1.2 m in front of it (SAE J994 Type B),
+  # beeping half the time, with the directivity of siren.csv (works_demo.py plays them).
   - name: breaker
+    group: Road works
     enabled: false
     position: [-20, 2, 1.0]
-    level_db: [116.0, 116.0, 114.0, 117.0, 111.0, 111.0, 108.0, 104.0]
+    model: {method: defra, machine: breaker}
   - name: generator
+    group: Road works
     enabled: false
     position: [-26, 4.5, 0.5]
-    level_db: [105.0, 100.0, 92.0, 88.0, 87.0, 85.0, 82.0, 70.0]
+    model: {method: defra, machine: generator}
   - name: dumper
+    group: Road works
     enabled: false
     position: [-13, 2, 1.5]
-    level_db: [110.0, 104.0, 103.0, 102.0, 96.0, 96.0, 92.0, 83.0]
+    model: {method: defra, machine: dumper}
   - name: dumper_alarm
+    group: Road works
     enabled: false
     position: [-14.5, 2, 1.2]
     orientation: {yaw: 180}
-    level_db: [48.6, 48.2, 51.6, 56.2, 108.6, 59.9, 44.1, 35.9]
+    model: {method: sae-j994}
     directivity: {file: siren.csv}
 listeners:
   - name: pavement

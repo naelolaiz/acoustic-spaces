@@ -2,9 +2,7 @@
 Schall 03's data sheets, its equation 1, the sound power of a moving unit and its
 directivity, a train's points and their sound, and the railway example's line source."""
 
-import argparse
 import math
-import re
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +11,7 @@ import pytest
 from acoustic_spaces.demos import rail
 from acoustic_spaces.examples import example_path
 from acoustic_spaces.parameters import A_WEIGHTING_DB
+from acoustic_spaces.scene import Scene
 
 RATE = 16_000
 
@@ -311,7 +310,7 @@ def test_a_fifth_of_the_freight_trains_wagons_are_tank_wagons() -> None:
     24 wagons, 20 % within one wagon, spread along it, each with its body ringing 4 m up
     (sources 3 and 4): 4 m up 116.4 dB(A) of sound power, the locomotive's roof alone
     111.8, the train 131.9 dB(A) in all. Its first wagon, the TSI's freight wagon in
-    validation/rail_sources.py, is not one. What its roof's source plays says so, and
+    validation/rail_sources.py, is not one. The credit of its roof's source says so, and
     the other trains', which have no tank wagons, do not."""
     from acoustic_spaces.parameters import a_weighted
 
@@ -329,12 +328,17 @@ def test_a_fifth_of_the_freight_trains_wagons_are_tank_wagons() -> None:
     assert a_weighted(rail.train_power_db(loco)) == pytest.approx(111.78, abs=0.01)
     assert a_weighted(rail.train_power_db(roof)) == pytest.approx(116.35, abs=0.01)
     assert a_weighted(rail.train_power_db(points)) == pytest.approx(131.86, abs=0.01)
-    tanks_there = "and its tank wagons' bodies there"
+    from acoustic_spaces.demos.models import made_brief
+
+    railway = Scene.from_yaml(Path(example_path("railway")))
+    roof = next(s for s in railway.sources if s.name == "train_roof")
+    tanks_there = "on its roof and its tank wagons' bodies"
     for name in ("freight", "regional"):
-        roofs = rail.TRAIN_VEHICLE.feeds(argparse.Namespace(train=name, horn="off"), "")
-        assert (tanks_there in roofs["train_roof"]) == (name == "freight"), name
-    tram = rail.TRAM_VEHICLE.feeds(argparse.Namespace(horn="off"), "")
-    assert tanks_there not in tram["tram_roof"]
+        train = roof.model_copy(update={"model": roof.model.model_copy(update={"train": name})})
+        assert (tanks_there in made_brief(train)) == (name == "freight"), name
+    street = Scene.from_yaml(Path(example_path("street")))
+    tram = next(s for s in street.sources if s.name == "tram_roof")
+    assert tanks_there not in made_brief(tram)
 
 
 def test_a_points_sound_has_its_spectrum_and_its_share_of_the_level() -> None:
@@ -362,8 +366,8 @@ def test_a_points_sound_has_its_spectrum_and_its_share_of_the_level() -> None:
 
 
 def _railway(tmp_path):
-    """The railway example, quick: no barrier, the train's walks 40 m long, the listener
-    where the EU's rule measures alone, 16 kHz, seeded."""
+    """The railway example, quick: no barrier and no line source, the train's walks 40 m
+    long, the listener where the EU's rule measures alone, 16 kHz, seeded."""
     import shutil
 
     import yaml
@@ -373,11 +377,12 @@ def _railway(tmp_path):
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     data["geometry"] = {"ground": {"extent": [[-40, -15], [40, 15]], "sky": 10}}
     data["assignments"] = {"ground": "meadow"}
+    data["sources"] = [each for each in data["sources"] if each["name"] != "line"]
     for each in data["sources"]:
         if each["name"].startswith("train"):
             z = each["position"][2]
             each["position"] = [-20, 0, z]
-            each["walk"]["to"] = [[20, 0, z]]
+            each["trajectory"]["to"] = [[20, 0, z]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "tsi_7m5"]
     data["simulation"].update({"sample_rate": RATE, "ir_length_s": 0.2, "seed": 1})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
@@ -394,7 +399,7 @@ def test_a_trains_sound_is_as_loud_as_its_levels_say(tmp_path) -> None:
     from acoustic_spaces.demos.passby import Trail, faded, trailed
     from acoustic_spaces.spatial import Mono
     from acoustic_spaces.synthesis import split_bands
-    from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
+    from acoustic_spaces.walkthrough import pass_by, render_trajectory, simulate_trajectory
 
     folder = _railway(tmp_path)
     speed = 80.0
@@ -404,13 +409,13 @@ def test_a_trains_sound_is_as_loud_as_its_levels_say(tmp_path) -> None:
     sources = []
     for source in scene.sources:
         if source.name == "train":
-            walk = source.walk.model_copy(update={"speed_m_s": speed / 3.6})
+            walk = source.trajectory.model_copy(update={"speed_m_s": speed / 3.6})
             source = source.model_copy(
-                update={"enabled": True, "walk": walk, "level_db": list(points[0].power_db)}
+                update={"enabled": True, "trajectory": walk, "level_db": list(points[0].power_db)}
             )
             sources.append(source)
     room = Room.from_scene(scene.model_copy(update={"sources": sources}))
-    walked = simulate_walk(room, "train", listener="tsi_7m5", step_m=4.0)
+    walked = simulate_trajectory(room, "train", listener="tsi_7m5", step_m=4.0)
     n = int(round(40.0 / (speed / 3.6) * RATE))
     first = faded(rail.point_sound(points[0].power_db, RATE, n / RATE, seed=0), RATE)
     behind = tuple(
@@ -426,8 +431,8 @@ def test_a_trains_sound_is_as_loud_as_its_levels_say(tmp_path) -> None:
         )
         for k, p in enumerate(points[1:], start=1)
     )
-    alone = render_walk(walked, {"train": first}, Mono())
-    every = render_walk(
+    alone = render_trajectory(walked, {"train": first}, Mono())
+    every = render_trajectory(
         walked, {"train": first}, Mono(), followers=[(lag, y) for lag, y, _ in behind]
     )
     weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
@@ -443,26 +448,88 @@ def test_a_trains_sound_is_as_loud_as_its_levels_say(tmp_path) -> None:
 
 
 def test_a_train_runs_at_its_own_speed_unless_told(tmp_path) -> None:
-    """Without --speed each train runs at its own speed, whatever its walk's in the
-    scene (the regional train's 160 km/h): the S-Bahn at 120 km/h, the freight train at
-    100; --speed still says. The tram, the street's only train, goes as its walk goes."""
-    from acoustic_spaces.demos import load
+    """With --train each train runs at its own speed, whatever its trajectory's in the
+    scene (the regional train's 160 km/h), and its horn along with it: the S-Bahn at 120
+    km/h, the freight train at 100; --speed still says. Without --train a train goes as
+    its trajectory goes: the street's tram too."""
+    from acoustic_spaces.demos import load, scene_demo
 
     folder = _railway(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
-    assert demo.option("speed").unset == "the train's own"
-    for train, speed in (("s_bahn", 120.0), ("freight", 100.0)):
-        args = demo.resolved(demo.parser().parse_args(["all", "--train", train]))
+    assert demo.option("speed").unset == "as in the scene, or a train's own"
+
+    def speeds(*argv: str) -> dict[str, float]:
+        args = demo.resolved(demo.parser().parse_args(["all", "--sources", "Train", *argv]))
         assert demo.check(args) is None
-        told = f"at {speed:.1f} km/h ({speed / 3.6:.2f} m/s, the train's own)"
-        assert told in demo.summary(args)
-    run = ["all", "--train", "s_bahn", "--speed", "80"]
-    assert "at 80.0 km/h (22.22 m/s, --speed)" in demo.summary(
-        demo.resolved(demo.parser().parse_args(run))
-    )
+        scene = scene_demo.moving_scene(args)
+        moving = [s for s in scene.sources if s.in_use and s.trajectory is not None]
+        return {s.name: round(3.6 * s.trajectory.speed_m_s, 6) for s in moving}
+
+    parts = ("train", "train_roof", "train_pantograph", "train_horn")
+    assert speeds() == dict.fromkeys(parts, round(3.6 * 44.44, 6))
+    for train, speed in (("s_bahn", 120.0), ("freight", 100.0)):
+        assert speeds("--train", train) == dict.fromkeys(parts, speed)
+    assert speeds("--train", "s_bahn", "--speed", "80") == dict.fromkeys(parts, 80.0)
     street = load(Path(example_path("street")).parent / "passby_demo.py")
-    assert street.option("speed").unset == "as in the scene"
-    assert rail.TRAM_VEHICLE.own_speed_kmh(argparse.Namespace()) is None
+    args = street.resolved(street.parser().parse_args(["all", "--vehicle", "tram"]))
+    scene = scene_demo.moving_scene(args)
+    assert {s.trajectory.speed_m_s for s in scene.sources if s.name.startswith("tram")} == {13.89}
+    args = street.resolved(
+        street.parser().parse_args(["all", "--vehicle", "tram", "--train", "tram"])
+    )
+    scene = scene_demo.moving_scene(args)
+    assert {
+        round(3.6 * s.trajectory.speed_m_s, 6) for s in scene.sources if s.name.startswith("tram")
+    } == {50.0}
+
+
+def test_the_railway_demo_keeps_the_scripts_command_lines(tmp_path) -> None:
+    """The railway's passby_demo.py is the demo of its scene: the script's train at every
+    height without its horn by default, its --train, --track and --horn the demo's own,
+    its --indoors train and train_and_rumble read as airborne and airborne_and_rumble,
+    --from as the scene and its steps sound, scene and walk as feeds, simulate and
+    render. A train on a track Schall 03 does not give it, or with no sources at a height
+    the run plays, is refused, saying why; several trains play in turn."""
+    from acoustic_spaces.demos import indoors, load
+
+    folder = _railway(tmp_path)
+    demo = load(folder / "passby_demo.py").at(folder)
+
+    def run(*argv: str):
+        return demo.resolved(demo.parser().parse_args(["all", *argv]))
+
+    args = run()
+    assert demo.check(args) is None and demo.run_name(args) == "passby_binaural"
+    assert demo.moving(args) == ["train", "train_roof", "train_pantograph"]
+    assert demo.run_name(run("--train", "freight")) == "passby_train-freight_binaural"
+    assert demo.run_name(run("--track", "slab")) == "passby_track-slab_binaural"
+    for old, new in (("train", indoors.AIRBORNE), ("train_and_rumble", "airborne_and_rumble")):
+        assert run("--indoors", old).indoors == new
+    assert run("--from", str(folder / "scene.yaml")).scene == folder / "scene.yaml"
+    for old, new in (("sound", "feeds"), ("scene", "simulate"), ("walk", "render")):
+        assert demo.steps_named(old) == [new]
+    assert demo.check(run("--track", "street")) == (
+        "--track street: train: Schall 03 has tracks ballast, slab, slab_absorber, "
+        "level_crossing for trains, not street"
+    )
+    assert demo.check(run("--train", "tram")) == (
+        "--train tram: train_pantograph: Schall 03 gives tram no sources at the height "
+        "pantograph; it has them at rail_top and roof"
+    )
+    assert demo.check(run("--train", "tram", "--sources", "train,train_roof")) is None
+    assert demo.check(run("--horn", "chord")) == (
+        "--horn changes nothing: no train horn plays a made sound"
+    )
+    two = run("--train", "regional,freight")
+    assert demo.check(two) is None and [p.train for p in demo.parts(two)] == [
+        "regional",
+        "freight",
+    ]
+    street = load(Path(example_path("street")).parent / "passby_demo.py")
+    car = street.resolved(street.parser().parse_args(["all", "--train", "freight"]))
+    assert street.check(car) == (
+        "--train changes nothing: no train or tram plays (a source with a schall-03 model)"
+    )
 
 
 def test_the_train_horn_sounds_the_rules_notes_at_its_level() -> None:
@@ -514,7 +581,7 @@ def test_the_train_horn_sounds_its_notes_together_as_a_chord() -> None:
     """--horn chord: the TSI's two notes together in the train horn's blasts, the two
     109 dB(C) together 25 m ahead on EN 15153-2's site (a group's level); its made
     sound holds both notes in every blast; a recording plays as loud as the chord's
-    made blasts; and the run, its walk and its credit say it is the chord."""
+    made blasts; and its made sound is another, and its credit says it is the chord."""
     import importlib
 
     from acoustic_spaces.demos import siren
@@ -538,50 +605,54 @@ def test_the_train_horn_sounds_its_notes_together_as_a_chord() -> None:
         spectrum = np.abs(np.fft.rfft(blast))
         f = np.fft.rfftfreq(len(blast), 1.0 / RATE)
         assert sorted(f[np.argsort(spectrum)[-2:]]) == pytest.approx([370.0, 660.0], abs=1.5)
-    vehicle = rail.TRAIN_VEHICLE
-    chord = argparse.Namespace(horn="chord")
-    assert vehicle.horn_on(chord) and vehicle.horn_of(chord) == "chord"
-    np.testing.assert_array_equal(vehicle.horn.power("chord", RATE), horn.horn_power(RATE, kind))
+    from acoustic_spaces.demos import models
+
+    railway = Scene.from_yaml(Path(example_path("railway")))
+    blasts = next(s for s in railway.sources if s.name == "train_horn")
+    chord = blasts.model_copy(update={"model": blasts.model.model_copy(update={"signal": "chord"})})
+    assert models.horn_kind(chord.model) is kind and models.horn_kind(blasts.model) is notes
     made = horn.horn_sound(RATE, kind.power_s, kind)
-    assert vehicle.input_gain(chord, "train_horn", made, RATE) == pytest.approx(1.0, rel=1e-12)
-    blasts = argparse.Namespace(horn="blasts")
-    assert vehicle.input_gain(blasts, "train_horn", made, RATE) != pytest.approx(1.0, rel=1e-3)
-    assert vehicle.played_by(chord) != vehicle.played_by(blasts)
-    facts = {"speed_kmh": 160.0, "horn": "chord"}
-    assert "horn: 660 and 370 Hz together, in blasts" in vehicle.credits(facts, {})
-    assert "horn: 660 and 370 Hz in turn, in blasts" in vehicle.credits(
-        facts | {"horn": "blasts"}, {}
-    )
+    assert models.input_gain(chord, made, RATE) == pytest.approx(1.0, rel=1e-12)
+    assert models.input_gain(blasts, made, RATE) != pytest.approx(1.0, rel=1e-3)
+    assert models.made_key(chord, RATE, 20.0) != models.made_key(blasts, RATE, 20.0)
+    assert "660 and 370 Hz together, in blasts" in models.made_brief(chord)
+    assert "660 and 370 Hz in turn, in blasts" in models.made_brief(blasts)
 
 
-def test_a_horns_first_blast_is_not_faded_in(tmp_path) -> None:
+def test_a_horns_first_blast_is_not_faded_in() -> None:
     """A pass's sound fades in and out over FADE_S, but a horn's blasts rise and fall
-    of themselves: its feed fades over its own rise time only, so the first blast of
-    the train's horn plays at its level after rising as every blast does; the train's
-    other sources, the fire engine's and the car's horns as the train's horn."""
+    of themselves: its made sound fades over its own rise time only, so the first blast
+    of the train's horn plays at its level after rising as every blast does; the train's
+    other sources and the fire engine's siren fade over FADE_S, the fire engine's and the
+    car's horns as the train's horn."""
     import importlib
 
-    from acoustic_spaces.demos import passby, siren
-    from acoustic_spaces.demos.audio import write
+    from acoustic_spaces.demos import models, passby
 
     horn = importlib.import_module("acoustic_spaces.demos.horn")
-    vehicle = rail.TRAIN_VEHICLE
-    assert vehicle.fade_s("train_horn") == horn.TRAIN_HORN.rise_s == horn.RISE_S
-    assert vehicle.fade_s("train") == passby.FADE_S
-    assert siren.FIRE_ENGINE_VEHICLE.fade_s(siren.FIRE_HORN) == horn.AIR_HORN.rise_s
-    assert siren.FIRE_ENGINE_VEHICLE.fade_s(siren.FIRE_SIREN) == passby.FADE_S
-    assert siren.HONKING_CAR.fade_s(siren.CAR_HORN_PART) == horn.CAR_HORN.rise_s
-    duration = 6.0
-    args = argparse.Namespace(work=tmp_path, horn="blasts", run_folder=tmp_path)
-    (tmp_path / "train").mkdir()
-    write(tmp_path / "train" / "train_horn.wav", vehicle.horn.sound("blasts", RATE, duration), RATE)
-    made = vehicle.made(args, RATE, duration, "train_horn")
-    x = passby.feed(None, args, RATE, duration, vehicle, "train_horn")
+    named = {
+        s.name: s
+        for example in ("railway", "street")
+        for s in Scene.from_yaml(Path(example_path(example))).sources
+    }
+    assert models.fade_s(named["train_horn"].model) == horn.TRAIN_HORN.rise_s == horn.RISE_S
+    assert models.fade_s(named["train"].model) == passby.FADE_S
+    assert models.fade_s(named["fire_engine_horn"].model) == horn.AIR_HORN.rise_s
+    assert models.fade_s(named["fire_engine_siren"].model) == passby.FADE_S
+    assert models.fade_s(named["car_horn"].model) == horn.CAR_HORN.rise_s
+    source = named["train_horn"]
+    x = models.made_sound(source, RATE, 20.0)
+    start, end = models.pass_times(source)
+    lead = int(round(start * RATE))
+    assert not np.any(x[:lead])
+    made = horn.horn_sound(RATE, end - start, horn.TRAIN_HORN)
+    played = x[lead:]
     rise, n = int(horn.RISE_S * RATE), len(made)
-    np.testing.assert_array_equal(x[rise : n - rise], made[rise : n - rise])
+    assert len(played) == n
+    np.testing.assert_array_equal(played[rise : n - rise], made[rise : n - rise])
     first = slice(rise, int(horn.TRAIN_HORN.blast_s * RATE) - rise)
-    assert np.sqrt(np.mean(x[first] ** 2)) > 0.9 * np.max(np.abs(made)) / 3.0
-    assert np.max(np.abs(x[:rise])) <= np.max(np.abs(made[:rise]))
+    assert np.sqrt(np.mean(played[first] ** 2)) > 0.9 * np.max(np.abs(made)) / 3.0
+    assert np.max(np.abs(played[:rise])) <= np.max(np.abs(made[:rise]))
 
 
 def test_a_sites_ground_adds_each_harmonics_reflection_in_pressure() -> None:
@@ -628,40 +699,19 @@ def test_a_sites_ground_adds_each_harmonics_reflection_in_pressure() -> None:
     assert int(np.argmin(horn.ground_db(RATE, kind, 0))) == OCTAVE_BANDS_HZ.index(500)
 
 
-def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
-    """--train s_bahn on the quick railway: its points' sounds (a column each), the scene
-    with the train's three sources alone at their front points' sound power, Schall 03's
-    directivity beside it, facing the way it goes, and the pass: as long as the walk and
-    the train, its level the parts' energies added, and each height's sound in the mix
-    as far under the rail top's as its level is. The video's frames draw from its first
-    moment, before the first bogie is heard (its level minus infinity there), to its
-    last."""
+def test_the_railway_demo_runs_a_train_past(tmp_path) -> None:
+    """--train s_bahn at 80 km/h on the quick railway: its sources of a Schall 03 model,
+    its five bogies at the rail top, its roof's two points and its pantograph, each point
+    behind the first played as far behind it as it is, with a sound of its own; the pass
+    lasts the trajectory and the train; and each height's sound in the mix is as far
+    under the rail top's as the pass's levels say."""
     pytest.importorskip("PIL")
-    from acoustic_spaces import Scene
-    from acoustic_spaces.demos import audio, load, passby, pipeline
-    from acoustic_spaces.synthesis import split_bands
+    from acoustic_spaces.demos import load, models, pipeline, scene_demo
+    from acoustic_spaces.demos.audio import read
+    from acoustic_spaces.render import power_gains
+    from acoustic_spaces.room import Room
+    from acoustic_spaces.walkthrough import render_movement, simulate_movement
 
-    # Without ffmpeg (--no-mp4) the video draws only its stills: draw its frames too.
-    drawn, said = [], []
-    real_animation = pipeline.animation
-
-    def animation(folder, duration, draw, *rest, **options):
-        for t in np.linspace(0.0, duration, 7):
-            drawn.append(draw(float(t)).size)
-            said.append(options["shown"](float(t)))
-        return real_animation(folder, duration, draw, *rest, **options)
-
-    monkeypatch.setattr(pipeline, "animation", animation)
-
-    # Each height is rendered alone and the three are added: keep what is added.
-    added = []
-    real_summed = passby.summed
-
-    def summed(played):
-        added.append([np.array(x) for x in played])
-        return real_summed(played)
-
-    monkeypatch.setattr(passby, "summed", summed)
     folder = _railway(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
     run = ["all", "--train", "s_bahn", "--speed", "80", "--step", "4", "--no-mp4"]
@@ -670,131 +720,120 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     parts = ["train", "train_roof", "train_pantograph"]
     assert demo.moving(args) == parts
     assert demo.plays(args)["train"].startswith(
-        "an S-Bahn: a four-car electric multiple unit at 80 km/h, made to Schall 03's"
+        "an S-Bahn: a four-car electric multiple unit at 80 km/h on sleepers in ballast"
     )
     assert demo.main(run) == 0
-    work = demo.run_folder(demo.parser().parse_args(run))
-    info = pipeline.read_json(work / "train" / "train.json")
-    assert info["train"] == "s_bahn" and info["track"] == "ballast"
-    assert [len(info["parts"][p]) for p in parts] == [5, 2, 1]
-    x, rate = audio.read(work / "train" / "train.wav")
-    assert rate == RATE and x.shape == (round(40.0 / (80.0 / 3.6) * RATE), 5)
-    scene = Scene.from_yaml(work / "scene_demo.yaml")
-    assert [s.name for s in scene.sources if s.in_use] == parts
+    feeds = scene_demo.feeds_folder(args)
+    assert feeds.name == "scene_with-train+train_roof+train_pantograph_speed-80_train-s_bahn"
+    table = pipeline.read_json(feeds / scene_demo.FEEDS)["sources"]
+    assert [table[name].get("behind") for name in parts] == [4, 1, None]
+    scene = scene_demo.moving_scene(args)
+    sources = {s.name: s for s in scene.sources}
     for name in parts:
-        source = next(s for s in scene.sources if s.name == name)
-        assert source.level_db == info["parts"][name][0]["level_db"]
-        assert source.walk.face_forward and source.walk.doppler
-        assert source.directivity.file == work / "scene_demo_train.csv"
-    facts = pipeline.read_json(work / "walk" / "walk.json")
-    assert facts["parts"] == parts and facts["train"] == "s_bahn"
-    heard = facts["listeners"]["tsi_7m5"]
-    energy = sum(10.0 ** (p["sel_a_db"] / 10.0) for p in heard["parts"].values())
-    assert heard["sel_a_db"] == pytest.approx(10.0 * math.log10(energy), abs=0.02)
-    # The pass lasts the walk and the train: the last bogie's sound ends that much later.
-    lasts = 40.0 / (80.0 / 3.6) + (info["parts"]["train"][-1]["behind_m"]) / (80.0 / 3.6)
-    assert heard["heard_s"][-1] > lasts - 0.5
-    mix, _ = audio.read(work / "walk" / "s_bahn__tsi_7m5.binaural.wav")
-    assert len(mix) / RATE > lasts
-    # Each height plays at its own sound power: its sound in the mix is as far under the
-    # rail top's as its SEL is (the roof's some 16 dB(A) under, the pantograph's 28), not as
-    # loud as it.
-    weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
-
-    def a_energy(x: np.ndarray) -> float:
-        return sum(
-            float(weights @ np.sum(split_bands(x[:, k], RATE) ** 2, axis=1))
-            for k in range(x.shape[1])
+        model = sources[name].model
+        assert model.train == "s_bahn" and sources[name].trajectory.speed_m_s == 80.0 / 3.6
+        first = model.points(80.0 / 3.6)[0].power_db
+        np.testing.assert_allclose(sources[name].power_db(), first, atol=1e-5)
+    seats = pipeline.read_json(demo.run_folder(args) / scene_demo.MOVING / pipeline.SEATS)
+    heard = seats["movement"]["passes"]["tsi_7m5"]
+    assert "(Schall 03, its 5 bogies at the rail top)" in heard["about"]
+    # The last bogie passes the trajectory's end that much after the front.
+    behind_m = sources["train"].model.points(80.0 / 3.6)[-1].behind_m
+    assert heard["heard_s"][-1] > (40.0 + behind_m) / (80.0 / 3.6) - 0.5
+    assert (demo.run_folder(args) / "stills" / "00_tsi_7m5.png").exists()
+    # Each height against the rail top, in the pass's levels and in its sound.
+    room = Room.from_scene(scene)
+    movement = simulate_movement(room)
+    c = room.speed_of_sound()
+    gains = power_gains(scene.sources, parts)
+    sel, energy = {}, {}
+    for name in parts:
+        source = sources[name]
+        sel[name] = scene_demo.passes_of(movement, [source], ["tsi_7m5"], c, 20.0)["tsi_7m5"][
+            "sel_a_db"
+        ]
+        first, _ = read(feeds / f"{name}.wav")
+        first = np.asarray(first).reshape(len(first), -1)[:, 0]
+        lead, behind = models.trail(source)
+        followers = {}
+        if behind:
+            behind_x, _ = read(feeds / scene_demo.BEHIND / f"{name}.wav")
+            behind_x = np.asarray(behind_x).reshape(len(behind_x), -1)
+            followers = {name: [(lag, (behind_x[:, k], RATE)) for k, (lag, _) in enumerate(behind)]}
+        # Alone, at its own power: each as the mix of them all scales it (power_gains).
+        mix = render_movement(
+            movement,
+            {name: (first, RATE)},
+            followers=followers,
+            leads={name: lead},
+            equal_power=True,
         )
-
-    (played,) = added
-    rail_top = a_energy(played[0])
-    for name, x in zip(parts[1:], played[1:], strict=True):
-        under = 10.0 * math.log10(rail_top / a_energy(x))
-        told = heard["parts"]["train"]["sel_a_db"] - heard["parts"][name]["sel_a_db"]
-        assert told > 5.0 and under == pytest.approx(told, abs=1.5), name
-    assert (work / "stills" / "00_tsi_7m5.png").exists()
-    assert len(drawn) == 7
-    # The video's messages: the train at the moment of its walk, heard at the listener.
-    assert said[0] == "train @ 0.00 s -> tsi_7m5"
-    assert all(re.fullmatch(r"train @ \d+\.\d\d s -> tsi_7m5", line) for line in said), said
-    assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] is None
-    # Another track makes the sound again.
-    again = demo.resolved(demo.parser().parse_args([*run, "--track", "slab"]))
-    assert not demo.is_done(demo.step("sound"), again)
+        energy[name] = _a_energy(mix["tsi_7m5"][:, 0]) * gains[name] ** 2
+    for name in parts[1:]:
+        told = sel["train"] - sel[name]
+        under = 10.0 * math.log10(energy["train"] / energy[name])
+        assert told > 5.0 and under == pytest.approx(told, abs=0.5), name
 
 
-def test_the_railway_demo_sounds_the_trains_horn(tmp_path, monkeypatch) -> None:
-    """--horn blasts on the quick railway: the horn's sound beside the train's, its
-    source in the scene at its front at its sound power with the measured siren's
-    directivity, facing the way it goes, and in the mix as far over the rail top's
-    sound as its SEL is, its captions following its blasts. Without --horn it stays
-    off."""
-    pytest.importorskip("PIL")
-    from acoustic_spaces import Scene
-    from acoustic_spaces.demos import audio, load, passby, pipeline
-    from acoustic_spaces.synthesis import split_bands
+def test_the_railway_demo_sounds_the_trains_horn(tmp_path) -> None:
+    """--sources Train on the quick railway: the horn at the train's front with the
+    train, made to EN 15153-2's notes in blasts (--horn chord, together), its sound power
+    the average of its blasts and pauses; it goes along with the train, at its own speed
+    with --train; and a chord is another simulation than the blasts, its feeds made
+    again."""
+    from acoustic_spaces.demos import load, scene_demo
+    from acoustic_spaces.demos.horn import POWER_DB
 
-    added = []
-    real_summed = passby.summed
-
-    def summed(played):
-        added.append([np.array(x) for x in played])
-        return real_summed(played)
-
-    monkeypatch.setattr(passby, "summed", summed)
     folder = _railway(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
-    run = ["all", "--train", "s_bahn", "--speed", "80", "--step", "8", "--no-mp4"]
-    parts = ["train", "train_roof", "train_pantograph"]
-    assert demo.moving(demo.resolved(demo.parser().parse_args(run))) == parts
-    run += ["--horn", "blasts"]
-    args = demo.resolved(demo.parser().parse_args(run))
+
+    def run(*argv: str):
+        return demo.resolved(demo.parser().parse_args(["all", "--sources", "Train", *argv]))
+
+    args = run()
     assert demo.check(args) is None
-    assert demo.moving(args) == [*parts, "train_horn"]
-    blasts = "its horn at its front, 2 m above the rail top, in blasts"
-    assert demo.plays(args)["train_horn"] == blasts
-    assert demo.main(run) == 0
-    work = demo.run_folder(demo.parser().parse_args(run))
-    info = pipeline.read_json(work / "train" / "train.json")
-    assert info["horn"] == "blasts" and len(info["horn_level_db"]) == 8
-    x, rate = audio.read(work / "train" / "train_horn.wav")
-    assert rate == RATE and x.shape == (round(40.0 / (80.0 / 3.6) * RATE), 1)
-    scene = Scene.from_yaml(work / "scene_demo.yaml")
-    assert [s.name for s in scene.sources if s.in_use] == [*parts, "train_horn"]
-    blower = next(s for s in scene.sources if s.name == "train_horn")
-    assert blower.level_db == info["horn_level_db"] and blower.position[2] == 2.2
-    assert blower.directivity.file == work / "scene_demo_train_horn.csv"
-    lines = blower.directivity.file.read_text(encoding="utf-8").splitlines()
-    assert lines[3:] == (folder / "siren.csv").read_text(encoding="utf-8").splitlines()[3:]
-    assert blower.walk.face_forward and blower.walk.doppler
-    facts = pipeline.read_json(work / "walk" / "walk.json")
-    assert facts["parts"] == [*parts, "train_horn"] and facts["horn"] == "blasts"
-    assert ", its horn in blasts " in facts["about"]
-    heard = facts["listeners"]["tsi_7m5"]
-    weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
+    assert demo.moving(args) == ["train", "train_roof", "train_pantograph", "train_horn"]
+    assert demo.plays(args)["train_horn"] == (
+        "a train horn's blasts, made to 109 dB(C) each note 25 m in front of it (EN 15153-2's most)"
+    )
+    chord = run("--horn", "chord")
+    assert demo.check(chord) is None and demo.run_name(chord) == "passby_Train_horn-chord_binaural"
+    for given, signal in ((args, "blasts"), (chord, "chord")):
+        horn = next(s for s in scene_demo.moving_scene(given).sources if s.name == "train_horn")
+        assert horn.model.signal == signal and horn.position[2] == 2.2
+        np.testing.assert_allclose(horn.power_db(), POWER_DB[("train_horn", signal)], atol=1e-5)
+        assert horn.trajectory.face_forward and horn.trajectory.doppler
+    assert scene_demo.run_scene_file(chord) != scene_demo.run_scene_file(args)
+    assert scene_demo.feeds_folder(chord) != scene_demo.feeds_folder(args)
+    freight = scene_demo.moving_scene(run("--train", "freight"))
+    horn, train = (next(s for s in freight.sources if s.name == n) for n in ("train_horn", "train"))
+    assert horn.trajectory.speed_m_s == train.trajectory.speed_m_s == 100.0 / 3.6
 
-    def a_energy(x: np.ndarray) -> float:
-        return sum(
-            float(weights @ np.sum(split_bands(x[:, k], RATE) ** 2, axis=1))
-            for k in range(x.shape[1])
-        )
 
-    (played,) = added
-    over = 10.0 * math.log10(a_energy(played[3]) / a_energy(played[0]))
-    told = heard["parts"]["train_horn"]["sel_a_db"] - heard["parts"]["train"]["sel_a_db"]
-    assert told > 5.0 and over == pytest.approx(told, abs=1.5)
+def _a_energy(x: np.ndarray) -> float:
+    """The A-weighted energy of the mono ``x`` at RATE, by its spectrum, per sample."""
+    from acoustic_spaces.demos.audio import a_gain
+
+    f = np.fft.rfftfreq(len(x), 1.0 / RATE)
+    return float(np.sum(np.abs(np.fft.rfft(x) * a_gain(f)) ** 2)) / len(x)
 
 
 def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
-    """--vehicle tram in the street: its four bogies at the rail top and its roof's two
-    halves, on a track set in the street."""
+    """--vehicle tram in the street: the tram's sources of a Schall 03 model, its four
+    bogies at the rail top and its roof's two halves on a track set in the street, each
+    point behind the first played as far behind it as it is, and heard so in the
+    pass's levels: the bogies, of one sound power, each that of the first, give the
+    pass's sound exposure that of the first's four times over, as their sounds give the
+    mix."""
     pytest.importorskip("PIL")
     import shutil
 
     import yaml
 
-    from acoustic_spaces.demos import load, pipeline
+    from acoustic_spaces.demos import load, models, pipeline, scene_demo
+    from acoustic_spaces.demos.audio import read
+    from acoustic_spaces.room import Room
+    from acoustic_spaces.walkthrough import render_movement, simulate_movement
 
     folder = tmp_path / "street"
     shutil.copytree(Path(example_path("street")).parent, folder)
@@ -805,7 +844,7 @@ def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
         if each["name"].startswith("tram"):
             z = each["position"][2]
             each["position"] = [-20, 0, z]
-            each["walk"]["to"] = [[20, 0, z]]
+            each["trajectory"]["to"] = [[20, 0, z]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "pavement"]
     data["simulation"].update({"sample_rate": RATE, "ir_length_s": 0.2, "seed": 1})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
@@ -813,25 +852,60 @@ def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     demo = load(folder / "passby_demo.py").at(folder)
     run = ["all", "--vehicle", "tram", "--step", "4", "--no-mp4"]
-    assert demo.moving(demo.resolved(demo.parser().parse_args(run))) == ["tram", "tram_roof"]
+    args = demo.resolved(demo.parser().parse_args(run))
+    assert demo.moving(args) == ["tram", "tram_roof"]
     assert demo.main(run) == 0
-    work = demo.run_folder(demo.parser().parse_args(run))
-    info = pipeline.read_json(work / "tram" / "tram.json")
-    assert info["train"] == "tram" and info["track"] == "street"
-    assert [len(info["parts"][p]) for p in ("tram", "tram_roof")] == [4, 2]
-    facts = pipeline.read_json(work / "walk" / "walk.json")
-    assert facts["about"].startswith("A low-floor tram, 30 m long, at 50 km/h on track set")
+    feeds = scene_demo.feeds_folder(args)
+    table = pipeline.read_json(feeds / scene_demo.FEEDS)["sources"]
+    assert [table[name]["behind"] for name in ("tram", "tram_roof")] == [3, 1]
+    assert table["tram"]["brief"].startswith("noise at its 4 bogies at the rail top")
+    behind_x, _ = read(feeds / scene_demo.BEHIND / "tram.wav")
+    first, _ = read(feeds / "tram.wav")
+    first = np.asarray(first).reshape(len(first), -1)[:, 0]
+    assert behind_x.shape == (len(first), 3)
+    # Each bogie's own noise, as loud as the first's.
+    rms = np.sqrt(np.mean(np.column_stack([first, behind_x]) ** 2, axis=0))
+    np.testing.assert_allclose(rms, rms[0], rtol=0.02)
+    assert abs(np.corrcoef(first, behind_x[:, 0])[0, 1]) < 0.05
+    seats = pipeline.read_json(demo.run_folder(args) / scene_demo.MOVING / pipeline.SEATS)
+    heard = seats["movement"]["passes"]["pavement"]
+    assert "Sound power of tram at 50 km/h" in heard["about"]
+    assert "(Schall 03, its 4 bogies at the rail top)" in heard["about"]
+    assert "(Schall 03, 2 points on its roof, 4 m up)" in heard["about"]
+    # The last bogie, 25.5 m behind the front, passes the trajectory's end 1.8 s after it.
+    assert heard["heard_s"][-1] > 40.0 / 13.89 + 25.5 / 13.89
+    # The bogies against the first alone, in the pass's levels and in its sound.
+    scene = scene_demo.moving_scene(args)
+    room = Room.from_scene(scene)
+    movement = simulate_movement(room)
+    (tram,) = [s for s in scene.sources if s.name == "tram"]
+    c = room.speed_of_sound()
+
+    def passing():
+        return scene_demo.passes_of(movement, [tram], ["pavement"], c, 20.0)["pavement"]
+
+    every = passing()
+    lead, behind = models.trail(tram)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(models, "trail", lambda source: (0.0, ()))
+        alone = passing()
+    assert every["sel_a_db"] - alone["sel_a_db"] == pytest.approx(10.0 * math.log10(4), abs=0.01)
+    x = (first, RATE)
+    points = {"tram": [(lag, (behind_x[:, k], RATE)) for k, (lag, _) in enumerate(behind)]}
+    heard_every = render_movement(movement, {"tram": x}, followers=points, leads={"tram": lead})
+    heard_alone = render_movement(movement, {"tram": x})
+    ratio = _a_energy(heard_every["pavement"][:, 0]) / _a_energy(heard_alone["pavement"][:, 0])
+    assert 10.0 * math.log10(ratio) == pytest.approx(10.0 * math.log10(4), abs=0.1)
 
 
-def test_the_lines_on_a_trains_stills_fit_them() -> None:
-    """The line on the stills that says what goes past, for every train on every track,
-    the credit line, and what they say of a house the train is heard in, fit the
-    still's width whole."""
+def test_what_the_stills_say_of_a_house_a_train_is_heard_in_fits_them() -> None:
+    """What the stills say of a house a train is heard in fits the still's width
+    whole."""
     pytest.importorskip("PIL")
     from PIL import Image, ImageDraw
 
     from acoustic_spaces.demos import indoors
-    from acoustic_spaces.demos.pictures import MARGIN, SIZE, fitted, font
+    from acoustic_spaces.demos.pictures import MARGIN, SIZE, font
 
     draw = ImageDraw.Draw(Image.new("RGB", SIZE))
     house_lines = ["Floor shaking 100 VdB at most, its rumble 100.0 dB(A)"]
@@ -841,20 +915,3 @@ def test_the_lines_on_a_trains_stills_fit_them() -> None:
         house_lines += house.words().split("\n")
     for line in house_lines:
         assert draw.textlength(line, font=font("Regular", 23)) <= SIZE[0] - 1010 - MARGIN, line
-    for vehicle in (rail.TRAIN_VEHICLE, rail.TRAM_VEHICLE):
-        for key in vehicle.trains:
-            for track in vehicle.tracks or (vehicle.track,):
-                train = rail.TRAINS[key]
-                info = {
-                    "train": key,
-                    "track": track,
-                    "length_m": train.length_m,
-                    "speed_kmh": train.speed_kmh,
-                    "sound_power_a_db": 133.3,
-                }
-                about = vehicle.facts(None, info)["about"]
-                for line in about.split("\n"):
-                    width = draw.textlength(line, font=font("Regular", 23))
-                    assert width <= SIZE[0] - 1010 - MARGIN, line
-                credit = vehicle.credits({"speed_kmh": train.speed_kmh}, {})
-                assert fitted(draw, credit, 19, SIZE[0] - 2 * MARGIN)[0] == credit

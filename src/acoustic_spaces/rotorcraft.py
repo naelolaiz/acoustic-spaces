@@ -1,4 +1,4 @@
-"""Helicopters: the sound their rotors send each way, for a walk with Doppler.
+"""Helicopters: the sound their rotors send each way, for a trajectory with Doppler.
 
 A :class:`Helicopter` is its mass, its fuselage's drag and two rotors (:class:`Rotor`).
 Flying level at an airspeed, :func:`trim` balances it the way momentum theory does
@@ -22,7 +22,7 @@ the loading compact, the thickness a row of sources and sinks at Gauss points al
 each straight chord, each where it truly is (its radius a little more than the
 station's, taken to second order). With loads that do not change round the turn, each
 harmonic of the blade passing frequency comes in closed form, from Bessel functions,
-in every direction; its convective amplification is in it, and the walk adds the
+in every direction; its convective amplification is in it, and the trajectory adds the
 Doppler shift. They are kept as one period of the sound in each direction
 (:class:`~acoustic_spaces.emission.Periodic`).
 
@@ -44,7 +44,7 @@ Doppler shift. They are kept as one period of the sound in each direction
   ``twist_deg``, in the trim's inflow, even over the disc, carry its thrust and do not
   flap. Each section's speed and angle of attack follow round the turn; its levels hold
   the convective amplification of its own motion through the air, its bands are shifted
-  by its Doppler shift over the hub's (the walk adds the hub's), and each place round
+  by its Doppler shift over the hub's (the trajectory adds the hub's), and each place round
   the turn counts as long as its sound takes to arrive. The boundary layers turn
   turbulent by themselves unless ``tripped``, the tips are square unless
   ``rounded_tip``, the trailing edges ``trailing_edge_m`` thick; sections whose flow
@@ -741,7 +741,7 @@ def bpm_bands(
     places round the turn, with the flow past it and its angle of attack from the
     trim's pitch (:func:`pitch`). A section's levels hold the convective amplification
     of its motion through the air; its bands are shifted by its own Doppler shift over
-    the hub's (the walk adds the hub's), and each place round the turn counts as long
+    the hub's (the trajectory adds the hub's), and each place round the turn counts as long
     as its sound takes to arrive. The bluntness noise is left out of sections faster
     than ``BLUNT_MACH`` and sections beyond ``BPM_ALPHA_DEG``, or where the flow
     reverses, are left out; the tip's vortex is the outermost section's."""

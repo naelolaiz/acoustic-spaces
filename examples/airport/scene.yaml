@@ -27,76 +27,29 @@ assignments:
   runway: asphalt
 air: {temperature_c: 15, humidity_percent: 70}
 sources:
+  # Doc 29's JETW (a Doc 29 model): the trajectory is its ground track, and the model
+  # flies it along it by its procedure, at Volume 3's default weights, in the scene's air:
+  # its heights, speeds and timing, its sound power at the highest thrust of its flight
+  # and its engines' installation as directivity.
   - name: departure
-    position: [0, 0, 1]
-    orientation: {yaw: 0, pitch: 0, roll: 0}
-    level_db: [142.6, 150.4, 152.1, 148.9, 148.3, 150.7, 148.5, 144.5]
-    directivity: {file: jetw.csv}
-    walk:
+    position: [0, 0, 1]  # its start of roll
+    model: {method: doc-29, aircraft: jetw, operation: departure}
+    trajectory:
+      to: [[6500, 0, 1]]
       doppler: true
-      keyframes:
-        - {time_s: 1.9822, position: [4.6073, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 3.9645, position: [18.4292, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 5.9467, position: [41.4658, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 7.9289, position: [73.717, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 9.9111, position: [115.1828, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 11.8934, position: [165.8632, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 13.8756, position: [225.7583, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 15.8578, position: [294.868, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 17.84, position: [373.1923, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 19.8223, position: [460.7312, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 21.8045, position: [557.4847, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 23.7867, position: [663.4529, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 25.769, position: [778.6357, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 27.7512, position: [903.0331, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 29.7334, position: [1036.6452, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 31.7156, position: [1179.4719, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 33.6979, position: [1331.5132, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 35.6801, position: [1492.7691, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 36.5304, position: [1562.8499, 0, 13.3925], orientation: {yaw: 0, pitch: 10.028, roll: 0}}
-        - {time_s: 37.3806, position: [1632.9753, 0, 25.7929], orientation: {yaw: 0, pitch: 10.028, roll: 0}}
-        - {time_s: 38.3806, position: [1715.4049, 0, 40.957], orientation: {yaw: 0, pitch: 10.4238, roll: 0}}
-        - {time_s: 39.41, position: [1800.3182, 0, 56.578], orientation: {yaw: 0, pitch: 10.4238, roll: 0}}
-        - {time_s: 41.8193, position: [1999.3206, 0, 93.1873], orientation: {yaw: 0, pitch: 10.4238, roll: 0}}
-        - {time_s: 44.8521, position: [2250.335, 0, 139.3649], orientation: {yaw: 0, pitch: 10.4238, roll: 0}}
-        - {time_s: 48.9126, position: [2587.2823, 0, 201.351], orientation: {yaw: 0, pitch: 10.4238, roll: 0}}
-        - {time_s: 54.9128, position: [3087.0497, 0, 293.2903], orientation: {yaw: 0, pitch: 10.4238, roll: 0}}
-        - {time_s: 65.5447, position: [3978.0377, 0, 457.2], orientation: {yaw: 0, pitch: 10.4238, roll: 0}}
-        - {time_s: 66.5447, position: [4063.0643, 0, 466.7509], orientation: {yaw: 0, pitch: 6.4091, roll: 0}}
-        - {time_s: 69.1273, position: [4282.8377, 0, 491.4377], orientation: {yaw: 0, pitch: 6.4091, roll: 0}}
-        - {time_s: 95.0066, position: [6500, 0, 740.4884], orientation: {yaw: 0, pitch: 6.4091, roll: 0}}
+      # Simulated every 4 m along its flight: from 100 m away and more, places 4 m apart
+      # follow the exact field closely (validation/doppler.py).
+      step_m: 4
   - name: arrival
     enabled: false
-    position: [-4000, 0, 224.8294]
-    orientation: {yaw: 0, pitch: -3, roll: 0}
-    level_db: [131.9, 142.1, 139.0, 139.8, 139.0, 137.5, 139.2, 138.5]
-    directivity: {file: jetw.csv}
-    walk:
+    position: [-4000, 0, 225]
+    model: {method: doc-29, aircraft: jetw, operation: arrival}
+    trajectory:
+      # It touches down where its track first comes down to the runway, and its roll-out
+      # ends where Doc 29's does, 1583 m along the runway.
+      to: [[290, 0, 1], [1600, 0, 1]]
       doppler: true
-      keyframes:
-        - {time_s: 19.2132, position: [-2655.1915, 0, 154.3509], orientation: {yaw: 0, pitch: -3, roll: 0}}
-        - {time_s: 32.2037, position: [-1748.5106, 0, 106.8338], orientation: {yaw: 0, pitch: -3, roll: 0}}
-        - {time_s: 41.9006, position: [-1073.0638, 0, 71.4351], orientation: {yaw: 0, pitch: -3, roll: 0}}
-        - {time_s: 49.6001, position: [-537.5745, 0, 43.3713], orientation: {yaw: 0, pitch: -3, roll: 0}}
-        - {time_s: 56.0829, position: [-87.2766, 0, 19.7722], orientation: {yaw: 0, pitch: -3, roll: 0}}
-        - {time_s: 57.3371, position: [-0.2149, 0, 15.2095], orientation: {yaw: 0, pitch: -3, roll: 0}}
-        - {time_s: 59.4379, position: [144.8925, 0, 7.6048], orientation: {yaw: 0, pitch: -3, roll: 0}}
-        - {time_s: 60.4379, position: [213.4963, 0, 4.4822], orientation: {yaw: 0, pitch: -2.6061, roll: 0}}
-        - {time_s: 61.5586, position: [290, 0, 1], orientation: {yaw: 0, pitch: -2.6061, roll: 0}}
-        - {time_s: 62.246, position: [336.6006, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 62.9335, position: [382.6897, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 65.416, position: [542.7468, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 67.8986, position: [691.8845, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 70.3812, position: [830.1026, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 72.8637, position: [957.4012, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 75.3463, position: [1073.7803, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 77.8288, position: [1179.2398, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 80.3114, position: [1273.7799, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 82.7939, position: [1357.4004, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 85.2765, position: [1430.1014, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 87.759, position: [1491.8829, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 90.2416, position: [1542.7448, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
-        - {time_s: 92.7241, position: [1582.6873, 0, 1], orientation: {yaw: 0, pitch: 0, roll: 0}}
+      step_m: 4
 listeners:
   - name: departure_4km
     position: [4000, 0, 1.2]

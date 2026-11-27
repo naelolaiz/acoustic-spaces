@@ -38,7 +38,7 @@ from acoustic_spaces import vibration
 from acoustic_spaces.demos.rail import TRAINS
 from acoustic_spaces.scene import Scene
 
-#: The scene's train: its walk is the track.
+#: The scene's train: its trajectory is the track.
 TRAIN = "train"
 #: Residences and buildings where people normally sleep (the manual's land use 2).
 RESIDENCES = 2
@@ -113,11 +113,11 @@ def places_of(scene: Scene, track, wanted: str | None) -> list[tuple[str, float]
 
 
 def track_of(scene: Scene) -> list[tuple[float, float, float]]:
-    """The track: the walk of the scene's train, from its position."""
+    """The track: the trajectory of the scene's train, from its position."""
     train = next((s for s in scene.sources if s.name == TRAIN), None)
-    if train is None or train.walk is None:
-        raise SystemExit(f"error: the scene has no {TRAIN!r} with a walk")
-    return [tuple(train.position), *(tuple(p) for p in train.walk.to)]
+    if train is None or train.trajectory is None:
+        raise SystemExit(f"error: the scene has no {TRAIN!r} with a trajectory")
+    return [tuple(train.position), *(tuple(p) for p in train.trajectory.to)]
 
 
 def rows(name: str, args: argparse.Namespace) -> list[tuple[str, float, vibration.Criterion]]:

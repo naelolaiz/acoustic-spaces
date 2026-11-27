@@ -8,7 +8,7 @@ traced the tracer needs more: on the CPU a copy for each thread that sums rays (
 memory in proportion to ``simulation.ir_length_s``, the listeners and
 ``late.directions``, the map points (``coverage.spacing``) and the sources: those traced
 for their late part, as a source or a listener whose late part is a mix of others' (a
-walk's places between the traced ones, ``simulate``'s ``late_from``) holds none. On the CPU
+trajectory's places between the traced ones, ``simulate``'s ``late_from``) holds none. On the CPU
 the rays cost time, not memory. A run whose late part would need more memory than the
 computer has is refused before it starts (:func:`check`), and
 :meth:`~acoustic_spaces.room.Room.warnings` notes one that would need more than half of
@@ -326,7 +326,7 @@ def _lowered(settings: Simulation, sources: Sequence, listeners: Sequence) -> li
     """The settings a simulation's late part may lower, each changed on its own: as
     (label, (settings, sources, listeners)). ``simulation.ir_length_s`` and
     ``late.directions`` halved, ``late.batches`` 1, and half the listeners and the
-    sources (the first of them), where there are more than one; a walk's places are
+    sources (the first of them), where there are more than one; a trajectory's places are
     sources or listeners of their own."""
     late = settings.late
     length = settings.ir_length_s / 2.0
@@ -365,7 +365,7 @@ def _lowered(settings: Simulation, sources: Sequence, listeners: Sequence) -> li
         half = len(sources) // 2
         found.append(
             (
-                f"{half} of the {len(sources)} sources (a walk's places count as sources)",
+                f"{half} of the {len(sources)} sources (a trajectory's places count as sources)",
                 (settings, sources[:half], listeners),
             )
         )

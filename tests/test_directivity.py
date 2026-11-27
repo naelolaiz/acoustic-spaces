@@ -407,6 +407,13 @@ def test_scene_directivity_files_are_resolved_and_saved_relative(tmp_path: Path)
     assert saved["sources"][0]["directivity"] == {"file": "speaker.csv"}
 
     data["sources"][0]["directivity"] = {"file": "missing.csv"}
+    # A talker's vocal effort sets its sound power through its directivity: the scene
+    # does not read without it.
+    with pytest.raises(ValueError, match="directivity file not found"):
+        Scene.model_validate(data, context={"base_dir": tmp_path})
+    # Given its sound power instead, the scene reads, and the room refuses it.
+    del data["sources"][0]["vocal_effort"]
+    data["sources"][0]["level_db"] = 78.0
     scene = Scene.model_validate(data, context={"base_dir": tmp_path})
     with pytest.raises(ValueError, match="source 'talker': directivity file not found"):
         Room.from_scene(scene)

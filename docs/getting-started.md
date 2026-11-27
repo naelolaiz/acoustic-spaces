@@ -22,7 +22,7 @@ The extras in brackets add the optional parts:
 
 | Extra | Adds | For |
 | --- | --- | --- |
-| `viz` | matplotlib, PyVista, imageio, imageio-ffmpeg | plots of responses and coverage maps (`--plot`), the 3D view (`view`, `--screenshot`), sound particles and walks as GIF or MP4 videos |
+| `viz` | matplotlib, PyVista, imageio, imageio-ffmpeg | plots of responses and coverage maps (`--plot`), the 3D view (`view`, `--screenshot`), sound particles and trajectories as GIF or MP4 videos |
 | `gui` | PySide6, pyvistaqt, PyVista, matplotlib | the [graphical editor](editor.md) |
 | `measure` | sounddevice | the sound card: measuring a room with sweeps (`measure`, `devices`) and real-time playback (`play`, the editor's Listen) |
 | `sofa` | h5py | HRTFs and source directivities from SOFA files |
@@ -231,13 +231,13 @@ listener. Sources and listeners left out of simulations (`enabled: false`) get n
 - `acoustic-spaces demo scene.yaml` (*This scene* in the editor's **Simulation > Run
   demo…**) writes into `demo/` beside the scene (`--work` elsewhere): the simulation in
   `results/`, and a folder for each run named after its settings (`scene_binaural/`)
-  with one mix per listener in `seats/` (`moving/` when something walks), named
+  with one mix per listener in `seats/` (`moving/` when something moves), named
   `LISTENER.binaural.wav`, and the stills, beside the run's video (`scene_binaural.mp4`),
   its sound and its thumbnail. The video visits every listener in use in the scene's
   order (`--listeners` picks them). A run with other settings goes to a folder and a
-  video of its own, and the `join` step plays several in one video. An example's own
-  demo writes its scene and simulation beside its script (the stadium's
-  `scene_band.yaml` and `results_band/`) and the rest into `demo/` there
+  video of its own; several values of an option (`--format binaural,mono`), or
+  `--sources-play in-turn`, play one after another in one video. An example's own
+  demo, a preset of the demo of its scene, writes into `demo/` beside its script too
   ([Demos](demos.md#running-a-demo)).
 - The editor runs a demo in the open scene's folder, where the command line runs it,
   but for the examples of an installed copy (opened from **File > Open example**) and a

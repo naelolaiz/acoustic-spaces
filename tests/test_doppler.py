@@ -19,7 +19,7 @@ from acoustic_spaces.directivity import _grid
 from acoustic_spaces.emission import Mixture
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.render import convolve, gusts_for
-from acoustic_spaces.scene.model import Walk
+from acoustic_spaces.scene.model import Trajectory
 from acoustic_spaces.spatial import Ambisonics, Binaural, Loudspeakers, Mono
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 from acoustic_spaces.spatial.hrtf import HRTF
@@ -27,9 +27,9 @@ from acoustic_spaces.spatial.microphone import first_order, xy
 from acoustic_spaces.walkthrough import (
     crossfade_weights,
     pass_by,
-    render_walk,
+    render_trajectory,
     simulate_movement,
-    simulate_walk,
+    simulate_trajectory,
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
@@ -57,8 +57,8 @@ def _standing(ground: str, doppler: bool = True) -> Scene:
     """A source that walks a hair's breadth: Doppler should change nothing."""
     scene = reference.scene("source", 30.0, ground, doppler)
     source = scene.sources[0]
-    walk = source.walk.model_copy(update={"to": [(-20.0 + 1e-7, 0.0, 1.0)], "speed_m_s": 1.0})
-    source = source.model_copy(update={"position": (-20.0, 0.0, 1.0), "walk": walk})
+    walk = source.trajectory.model_copy(update={"to": [(-20.0 + 1e-7, 0.0, 1.0)], "speed_m_s": 1.0})
+    source = source.model_copy(update={"position": (-20.0, 0.0, 1.0), "trajectory": walk})
     return scene.model_copy(update={"sources": [source]})
 
 
@@ -77,13 +77,13 @@ def _error_db(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def test_doppler_is_off_unless_asked_and_round_trips(tmp_path: Path) -> None:
-    assert Walk.model_validate({"to": [[1.0, 0.0, 1.0]]}).doppler is False
+    assert Trajectory.model_validate({"to": [[1.0, 0.0, 1.0]]}).doppler is False
     scene = reference.scene("source", 30.0, "hard")
-    assert scene.sources[0].walk.doppler is True
+    assert scene.sources[0].trajectory.doppler is True
     path = tmp_path / "scene.yaml"
     scene.to_yaml(path)
     assert "doppler: true" in path.read_text()
-    assert Scene.from_yaml(path).sources[0].walk.doppler is True
+    assert Scene.from_yaml(path).sources[0].trajectory.doppler is True
 
 
 @pytest.mark.parametrize("doppler", [True, False])
@@ -93,12 +93,12 @@ def test_every_walk_goes_slower_than_sound(walker: str, doppler: bool) -> None:
     anything is simulated: shock waves are not simulated."""
     room = Room.from_scene(reference.scene(walker, 400.0, "hard", doppler))
     with pytest.raises(ValueError, match="as fast as sound or faster"):
-        simulate_walk(room, step_m=10.0, late_step_m=None)
+        simulate_trajectory(room, step_m=10.0, late_step_m=None)
     with pytest.raises(ValueError, match="as fast as sound or faster"):
         simulate_movement(room, step_m=10.0)
     # Just slower than sound is a walk.
     room = Room.from_scene(reference.scene(walker, 330.0, "hard", doppler))
-    assert len(simulate_walk(room, step_m=40.0, late_step_m=None).names) > 1
+    assert len(simulate_trajectory(room, step_m=40.0, late_step_m=None).names) > 1
 
 
 def test_doppler_needs_no_wave_solver() -> None:
@@ -106,7 +106,9 @@ def test_doppler_needs_no_wave_solver() -> None:
     data = scene.model_dump(mode="json", exclude_none=True)
     data["simulation"]["wave"] = {"enabled": True}
     with pytest.raises(ValueError, match="wave solver"):
-        simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=10.0, late_step_m=None)
+        simulate_trajectory(
+            Room.from_scene(Scene.model_validate(data)), step_m=10.0, late_step_m=None
+        )
 
 
 # -- the delays ----------------------------------------------------------------------
@@ -210,12 +212,12 @@ def test_read_delays_a_signal_by_a_fraction_of_a_sample() -> None:
 
 def test_paths_are_followed_from_place_to_place(short) -> None:
     room = Room.from_scene(short.scene("source", 30.0, "hard"))
-    walk = simulate_walk(room, step_m=1.0, late_step_m=None)
+    walk = simulate_trajectory(room, step_m=1.0, late_step_m=None)
     places = [walk.result[name, "l"].early for name in walk.names]
     found = dp.tracks(
         places,
         walk.points.times,
-        source_walks=True,
+        source_moves=True,
         planes=dp.plane_ids(room.mesh),
         step_s=1.5 / 343.0 + 1e-4,
     )
@@ -240,7 +242,7 @@ def test_a_path_that_comes_among_others_off_the_same_planes_leaves_them_as_they_
     10 ms back between two places, and the sound there was off by 5 dB more than the
     new path's own level."""
     room = Room.from_scene(short.scene("source", 30.0, "hard"))
-    walk = simulate_walk(room, step_m=1.0, late_step_m=None)
+    walk = simulate_trajectory(room, step_m=1.0, late_step_m=None)
     responses = walk.result.responses
     first = {name: responses[name, "l"] for name in walk.names}
     came = len(walk.names) // 2
@@ -255,14 +257,14 @@ def test_a_path_that_comes_among_others_off_the_same_planes_leaves_them_as_they_
             responses[name, "l"] = dataclasses.replace(
                 first[name], early=EarlyReflections.concatenate(parts, early.energy.shape[1])
             )
-        return render_walk(walk, {"s": dry}, Mono())[:, 0]
+        return render_trajectory(walk, {"s": dry}, Mono())[:, 0]
 
     dry = _noise(1.0)
     step_s = 1.5 / 343.0 + 1e-4
     both = heard(True, True)
     places = [responses[name, "l"].early for name in walk.names]
     found = dp.tracks(
-        places, walk.points.times, source_walks=True, planes=dp.plane_ids(room.mesh), step_s=step_s
+        places, walk.points.times, source_moves=True, planes=dp.plane_ids(room.mesh), step_s=step_s
     )
     last = len(places) - 1
     assert sorted(track.span for track in found) == [(0, last), (0, last), (came, last)]
@@ -279,7 +281,7 @@ def test_a_path_that_comes_among_others_off_the_same_planes_leaves_them_as_they_
 def _standing_walk(ground: str):
     """The standing walk, with the first place's late part at both places, so that only
     the early sound's way differs."""
-    walk = simulate_walk(Room.from_scene(_standing(ground)), step_m=1.0, late_step_m=None)
+    walk = simulate_trajectory(Room.from_scene(_standing(ground)), step_m=1.0, late_step_m=None)
     responses = walk.result.responses
     first = responses[walk.names[0], "l"]
     for name in walk.names[1:]:
@@ -298,7 +300,7 @@ def test_a_walker_that_stands_still_is_a_convolution(ground: str) -> None:
     walk, first = _standing_walk(ground)
     assert walk.doppler
     dry = _noise(1.0)
-    wet = render_walk(walk, {"s": dry}, Mono())[:, 0]
+    wet = render_trajectory(walk, {"s": dry}, Mono())[:, 0]
     ir = first.spatial_impulse_response(Mono(), RATE, walk.result.settings.seed)
     assert _error_db(wet, convolve(dry, ir)[:, 0]) < -50.0
 
@@ -307,7 +309,7 @@ def test_a_walker_that_stands_still_is_a_convolution_at_the_ears() -> None:
     walk, first = _standing_walk("grass")
     dry = _noise(1.0)
     fmt = Binaural()
-    wet = render_walk(walk, {"s": dry}, fmt)
+    wet = render_trajectory(walk, {"s": dry}, fmt)
     ref = convolve(dry, first.spatial_impulse_response(fmt, RATE, walk.result.settings.seed))
     for ear in range(2):
         assert _error_db(wet[:, ear], ref[:, ear]) < -45.0
@@ -333,7 +335,7 @@ def test_a_filter_goes_linearly_from_one_place_to_the_next() -> None:
             Mono(),
             RATE,
             len(dry),
-            source_walks=False,
+            source_moves=False,
             planes=planes,
             step_s=1e-4,
         )[:, 0]
@@ -386,7 +388,7 @@ def _late_only(walker: str, monkeypatch: pytest.MonkeyPatch):
     """The short pass-by of a walking ``walker``, 1 m between places, each with its own
     late part, and the early paths left out of its renders: the walk and each place's
     late part as it plays it (the response without its early paths)."""
-    walk = simulate_walk(
+    walk = simulate_trajectory(
         Room.from_scene(reference.scene(walker, 30.0, "grass")), step_m=1.0, late_step_m=None
     )
     monkeypatch.setattr(dp, "render", lambda *args, **kwargs: 0.0)
@@ -414,7 +416,7 @@ def test_a_walking_source_sends_its_late_part_from_where_it_is(short, monkeypatc
     assert walk.result[walk.names[k], "l"].direct_delay_s > (times[k + 1] - times[k]) / 2
     click = np.zeros(RATE)
     click[sent] = 1.0
-    wet = render_walk(walk, {"s": click}, Mono())[:, 0]
+    wet = render_trajectory(walk, {"s": click}, Mono())[:, 0]
     expected = np.zeros_like(wet)
     expected[sent : sent + len(irs[k])] = irs[k][: len(wet) - sent]
     assert _error_db(wet, expected) < -100.0
@@ -428,7 +430,7 @@ def test_a_walking_source_with_one_late_part_everywhere_plays_it(short, monkeypa
     for name in walk.names[1:]:
         responses[name, "l"] = responses[walk.names[0], "l"]
     dry = _noise(1.5)
-    wet = render_walk(walk, {"s": dry}, Mono())[:, 0]
+    wet = render_trajectory(walk, {"s": dry}, Mono())[:, 0]
     expected = convolve(dry, irs[0])
     assert np.max(np.abs(wet[len(expected) :]), initial=0.0) == 0.0
     np.testing.assert_allclose(
@@ -442,7 +444,7 @@ def test_a_walking_listener_hears_the_late_part_of_where_it_is(short, monkeypatc
     heard."""
     walk, irs = _late_only("listener", monkeypatch)
     dry = _noise(1.0)
-    wet = render_walk(walk, {"s": dry}, Mono())[:, 0]
+    wet = render_trajectory(walk, {"s": dry}, Mono())[:, 0]
     weights = crossfade_weights(walk.points.times, np.arange(len(wet)) / RATE)
     expected = np.zeros_like(wet)
     for weight, ir in zip(weights, irs, strict=True):
@@ -471,13 +473,15 @@ def test_ears_whose_onsets_jump_keep_the_treble_between_places(short) -> None:
     5.4 dB of it."""
     data = short.scene("source", 30.0, "hard").model_dump(mode="json", exclude_none=True)
     data["materials"]["ground"] = {"absorption": [1.0] * 8, "scattering": 0.0}
-    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=1.0, late_step_m=None)
+    walk = simulate_trajectory(
+        Room.from_scene(Scene.model_validate(data)), step_m=1.0, late_step_m=None
+    )
     dry = _noise(1.5)
     count = 300
     jumping = 20.0 + 4.0 * (np.arange(count) % 2)[:, None] * np.ones(2)
     together = np.full((count, 2), 20.0)
     wet, flat = (
-        render_walk(walk, {"s": dry}, Binaural(hrtf=_delays_hrtf(onsets)))
+        render_trajectory(walk, {"s": dry}, Binaural(hrtf=_delays_hrtf(onsets)))
         for onsets in (jumping, together)
     )
     frame = 960
@@ -558,7 +562,7 @@ def test_a_path_that_goes_or_comes_is_nowhere_louder_than_at_the_places_it_is_he
     dry = np.sin(2 * np.pi * 1000.0 * np.arange(int(0.5 * RATE)) / RATE)
 
     def without_direct(at: list[int]) -> np.ndarray:
-        walk = simulate_walk(room, step_m=1.0, late_step_m=None)
+        walk = simulate_trajectory(room, step_m=1.0, late_step_m=None)
         assert len(walk.names) == 3
         responses = walk.result.responses
         for k in at:
@@ -566,7 +570,7 @@ def test_a_path_that_goes_or_comes_is_nowhere_louder_than_at_the_places_it_is_he
             responses["s", walk.names[k]] = dataclasses.replace(
                 place, early=place.early[place.early.order > 0]
             )
-        return render_walk(walk, {"s": dry}, Mono())[:, 0]
+        return render_trajectory(walk, {"s": dry}, Mono())[:, 0]
 
     gone = 2 if way == "goes" else 0
     # The paths add: what the direct sound alone gives, the ground's reflection taken out.
@@ -585,8 +589,8 @@ def test_the_sound_sent_each_way_as_the_exact_field(short, directivity) -> None:
     sent = short.emission(tone, int((walked + 0.5) * RATE))
     for walker in ("source", "listener"):
         room = Room.from_scene(short.scene(walker, speed, "hard", True, directivity))
-        walk = simulate_walk(room, step_m=short.STEP_M, late_step_m=None)
-        wet = render_walk(walk, {"s": sent}, Mono())[:, 0]
+        walk = simulate_trajectory(room, step_m=short.STEP_M, late_step_m=None)
+        wet = render_trajectory(walk, {"s": sent}, Mono())[:, 0]
         field = short.exact(walker, speed, tone, len(wet), sent=True)
         errors = short.errors(wet, field, walked)
         assert errors["waveform_db"] < -45.0, walker
@@ -600,8 +604,8 @@ def test_the_sound_sent_each_way_as_the_exact_field_at_the_ears(short) -> None:
     walked = (short.X1 - short.X0) / speed
     sent = short.emission(tone, int((walked + 0.5) * RATE))
     room = Room.from_scene(short.scene("source", speed, "hard", True))
-    walk = simulate_walk(room, step_m=short.STEP_M, late_step_m=None)
-    wet = render_walk(walk, {"s": sent}, Binaural())
+    walk = simulate_trajectory(room, step_m=short.STEP_M, late_step_m=None)
+    wet = render_trajectory(walk, {"s": sent}, Binaural())
     field = short.exact("source", speed, tone, len(wet), sent=True, heard_by="ears")
     errors = short.errors(wet, field, walked)
     assert errors["waveform_db"] < -45.0
@@ -613,37 +617,43 @@ def test_the_same_sound_sent_every_way_is_the_signal_itself(short) -> None:
     tone = np.sin(2 * np.pi * 1000.0 * np.arange(int((walked + 0.5) * RATE)) / RATE)
     elevation, azimuth = _grid(10.0)
     every_way = Mixture(tone[None, :], np.ones((len(elevation), len(azimuth), 1)), RATE)
-    walk = simulate_walk(Room.from_scene(short.scene("source", 30.0, "hard")), late_step_m=None)
-    plain = render_walk(walk, {"s": tone}, Mono())
-    sent = render_walk(walk, {"s": every_way}, Mono())
+    walk = simulate_trajectory(
+        Room.from_scene(short.scene("source", 30.0, "hard")), late_step_m=None
+    )
+    plain = render_trajectory(walk, {"s": tone}, Mono())
+    sent = render_trajectory(walk, {"s": every_way}, Mono())
     np.testing.assert_allclose(sent, plain, rtol=0.0, atol=1e-12 * np.abs(plain).max())
 
 
 def test_the_sound_sent_each_way_needs_a_walk_with_doppler(short) -> None:
     elevation, azimuth = _grid(30.0)
     sent = Mixture(np.ones((1, 100)), np.ones((len(elevation), len(azimuth), 1)), RATE)
-    walk = simulate_walk(Room.from_scene(short.scene("source", 30.0, "hard", False)))
-    with pytest.raises(ValueError, match="plays only along a walk with Doppler"):
-        render_walk(walk, {"s": sent}, Mono())
-    walk = simulate_walk(Room.from_scene(short.scene("source", 30.0, "hard")), late_step_m=None)
+    walk = simulate_trajectory(Room.from_scene(short.scene("source", 30.0, "hard", False)))
+    with pytest.raises(ValueError, match="plays only along a trajectory with Doppler"):
+        render_trajectory(walk, {"s": sent}, Mono())
+    walk = simulate_trajectory(
+        Room.from_scene(short.scene("source", 30.0, "hard")), late_step_m=None
+    )
     with pytest.raises(ValueError, match="at 48000 Hz, the rendering at 44100 Hz"):
-        render_walk(walk, {"s": sent}, Mono(), sample_rate=44_100)
+        render_trajectory(walk, {"s": sent}, Mono(), sample_rate=44_100)
 
 
 def test_the_late_part_and_the_eddies_go_along(short) -> None:
     data = short.scene("source", 30.0, "grass").model_dump(mode="json", exclude_none=True)
     data["atmosphere"] = {"turbulence": "strong"}
-    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0)
+    walk = simulate_trajectory(
+        Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0
+    )
     dry = _noise(1.5)
-    wet = render_walk(walk, {"s": dry}, Mono())
+    wet = render_trajectory(walk, {"s": dry}, Mono())
     assert np.isfinite(wet).all() and np.max(np.abs(wet)) > 0.0
-    calm = simulate_walk(
+    calm = simulate_trajectory(
         Room.from_scene(short.scene("source", 30.0, "grass")), step_m=2.0, late_step_m=4.0
     )
-    still = render_walk(calm, {"s": dry}, Mono())
+    still = render_trajectory(calm, {"s": dry}, Mono())
     assert not np.allclose(wet, still)
     # Rendered again, the same: the eddies and the late part are drawn the same way.
-    assert np.array_equal(wet, render_walk(walk, {"s": dry}, Mono()))
+    assert np.array_equal(wet, render_trajectory(walk, {"s": dry}, Mono()))
 
 
 class _Forgetful(OrderedDict):
@@ -671,11 +681,13 @@ def test_the_caches_change_nothing(short, monkeypatch: pytest.MonkeyPatch, fmt) 
     them out anew each time gives, in every format."""
     data = short.scene("source", 30.0, "grass").model_dump(mode="json", exclude_none=True)
     data["atmosphere"] = {"turbulence": "strong"}
-    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0)
+    walk = simulate_trajectory(
+        Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0
+    )
     dry = _noise(0.6)
-    kept = render_walk(walk, {"s": dry}, fmt)
+    kept = render_trajectory(walk, {"s": dry}, fmt)
     monkeypatch.setattr(dp, "OrderedDict", _Forgetful)
-    anew = render_walk(walk, {"s": dry}, fmt)
+    anew = render_trajectory(walk, {"s": dry}, fmt)
     assert np.max(np.abs(kept)) > 0.0
     assert np.array_equal(kept, anew)
 
@@ -698,24 +710,28 @@ def test_each_filter_is_worked_out_once_and_kept_while_in_use(
 
     monkeypatch.setattr(dp.Filters, "_spectra", counted)
     data = short.scene("source", 30.0, "hard").model_dump(mode="json", exclude_none=True)
-    walk = data["sources"][0]["walk"]
+    walk = data["sources"][0]["trajectory"]
     del walk["to"], walk["speed_m_s"]
     walk["keyframes"] = [
         {"time_s": 0.001, "position": [short.X0 + 0.03, 0.0, short.ZS]},
         {"time_s": 1.0, "position": [short.X1, 0.0, short.ZS]},
     ]
-    keyed = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=None)
+    keyed = simulate_trajectory(
+        Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=None
+    )
     assert np.diff(keyed.points.times)[0] == pytest.approx(0.001)
-    render_walk(keyed, {"s": _noise(1.0)}, Mono())
+    render_trajectory(keyed, {"s": _noise(1.0)}, Mono())
     assert sorted(made) == [(k, 0) for k in range(17)] and len(keyed.names) == 17
     assert most[0] == 3
     # In turbulence, at two moments at once.
     data = short.scene("source", 30.0, "grass").model_dump(mode="json", exclude_none=True)
     data["atmosphere"] = {"turbulence": "strong"}
-    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0)
+    walk = simulate_trajectory(
+        Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0
+    )
     made.clear()
     most[0] = 0
-    render_walk(walk, {"s": _noise(0.6)}, Mono())
+    render_trajectory(walk, {"s": _noise(0.6)}, Mono())
     assert len(made) == len(set(made)) and len({moment for _, moment in made}) > 1
     assert most[0] <= 6
 
@@ -731,7 +747,7 @@ def test_filters_kept_as_shaping_and_gains_are_the_channels_spectra(
     an eighth of the bytes of every channel's spectra in third-order Ambisonics. Each
     path's filter formed from them is, bit for bit, its row of every channel's
     spectra."""
-    walk = simulate_walk(
+    walk = simulate_trajectory(
         Room.from_scene(short.scene("source", 30.0, "hard")), step_m=4.0, late_step_m=None
     )
     responses = [walk.result[name, "l"] for name in walk.names]
@@ -774,10 +790,10 @@ def test_the_paths_share_a_reading_table_for_each_reach(
 
     monkeypatch.setattr(dp, "_Reading", kept)
     monkeypatch.setattr(dp, "_table", functools.lru_cache(maxsize=16)(table))
-    walk = simulate_walk(
+    walk = simulate_trajectory(
         Room.from_scene(short.scene("source", 30.0, "hard")), step_m=1.0, late_step_m=None
     )
-    render_walk(walk, {"s": _noise(1.2)}, Mono())
+    render_trajectory(walk, {"s": _noise(1.2)}, Mono())
     assert len(readings) >= 2
     for each in readings:
         heard = each.heard
@@ -798,15 +814,15 @@ def test_sounds_that_follow_the_walker_are_heard_as_its_own_later(short) -> None
     walker's own sound would be, its lag later, through the early paths and the late
     part: exactly a render of its own, delayed, but for the filters' faint lead-in that
     such a render cuts at its start."""
-    walk = simulate_walk(
+    walk = simulate_trajectory(
         Room.from_scene(short.scene("source", 30.0, "grass")), step_m=2.0, late_step_m=4.0
     )
     lead, behind = _noise(1.0, seed=3), _noise(1.0, seed=4)
-    first = render_walk(walk, {"s": lead}, Mono())
-    second = render_walk(walk, {"s": behind}, Mono())
+    first = render_trajectory(walk, {"s": lead}, Mono())
+    second = render_trajectory(walk, {"s": behind}, Mono())
     for lag_s in (0.25, 0.0):
         lag = round(lag_s * RATE)
-        together = render_walk(walk, {"s": lead}, Mono(), followers=[(lag_s, behind)])
+        together = render_trajectory(walk, {"s": lead}, Mono(), followers=[(lag_s, behind)])
         assert len(together) == lag + len(second)
         expected = np.zeros_like(together)
         expected[: len(first)] += first
@@ -815,17 +831,19 @@ def test_sounds_that_follow_the_walker_are_heard_as_its_own_later(short) -> None
         np.testing.assert_allclose(together[lag:], expected[lag:], rtol=0.0, atol=1e-12 * peak)
         assert np.abs(together[:lag] - expected[:lag]).max(initial=0.0) < 1e-3 * peak
     with pytest.raises(ValueError, match="0 s or more behind"):
-        render_walk(walk, {"s": lead}, Mono(), followers=[(-0.1, behind)])
+        render_trajectory(walk, {"s": lead}, Mono(), followers=[(-0.1, behind)])
     elevation, azimuth = _grid(30.0)
     sent = Mixture(lead[None, :], np.ones((len(elevation), len(azimuth), 1)), RATE)
     with pytest.raises(ValueError, match="sends one sound every way"):
-        render_walk(walk, {"s": sent}, Mono(), followers=[(0.1, behind)])
+        render_trajectory(walk, {"s": sent}, Mono(), followers=[(0.1, behind)])
     for still in (
-        simulate_walk(Room.from_scene(short.scene("source", 30.0, "hard", False))),
-        simulate_walk(Room.from_scene(short.scene("listener", 30.0, "hard")), late_step_m=None),
+        simulate_trajectory(Room.from_scene(short.scene("source", 30.0, "hard", False))),
+        simulate_trajectory(
+            Room.from_scene(short.scene("listener", 30.0, "hard")), late_step_m=None
+        ),
     ):
-        with pytest.raises(ValueError, match="a walking source along a walk with Doppler"):
-            render_walk(still, {"s": lead}, Mono(), followers=[(0.1, behind)])
+        with pytest.raises(ValueError, match="a moving source along a trajectory with Doppler"):
+            render_trajectory(still, {"s": lead}, Mono(), followers=[(0.1, behind)])
 
 
 def test_a_walker_standing_in_the_eddies_hears_each_path_half_way_between_moments() -> None:
@@ -839,11 +857,11 @@ def test_a_walker_standing_in_the_eddies_hears_each_path_half_way_between_moment
 
     data = _standing("hard").model_dump(mode="json", exclude_none=True)
     data["atmosphere"] = {"turbulence": {"preset": "strong", "outer_scale_m": 2.0}}
-    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), late_step_m=None)
+    walk = simulate_trajectory(Room.from_scene(Scene.model_validate(data)), late_step_m=None)
     response = next(iter(walk.result.responses.values()))
     rate, f = RATE, 8000.0
     dry = np.sin(2 * np.pi * f * np.arange(3 * rate) / rate)
-    wet = render_walk(walk, {"s": dry}, Mono())[:, 0]
+    wet = render_trajectory(walk, {"s": dry}, Mono())[:, 0]
     seed = walk.result.settings.seed
     gusts = gusts_for(response, len(wet) / rate, seed)
     moments = range(4, int(2.5 / gusts.step_s))
@@ -853,10 +871,12 @@ def test_a_walker_standing_in_the_eddies_hears_each_path_half_way_between_moment
 def test_a_walking_listener_hears_a_moving_and_a_standing_source(short) -> None:
     data = short.scene("listener", 30.0, "hard").model_dump(mode="json", exclude_none=True)
     data["sources"].append({"name": "t", "position": [0.0, -10.0, 1.0]})
-    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=1.0, late_step_m=None)
+    walk = simulate_trajectory(
+        Room.from_scene(Scene.model_validate(data)), step_m=1.0, late_step_m=None
+    )
     dry = _noise(1.5)
-    both = render_walk(walk, {"s": dry, "t": dry}, Mono())
-    alone = [render_walk(walk, {name: dry}, Mono()) for name in ("s", "t")]
+    both = render_trajectory(walk, {"s": dry, "t": dry}, Mono())
+    alone = [render_trajectory(walk, {name: dry}, Mono()) for name in ("s", "t")]
     assert np.allclose(both, alone[0] + alone[1], atol=1e-12)
 
 
@@ -865,7 +885,7 @@ def test_a_walking_listener_hears_a_moving_and_a_standing_source(short) -> None:
 
 def test_pass_by_levels(short) -> None:
     room = Room.from_scene(short.scene("source", 30.0, "hard"))
-    walk = simulate_walk(room, step_m=1.0, late_step_m=None)
+    walk = simulate_trajectory(room, step_m=1.0, late_step_m=None)
     passing = pass_by(walk)
     assert (passing.source, passing.listener) == ("s", "l")
     responses = [walk.result[name, "l"] for name in walk.names]
@@ -884,14 +904,16 @@ def test_pass_by_levels(short) -> None:
     power = 10.0 ** (passing.levels_a / 10.0)
     energy = np.sum((power[1:] + power[:-1]) / 2.0 * np.diff(passing.times))
     assert passing.exposure_a == pytest.approx(10.0 * math.log10(energy))
-    with pytest.raises(ValueError, match="does not walk"):
+    with pytest.raises(ValueError, match="does not move"):
         pass_by(walk, "l")
 
 
 def test_pass_by_of_a_walking_listener(short) -> None:
     data = short.scene("listener", 30.0, "hard").model_dump(mode="json", exclude_none=True)
     data["sources"].append({"name": "t", "position": [0.0, -10.0, 1.0]})
-    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=None)
+    walk = simulate_trajectory(
+        Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=None
+    )
     with pytest.raises(ValueError, match="pick a source"):
         pass_by(walk)
     with pytest.raises(ValueError, match="no source 'x'"):

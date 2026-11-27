@@ -27,6 +27,14 @@ msgstr "taal: {language} ({source})"
 msgid "Scene"
 msgstr "Scène"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Recording"
+msgstr "Opname"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Vocal effort"
+msgstr "Steminspanning"
+
 #: acoustic_spaces/demos/__init__.py
 msgid "Time per listener"
 msgstr "Tijd per ontvanger"
@@ -34,6 +42,10 @@ msgstr "Tijd per ontvanger"
 #: acoustic_spaces/demos/__init__.py
 msgid "Tour"
 msgstr "Rondgang"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Atmosphere"
+msgstr "Atmosfeer"
 
 #: acoustic_spaces/demos/__init__.py
 msgid "Credit"
@@ -71,7 +83,7 @@ msgstr "Scène van het voorbeeld"
 msgid "Results folder"
 msgstr "Resultatenmap"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/tree.py
 msgid "Listeners"
 msgstr "Ontvangers"
 
@@ -84,8 +96,8 @@ msgid "Voice"
 msgstr "Stem"
 
 #: acoustic_spaces/demos/__init__.py
-msgid "Where the visitor stands"
-msgstr "Waar de bezoeker staat"
+msgid "Where a listener stands"
+msgstr "Waar een ontvanger staat"
 
 #: acoustic_spaces/demos/__init__.py
 msgid "Head turns"
@@ -128,6 +140,18 @@ msgid "Last stop's phrases"
 msgstr "Frasen van de laatste stop"
 
 #: acoustic_spaces/demos/__init__.py
+msgid "Last stop"
+msgstr "Laatste stop"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Levels between listeners"
+msgstr "Niveaus tussen ontvangers"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Leave out"
+msgstr "Weglaten"
+
+#: acoustic_spaces/demos/__init__.py
 msgid "Downloads folder"
 msgstr "Downloadmap"
 
@@ -151,6 +175,10 @@ msgstr "Scène van de vlucht"
 msgid "Stadium's scene"
 msgstr "Scène van het stadion"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Start time"
+msgstr "Starttijd"
+
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
 msgid "Height"
 msgstr "Hoogte"
@@ -171,6 +199,10 @@ msgstr "Eerste downbeat"
 msgid "Stems"
 msgstr "Stems"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Response length"
+msgstr "Responslengte"
+
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
 msgid "Rays per band"
 msgstr "Stralen per band"
@@ -180,8 +212,76 @@ msgid "Written to"
 msgstr "Geschreven naar"
 
 #: acoustic_spaces/demos/__init__.py
-msgid "Runs"
-msgstr "Runs"
+msgid "Vehicle"
+msgstr "Voertuig"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Train"
+msgstr "Trein"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Track"
+msgstr "Spoor"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Siren"
+msgstr "Sirene"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Horn"
+msgstr "Hoorn"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Heard indoors"
+msgstr "Binnen gehoord"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/tree.py
+msgid "Sources"
+msgstr "Bronnen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Sources play"
+msgstr "Hoe de bronnen spelen"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py
+msgid "Order of the parts"
+msgstr "Volgorde van de delen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Timeline"
+msgstr "Tijdlijn"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Pieces"
+msgstr "Stukken"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "Moving"
+msgstr "In beweging"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Trains a day"
+msgstr "Treinen per dag"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tram passes"
+msgstr "Trampassages"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "House"
+msgstr "Huis"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Floor"
+msgstr "Verdieping"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Grond"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Vibration peak"
+msgstr "Trillingspiek"
 
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
@@ -541,7 +641,7 @@ msgstr "Dekkingskaart"
 msgid "Messages"
 msgstr "Meldingen"
 
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/demo_dialog.py
+#: acoustic_spaces/gui/app.py
 msgid "Movement"
 msgstr "Beweging"
 
@@ -853,12 +953,12 @@ msgstr "Run &volgen"
 msgid ""
 "While a run, coverage map, export or demo goes on, ring the sources and "
 "listeners its latest step works on in the 3D view and the plan, and draw the "
-"walkers where the place along a walk it simulates has them"
+"movers where the place along a trajectory it simulates has them"
 msgstr ""
-"Terwijl een berekening, dekkingskaart, export of demo loopt, in de "
-"3D-weergave en de plattegrond een ring tekenen om de bronnen en ontvangers "
-"waaraan de laatste stap werkt, en wat beweegt tekenen waar het is op de "
-"plaats van een route die wordt gesimuleerd"
+"Terwijl een berekening, een dekkingskaart, een export of een demo loopt, in "
+"de 3D-weergave en de plattegrond een ring zetten om de bronnen en ontvangers "
+"waaraan de laatste stap werkt, en de bewegende elementen tekenen waar het "
+"gesimuleerde punt van een route ze plaatst"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
@@ -1146,10 +1246,11 @@ msgstr "Wacht tot de lopende berekening klaar is en render dan de beweging."
 
 #: acoustic_spaces/gui/app.py
 msgid ""
-"Nothing moves: add a keyframe to a source or listener in use, and tick Moves."
+"Nothing moves: add a keyframe to a source or listener in use, and tick "
+"Moving."
 msgstr ""
-"Niets beweegt: geef een meegenomen bron of ontvanger een keyframe en vink "
-"Beweegt aan."
+"Niets beweegt: geef een meegenomen bron of ontvanger een keyframe en vink In "
+"beweging aan."
 
 #: acoustic_spaces/gui/app.py
 msgid "Nothing to play: give a source in use a WAV file under Plays first."
@@ -1889,8 +1990,8 @@ msgid "What the source plays in the demo, unless a file is given"
 msgstr "Wat de bron in de demo speelt, tenzij er een bestand wordt gegeven"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Instead"
-msgstr "In plaats daarvan"
+msgid "Your WAV"
+msgstr "Eigen WAV"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -1944,25 +2045,105 @@ msgid "All"
 msgstr "Alle"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick every finished run: the video joins them all, its default"
-msgstr ""
-"Vink alle voltooide runs aan: de video voegt ze allemaal samen, de standaard"
+msgid "None"
+msgstr "Geen"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every listener: the demo plays them all, its default"
 msgstr "Vink alle ontvangers aan: de demo speelt ze allemaal, de standaard"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "None"
-msgstr "Geen"
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid "Untick every run, to tick the ones to join"
-msgstr "Vink alle runs uit, om de runs aan te vinken die je wilt samenvoegen"
-
-#: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every listener, to tick the few to hear"
 msgstr "Vink alle ontvangers uit, om de paar aan te vinken die je wilt horen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Several…"
+msgstr "Meerdere…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Play several of them, one after another in one video: a tick for each, "
+"dragged into the order they play"
+msgstr ""
+"Er meerdere spelen, na elkaar in één video: een vinkje voor elk, gesleept in "
+"de volgorde waarin ze spelen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "One only"
+msgstr "Slechts één"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Back to one of them, the first ticked"
+msgstr "Terug naar één ervan, de eerste aangevinkte"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "File…"
+msgstr "Bestand…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours in place of one of the choices"
+msgstr "Een eigen bestand in plaats van een van de keuzes"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every one: the run plays them one after another"
+msgstr "Vink ze allemaal aan: de uitvoering speelt ze na elkaar"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every one, to tick those to play"
+msgstr "Vink ze allemaal uit, om aan te vinken wat moet spelen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours"
+msgstr "Een eigen bestand"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every source"
+msgstr "Vink alle bronnen aan"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every source, to tick those to hear"
+msgstr "Vink alle bronnen uit, om aan te vinken welke je wilt horen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo's pick"
+msgstr "De keuze van de demo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick the sources the demo plays by default"
+msgstr "Vink de bronnen aan die de demo standaard speelt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick the sources that play; a group ticks all of its own"
+msgstr "De bronnen aanvinken die spelen; een groep vinkt al de zijne aan"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"The WAV file the source plays instead ({option} SOURCE=WAV), typed after a "
+"double click or chosen with Choose WAV…; empty: what Plays says"
+msgstr ""
+"Het WAV-bestand dat de bron in plaats daarvan speelt ({option} SOURCE=WAV), "
+"getypt na een dubbelklik of gekozen met WAV kiezen…; leeg: wat Speelt zegt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo plays it whatever is ticked"
+msgstr "De demo speelt het, wat er ook aangevinkt is"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A tour in each part visits them"
+msgstr "Een rondgang in elk deel bezoekt ze"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Each in a part of its own"
+msgstr "Elk in een eigen deel"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"How the listeners are heard: one after another in the video of each part, or "
+"each in a part of its own, at its place in the order of the parts"
+msgstr ""
+"Hoe de ontvangers gehoord worden: na elkaar in de video van elk deel, of elk "
+"in een eigen deel, op zijn plaats in de volgorde van de delen"
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -1981,20 +2162,20 @@ msgid ", with Doppler"
 msgstr ", met doppler"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "Trajectories"
+msgstr "Routes"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"The sources and listeners with a walk. Ticked ones move along it while the "
-"piece plays, all on one clock; the others stand where they start"
+"The sources and listeners with a trajectory. Ticked ones move along it while "
+"the piece plays, all on one clock; the others stand where they start"
 msgstr ""
 "De bronnen en ontvangers met een route. Aangevinkte volgen die terwijl het "
 "stuk speelt, allemaal op één klok; de andere blijven staan waar ze beginnen"
 
-#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
-msgid "Moves"
-msgstr "Beweegt"
-
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick to move it along its walk in this run"
-msgstr "Aanvinken om het in deze run zijn route te laten volgen"
+msgid "Tick to move it along its trajectory in this run"
+msgstr "Vink aan om het in deze run zijn route te laten volgen"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "The source or listener, as the scene names it"
@@ -2009,7 +2190,7 @@ msgid "A source or a listener"
 msgstr "Een bron of een ontvanger"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Walk"
+msgid "Trajectory"
 msgstr "Route"
 
 #: acoustic_spaces/gui/demo_dialog.py
@@ -2034,9 +2215,9 @@ msgstr "Beweging bewerken…"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"Close this window and open the Movement panel on the selected walker, to "
-"change its walk or give a source or listener one; save the scene before "
-"running the demo"
+"Close this window and open the Movement panel on the selected mover, to "
+"change its trajectory or give a source or listener one; save the scene "
+"before running the demo"
 msgstr ""
 "Sluit dit venster en opent het bewegingspaneel op het geselecteerde element, "
 "om zijn route te wijzigen of een bron of ontvanger er een te geven; sla de "
@@ -2047,8 +2228,91 @@ msgid "As in the scene"
 msgstr "Zoals in de scène"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick what Moves ticks in the scene again"
-msgstr "Vink weer aan wat Beweegt in de scène aanvinkt"
+msgid "Tick what Moving ticks in the scene again"
+msgstr "Vink opnieuw aan wat In beweging in de scène aanvinkt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"What the scene's sources play: a free recording or one of yours, and its "
+"pieces"
+msgstr ""
+"Wat de bronnen van de scène spelen: een vrije opname of een eigen, en de "
+"stukken ervan"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The sources that play, what each plays and how they play: together or in turn"
+msgstr ""
+"De bronnen die spelen, wat elk speelt en hoe ze spelen: samen of om de beurt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Where the run listens: the listeners in the order of the tour, and how long "
+"each"
+msgstr ""
+"Waar de run luistert: de ontvangers in de volgorde van de rondgang, en hoe "
+"lang elk"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Video"
+msgstr "Video"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/movement.py
+msgid "Output"
+msgstr "Uitvoer"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What the run mixes to: the format, and the HRTFs of a binaural mix"
+msgstr "Waarnaar de run mixt: het formaat en de HRTF's van een binaurale mix"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "All together, in each part"
+msgstr "Allemaal samen, in elk deel"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Each turned up to the loudest"
+msgstr "Elk opgehaald tot de luidste"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "As simulated, one gain for all"
+msgstr "Zoals gesimuleerd, één versterking voor alle"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start where something moves, else shared"
+msgstr "Vanaf de start van elke ontvanger waar iets beweegt, anders gedeeld"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Shared: the tour goes on as the piece plays"
+msgstr "Gedeeld: de rondgang gaat door terwijl het stuk speelt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start"
+msgstr "Vanaf de start van elke ontvanger"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The scene's own weather"
+msgstr "Het weer van de scène"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Still air"
+msgstr "Stille lucht"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "every one"
+msgstr "allemaal"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "the demo's pick"
+msgstr "de keuze van de demo"
+
+#. Translators: no draws at all, so no spread of the results.
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "none"
+msgstr "geen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "as by default"
+msgstr "zoals standaard"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
@@ -2085,6 +2349,14 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Demo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The video the run makes: one part, or several one after another, each after "
+"a title card that says what sets it apart"
+msgstr ""
+"De video die de run maakt: één deel, of meerdere na elkaar, elk na een "
+"titelkaart die zegt wat het onderscheidt"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Advanced"
@@ -2140,7 +2412,7 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "Nothing in this scene moves. Edit movement… gives a source or a listener a "
-"walk along keyframes."
+"trajectory along keyframes."
 msgstr ""
 "Niets beweegt in deze scène. Beweging bewerken… geeft een bron of een "
 "ontvanger een route langs keyframes."
@@ -2148,33 +2420,33 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
 msgid ""
-"Ticked sources and listeners move along their walks while the piece plays; "
-"the others stand where they start. The ticks start as Moves sets them in the "
-"scene, and change this run only ({option})."
+"Ticked sources and listeners move along their trajectories while the piece "
+"plays; the others stand where they start. The ticks start as Moving sets "
+"them in the scene, and change this run only ({option})."
 msgstr ""
 "Aangevinkte bronnen en ontvangers volgen hun routes terwijl het stuk speelt; "
-"de andere blijven staan waar ze beginnen. De vinkjes beginnen zoals Beweegt "
-"ze in de scène zet, en veranderen alleen deze run ({option})."
+"de andere blijven staan waar ze beginnen. De vinkjes beginnen zoals In "
+"beweging ze in de scène zet, en veranderen alleen deze run ({option})."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"This demo moves what is ticked; Moves in the scene turns a walk on or off, "
-"and Edit movement… changes it."
+"What this run moves along its trajectory, as the options below pick what "
+"plays; Edit movement… changes a trajectory."
 msgstr ""
-"Deze demo beweegt wat is aangevinkt; Beweegt in de scène zet een route aan "
-"of uit, en Beweging bewerken… wijzigt hem."
+"Wat deze run langs zijn route beweegt, zoals de opties hieronder kiezen wat "
+"speelt; Beweging bewerken… wijzigt een route."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "This demo moves nothing: every source and listener stands where it starts. "
-"This scene plays the walks."
+"This scene plays the trajectories."
 msgstr ""
 "Deze demo beweegt niets: elke bron en elke ontvanger blijft staan waar hij "
 "begint. Deze scène speelt de routes."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "all: every step in order but join, leaving out what is done already."
-msgstr "all: elke stap op volgorde behalve join, zonder wat al gedaan is."
+msgid "all: every step in order, leaving out what is done already."
+msgstr "all: elke stap op volgorde, zonder wat al gedaan is."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2185,6 +2457,11 @@ msgstr "Draait in {folder}"
 #, python-brace-format
 msgid "This run downloads {what}."
 msgstr "Deze uitvoering downloadt {what}."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "{option} names none: tick one at least"
+msgstr "{option} noemt er geen: vink er minstens één aan"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "save the scene first (File > Save): the demo reads it from its file"
@@ -2206,6 +2483,33 @@ msgstr ""
 "Gewijzigd ten opzichte van de standaardwaarden en bewaard voor de volgende "
 "keer: {options}. Standaardwaarden zet ze terug."
 
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "This run makes one video, {name}.mp4."
+msgstr "Deze run maakt één video, {name}.mp4."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"This run makes one video, {name}.mp4, of {count} part, each after a title "
+"card of 4 s:"
+msgid_plural ""
+"This run makes one video, {name}.mp4, of {count} parts, one after another, "
+"each after a title card of 4 s:"
+msgstr[0] ""
+"Deze run maakt één video, {name}.mp4, van {count} deel, na een titelkaart "
+"van 4 s:"
+msgstr[1] ""
+"Deze run maakt één video, {name}.mp4, van {count} delen, na elkaar, elk na "
+"een titelkaart van 4 s:"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "… and {count} more"
+msgid_plural "… and {count} more"
+msgstr[0] "… en nog {count}"
+msgstr[1] "… en nog {count}"
+
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
 msgstr "geen bestand om in op te slaan; een pad opgeven"
@@ -2226,7 +2530,7 @@ msgstr "bron verplaatsen"
 msgid "move listener"
 msgstr "ontvanger verplaatsen"
 
-#: acoustic_spaces/gui/document.py
+#: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
 msgid "change source"
 msgstr "bron wijzigen"
 
@@ -2264,15 +2568,15 @@ msgstr[1] "{count} ontvangers weglaten"
 
 #: acoustic_spaces/gui/document.py
 #, python-brace-format
-msgid "{name} has no walk yet: add a keyframe first"
+msgid "{name} has no trajectory yet: add a keyframe first"
 msgstr "{name} heeft nog geen route: voeg eerst een keyframe toe"
 
 #: acoustic_spaces/gui/document.py
-msgid "turn the walk on"
+msgid "turn the trajectory on"
 msgstr "route inschakelen"
 
 #: acoustic_spaces/gui/document.py
-msgid "turn the walk off"
+msgid "turn the trajectory off"
 msgstr "route uitschakelen"
 
 #: acoustic_spaces/gui/document.py
@@ -2522,6 +2826,40 @@ msgstr "mannelijke spraak"
 msgid "speech_female"
 msgstr "vrouwelijke spraak"
 
+#. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
+#: acoustic_spaces/gui/inspector.py
+msgid "(none)"
+msgstr "(geen)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "relaxed"
+msgstr "ontspannen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "normal"
+msgstr "normaal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "raised"
+msgstr "verheven"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "loud"
+msgstr "luid"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How hard the talker talks (ISO 9921): relaxed, normal, raised or loud is its "
+"speech at 54, 60, 66 or 72 dB(A) 1 m in front of it, which sets its sound "
+"power through its spectrum and directivity; (none) keeps the sound power you "
+"give. For a speech spectrum only"
+msgstr ""
+"Hoe hard de spreker spreekt (ISO 9921): ontspannen, normaal, verheven of "
+"luid is de spraak op 54, 60, 66 of 72 dB(A) 1 m ervoor, wat het "
+"geluidsvermogen vastlegt via het spectrum en de richtingskarakteristiek; "
+"(geen) houdt het geluidsvermogen dat u opgeeft. Alleen voor een "
+"spraakspectrum"
+
 #: acoustic_spaces/gui/inspector.py
 msgid "omni"
 msgstr "rondomstralend"
@@ -2581,11 +2919,6 @@ msgstr "straaltracering"
 #: acoustic_spaces/gui/inspector.py
 msgid "image_sources"
 msgstr "spiegelbronnen"
-
-#. Translators: no draws at all, so no spread of the results.
-#: acoustic_spaces/gui/inspector.py
-msgid "none"
-msgstr "geen"
 
 #. Translators: the direct sound's paths, in a plot's legend.
 #: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
@@ -2693,11 +3026,6 @@ msgstr "plus of min 0,1"
 msgid "twice ISO 12999-2"
 msgstr "tweemaal ISO 12999-2"
 
-#. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
-#: acoustic_spaces/gui/inspector.py
-msgid "(none)"
-msgstr "(geen)"
-
 #: acoustic_spaces/gui/inspector.py
 msgid "neutral"
 msgstr "neutraal"
@@ -2776,14 +3104,19 @@ msgid ""
 "The channel the source plays in a demo of the scene: left or right, or both "
 "mixed down (mono), of its WAV file or, without one, of the scene's recording "
 "(on the scene's page), so that a sound system's left and right loudspeakers "
-"play the two sides of one stereo recording. (none): its WAV file mixed down "
-"to mono, or silent"
+"play the two sides of one stereo recording; or a stem of the recording, a "
+"part it was mixed from, as a band's drum kit plays the drums (a mix of "
+"stems, as a monitor's, is set in the scene file). (none): its WAV file mixed "
+"down to mono, or silent"
 msgstr ""
 "Het kanaal dat de bron speelt in een demo van de scène: links of rechts, of "
 "beide samengemengd (mono), van het WAV-bestand of, zonder bestand, van de "
 "opname van de scène (op de pagina van de scène), zodat de linker- en "
 "rechterluidspreker van een geluidsinstallatie de twee kanten van één "
-"stereo-opname spelen. (geen): het WAV-bestand naar mono gemengd, of stil"
+"stereo-opname spelen; of een stem van de opname, een van de delen waaruit ze "
+"is gemixt, zoals het drumstel van een band de drumstem speelt (een mix van "
+"stems, zoals die van een monitor, wordt in het scènebestand ingesteld). "
+"(geen): het WAV-bestand naar mono gemengd, of stil"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2811,6 +3144,35 @@ msgstr "rechts"
 msgid "mono"
 msgstr "mono"
 
+#. Translators: this and the entries below are stems of a song, the parts it was mixed from, as the scene file names them (drums, bass, ...).
+#: acoustic_spaces/gui/inspector.py
+msgid "drums stem"
+msgstr "drum-stem"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "bass stem"
+msgstr "bas-stem"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "guitar stem"
+msgstr "gitaar-stem"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "keys stem"
+msgstr "toetsen-stem"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "brass stem"
+msgstr "blazers-stem"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "vocal stem"
+msgstr "zang-stem"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "backing vocals stem"
+msgstr "achtergrondzang-stem"
+
 #: acoustic_spaces/gui/inspector.py
 msgid "a song in stereo"
 msgstr "een nummer in stereo"
@@ -2818,6 +3180,265 @@ msgstr "een nummer in stereo"
 #: acoustic_spaces/gui/inspector.py
 msgid "speech"
 msgstr "spraak"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a multitrack recording"
+msgstr "een meersporenopname"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The method that gives the source's sound power in place of the one you give, "
+"and the sound a demo of the scene plays for it (model: in the scene file): a "
+"road vehicle's by CNOSSOS-EU, at the speed of its trajectory, in the scene's "
+"air; a siren's, that of the 100 W electronic siren NBS measured; a horn's, "
+"its blasts as loud as its rule or its maker gives them, averaged over its "
+"blasts and pauses; a train's or a tram's by Schall 03, at the speed of its "
+"trajectory, that of the first of its points at one height, a demo playing "
+"those behind it too; construction plant's, Defra's row for the machine plus "
+"28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its beeps and "
+"pauses; a helicopter's, its rotors' sound in level flight at its speed "
+"through the air, its directivity too; an aircraft's by ECAC Doc 29, its NPD "
+"curves at the highest thrust of the flight it flies along the trajectory's "
+"ground track, its flight and directivity too"
+msgstr ""
+"De methode die het geluidsvermogen van de bron geeft in plaats van het "
+"vermogen dat u opgeeft, en het geluid dat een demo van de scène ervoor "
+"speelt (model: in het scènebestand): dat van een wegvoertuig volgens "
+"CNOSSOS-EU, bij de snelheid van zijn route, in de lucht van de scène; dat "
+"van een sirene, dat van de elektronische sirene van 100 W die het NBS mat; "
+"dat van een hoorn, zijn stoten zo luid als zijn voorschrift of zijn "
+"fabrikant ze opgeeft, gemiddeld over stoten en pauzes; dat van een trein of "
+"een tram volgens Schall 03, bij de snelheid van zijn route, dat van het "
+"eerste van zijn punten op één hoogte, terwijl een demo ook de punten "
+"erachter speelt; dat van bouwmaterieel, de rij van Defra voor de machine "
+"plus 28 dB; dat van een achteruitrijalarm, dat van type B van SAE J994, "
+"gemiddeld over piepen en pauzes; dat van een helikopter, het geluid van zijn "
+"rotoren in horizontale vlucht bij zijn snelheid ten opzichte van de lucht, "
+"ook zijn richtingskarakteristiek; dat van een vliegtuig volgens ECAC Doc 29, "
+"zijn NPD-curven bij de hoogste stuwkracht van de vlucht die het langs het "
+"grondspoor van de route vliegt, ook zijn vlucht en richtingskarakteristiek"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the "
+"100 W electronic siren NBS measured"
+msgstr ""
+"Sirene: klinkt {pattern} (kan {patterns} klinken), met het geluidsvermogen "
+"van de elektronische sirene van 100 W die het NBS mat"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the "
+"100 W electronic siren NBS measured, {gain} dB"
+msgstr ""
+"Sirene: klinkt {pattern} (kan {patterns} klinken), met het geluidsvermogen "
+"van de elektronische sirene van 100 W die het NBS mat, {gain} dB"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Horn: {kind}, {tones} Hz {how}, in blasts, {level} dB({weighting}) {at} m "
+"ahead"
+msgstr ""
+"Hoorn: {kind}, {tones} Hz {how}, in stoten, {level} dB({weighting}) {at} m "
+"vooruit"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an air horn"
+msgstr "een luchthoorn"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a pair of disc horns"
+msgstr "een paar schijfhoorns"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a train horn"
+msgstr "een treinhoorn"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "in turn"
+msgstr "om beurten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "together"
+msgstr "samen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Helicopter: {helicopter}, its rotors in level flight at {speed} m/s through "
+"the air, their broadband noise by {broadband}; its directivity too"
+msgstr ""
+"Helikopter: {helicopter}, zijn rotoren in horizontale vlucht bij {speed} m/s "
+"ten opzichte van de lucht, hun breedbandgeluid volgens {broadband}; ook zijn "
+"richtingskarakteristiek"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an Airbus Helicopters AS350 B3 at 2,250 kg"
+msgstr "een Airbus Helicopters AS350 B3 van 2250 kg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Pegg's method"
+msgstr "de methode van Pegg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Brooks, Pope and Marcolini's airfoil self-noise"
+msgstr ""
+"het eigengeluid van het vleugelprofiel volgens Brooks, Pope en Marcolini"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Doc 29: {aircraft} {operation}, flown along the trajectory's ground track; "
+"its sound power at {thrust} lb of thrust, the highest of its flight, its "
+"directivity too"
+msgstr ""
+"Doc 29: {aircraft} {operation}, gevlogen langs het grondspoor van de route; "
+"zijn geluidsvermogen bij {thrust} lb stuwkracht, de hoogste van zijn vlucht, "
+"ook zijn richtingskarakteristiek"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "JETW, Volume 3's hypothetical twin jet,"
+msgstr "JETW, het hypothetische tweemotorige straalvliegtuig uit deel 3,"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "taking off by the ICAO-A procedure"
+msgstr "opstijgend volgens de ICAO-A-procedure"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "landing down a 3° approach"
+msgstr "landend via een nadering van 3°"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "given by its model"
+msgstr "door zijn model gegeven"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Schall 03: {train} on {track}; its sources {height}, the sound power the "
+"first's, the others played behind it"
+msgstr ""
+"Schall 03: {train} op {track}; zijn bronnen {height}, met het "
+"geluidsvermogen van de eerste, de andere erachter gespeeld"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an S-Bahn"
+msgstr "een S-Bahn"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a regional train"
+msgstr "een stoptrein"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an intercity train"
+msgstr "een intercity"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a freight train"
+msgstr "een goederentrein"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a low-floor tram"
+msgstr "een lagevloertram"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "sleepers in ballast"
+msgstr "dwarsliggers in ballast"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "slab track"
+msgstr "spoor op een betonplaat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "slab track with absorbers"
+msgstr "spoor op een betonplaat met absorbers"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a level crossing"
+msgstr "een overweg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "track set in the street"
+msgstr "in de straat ingebed spoor"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grassed track, the grass low"
+msgstr "grasspoor, het gras laag"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grassed track, the grass up to the rail top"
+msgstr "grasspoor, het gras tot de bovenkant van de spoorstaaf"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "at the rail top (its bogies)"
+msgstr "op de bovenkant van de spoorstaaf (zijn draaistellen)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "on its roof, 4 m up"
+msgstr "op zijn dak, 4 m hoog"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "at its pantograph's head, 5 m up"
+msgstr "op de kop van zijn stroomafnemer, 5 m hoog"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C)"
+msgstr ""
+"Bouwmaterieel: de rij van Defra voor {machine} (2005, BS 5228-1, bijlage C)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C); its "
+"made sound's blows: {blows} a minute"
+msgstr ""
+"Bouwmaterieel: de rij van Defra voor {machine} (2005, BS 5228-1, bijlage C); "
+"de slagen van het gemaakte geluid: {blows} per minuut"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 1650 kg breaker on a 15 t excavator"
+msgstr "een sloophamer van 1650 kg op een graafmachine van 15 t"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 6 kVA diesel generator"
+msgstr "een dieselgenerator van 6 kVA"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 9 t dumper"
+msgstr "een dumper van 9 t"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Reversing alarm: SAE J994 Type B, {hz} Hz beeps {per_s} times a second, "
+"{level} dB(A) {at} m in front of it"
+msgstr ""
+"Achteruitrijalarm: SAE J994 type B, piepen van {hz} Hz {per_s} keer per "
+"seconde, {level} dB(A) op {at} m ervoor"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "light motor vehicles"
+msgstr "lichte motorvoertuigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "medium heavy vehicles"
+msgstr "middelzware voertuigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "heavy vehicles"
+msgstr "zware voertuigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "mopeds"
+msgstr "bromfietsen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "motorcycles"
+msgstr "motorfietsen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2958,10 +3579,6 @@ msgstr "Relatieve luchtvochtigheid"
 #: acoustic_spaces/gui/inspector.py
 msgid "Air pressure"
 msgstr "Luchtdruk"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Recording"
-msgstr "Opname"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Choose recording…"
@@ -4585,10 +5202,6 @@ msgstr ""
 "met het tweeparametermodel"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Ground"
-msgstr "Grond"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Model"
 msgstr "Model"
 
@@ -4794,6 +5407,15 @@ msgstr "de opname van de scène: {what}"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid ""
+"CNOSSOS-EU category {category} ({kind}); its made sound's engine: "
+"{cylinders} cylinders at {rpm} rpm"
+msgstr ""
+"CNOSSOS-EU categorie {category} ({kind}); de motor van zijn gemaakte geluid: "
+"{cylinders} cilinders bij {rpm} tpm"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "file: {name}"
 msgstr "bestand: {name}"
 
@@ -4809,6 +5431,12 @@ msgstr[1] "array van {count} elementen"
 #, python-brace-format
 msgid "per band: {patterns}"
 msgstr "per band: {patterns}"
+
+#. Translators: {parts} are stems and their gains, "vocal; backing -6 dB".
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "mix of stems: {parts}"
+msgstr "mix van stems: {parts}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "The source's name, as the results and the exported files show it"
@@ -4904,7 +5532,7 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Only a point source moves: a line or a surface stands where it is. Set Shape "
-"to point to give the source a walk"
+"to point to give the source a trajectory"
 msgstr ""
 "Alleen een puntbron beweegt: een lijn of een vlak blijft waar het is. Zet "
 "Vorm op punt om de bron een route te geven"
@@ -5277,6 +5905,30 @@ msgstr "Richtingsindex: {values} dB (63 Hz tot 8 kHz)"
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid "{tip}. Given by the model, at the highest thrust of the flight"
+msgstr "{tip}. Gegeven door het model, bij de hoogste stuwkracht van de vlucht"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the model, at the speed of the trajectory"
+msgstr "{tip}. Gegeven door het model, bij de snelheid van de route"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the model"
+msgstr "{tip}. Gegeven door het model"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the vocal effort"
+msgstr "{tip}. Gegeven door de steminspanning"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "{tip}. Given per band in the scene file; this is their sum"
 msgstr "{tip}. Per band opgegeven in het scènebestand; dit is de som"
 
@@ -5385,7 +6037,7 @@ msgid ""
 "their paths in pressure: the solver for whole rows (one field over all of "
 "them, with the ground and the roofs in it, where their tops go on far enough "
 "to both sides of the way; seconds for each source and listener) or the paths "
-"over one edge or two alone. Maps and walks take the paths"
+"over one edge or two alone. Maps and trajectories take the paths"
 msgstr ""
 "Buiten het geluid over schermen en gebouwen in het verticale vlak door een "
 "bron en een ontvanger, in de octaafbanden tot 500 Hz die hun paden in "
@@ -6568,14 +7220,16 @@ msgstr "Doppler"
 msgid ""
 "Tick for a vehicle or an aircraft: the early sound goes through delays that "
 "change as it goes, so its pitch shifts as it passes (doppler in the scene "
-"file). A walk with Doppler moves alone: Render movement… and the demos play "
-"it while every other walk is off"
+"file). Sources with Doppler move together, beside other sources that move, "
+"while no listener moves; a listener with Doppler moves alone: Render "
+"movement… and the demos play them so"
 msgstr ""
 "Vink aan voor een voertuig of een vliegtuig: het vroege geluid gaat door "
 "vertragingen die onderweg veranderen, zodat de toonhoogte verschuift bij het "
-"passeren (doppler in het scènebestand). Een route met Doppler beweegt "
-"alleen: Beweging renderen… en de demo's spelen hem terwijl alle andere "
-"routes uit staan"
+"passeren (doppler in het scènebestand). Bronnen met Doppler bewegen samen, "
+"naast andere bronnen die bewegen, terwijl geen ontvanger beweegt; een "
+"ontvanger met Doppler beweegt alleen: Beweging renderen… en de demo's spelen "
+"ze zo"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
@@ -6589,10 +7243,6 @@ msgstr ""
 "geen binaurale heeft. Binauraal, voor hoofdtelefoons, komt eerst: een bron "
 "die voorbijkomt gaat van het ene oor naar het andere, wat mono, één kanaal, "
 "niet kan laten horen"
-
-#: acoustic_spaces/gui/movement.py
-msgid "Output"
-msgstr "Uitvoer"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Render movement…"
@@ -6674,8 +7324,8 @@ msgstr ""
 msgid ""
 "How fast it goes from this keyframe to the next: the distance between them "
 "over the time between them (m/s; 3.6 km/h each). Nothing to set: change a "
-"time or a position and the speed follows. A walk through points goes at one "
-"speed: type it here and the times follow"
+"time or a position and the speed follows. A trajectory through points goes "
+"at one speed: type it here and the times follow"
 msgstr ""
 "Hoe snel het van dit keyframe naar het volgende gaat: de afstand ertussen "
 "gedeeld door de tijd ertussen (m/s; elk 3,6 km/h). Niets in te stellen: "
@@ -6688,8 +7338,8 @@ msgstr "Omzetten in keyframes"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
-"Turn a walk along points at a speed (to, speed_m_s) into keyframes that move "
-"the same way, timed, so that they can be edited here"
+"Turn a trajectory along points at a speed (to, speed_m_s) into keyframes "
+"that move the same way, timed, so that they can be edited here"
 msgstr ""
 "Een route langs punten met een snelheid (to, speed_m_s) omzetten in "
 "keyframes die op dezelfde manier bewegen, met tijden, zodat ze hier te "
@@ -6718,9 +7368,9 @@ msgstr ""
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
-"Where the timeline ends: at least the longest walk; make it longer to add "
-"keyframes past the end, and the movers that have ended stand where their "
-"walks end"
+"Where the timeline ends: at least the longest trajectory; make it longer to "
+"add keyframes past the end, and the movers that have ended stand where their "
+"trajectories end"
 msgstr ""
 "Waar de tijdlijn eindigt: minstens de langste route; maak ze langer om "
 "keyframes na het einde toe te voegen; wat zijn route heeft afgelegd staat "
@@ -6781,8 +7431,9 @@ msgstr "Keyframe {n}"
 #, python-brace-format
 msgid ""
 "{name} goes through its points at one speed, {speed:.2f} m/s ({kmh:.1f} "
-"km/h): type or drag a point to move it, type a speed for the whole walk, and "
-"the times follow. Convert to keyframes to time each point yourself."
+"km/h): type or drag a point to move it, type a speed for the whole "
+"trajectory, and the times follow. Convert to keyframes to time each point "
+"yourself."
 msgstr ""
 "{name} gaat met één snelheid door zijn punten, {speed:.2f} m/s ({kmh:.1f} "
 "km/h): typ of sleep een punt om het te verplaatsen, typ een snelheid voor de "
@@ -6827,7 +7478,7 @@ msgstr "Punt verwijderen"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Remove the selected point; the mover goes straight from the one before to "
-"the one after. With the last one, the walk goes too"
+"the one after. With the last one, the trajectory goes too"
 msgstr ""
 "Het geselecteerde punt verwijderen; het bewegende gaat rechtstreeks van het "
 "vorige naar het volgende. Met het laatste verdwijnt ook de route"
@@ -6839,8 +7490,8 @@ msgstr "Keyframe toevoegen"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Add a keyframe at the playhead, where the mover is then (on a keyframe "
-"already, or at 0 s: a second past the end of its walk, where it ends), then "
-"drag it into place or type where it is"
+"already, or at 0 s: a second past the end of its trajectory, where it ends), "
+"then drag it into place or type where it is"
 msgstr ""
 "Een keyframe toevoegen op de afspeelkop, waar het bewegende dan is (al op "
 "een keyframe, of op 0 s: een seconde na het einde van zijn route, waar het "
@@ -6853,7 +7504,7 @@ msgstr "Keyframe verwijderen"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Remove the selected keyframe; the mover goes straight from the one before to "
-"the one after. With the last one, the walk goes too"
+"the one after. With the last one, the trajectory goes too"
 msgstr ""
 "Het geselecteerde keyframe verwijderen; het bewegende gaat rechtstreeks van "
 "het vorige naar het volgende. Met het laatste verdwijnt ook de route"
@@ -6864,7 +7515,7 @@ msgid "{text} is not a number"
 msgstr "{text} is geen getal"
 
 #: acoustic_spaces/gui/movement.py
-msgid "a walk goes at a speed above 0 m/s"
+msgid "a trajectory goes at a speed above 0 m/s"
 msgstr "een route heeft een snelheid boven 0 m/s"
 
 #: acoustic_spaces/gui/movement.py
@@ -6928,7 +7579,7 @@ msgid "remove keyframe"
 msgstr "keyframe verwijderen"
 
 #: acoustic_spaces/gui/movement.py
-msgid "convert walk to keyframes"
+msgid "convert trajectory to keyframes"
 msgstr "route omzetten in keyframes"
 
 #: acoustic_spaces/gui/movement.py
@@ -7140,7 +7791,7 @@ msgstr "hoek verplaatsen"
 #, python-brace-format
 msgid ""
 "Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
-"its walk; drag it once the run is over"
+"its trajectory; drag it once the run is over"
 msgstr ""
 "Niet verplaatst: {name} is getekend waar de run het simuleert, op {time:.2f} "
 "s van zijn route; sleep het als de run voorbij is"
@@ -7986,10 +8637,6 @@ msgid "Materials"
 msgstr "Materialen"
 
 #: acoustic_spaces/gui/tree.py
-msgid "Sources"
-msgstr "Bronnen"
-
-#: acoustic_spaces/gui/tree.py
 msgid "Simulation"
 msgstr "Simulatie"
 
@@ -8220,6 +8867,62 @@ msgid "In step with the scene"
 msgstr "Gelijk met de scène"
 
 #: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F1)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F1)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F2)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F2)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F3)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F3)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F4)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F4)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F5)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F5)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M1)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M1)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M2)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M2)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M3)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M3)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M4)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M4)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M5)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M5)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M6)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M6)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M7)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M7)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M8)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M8)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M9)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M9)"
+
+#: acoustic_spaces/recordings.py
 msgid "\"Spicy Funk Cake\", Rhythmussportgruppe"
 msgstr "\"Spicy Funk Cake\", Rhythmussportgruppe"
 
@@ -8232,12 +8935,20 @@ msgid "\"Potassium\", Software-Entwicklungskit"
 msgstr "\"Potassium\", Software-Entwicklungskit"
 
 #: acoustic_spaces/recordings.py
-msgid "A man talking (ACE corpus, talker M4)"
-msgstr "Een man die spreekt (ACE-corpus, spreker M4)"
+msgid "\"Francium\", Software-Entwicklungskit"
+msgstr "\"Francium\", Software-Entwicklungskit"
 
 #: acoustic_spaces/recordings.py
-msgid "A woman talking (ACE corpus, talker F2)"
-msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F2)"
+msgid "\"Rubidium\", Software-Entwicklungskit"
+msgstr "\"Rubidium\", Software-Entwicklungskit"
+
+#: acoustic_spaces/recordings.py
+msgid "\"Dona nobis pacem\", a choir of 19 singers and an organ"
+msgstr "\"Dona nobis pacem\", een koor van 19 zangers en een orgel"
+
+#: acoustic_spaces/recordings.py
+msgid "Beethoven's Symphony No. 8, an orchestra of 61 players"
+msgstr "Beethovens Symfonie nr. 8, een orkest van 61 musici"
 
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py
@@ -8536,6 +9247,54 @@ msgstr "niveau {number}, vloer op ongeveer {height:.1f} m"
 msgid "{source}: {title}, {count} points {spacing:g} m apart"
 msgstr "{source}: {title}, {count} punten met {spacing:g} m tussenafstand"
 
+#: examples/airport/flight_demo.py
+msgid "A jet taking off and landing"
+msgstr "Een straalvliegtuig dat opstijgt en landt"
+
+#: examples/church/church_demo.py
+msgid "A choir and an organ in the church"
+msgstr "Een koor en een orgel in de kerk"
+
+#: examples/gallery/walk_demo.py
+msgid "A walk through the gallery"
+msgstr "Een wandeling door de galerie"
+
+#: examples/helicopter_flyover/flyover_demo.py
+msgid "A helicopter flying over"
+msgstr "Een overvliegende helikopter"
+
+#: examples/lakeside_concert/lakeside_demo.py
+msgid "A concert across a lake"
+msgstr "Een concert over een meer"
+
+#: examples/orchestra/orchestra_demo.py
+msgid "Beethoven's 8th in the concert hall"
+msgstr "Beethovens Achtste in de concertzaal"
+
+#: examples/railway/passby_demo.py
+msgid "A train running past"
+msgstr "Een passerende trein"
+
+#: examples/roadside/passby_demo.py
+msgid "A car or a truck passing the meadow"
+msgstr "Een auto of een vrachtwagen langs de weide"
+
+#: examples/stadium_concert/helicopter_demo.py
+msgid "A helicopter over the stadium concert"
+msgstr "Een helikopter boven het stadionconcert"
+
+#: examples/stadium_concert/stadium_demo.py
+msgid "A band in the stadium"
+msgstr "Een band in het stadion"
+
+#: examples/street/passby_demo.py
+msgid "A vehicle driving down the street"
+msgstr "Een voertuig dat door de straat rijdt"
+
+#: examples/street/works_demo.py
+msgid "Road works in the street"
+msgstr "Wegwerkzaamheden in de straat"
+
 #: examples/airport/scene.yaml
 msgctxt "example"
 msgid "Aerodrome by a meadow"
@@ -8833,22 +9592,26 @@ msgid ""
 "round the corner hear them only by the sound that bends round it (edge "
 "diffraction) and by reflections. The plan's corners go round the floor; "
 "wall_3 and wall_4 meet at the inner corner (8, 8). One visitor sees the "
-"guide, one stands round the corner, and one walks from 3 m in front of the "
-"guide down the long arm and round the corner at 1.2 m/s: `acoustic-spaces "
-"walkthrough` plays a recording along that walk, and walk_demo.py makes a "
-"video of it. Turn the walk off (Moves, or `enabled: false`) and that visitor "
-"stands where it starts."
+"guide, one stands round the corner, one walks from 3 m in front of the guide "
+"down the long arm and round the corner at 1.2 m/s, and one stands 4 m from "
+"the guide and turns their head a quarter at a time: the demo of the scene "
+"(`acoustic-spaces demo`, or walk_demo.py with the walker and the one turning "
+"alone) plays the guide's talk as each hears it. Turn a trajectory off "
+"(Moving, or `enabled: false`) and that visitor stands where they start, "
+"facing as they do there."
 msgstr ""
 "Een L-vormige galerij, 4 m hoog (1150 m3), met een marmeren vloer, ruwe "
-"bakstenen wanden en een absorberend plafond: een gids spreekt in de lange "
-"arm, en bezoekers om de hoek horen de gids alleen via geluid dat om de hoek "
-"buigt (randdiffractie) en via reflecties. De hoeken van de plattegrond "
-"volgen de vloeromtrek; wall_3 en wall_4 komen samen in de binnenhoek (8, 8). "
-"Eén bezoeker ziet de gids, één staat om de hoek, en één loopt van 3 m voor "
-"de gids door de lange arm en om de hoek met 1,2 m/s: `acoustic-spaces "
-"walkthrough` speelt een opname langs die route af, en walk_demo.py maakt er "
-"een video van. Zet de route uit (Beweegt, of `enabled: false`) en die "
-"bezoeker blijft staan waar hij begint."
+"bakstenen muren en een absorberend plafond: een gids spreekt in de lange "
+"arm, en bezoekers om de hoek horen hem alleen door het geluid dat om de hoek "
+"buigt (diffractie aan randen) en door reflecties. De hoeken van de "
+"plattegrond lopen rond de vloer; wall_3 en wall_4 komen samen in de "
+"binnenhoek (8, 8). Eén bezoeker ziet de gids, één staat om de hoek, één "
+"loopt vanaf 3 m voor de gids door de lange arm en met 1.2 m/s om de hoek, en "
+"één staat 4 m van de gids en draait het hoofd telkens een kwartslag: de demo "
+"van de scène (`acoustic-spaces demo`, of walk_demo.py met alleen de loper en "
+"degene die draait) speelt het praatje van de gids zoals ieder het hoort. Zet "
+"een route uit (In beweging, of `enabled: false`) en die bezoeker staat waar "
+"hij begint, en kijkt zoals hij daar kijkt."
 
 #: examples/helicopter_flyover/scene.yaml
 msgctxt "example"
@@ -9080,13 +9843,17 @@ msgid ""
 "The orchestra of an anechoic recording of Beethoven's Symphony No. 8 on the "
 "stage of the concert hall: 61 sources, one per track, and four seats. The "
 "tracks (TU Berlin, CC BY 4.0, https://doi.org/10.14279/depositonce-6729.2) "
-"are not included: download a movement and mix it at a seat with auralize.sh."
+"are not included: the demo of the scene (acoustic-spaces demo scene.yaml, or "
+"orchestra_demo.py) downloads each movement it plays the first time, or mix "
+"one movement at a seat with auralize.sh."
 msgstr ""
 "Het orkest van een anechoïsche opname van Beethovens Symfonie nr. 8 op het "
 "podium van de concertzaal: 61 bronnen, één per spoor, en vier zitplaatsen. "
 "De sporen (TU Berlin, CC BY 4.0, "
-"https://doi.org/10.14279/depositonce-6729.2) zijn niet inbegrepen: een deel "
-"downloaden en met auralize.sh voor een zitplaats mixen."
+"https://doi.org/10.14279/depositonce-6729.2) zijn niet inbegrepen: de demo "
+"van de scène (acoustic-spaces demo scene.yaml, of orchestra_demo.py) "
+"downloadt elk deel dat hij speelt de eerste keer; of een deel met "
+"auralize.sh voor een zitplaats mixen."
 
 #: examples/railway/scene.yaml
 msgctxt "example"
@@ -9106,12 +9873,13 @@ msgid ""
 "km/h, its sound power per metre and its directivity round the track Schall "
 "03's (Germany's method for the noise of railways, 2014), all of it at the "
 "rail top. A train runs past at 160 km/h, its pitch falling as it goes by "
-"(Doppler): three sources along one walk, at the rail top, on the roof and at "
-"the pantograph, Schall 03's heights; each plays the train's points at that "
-"height one behind the other (its bogies, its cars' roofs, its pantograph), "
-"so the train goes by as long as it is. They are left out of simulations "
-"until ticked, as is the train's horn at its front, and passby_demo.py runs "
-"one of four trains past, its horn sounding with --horn blasts."
+"(Doppler): three sources along one trajectory, at the rail top, on the roof "
+"and at the pantograph, Schall 03's heights; each plays the train's points at "
+"that height one behind the other (its bogies, its cars' roofs, its "
+"pantograph), so the train goes by as long as it is. They are left out of "
+"simulations until ticked, as is the train's horn at its front (the group "
+"Train), and passby_demo.py runs one of four trains past, its horn sounding "
+"with --sources Train."
 msgstr ""
 "Buiten: een spoorlijn op ballast door een weiland, gehoord waar de EU-regel "
 "voor het geluid van treinen een passage meet (7.5 m van het midden van het "
@@ -9130,8 +9898,8 @@ msgstr ""
 "achter elkaar (zijn draaistellen, de daken van zijn rijtuigen, zijn "
 "stroomafnemer), zodat de trein zo lang voorbijkomt als hij lang is. Ze "
 "blijven buiten de simulaties tot ze aangevinkt worden, net als de hoorn van "
-"de trein aan zijn kop, en passby_demo.py laat een van vier treinen "
-"voorbijrijden, met zijn hoorn die klinkt bij --horn blasts."
+"de trein aan zijn kop (de groep Train), en passby_demo.py laat een van vier "
+"treinen voorbijrijden, met zijn hoorn die klinkt bij --sources Train."
 
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"
@@ -9172,8 +9940,9 @@ msgid ""
 "kHz. The meadow, the road and the yard are parts of the ground, each with "
 "its impedance; a reflection near where two meet takes some of each, as much "
 "as each covers of its Fresnel zone. A car at 50 km/h and a truck at 70 km/h "
-"drive along the road, their pitch falling as they pass (Doppler): they are "
-"left out of simulations until ticked, and passby_demo.py plays one."
+"drive along the road, their pitch falling as they pass (Doppler), each with "
+"CNOSSOS-EU's sound power for its kind and speed: they are left out of "
+"simulations until ticked, and a demo of the scene plays them."
 msgstr ""
 "Buiten: verkeer op een weg tussen een weiland en een verharde binnenplaats, "
 "gehoord op 7.5, 25 en 50 m boven het gras en op 25 m boven de binnenplaats. "
@@ -9184,9 +9953,10 @@ msgstr ""
 "delen van de grond, elk met een eigen impedantie; een reflectie dicht bij "
 "waar twee elkaar raken neemt van elk iets, zoveel als elk van haar "
 "fresnelzone bedekt. Een auto met 50 km/h en een vrachtwagen met 70 km/h "
-"rijden over de weg, hun toonhoogte daalt bij het passeren (Doppler): ze "
-"blijven buiten de simulaties tot ze aangevinkt worden, en passby_demo.py "
-"speelt er één."
+"rijden over de weg, hun toonhoogte daalt bij het passeren (Doppler), elk met "
+"het geluidsvermogen volgens CNOSSOS-EU voor zijn soort en snelheid: ze "
+"blijven buiten de simulaties tot ze aangevinkt worden, en een demo van de "
+"scène speelt ze af."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"
@@ -9291,28 +10061,28 @@ msgid ""
 "stand nearer the arrays than their far-field patterns hold, so every array "
 "adds up its boxes one by one (`near_field: true`). The sources and listeners "
 "sit in groups: the PA's mains, subwoofers, fills and delays, the monitors, "
-"the stage, the audience standing and seated, and the band and the "
-"helicopter, which the concert's simulations leave out until they are ticked, "
-"as they do the singer's microphone. The editor's scene tree shows or hides "
-"each group, and its tick uses it in simulations or leaves it out: with the "
-"monitors and the stage left out, the sound system plays alone, for the "
-"crowd.  acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
+"the band, the stage, the audience standing and seated, and the helicopter, "
+"which the concert's simulations leave out until it is ticked, as they do the "
+"singer's microphone. The editor's scene tree shows or hides each group, and "
+"its tick uses it in simulations or leaves it out: with the monitors, the "
+"band and the stage left out, the sound system plays alone, for the crowd.  "
+"acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
 "align.py python near_field.py python feedback.py python make_model.py  On "
 "the pitch from the mix position back, nine points of the map in ten get the "
 "same level within 2.3 to 2.5 dB (all bands together; it differs from run to "
-"run, as the scene sets no seed). The map takes under five minutes on 4 "
-"cores. align.py prints when and how loud each loudspeaker arrives at each "
-"listener, and which would be heard as an echo: none, and each player hears "
-"their own monitor loudest. near_field.py prints how far each array's "
-"far-field pattern would be off at each listener: within 3.5 dB up to 2 kHz, "
-"but up to 10.2 dB at 4 and 8 kHz near the main arrays. feedback.py finds how "
-"much gain the singer's microphone allows before the loudspeakers that play "
-"it make it ring, at the mix position and at the singer's ears, and the "
-"frequencies where it rings first, then renders the loop below and above that "
-"gain. Its microphone is an ideal supercardioid and the reverberation's "
-"phases are random, so take the frequencies as an example of where such a "
-"stage rings. make_model.py writes the model and the arrays; their boxes are "
-"a generic box made up for this example, not any product's data."
+"run, as the scene sets no seed). The map takes about 8 minutes on 4 cores. "
+"align.py prints when and how loud each loudspeaker arrives at each listener, "
+"and which would be heard as an echo: none, and each player hears their own "
+"monitor loudest. near_field.py prints how far each array's far-field pattern "
+"would be off at each listener: within 3.5 dB up to 2 kHz, but up to 10.2 dB "
+"at 4 and 8 kHz near the main arrays. feedback.py finds how much gain the "
+"singer's microphone allows before the loudspeakers that play it make it "
+"ring, at the mix position and at the singer's ears, and the frequencies "
+"where it rings first, then renders the loop below and above that gain. Its "
+"microphone is an ideal supercardioid and the reverberation's phases are "
+"random, so take the frequencies as an example of where such a stage rings. "
+"make_model.py writes the model and the arrays; their boxes are a generic box "
+"made up for this example, not any product's data."
 msgstr ""
 "Een concert in een voetbalstadion, met een geluidsinstallatie zoals tournees "
 "die ophangen en de monitoren van het podium (concert_stage heeft het podium "
@@ -9353,23 +10123,23 @@ msgstr ""
 "Veel ontvangers staan dichter bij de arrays dan hun verreveldpatronen "
 "gelden, dus elke array telt zijn kasten een voor een op (`near_field: "
 "true`). De bronnen en ontvangers staan in groepen: de hoofdarrays, de "
-"subwoofers, de fills en de delays van de PA, de monitoren, het podium, het "
-"staande en zittende publiek, en de band en de helikopter, die de simulaties "
-"van het concert weglaten tot ze aangevinkt worden, zoals ze ook de "
+"subwoofers, de fills en de delays van de PA, de monitoren, de band, het "
+"podium, het staande en zittende publiek, en de helikopter, die de simulaties "
+"van het concert weglaten tot hij aangevinkt wordt, zoals ze ook de "
 "zangmicrofoon weglaten. De scèneboom van de editor toont of verbergt elke "
 "groep, en het vinkje ervan neemt hem mee in simulaties of laat hem weg: met "
-"de monitoren en het podium weggelaten speelt de geluidsinstallatie alleen, "
-"voor het publiek.  acoustic-spaces map scene.yaml --parameter spl --plot "
-"spl.png python align.py python near_field.py python feedback.py python "
-"make_model.py  Op het veld vanaf de mengpositie naar achteren krijgen negen "
-"van de tien punten van de kaart hetzelfde niveau binnen 2,3 tot 2,5 dB (alle "
-"banden samen; het verschilt per berekening, omdat de scène geen startwaarde "
-"vastlegt). De dekkingskaart duurt minder dan vijf minuten op 4 kernen. "
-"align.py toont wanneer en hoe luid elke luidspreker bij elke ontvanger "
-"aankomt, en welke als echo gehoord zou worden: geen, en elke muzikant hoort "
-"zijn eigen monitor het luidst. near_field.py toont hoeveel het "
-"verreveldpatroon van elke array bij elke ontvanger zou afwijken: minder dan "
-"3,5 dB tot 2 kHz, maar tot 10,2 dB bij 4 en 8 kHz bij de hoofdarrays. "
+"de monitoren, de band en het podium weggelaten speelt de geluidsinstallatie "
+"alleen, voor het publiek.  acoustic-spaces map scene.yaml --parameter spl "
+"--plot spl.png python align.py python near_field.py python feedback.py "
+"python make_model.py  Op het veld vanaf de mengpositie naar achteren krijgen "
+"negen van de tien punten van de kaart hetzelfde niveau binnen 2,3 tot 2,5 dB "
+"(alle banden samen; het verschilt per berekening, omdat de scène geen "
+"startwaarde vastlegt). De dekkingskaart duurt ongeveer 8 minuten op 4 "
+"kernen. align.py toont wanneer en hoe luid elke luidspreker bij elke "
+"ontvanger aankomt, en welke als echo gehoord zou worden: geen, en elke "
+"muzikant hoort zijn eigen monitor het luidst. near_field.py toont hoeveel "
+"het verreveldpatroon van elke array bij elke ontvanger zou afwijken: minder "
+"dan 3,5 dB tot 2 kHz, maar tot 10,2 dB bij 4 en 8 kHz bij de hoofdarrays. "
 "feedback.py bepaalt hoeveel versterking de microfoon van de zanger toelaat "
 "voordat de luidsprekers die hem weergeven hem laten rondzingen, op de "
 "mengpositie en bij de oren van de zanger, en de frequenties waar hij het "

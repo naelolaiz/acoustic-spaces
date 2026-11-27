@@ -1,5 +1,5 @@
-"""The Doppler shift of a walk: each early path through a delay that changes as the
-walker goes.
+"""The Doppler shift along a trajectory: each early path through a delay that changes as the
+mover goes.
 
 A source moving towards a listener shortens the way its sound has to go while it is
 on it, so the listener hears its pitch raised by 1 / (1 - M cos theta), M its speed
@@ -12,14 +12,14 @@ place to place along the walk:
 - **The paths.** A path at one place is the same path at the next when it meets the
   same planes (the ground, a facade) in the same order over the same edge, failing
   that when it is of the same kind, and its delay carries on from it: it changes by no
-  more than one and a half times the walker's longest step over the speed of sound,
+  more than one and a half times the mover's longest step over the speed of sound,
   and is nearest where the path's last two places lead. Paths that meet the same planes over
   the same edge are paired so that the most go on, and of those pairings the one with
   the delays nearest where they lead. Where a path appears or goes, it fades in or out
   between two places.
-- **The delay.** Each path's delay is known at every place: for a walking source, the
+- **The delay.** Each path's delay is known at every place: for a moving source, the
   time its sound takes from there, heard that much later (the retarded time); for a
-  walking listener, at the moment it is there. Between the places a cubic through
+  moving listener, at the moment it is there. Between the places a cubic through
   them gives the delay at every sample, and the signal is read through it with a
   windowed sinc (Kaiser, 32 zero crossings each side) whose cutoff falls with the
   shift, so a raised pitch does not alias: 0.97 of the Nyquist frequency over the
@@ -27,7 +27,7 @@ place to place along the walk:
   frequency, n the taps it then needs on each side, so that the paths share a few
   tables of taps.
 - **The spreading.** The direct sound's level, and a reflection's, falls as one over the
-  path's length, which is its delay times the speed of sound, and a fast walker close
+  path's length, which is its delay times the speed of sound, and a fast mover close
   by changes that length by much of itself within one window of the filter. So each
   sample read is divided by the path's delay at that sample (the cubic's, held past
   the path's own ends, before the eddies move it and without an ear's onset; no less
@@ -47,16 +47,16 @@ place to place along the walk:
   each place's sound is heard; the delayed signal goes through it in windows that
   overlap, each rising from the time before its own and falling to the time after
   (triangles, which add up to one), so the filter goes linearly from each place to the
-  next however fast the walker passes them, and a path heard from one place alone
+  next however fast the mover passes them, and a path heard from one place alone
   gives exactly the convolution with its response.
 - **The ears.** Where each ear's response starts (its onset, as the ears are mixed
   between measured directions: :meth:`~acoustic_spaces.spatial.hrtf.HRTF.interpolate`)
   is a delay too: it goes into that ear's delay, read through the cubic and the sinc
   as the path's is, and out of its filter. Measured ears can start a few samples apart
   from one direction to the next; filters that start apart, mixed between two places
-  or in the overlapping windows, would cancel the treble there. A walking listener's
+  or in the overlapping windows, would cancel the treble there. A moving listener's
   ear is, at each moment, that much further along the path than the head's centre: the
-  onset adds to the path's delay then. A walking source's sound passes the head's
+  onset adds to the path's delay then. A moving source's sound passes the head's
   centre and reaches the ear an onset later, so at each sample the ear hears what
   passed the centre an onset earlier: the path's delay, its spreading and how far its
   filter is between two places are all taken at that earlier time. And while the
@@ -82,10 +82,10 @@ place to place along the walk:
 
 The late part and the wave solver's bands have no Doppler shift here: the late part
 of each place is crossfaded to the next's by weights that add up to one, which keep
-its power as the places' tails, drawn from one random sequence, are alike (a walking
+its power as the places' tails, drawn from one random sequence, are alike (a moving
 source's sound as it is sent, so that each place's late part follows its early paths
-at the retarded time; a walking listener's as it is heard); and the wave solver's
-bands are not taken (a walk with Doppler and the wave solver stops with an error).
+at the retarded time; a moving listener's as it is heard); and the wave solver's
+bands are not taken (a trajectory with Doppler and the wave solver stops with an error).
 The source radiates as it would standing at each place, as road and rail emission data
 have it: the convective amplification of a moving source is left out, and emission
 measured in a pass-by already carries it, as an emission may. Its size depends on the
@@ -136,7 +136,7 @@ _STEPS = 48
 
 @dataclass
 class Track:
-    """One path followed along a walk."""
+    """One path followed along a trajectory."""
 
     #: (N,) whether the path is heard from each place.
     present: np.ndarray
@@ -180,11 +180,11 @@ def _key(paths, row: int, planes: np.ndarray) -> tuple:
 
 
 def tracks(
-    places: list, times: np.ndarray, *, source_walks: bool, planes: np.ndarray, step_s: float
+    places: list, times: np.ndarray, *, source_moves: bool, planes: np.ndarray, step_s: float
 ) -> list[Track]:
-    """The paths of ``places`` (the early paths at each place of a walk, in order),
-    followed from place to place. ``times`` (N,) are when the walker is at each place;
-    with ``source_walks`` its sound is heard a path's delay later, otherwise then.
+    """The paths of ``places`` (the early paths at each place of a trajectory, in order),
+    followed from place to place. ``times`` (N,) are when the mover is at each place;
+    with ``source_moves`` its sound is heard a path's delay later, otherwise then.
     ``step_s`` is the most a delay may jump between places and stay the same path's."""
     count = len(places)
     found: list[dict] = []  # each track: {place: row}
@@ -235,7 +235,7 @@ def tracks(
         heard = np.flatnonzero(present)
         delays = np.array([places[k].delay_s[rows[k]] for k in heard], dtype=float)
         filled = _carried(times[heard], delays, times)
-        received = times + filled if source_walks else times.astype(float)
+        received = times + filled if source_moves else times.astype(float)
         out.append(Track(present, rows, received, filled))
     return out
 
@@ -357,7 +357,7 @@ def _reach(cutoff: float) -> int:
 def _table(cutoff: float) -> tuple[np.ndarray, int]:
     """The reading sinc's taps (phases, taps) for ``cutoff`` (share of Nyquist), and how
     far it reaches back from the sample before the position: kept for the last 16
-    cutoffs, which :func:`render` rounds so that a walk's paths share a few."""
+    cutoffs, which :func:`render` rounds so that a trajectory's paths share a few."""
     reach = _reach(cutoff)
     offsets = np.arange(-reach + 1, reach + 1)
     frac = np.arange(_PHASES) / _PHASES
@@ -732,7 +732,7 @@ class _Reading:
             _, rate[left] = heard(s[left], left)
         return s, 1.0 / rate
 
-    def delays(self, t: np.ndarray, walk_last: int) -> tuple[np.ndarray, np.ndarray]:
+    def delays(self, t: np.ndarray, last_place: int) -> tuple[np.ndarray, np.ndarray]:
         """The path's delay at times ``t`` (s), carried on along its slope past the
         path's own ends, and the same delay held at its ends instead (inside the places
         it is heard from the two are the same)."""
@@ -740,14 +740,14 @@ class _Reading:
         held = hermite(track.received[heard], track.delays[heard], t, hold=True)
         delay = held.copy()
         first_k, last_k = track.span
-        if first_k > 0 or last_k < walk_last:
+        if first_k > 0 or last_k < last_place:
             # Past a path's own ends (it appears or goes) its delay carries on along
             # its slope.
             carried = hermite(track.received[heard], track.delays[heard], t, hold=False)
             ends = np.zeros(len(t), dtype=bool)
             if first_k > 0:
                 ends |= t < track.received[first_k]
-            if last_k < walk_last:
+            if last_k < last_place:
                 ends |= t > track.received[last_k]
             delay[ends] = carried[ends]
         return delay, held
@@ -756,7 +756,7 @@ class _Reading:
 def _turns(
     received: np.ndarray, rate: int, hop: int, blocks: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The times in ``received`` (s, when the sound of each place of a walk is heard)
+    """The times in ``received`` (s, when the sound of each place of a trajectory is heard)
     that fall between the centres of the blocks, ``hop`` samples apart: the times, the
     samples they are at (fractions included), and the block whose centre each follows.
     A path's filter goes linearly from one place's time to the next's and turns there,
@@ -793,7 +793,7 @@ def render(
     sample_rate: int,
     length: int,
     *,
-    source_walks: bool,
+    source_moves: bool,
     planes: np.ndarray,
     step_s: float,
     gusts=None,
@@ -804,7 +804,7 @@ def render(
     followers: Sequence[tuple[int, np.ndarray]] = (),
 ) -> np.ndarray:
     """(length, channels) the early paths of ``responses`` (the responses at the places
-    of a walk, in order, the walker there at ``times``) heard as it goes, the mono
+    of a trajectory, in order, the mover there at ``times``) heard as it goes, the mono
     ``dry`` signal through each path's changing delay and filter (see the module's
     description). ``step_s`` is the most a path's delay may jump from one place to the
     next; ``gusts`` gives the moments of the eddies in turbulence, ``seed`` the moment
@@ -814,7 +814,7 @@ def render(
     is taken out of the paths' filters. With ``span`` (begin, end), samples begin to end
     alone: (end - begin, channels).
 
-    ``followers`` are more mono signals going along the walk after the walker, each
+    ``followers`` are more mono signals going along the trajectory after the mover, each
     (lag, signal) ``lag`` samples behind it, as the wheels and the cars of a train
     follow its front: each goes through the same paths, places and filters, all of it
     ``lag`` samples later (``length`` counts them). They share what the paths cost
@@ -825,11 +825,11 @@ def render(
     emission = dry if isinstance(dry, Emission) else None
     plain = dry if not isinstance(dry, Emission) else np.zeros(0)
     if followers and (emission is not None or span is not None):
-        raise ValueError("signals follow the walker only as plain signals, rendered whole")
+        raise ValueError("signals follow the mover only as plain signals, rendered whole")
     signals = [(0, np.asarray(plain, dtype=float))]
     for lag, signal in followers:
         if int(lag) < 0:
-            raise ValueError(f"a signal follows the walker, {lag} samples behind it is ahead")
+            raise ValueError(f"a signal follows the mover, {lag} samples behind it is ahead")
         signals.append((int(lag), np.asarray(signal, dtype=float)))
     most = max(lag for lag, _ in signals)
     frames = np.zeros((0, 3, 3))
@@ -843,7 +843,7 @@ def render(
             raise ValueError("the sound sent each way needs the source's axes at each place")
         frames = np.asarray(axes, dtype=float).reshape(len(times), 3, 3)
     places = [r.early for r in responses]
-    followed = tracks(places, times, source_walks=source_walks, planes=planes, step_s=step_s)
+    followed = tracks(places, times, source_moves=source_moves, planes=planes, step_s=step_s)
     hop = max(int(round(HOP_S * rate)), 1)
     kernel = 1 << int(math.ceil(math.log2(KERNEL_S * rate)))
     half = kernel // 2
@@ -852,10 +852,10 @@ def render(
     starts: list[np.ndarray | None] = [None] * len(followed)
     if hrtf is not None:
         starts = [_onsets(responses, track, hrtf, rate) for track in followed]
-    # At the ears, a walking source's sound is heard an onset after it passes the
+    # At the ears, a moving source's sound is heard an onset after it passes the
     # head's centre (see the module's description): each block's windows then reach
     # this many samples before its own (an onset below zero) and after them.
-    passing = hrtf is not None and source_walks and len(followed) > 0
+    passing = hrtf is not None and source_moves and len(followed) > 0
     ahead = behind = 0
     if passing:
         ends = np.concatenate(
@@ -877,7 +877,7 @@ def render(
         first_k, last_k = track.span
         heard = np.flatnonzero(track.present)
         # Heard from the place before its first to the place after its last, or to
-        # either end of the sound where it is heard at the walk's.
+        # either end of the sound where it is heard at the trajectory's.
         lo = 0.0 if first_k == 0 else track.received[first_k - 1]
         hi = math.inf if last_k == last else track.received[last_k + 1]
         j0 = max(int(math.floor(lo * rate / hop)), 0)
@@ -954,7 +954,7 @@ def render(
             if reading.first > c1 - 1 or reading.last < c0:
                 continue
             # When the sound heard at each sample passed the listener: then, or at the
-            # ears of a walking source's listener an onset earlier, each ear its own.
+            # ears of a moving source's listener an onset earlier, each ear its own.
             passed = [reading.passed(t, e) for e in (0, 1)] if passing else [(t, None)]
             reads: list[tuple[np.ndarray, np.ndarray]] = []
             for s, share in passed:
@@ -975,7 +975,7 @@ def render(
                 elif reading.onsets is None:
                     reads.append((np.arange(n0, n1) - delay * rate, spread))
                 else:
-                    # At a walking listener's ears, each ear's own delay (its onset
+                    # At a moving listener's ears, each ear's own delay (its onset
                     # added).
                     for e in (0, 1):
                         each = delay + reading.onset(t, e)
