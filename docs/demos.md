@@ -341,8 +341,10 @@ acoustic-spaces demo scene.yaml --tour front:2,back:still:12s,front:end
   stop at the one gain of the mixes instead, so the differences in level between the
   listeners are heard as simulated (`matched`, the default, turns them up). The stills show the scene from above,
   drawn from its own model, with its sources (those that play in the stop in colour,
-  with a ray to the listener), the listeners and the one of the moment as a head, and
-  beside it the A-weighted level there of the sources that play in the stop, as
+  with a ray to the listener), the listeners and the one of the moment as a head, each
+  named beside its mark on a side clear of the other words (sources of a group too close
+  together to name one by one, by their group once), or left unnamed where no side is
+  clear; and beside it the A-weighted level there of the sources that play in the stop, as
   simulated, when their sound arrives, the nearest of them and, where a talker plays,
   the STI of the speech of the one loudest there (IEC 60268-16), rated as ISO 9921
   rates it (bad below 0.30, poor, fair, good, excellent from 0.75); it counts the
