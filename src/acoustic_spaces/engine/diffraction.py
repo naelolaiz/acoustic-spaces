@@ -1533,16 +1533,19 @@ class EdgeDiffraction:
         if len(self.edges) == 0:
             return paths
         combos = self._combos(listener, max_delay_s)
+        left_out = None
         if combos is not None:
-            combos = self._in_front(listener, paths, combos)
+            combos, left_out = self._in_front(listener, paths, combos)
         clusters = self.clusters(listener, paths)
         first = len(paths)
-        single = None if combos is None else self._single(listener, paths, combos, clusters, first)
+        single = None
+        if combos is not None:
+            single = self._single(listener, paths, combos, clusters, first, left_out)
         if single is not None:
             first += len(single["distance"])
         double = None
         if self.two_edges:
-            double = self._double(listener, max_delay_s, single, clusters, first)
+            double = self._double(listener, max_delay_s, single, clusters, first, left_out)
         if single is None and double is None:
             if clusters is not None:
                 self.ledger = (paths, clusters)
@@ -1645,9 +1648,13 @@ class EdgeDiffraction:
             out |= (plane >= 0)[:, None] & (np.abs(off) <= _TOLERANCE * self.size)
         return out
 
-    def _in_front(self, listener: np.ndarray, paths: EarlyReflections, c: dict) -> dict | None:
+    def _in_front(
+        self, listener: np.ndarray, paths: EarlyReflections, c: dict
+    ) -> tuple[dict | None, dict | None]:
         """``c`` (:meth:`_combos`) without the paths whose listener side lies behind a
-        face of their edge, or None where none is left. A listener side exactly in the
+        face of their edge, or None where none is left, and those paths (with ``image``
+        and ``order``, their incident wave's image of the source and its order, as
+        :meth:`_specular` has them), or None. A listener side exactly in the
         plane of face 0 or face n, seen along the edge, beyond the face's end, with the
         source side in that plane too (:func:`_past_face`: a building's wall or a thick
         barrier's top in line with the source and the listener) lies behind the face
@@ -1658,7 +1665,12 @@ class EdgeDiffraction:
         the face is then the path over the edge at its other end, which the listener side
         lies in front of: the paths over the two edges are one ray there, and both
         together doubled its pressure. A listener on the face itself (on the wall, or at
-        its far corner) has only the side in front of it, and its paths stay."""
+        its far corner) has only the side in front of it, and its paths stay. The way
+        still passes the edge of a path left out here, and the rays find the path:
+        :meth:`_in_line` counts its place among those of the way, and :meth:`_double`
+        takes it as found for the side of a boundary within the rays' reach (with the
+        source and the listener swapped, the path left out is the one at the way's
+        other end)."""
         hearer = np.broadcast_to(listener, (len(c["edge"]), 3))
         tolerance = _TOLERANCE * self.size
         past = _past_face(
@@ -1666,15 +1678,18 @@ class EdgeDiffraction:
         )
         rows = np.flatnonzero(past)
         if not len(rows):
-            return c
-        found = self._specular(listener, paths, _subset(c, rows))[0]
+            return c, None
+        found, images, orders = self._specular(listener, paths, _subset(c, rows))[:3]
+        left = found[:, 0] < 0
+        if not left.any():
+            return c, None
         keep = np.ones(len(c["edge"]), dtype=bool)
-        keep[rows[found[:, 0] < 0]] = False
-        if keep.all():
-            return c
-        return _subset(c, keep) if keep.any() else None
+        keep[rows[left]] = False
+        left_out = _subset(c, rows[left])
+        left_out["image"], left_out["order"] = images[left, 0], orders[left, 0]
+        return (_subset(c, keep) if keep.any() else None), left_out
 
-    def _in_line(self, c: dict, missing, angle, image, order):
+    def _in_line(self, c: dict, missing, angle, image, order, left_out=None):
         """Edges in a row on a straight way whose path is ``missing`` (C,) although the
         paths over them are found, among the paths ``c`` over one edge
         (:meth:`_combos`): the rows that count on the lit side of their incident wave's
@@ -1682,7 +1697,8 @@ class EdgeDiffraction:
         the rows on those ways. ``angle`` (C,) is the listener side's from the boundary, ``image``
         (C, 3) and ``order`` (C,) the wave's image of the source and its order; two rows
         have one wave where those and the planes it reflects off (:func:`_wave_planes`)
-        are the same.
+        are the same. ``left_out`` (:meth:`_in_front`) are the paths left out as behind a
+        face the way runs along: they are places of their ways, never rows.
 
         The rays that look for a path over an edge start just off the edge, and pass
         what the straight way between the source and the listener sides does not: two
@@ -1706,31 +1722,59 @@ class EdgeDiffraction:
         the reflection between two of its edges (a wall beside two screens): the terms
         that make reflections fade at edges take the product of the two edges' terms
         on the dark side there, the level just below the line
-        (:mod:`~acoustic_spaces.engine.edge_fade`)."""
+        (:mod:`~acoustic_spaces.engine.edge_fade`).
+
+        The places of a way are those of all the edges it passes, also of the paths
+        left out as behind a face the way runs along (``left_out``): with the source and
+        the listener in the plane of a block's top, the path over the top's edge at one
+        end of the way is left out (:meth:`_in_front`), and with the two swapped the one
+        at the other end. The upright edge at a corner of the top, whose path touches its
+        end there, is then on a way with the top's other edge both ways round, not at one
+        place with it in one direction and in a row in the other."""
         reach = 2.0 * self.offset
-        t_k, length = c["t_k"], self.edges.length[c["edge"]]
-        across = np.abs(angle) * c["rho_s"] * c["r2"] / (c["r1"] + c["r2"])
-        rows = np.flatnonzero(missing & (angle <= _ON_BOUNDARY) & (across <= reach))
-        if len(rows) < 2:
-            return rows[:0], rows[:0], rows[:0]
+        keys = ("edge", "kind", "point", "t_k", "rho_s", "r1", "r2")
+        rows_of = {key: c[key] for key in keys}
         planes = _wave_planes(self.model, c)
+        aside = np.zeros(len(c["edge"]), dtype=bool)
+        if left_out is not None:
+            n = self.edges.wedge[left_out["edge"]]
+            others = np.ones(len(left_out["edge"]), dtype=bool)
+            rows_of = {key: np.concatenate([rows_of[key], left_out[key]]) for key in keys}
+            missing = np.concatenate([missing, others])
+            angle = np.concatenate(
+                [angle, boundary_angles(n, left_out["phi_r"], left_out["phi_s"])[:, 0]]
+            )
+            image = np.concatenate([image, left_out["image"]])
+            order = np.concatenate([order, left_out["order"]])
+            planes = np.concatenate([planes, _wave_planes(self.model, left_out)])
+            aside = np.concatenate([aside, others])
+        edge, t_k = rows_of["edge"], rows_of["t_k"]
+        length = self.edges.length[edge]
+        across = np.abs(angle) * rows_of["rho_s"] * rows_of["r2"] / (rows_of["r1"] + rows_of["r2"])
+        rows = np.flatnonzero(missing & (angle <= _ON_BOUNDARY) & (across <= reach))
+        if np.count_nonzero(~aside[rows]) < 2:
+            return rows[:0], rows[:0], rows[:0]
         wave = np.column_stack([np.round(image / (1e-6 * self.size)), order, planes])
         groups = np.unique(wave, axis=0, return_inverse=True)[1].ravel()
         group = groups[rows]
         past = (t_k[rows] < 0.0) | (t_k[rows] > length[rows])
-        by = np.lexsort((c["edge"][rows], past, group))
-        rows, group, past = rows[by], group[by], past[by]
+        left = aside[rows]
+        by = np.lexsort((edge[rows], past, left, group))
+        rows, group, past, left = rows[by], group[by], past[by], left[by]
         first = np.concatenate([[True], group[1:] != group[:-1]])
         lead = np.flatnonzero(first)[np.cumsum(first) - 1]
-        apart = np.linalg.norm(c["point"][rows] - c["point"][rows[lead]], axis=1) > reach
-        # The ways with edges in a row, one of which touches its edge: their rows.
+        point = rows_of["point"]
+        apart = np.linalg.norm(point[rows] - point[rows[lead]], axis=1) > reach
+        # The ways with edges in a row, one of which touches its edge: their rows, two
+        # at least (a path left out is a place of its way, not a row).
         several = np.zeros(int(groups.max()) + 1, dtype=bool)
-        several[group[apart & ~past[lead]]] = True
+        several[group[apart & ~past[lead] & ~left[lead]]] = True
+        several &= np.bincount(group[~left], minlength=len(several)) >= 2
         # Not with a reflection between two of the way's edges (the paths over them
         # reflect on different sides of their edges).
-        kind = c["kind"][rows]
+        kind = rows_of["kind"][rows]
         several[group[kind != kind[lead]]] = False
-        clear = several[group]
+        clear = several[group] & ~left
         return np.sort(rows[clear & ~first]), np.sort(rows[clear & first]), np.sort(rows[clear])
 
     def _ray_starts(self, edge: np.ndarray, t: np.ndarray, point: np.ndarray, at_corners=True):
@@ -1994,10 +2038,13 @@ class EdgeDiffraction:
             "t_line": t_line[sel],
         }
 
-    def _single(self, listener, paths: EarlyReflections, c: dict, clusters, start: int) -> dict:
+    def _single(
+        self, listener, paths: EarlyReflections, c: dict, clusters, start: int, left_out=None
+    ) -> dict:
         """The paths over one edge: each wave's terms and their energy in the bands where
         the terms add in pressure; in the others, their pieces go to ``clusters`` (if
-        any), as rows from ``start``."""
+        any), as rows from ``start``. ``left_out`` are the paths :meth:`_in_front` left
+        out, for :meth:`_in_line`."""
         model, edges = self.model, self.edges
         edge, kind = c["edge"], c["kind"]
         r1, r2 = c["r1"], c["r2"]
@@ -2026,17 +2073,25 @@ class EdgeDiffraction:
         fades = self.fades[edge]
         near, reach = near_fading_end(fades, t_k, length, r1, r2, sin_beta, self.k_min)
         # Edges in a row on one straight way that is not found: all but one count on the
-        # lit side of its boundary (_in_line), the listener side mirrored in it there,
-        # and that one carries the wave.
+        # lit side of its boundary (_in_line), the incident wave's way mirrored in it
+        # there, and that one carries the wave. The way turns by half the mirror at
+        # each end, the listener side one way and the source side the other: the
+        # incident wave's terms take the angle between the two sides only, and the
+        # reflections' terms, which take the sum of their angles, stay where they are,
+        # as they do with the source and the listener swapped (moving the listener
+        # side alone also turned a face's reflection across its boundary where the
+        # source side lies in that face's plane, and not where the listener side does).
+        phi_s = c["phi_s"]
         in_line, carrier, on_ways = self._in_line(
-            c, found[:, 0] < 0, angle[:, 0], images[:, 0], orders[:, 0]
+            c, found[:, 0] < 0, angle[:, 0], images[:, 0], orders[:, 0], left_out
         )
         was_lit = angle[in_line] > _ON_BOUNDARY
         if len(in_line):
-            phi_r = phi_r.copy()
-            mirror = 2.0 * angle[in_line, 0] * np.sign(phi_r[in_line] - c["phi_s"][in_line])
+            phi_r, phi_s = phi_r.copy(), phi_s.copy()
+            mirror = angle[in_line, 0] * np.sign(phi_r[in_line] - phi_s[in_line])
             phi_r[in_line] += mirror
-            angle = boundary_angles(n, phi_r, c["phi_s"])
+            phi_s[in_line] -= mirror
+            angle = boundary_angles(n, phi_r, phi_s)
         # The paths that touch a corner of a screen or of a solid (_combos), and whether
         # the way of their incident wave, and those of the reflections off the edge's
         # faces, pass through the corner (_through): within the tolerance, as through the
@@ -2061,12 +2116,12 @@ class EdgeDiffraction:
             # edges alike.
             phi_r = phi_r.copy()
             ahead = angle[cornered]
-            onto = ahead[:, 0] * np.sign(phi_r[cornered] - c["phi_s"][cornered])
+            onto = ahead[:, 0] * np.sign(phi_r[cornered] - phi_s[cornered])
             nearer_n = np.abs(ahead[:, 2]) < np.abs(ahead[:, 1])
             off = np.where(nearer_n, -ahead[:, 2], ahead[:, 1])
             reflected = np.where(nearer_n, through[:, 2], through[:, 1])
             phi_r[cornered] += np.where(through[:, 0], onto, np.where(reflected, off, 0.0))
-            angle = boundary_angles(n, phi_r, c["phi_s"])
+            angle = boundary_angles(n, phi_r, phi_s)
         self._own_paths(listener, c, found, angle[:, 0] < -_ON_BOUNDARY)
         lit = (angle > _ON_BOUNDARY) | ((np.abs(angle) <= _ON_BOUNDARY) & (found >= 0))
         # The incident wave's term only: a face along the way has its reflection on
@@ -2110,7 +2165,7 @@ class EdgeDiffraction:
             scale = sin_beta[fading, None, None] ** 2 * spread
             # Each of the coefficient's four terms: at an end that fades (end_fades), the
             # edge's own part of the term, by its boundary.
-            eps = _term_angles(n[fading], phi_r[fading], c["phi_s"][fading])
+            eps = _term_angles(n[fading], phi_r[fading], phi_s[fading])
             # The share comes from where the path touches the edge's line, also within
             # the tolerance of an end, where the path counts as touching the end
             # (_combos): beside a corner each edge gives its own part of its terms, as
@@ -2219,7 +2274,7 @@ class EdgeDiffraction:
                     (g, kept_near * geometric + (1.0 - kept_near) * from_edge[:, None])
                 )
         factors = self._face_factors(edge, sin_beta, c["phi_s"])
-        waves = _waves(n, phi_r, c["phi_s"], kl, lit, factors, fading, shares)
+        waves = _waves(n, phi_r, phi_s, kl, lit, factors, fading, shares)
         # The row that carries the wave of a way with edges in a row (_in_line): its
         # term on the dark side is half the wave, by the share its edge gives; the other
         # edges take theirs off all of the wave, so it carries the rest of it too:
@@ -2353,10 +2408,18 @@ class EdgeDiffraction:
             "found": found,
         }
 
-    def _double(self, listener, max_delay_s: float, single: dict | None, clusters, start: int):
+    def _double(
+        self,
+        listener,
+        max_delay_s: float,
+        single: dict | None,
+        clusters,
+        start: int,
+        left_out=None,
+    ):
         """The direct sound over two edges in turn (see the module notes), as
         :meth:`_single` gives the paths over one edge, with its pieces as rows from
-        ``start``."""
+        ``start``. ``left_out`` are the paths over one edge :meth:`_in_front` left out."""
         model, edges = self.model, self.edges
         tolerance = _TOLERANCE * self.size
         edge_s, side_s, _, rho_s, phi_s = self._source_side
@@ -2543,6 +2606,18 @@ class EdgeDiffraction:
         has1, has2, within1, within2 = self._alone(
             single, e1, e2, phi_s1, phi_12, leave, graze, near[0][3], near[1][3]
         )
+        # The paths over one edge the rays found, also those left out as behind a face
+        # (_in_front): with the source and the listener swapped, the path left out is
+        # the one over the edge at the face's other end, and the rays find the same.
+        seen1, seen2 = has1, has2
+        if left_out is not None:
+            keys = ("edge", "kind", "plane", "t_k")
+            over_one = left_out
+            if single is not None:
+                over_one = {key: np.concatenate([single["c"][key], left_out[key]]) for key in keys}
+            seen1, seen2 = self._alone(
+                {"c": over_one}, e1, e2, phi_s1, phi_12, leave, graze, near[0][3], near[1][3]
+            )[:2]
         # The path over the other edge alone, which the source (or the listener) sees
         # round a screen's end, continues the wave along the screen's face on its side,
         # not along the other face: that one carries no geometric wave of theirs.
@@ -2551,6 +2626,8 @@ class EdgeDiffraction:
             (has2, n2, p2, listener),
             (within1, n1, p1, self.source),
             (within2, n2, p2, listener),
+            (seen1, n1, p1, self.source),
+            (seen2, n2, p2, listener),
         ):
             beyond = np.einsum("ij,ij->i", end - point, side) < -tolerance
             has[along & np.isclose(n, 2.0) & beyond] = -1
@@ -2596,16 +2673,18 @@ class EdgeDiffraction:
         # the source a fraction of a millimetre below the line of their tops) that path
         # can be there on the dark side, or missing on the lit one. The side is then the
         # one that agrees with it: the source (at the first edge) or the listener (at
-        # the second) counts as mirrored in the boundary, that little way across.
+        # the second) counts as mirrored in the boundary, that little way across. The
+        # path counts as found where the rays find it, also where it is left out as
+        # behind a face (seen1, seen2), so that the side is the same both ways round.
         reach = 2.0 * offset
-        for angle, rho_end, rho_edge, has, moved, fixed in (
-            (angle1, rho_from[e1], rho_21, has1, phi_s1, phi_21),
-            (angle2, rho_to[e2], rho_12, has2, phi_r2, phi_12),
+        for angle, rho_end, rho_edge, seen, moved, fixed in (
+            (angle1, rho_from[e1], rho_21, seen1, phi_s1, phi_21),
+            (angle2, rho_to[e2], rho_12, seen2, phi_r2, phi_12),
         ):
             a = angle[:, 0]
             across = np.abs(a) * rho_end * rho_edge / (rho_end + rho_edge)
             wrong = (np.abs(a) > _ON_BOUNDARY) & (across <= reach)
-            wrong &= (a > 0.0) != (has[:, 0] >= 0)
+            wrong &= (a > 0.0) != (seen[:, 0] >= 0)
             moved[wrong] += 2.0 * a[wrong] * np.sign(moved[wrong] - fixed[wrong])
         angle1 = boundary_angles(n1, phi_21, phi_s1)
         angle2 = boundary_angles(n2, phi_r2, phi_12)
