@@ -2393,6 +2393,40 @@ class EdgeFade:
         )
         return np.sqrt(1.0 - scattering)
 
+    def _off_row(self, listener, go: dict, t: dict) -> dict:
+        """``t`` without the share of each term of a path along the way past the edges in
+        a row of the edge diffraction's last listener, if it is ``listener``
+        (:attr:`~acoustic_spaces.engine.diffraction.EdgeDiffraction.row`), that the
+        row's field stands for, as the edge diffraction's own paths over those edges
+        have it (:meth:`~acoustic_spaces.engine.paraxial.Row.members`,
+        :meth:`~acoustic_spaces.engine.paraxial.Row.weight`)."""
+        held = self.d.row
+        if held is None or not np.array_equal(held[0], listener):
+            return t
+        row = held[1]
+        shape = self.d.wavenumber.shape
+        factor = np.ones((len(t["edge"]), *shape))
+        kept: dict[frozenset, np.ndarray] = {}
+        for i in np.flatnonzero(np.isin(t["edge"], row.edge)):
+            path = int(t["go"][i])
+            members = row.members(
+                int(t["edge"][i]), int(t["column"][i]), go["planes"][path], go["points"][path][1:]
+            )
+            if members is None:
+                continue
+            if members not in kept:
+                kept[members] = 1.0 - row.weight(members).reshape(shape)
+            factor[i] = kept[members]
+        if (factor == 1.0).all():
+            return t
+        late = slice(self.d.coherent, None)
+        t = dict(t)
+        for key in ("pressure", "others"):
+            t[key] = t[key] * factor
+        for key in ("others_bent", "others_on"):
+            t[key] = t[key] * factor[:, late]
+        return t
+
     def _combine(self, listener, go: dict, k: int, t: dict, floor: float) -> dict:
         """The paths over the edges for the terms ``t`` of the paths ``go``: each term
         with its share of its path's product over the events (see the module notes),
@@ -2400,6 +2434,7 @@ class EdgeFade:
         would leave out, under ``floor`` in every band and with no cross terms."""
         d, edges = self.d, self.edges
         wavenumber = d.wavenumber  # (B, M)
+        t = self._off_row(listener, go, t)
         ids, path = np.unique(t["go"], return_inverse=True)
         path = path.reshape(-1)
         fail, fail2 = go["fail"][ids], go["fail2"][ids]

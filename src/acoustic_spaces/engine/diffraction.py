@@ -84,6 +84,7 @@ through a wall is left out, as it is far weaker than the sound that passes it st
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -103,6 +104,7 @@ from acoustic_spaces.engine.early import (
     _over,
 )
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
+from acoustic_spaces.engine.paraxial import Row, find_row
 from acoustic_spaces.geometry.cells import _components
 from acoustic_spaces.geometry.outdoor import ON_GROUND_M, on_ground
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, Resolution, band_centres
@@ -1384,6 +1386,9 @@ class EdgeDiffraction:
         #: The paths :meth:`apply` returned last and its paths over edges in a row
         #: (:meth:`_in_line`) that carry too little to be among them, or None.
         self.unheard: tuple[EarlyReflections, EarlyReflections] | None = None
+        #: The listener of :meth:`apply`'s last call and the edges in a row near its way
+        #: from the source (:meth:`_row`), or None.
+        self.row: tuple[np.ndarray, Row] | None = None
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
         self.offset = ray_offset(self.size)
         frequencies, self.slice_hz = band_frequencies(bands=model.bands)
@@ -1529,33 +1534,41 @@ class EdgeDiffraction:
         their terms (:mod:`~acoustic_spaces.engine.clusters`) are kept in
         :attr:`ledger` with the paths returned, for the edge fade to add to."""
         listener = np.asarray(listener, dtype=float)
-        self.ledger = self.unheard = None
+        self.ledger = self.unheard = self.row = None
         if len(self.edges) == 0:
             return paths
         combos = self._combos(listener, max_delay_s)
         left_out = None
         if combos is not None:
             combos, left_out = self._in_front(listener, paths, combos)
+        # Edges in a row near the way from the source to the listener (paraxial.Row):
+        # the paths over one and two of them take their terms along the way in part, by
+        # the share the row's paraxial field takes, which a path of its own carries.
+        row = self._row(listener) if self.two_edges else None
+        self.row = None if row is None else (listener.copy(), row)
         clusters = self.clusters(listener, paths)
-        first = len(paths)
+        starts = [len(paths)]
         single = None
         if combos is not None:
-            single = self._single(listener, paths, combos, clusters, first, left_out)
-        if single is not None:
-            first += len(single["distance"])
+            single = self._single(listener, paths, combos, clusters, starts[-1], left_out, row)
+        starts.append(starts[-1] + (0 if single is None else len(single["distance"])))
         double = None
         if self.two_edges:
-            double = self._double(listener, max_delay_s, single, clusters, first, left_out)
-        if single is None and double is None:
+            double = self._double(
+                listener, max_delay_s, single, clusters, starts[-1], left_out, row
+            )
+        starts.append(starts[-1] + (0 if double is None else len(double["distance"])))
+        lined = None if row is None else self._lined(listener, paths, row, clusters, starts[-1])
+        found_all = (single, double, lined)
+        if all(found is None for found in found_all):
             if clusters is not None:
                 self.ledger = (paths, clusters)
             return paths
-        count = first + (0 if double is None else len(double["distance"]))
-        starts = (len(paths), first)
+        count = starts[-1] + (0 if lined is None else len(lined["distance"]))
         if clusters is not None:
             energy, has = clusters.resolve(count)
             paths = self.settled(paths, energy[: len(paths)], has[: len(paths)])
-            for found, start in zip((single, double), starts, strict=True):
+            for found, start in zip(found_all, starts, strict=True):
                 if found is not None:
                     rows = slice(start, start + len(found["distance"]))
                     found["energy"][:, self.coherent :] = energy[rows]
@@ -1564,13 +1577,15 @@ class EdgeDiffraction:
         floor = MIN_RELATIVE_ENERGY / (4.0 * np.pi * squared)
         parts, ids = [paths], [np.arange(len(paths))]
         quiet = np.zeros(0, dtype=np.int64)
-        for found, start in zip((single, double), starts, strict=True):
+        for found, start in zip(found_all, starts, strict=True):
             if found is not None:
                 emitted, idx = self._emit(listener, found, floor, max_delay_s)
                 parts.append(emitted)
                 ids.append(start + idx)
                 if found is single:
-                    quiet = np.setdiff1d(single["in_line"], idx)
+                    # Also the paths over edges of the row whose terms it takes.
+                    kept = np.union1d(single["in_line"], np.flatnonzero(single["row"]))
+                    quiet = np.setdiff1d(kept, idx)
         out = EarlyReflections.concatenate(parts, self.model.absorption.shape[1])
         if len(quiet):
             # Paths over edges in a row whose terms cancel in the bands that add in
@@ -2039,12 +2054,21 @@ class EdgeDiffraction:
         }
 
     def _single(
-        self, listener, paths: EarlyReflections, c: dict, clusters, start: int, left_out=None
+        self,
+        listener,
+        paths: EarlyReflections,
+        c: dict,
+        clusters,
+        start: int,
+        left_out=None,
+        edge_row=None,
     ) -> dict:
         """The paths over one edge: each wave's terms and their energy in the bands where
         the terms add in pressure; in the others, their pieces go to ``clusters`` (if
         any), as rows from ``start``. ``left_out`` are the paths :meth:`_in_front` left
-        out, for :meth:`_in_line`."""
+        out, for :meth:`_in_line`. The paths over the edges of ``edge_row``
+        (:meth:`_row`) keep the share of their terms along the way that the
+        row's field does not take (:func:`_off_row`)."""
         model, edges = self.model, self.edges
         edge, kind = c["edge"], c["kind"]
         r1, r2 = c["r1"], c["r2"]
@@ -2286,6 +2310,13 @@ class EdgeDiffraction:
             rest = 1.0 - shares[held, term]  # (R, B, M)
             wave = -2.0 * n[row, None, None] * np.sqrt(2.0 * np.pi * kl[row])
             waves[row, 0] += rest * wave * np.exp(0.25j * np.pi)
+        in_row = np.zeros(len(edge), dtype=bool)
+        if edge_row is not None:
+            planes = np.column_stack([c["plane"], c["plane2"]])
+            planes = np.where((kind == 0)[:, None], -1, planes)
+            planes[kind < 3, 1] = -1
+            bounces = np.stack([c["bounce"], c["bounce2"]], axis=1)
+            in_row = _off_row(edge_row, waves, edge, planes, bounces)
         waves *= common[:, None]  # (C, 3, B, M): incident, off face 0, off face n
         for g, factor in on_ground:
             waves[g] *= factor
@@ -2405,6 +2436,7 @@ class EdgeDiffraction:
             "faces": faces,
             "cosines": cosines,
             "in_line": on_ways,
+            "row": in_row,
             "found": found,
         }
 
@@ -2416,10 +2448,15 @@ class EdgeDiffraction:
         clusters,
         start: int,
         left_out=None,
+        edge_row=None,
     ):
         """The direct sound over two edges in turn (see the module notes), as
         :meth:`_single` gives the paths over one edge, with its pieces as rows from
-        ``start``. ``left_out`` are the paths over one edge :meth:`_in_front` left out."""
+        ``start``; ``left_out`` are the paths over one edge :meth:`_in_front` left out;
+        over two edges of ``edge_row`` in turn along the way, with the share of
+        their terms along it that the row's field does not take (:func:`_off_row_pairs`),
+        and, back along the way, with their legs past the row's edges between
+        (:func:`_back_past_row`)."""
         model, edges = self.model, self.edges
         tolerance = _TOLERANCE * self.size
         edge_s, side_s, _, rho_s, phi_s = self._source_side
@@ -2892,6 +2929,9 @@ class EdgeDiffraction:
             * loss
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
+        if edge_row is not None:
+            _off_row_pairs(edge_row, waves, e1, e2)
+            _back_past_row(edge_row, waves, e1, e2, (self.source, p1, p2, listener))
         pressure = np.zeros((paths, *self.wavenumber.shape), dtype=complex)
         np.add.at(pressure, ways, (waves * carried[..., None, None]).sum(axis=(1, 2)))
         energy = np.zeros((paths, self.wavenumber.shape[0]))
@@ -3137,6 +3177,165 @@ class EdgeDiffraction:
             cosines=[] if spectrum is None else [found["cosines"](i) for i in idx],
         ), idx
 
+    def _row(self, listener: np.ndarray) -> Row | None:
+        """The edges in a row near the straight way from the source to ``listener``
+        (:func:`~acoustic_spaces.engine.paraxial.find_row`), at the wavenumbers of every
+        band, their tops reflecting as the faces of the edges' paths do."""
+
+        def reflection(edge: int, side: int, point: np.ndarray) -> np.ndarray:
+            index = np.array([edge])
+            _, rho, phi, _ = self.edges.frame(index, self.source[None])
+            reach = max(float(np.linalg.norm(point - self.source, axis=-1)), 1e-300)
+            sin_beta = np.clip(rho / reach, 1e-12, 1.0)
+            return self._face_factors(index, sin_beta, phi)[0, side].reshape(-1)
+
+        return find_row(
+            self.edges,
+            self.model,
+            self.source,
+            listener,
+            self.wavenumber,
+            _TOLERANCE * self.size,
+            reflection,
+        )
+
+    def _lined(self, listener, paths: EarlyReflections, row: Row, clusters, start: int):
+        """The path of the field of the edges of ``row`` over the rows of two of them or
+        more (:meth:`~acoustic_spaces.engine.paraxial.Row.branches`) with the terms of
+        the paths over each edge alone that the paraxial field leaves out (:meth:`_rests`),
+        less the share of the specular paths along the way that it stands for (the direct
+        sound, and the reflections off the row's tops in turn): one path along the way, as
+        :meth:`_single` gives the paths over one edge, as row ``start``. In the bands
+        where the paths add in energy the row's field is one wave, the direct sound's, its
+        branches off the tops coming from the source's images in them, which lie as close
+        to the source as the way passes the tops' plane; the share of each specular path
+        it stands for is taken off in that path's wave."""
+        k = self.wavenumber
+        length = row.length
+        way = (listener - self.source) / length
+        weight = source_weights(
+            self.directivity, self.orientation, way[None], len(self.air), distances=[length]
+        )
+        amplitude = np.sqrt(weight[0] * np.exp(-self.air * length) / (4.0 * np.pi)) / length
+        free = amplitude[:, None] * np.exp(-1j * k * length)  # (B, M)
+        # The specular paths along the way: the direct sound and the reflections off the
+        # row's tops in turn, by those tops.
+        rows = np.flatnonzero((paths.edge < 0) & (paths.crossings == 0))
+        rows = rows[paths.order[rows] <= len(row.tops)]
+        sequence, known = _sequences(self.model, paths, rows, max(len(row.tops), 1))
+        along_way: dict[tuple[int, ...], list[int]] = {}
+        for at, (r, planes, carried) in enumerate(zip(rows, sequence, known, strict=True)):
+            tops = [
+                row.top_of(int(plane), paths.points[r][1 + j])
+                for j, plane in enumerate(planes[: paths.order[r]])
+            ]
+            if carried and -1 not in tops and tops == sorted(set(tops)):
+                along_way.setdefault(tuple(tops), []).append(at)
+        # (pressure (B, M), distance, the wave's index in rows or -1 for the direct sound's)
+        pieces: list[tuple[np.ndarray, float, int]] = []
+        for flips, image, part in row.branches(k.reshape(-1)):
+            pieces.append((free * part.reshape(k.shape), image, -1))
+            if flips in along_way:
+                share = row.weight([i for q in flips for i in row.tops[q][:2]]).reshape(k.shape)
+                for at in along_way[flips]:
+                    r = rows[at]
+                    wave = np.sqrt(paths.energy[r])[:, None]
+                    wave = wave * np.exp(-1j * k * paths.distance_m[r])
+                    if paths.spectrum is not None:
+                        wave[: self.coherent] *= paths.spectrum[r]
+                    pieces.append((-share * wave, float(paths.distance_m[r]), at))
+        # The edges' terms that the paraxial field leaves out, past the other nodes.
+        pieces.append((free * self._rests(listener, row), length, -1))
+        total = np.sum([pressure for pressure, _, _ in pieces], axis=0)
+        energy = np.zeros((1, k.shape[0]))
+        energy[:, : self.coherent] = np.mean(np.abs(total[None, : self.coherent]) ** 2, axis=2)
+        if clusters is not None:
+            late = slice(self.coherent, None)
+            images = _image_sources(listener, paths)
+            for pressure, distance, at in pieces:
+                if at < 0:
+                    key = clusters.geometric(
+                        self._mirror(np.full((1, 1), -1)), 0, self.source[None], True
+                    )
+                else:
+                    key = clusters.geometric(
+                        self._mirror(sequence[at : at + 1]),
+                        paths.order[rows[at]],
+                        images[rows[at] : rows[at] + 1],
+                        known[at],
+                    )
+                clusters.add(np.array([start]), key, pressure[None, late], np.array([distance]))
+        points = list(row.point)
+        return {
+            "energy": energy,
+            "spectrum": self._spectrum(total[None], np.array([length])),
+            "distance": np.array([length]),
+            "order": np.zeros(1, dtype=np.int64),
+            "edge": row.edge[:1].astype(np.int64),
+            "last": row.point[-1:].copy(),
+            "corners": lambda i: points,
+            "faces": lambda i: np.zeros(0, dtype=np.int64),
+            "cosines": lambda i: np.zeros(0),
+        }
+
+    def _rests(self, listener: np.ndarray, row: Row) -> np.ndarray:
+        """(B, M) the terms of the paths over each edge of ``row`` alone that its paraxial
+        field leaves out, relative to the way's free field: those of the uniform theory
+        of diffraction but the one of the incident wave's boundary and the reflection
+        off a top (the reflections off the edge's other faces, and the incident wave's
+        other term), over the point on the edge nearest the way, each in the share the
+        row's field stands for of it, past the row's other nodes on the way to the edge
+        and on from it (:meth:`~acoustic_spaces.engine.paraxial.Row.past`). Near an end
+        that fades, each is the share of its path the edge gives (:func:`along_edge`)."""
+        edges, k = self.edges, self.wavenumber
+        edge = row.edge.astype(np.int64)
+        t = np.einsum("ij,ij->i", row.point - edges.start[edge], edges.direction[edge])
+        points = edges.start[edge] + t[:, None] * edges.direction[edge]
+        _, rho_s, phi_s, _ = edges.frame(edge, np.broadcast_to(self.source, points.shape))
+        _, _, phi_r, _ = edges.frame(edge, np.broadcast_to(listener, points.shape))
+        r1 = np.linalg.norm(points - self.source, axis=1)
+        r2 = np.linalg.norm(listener - points, axis=1)
+        distance = r1 + r2
+        sin_beta = np.clip(rho_s / np.maximum(r1, 1e-300), 1e-12, 1.0)
+        length_param = r1 * r2 / distance * sin_beta**2
+        kl = k[None] * length_param[:, None, None]
+        n = edges.wedge[edge]
+        terms = wedge_terms(n[:, None, None], phi_r[:, None, None], phi_s[:, None, None], kl)
+        factors = self._face_factors(edge, sin_beta, phi_s)
+        # The incident wave's term away from its boundary (_term_angles): the first where
+        # the listener's angle is past the source's, the boundary at their difference pi.
+        other = np.where(phi_r >= phi_s, 0, 1)[:, None, None, None]
+        rest = np.take_along_axis(terms[..., :2], other, axis=-1)[..., 0]
+        faces = np.stack([terms[..., 3] * factors[:, 0], terms[..., 2] * factors[:, 1]], axis=1)
+        for i in range(len(edge)):
+            if row.partner(i) >= 0:
+                faces[i, row.top_sides[i]] = 0.0
+        rest = rest + faces.sum(axis=1)
+        ratio = row.length / np.sqrt(r1 * r2 * distance)
+        delay = np.exp(-0.5 * np.outer(distance - row.length, self.air))[:, :, None] * np.exp(
+            -1j * k[None] * (distance - row.length)[:, None, None]
+        )
+        rest = rest * wedge_prefactor(n[:, None, None], k[None], sin_beta[:, None, None])
+        rest = rest * ratio[:, None, None] * delay
+        # Near an end that fades, the share of the path the edge gives (along_edge).
+        length = edges.length[edge]
+        near, reach = near_fading_end(self.fades[edge], t, length, r1, r2, sin_beta, self.k_min)
+        if near.any():
+            spread = np.sqrt(k[None] / (np.pi * length_param[near, None, None]))
+            scale = sin_beta[near, None, None] ** 2 * spread
+            rest[near] *= along_edge(
+                t[near],
+                length[near],
+                scale,
+                self.fades[edge[near]],
+                reach[near],
+                closed=self.closed[edge[near]],
+            )
+        out = np.zeros(k.shape, dtype=complex)
+        for i in range(len(edge)):
+            out += rest[i] * row.past(i, points[i]).reshape(k.shape)
+        return out
+
     def _specular(self, listener: np.ndarray, paths: EarlyReflections, c: dict):
         """(C, 3) index in ``paths`` of the specular path of each term's wave (the
         incident wave and the reflections off face 0 and face n), or -1; (C, 3, 3) the
@@ -3300,6 +3499,69 @@ def _on_own_face(
     own = candidates[joined == joined[np.flatnonzero(candidates == face)[0]]]
     vertices = np.asarray(model.room.mesh.vertices, dtype=float)
     return _on_triangles(np.asarray(point, dtype=float), vertices[faces[own]], tolerance)
+
+
+def _off_row(row: Row, waves: np.ndarray, edge, planes, points) -> np.ndarray:
+    """Take off the terms ``waves`` (C, 3, B, M, :func:`_waves`) of the paths over the
+    edges ``edge`` (C,) that reflect off ``planes`` (C, 2; -1 for none) at ``points``
+    (C, 2, 3) the share that the field of ``row`` stands for
+    (:meth:`~acoustic_spaces.engine.paraxial.Row.members`,
+    :meth:`~acoustic_spaces.engine.paraxial.Row.weight`), in place. (C,) which paths
+    have such terms."""
+    out = np.zeros(len(edge), dtype=bool)
+    shape = waves.shape[2:]
+    kept: dict[frozenset, np.ndarray] = {}
+    for c in np.flatnonzero(np.isin(edge, row.edge)):
+        for column in range(3):
+            members = row.members(int(edge[c]), column, planes[c], points[c])
+            if members is None:
+                continue
+            if members not in kept:
+                kept[members] = 1.0 - row.weight(members).reshape(shape)
+            waves[c, column] *= kept[members]
+            out[c] = True
+    return out
+
+
+def _off_row_pairs(row: Row, waves: np.ndarray, e1: np.ndarray, e2: np.ndarray) -> None:
+    """As :func:`_off_row`, for the terms ``waves`` (C, 3, 3, B, M) of the paths of the
+    direct sound over two edges ``e1`` and then ``e2`` (C,): those over two edges of
+    ``row`` in turn along the way, or over the top and the end of a screen's corner in
+    the row, for each pair of their waves along the way, in place."""
+    shape = waves.shape[3:]
+    kept: dict[frozenset, np.ndarray] = {}
+    for c in np.flatnonzero(np.isin(e1, row.edge) & np.isin(e2, row.edge)):
+        i, j = row.node(e1[c]), row.node(e2[c])
+        if i == j or not (row.along[i] < row.along[j] or row.together(i, j)):
+            continue
+        for a in range(3):
+            first = row.members(int(e1[c]), a, (), ())
+            for b in range(3):
+                second = row.members(int(e2[c]), b, (), ())
+                if first is None or second is None:
+                    continue
+                members = first | second
+                if members not in kept:
+                    kept[members] = 1.0 - row.weight(members).reshape(shape)
+                waves[c, a, b] *= kept[members]
+
+
+def _back_past_row(row: Row, waves: np.ndarray, e1, e2, corners) -> None:
+    """The terms ``waves`` (C, 3, 3, B, M) of the paths over two edges ``e1`` and then
+    ``e2`` (C,) of ``row`` whose second edge comes before the first along the way, with
+    each leg between the ``corners`` (the source, the points on the two edges (C, 3) and
+    the listener) past the row's other edges between its ends, which the uniform theory
+    of diffraction leaves out: as the row's field has it there
+    (:meth:`~acoustic_spaces.engine.paraxial.Row.passing`), in place."""
+    shape = waves.shape[3:]
+    source, p1, p2, listener = corners
+    x1 = np.einsum("ij,j->i", p1 - row.origin, row.direction)
+    x2 = np.einsum("ij,j->i", p2 - row.origin, row.direction)
+    back = np.isin(e1, row.edge) & np.isin(e2, row.edge) & (x2 < x1)
+    for c in np.flatnonzero(back):
+        legs = (source, p1[c], p2[c], listener)
+        factor = np.prod([row.passing(a, b) for a, b in itertools.pairwise(legs)], axis=0)
+        waves[c] *= factor.reshape(shape)
 
 
 def _subset(part: dict, keep: np.ndarray) -> dict:
