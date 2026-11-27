@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fixed (results change): with the late rays on a GPU (`simulation.late.device` gpu
+  or both, or auto where it takes either), the spread from the materials' absorption
+  uncertainty could be far too wide, most with the CPU and the GPU sharing the rays: in
+  the stadium, main_left at the singer read SPL u = 17 dB, 95 % within 222 to 234 dB,
+  where the CPU gives u = 0.39 dB. The editor's results re-weighted for other absorption
+  and material calibration's fits took the same wrong figures. The GPU rounded each term
+  of an arrival's moments of its reflection counts on its own, so that far down the late
+  tail, where an arrival brings less than a step of its sums, a slot's moments were
+  those of no set of arrivals, and re-weighting that slot for other absorption
+  multiplied it by up to e^50. An arrival's energy is now rounded once, for all its
+  terms. Sharing the rays there now gives u = 0.42 dB (0.38 to 0.41 dB on the CPU
+  alone). Nominal results do not change, beyond the noise of the ray count where the
+  GPU counts the reflections (with the spread, in the editor and in calibration), as it
+  draws its random numbers differently there.
 - Fixed (results change): with `method: image_sources` over two thin screens or
   barriers in a row, the terms that make paths fade at edges added a path in the gap
   between them (off the second's front and then the first's back, which both stop) that
