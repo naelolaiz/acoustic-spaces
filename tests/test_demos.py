@@ -2832,6 +2832,24 @@ def test_a_tour_column_lists_the_stops_that_fit_round_the_current_one() -> None:
             assert first <= current < end and end - first + hidden <= max(rows, 3)
 
 
+def test_a_still_sets_its_facts_smaller_to_leave_the_tour_its_room() -> None:
+    """The facts under a stop's name are set as large as ends them where the tour's
+    title and three rows still fit over the panel under them; a few stay large."""
+    pytest.importorskip("PIL")
+    from PIL import Image, ImageDraw
+
+    from acoustic_spaces.demos import pictures
+
+    draw = ImageDraw.Draw(Image.new("RGB", pictures.SIZE))
+    bottom = pictures.TOUR_BOTTOM - pictures.tour_room(11)
+    assert pictures.fitted_facts(draw, 1010, 330, ["a fact"] * 3, bottom) == 330 + 3 * 32
+    many = ["a fact of some length that a still gives"] * 16
+    end = pictures.fitted_facts(draw, 1010, 330, many, bottom)
+    assert end <= bottom and end > 330 + 16 * 23 - 1
+    first, last = pictures.tour_window(11, 3, int((pictures.TOUR_BOTTOM - end - 58) // 28))
+    assert last - first + (first > 0) + (last < 11) <= (pictures.TOUR_BOTTOM - end - 58) // 28
+
+
 def test_the_stills_say_how_the_sound_was_made(tmp_path: Path) -> None:
     """The lines under every still state the simulation as it ran, the engine's defaults
     for what a scene leaves out, the wave solver and, outdoors in wind, what the weather

@@ -331,6 +331,21 @@ def place(
     return y + size + 14 + 50
 
 
+def _fact_rows(draw, line, size: int, width: float) -> tuple[list[str], object, str]:
+    """A fact (a string or (string, colour)) in rows no wider than ``width`` pixels,
+    broken between words, with its font and colour."""
+    s, colour = line if isinstance(line, tuple) else (line, TEXT)
+    f = font("SemiBold" if colour == LISTENER else "Regular", size)
+    rows: list[str] = []
+    for word in s.split(" "):
+        longer = f"{rows[-1]} {word}" if rows else word
+        if rows and draw.textlength(longer, font=f) > width:
+            rows.append(word)
+        else:
+            rows[-1:] = [longer]
+    return rows, f, colour
+
+
 def facts(
     draw,
     x: float,
@@ -344,20 +359,29 @@ def facts(
     longer than reaches ``right`` going on on the next, between words; returns the y
     under them."""
     for line in lines:
-        s, colour = line if isinstance(line, tuple) else (line, TEXT)
-        weight = "SemiBold" if colour == LISTENER else "Regular"
-        f = font(weight, size)
-        rows: list[str] = []
-        for word in s.split(" "):
-            longer = f"{rows[-1]} {word}" if rows else word
-            if rows and draw.textlength(longer, font=f) > right - x:
-                rows.append(word)
-            else:
-                rows[-1:] = [longer]
+        rows, f, colour = _fact_rows(draw, line, size, right - x)
         for row in rows:
             text(draw, (x, y), row, f, colour)
             y += step
     return y
+
+
+#: The sizes the facts under a stop's name are set in, with their rows' step (px),
+#: largest first (:func:`fitted_facts`).
+FACT_SIZES = ((23, 32), (21, 29), (19, 26), (17, 23))
+
+
+def fitted_facts(
+    draw, x: float, y: float, lines: Sequence, bottom: float, right: float = RIGHT
+) -> float:
+    """:func:`facts` in the largest of :data:`FACT_SIZES` whose rows end by ``bottom``
+    (the smallest where none does), so that what comes under them keeps its room;
+    returns the y under them."""
+    for size, step in FACT_SIZES:
+        rows = sum(len(_fact_rows(draw, line, size, right - x)[0]) for line in lines)
+        if y + rows * step <= bottom:
+            break
+    return facts(draw, x, y, lines, size=size, step=step, right=right)
 
 
 def tour_column(
@@ -394,6 +418,17 @@ def tour_column(
     if last < len(entries):
         more = len(entries) - last
         text(draw, (x, y), f"   … {_stops(more)} after", font("Regular", size), FAINT)
+
+
+#: The tour column's title and the gap over it, its rows and how far down it may go (px).
+TOUR_HEAD, TOUR_ROW, TOUR_BOTTOM = 58, 28, 860
+
+
+def tour_room(count: int) -> float:
+    """How tall a tour column of ``count`` stops is at the least (px): its title and
+    three rows, the current stop with a row for those before it and one for those after
+    (all of them where there are fewer)."""
+    return TOUR_HEAD + min(count, 3) * TOUR_ROW
 
 
 def _stops(n: int) -> str:
@@ -640,6 +675,7 @@ __all__ = [
     "ears_text",
     "facing",
     "facts",
+    "fitted_facts",
     "fitted",
     "font",
     "footer",
@@ -658,5 +694,6 @@ __all__ = [
     "title_card",
     "tool_line",
     "tour_column",
+    "tour_room",
     "tour_window",
 ]

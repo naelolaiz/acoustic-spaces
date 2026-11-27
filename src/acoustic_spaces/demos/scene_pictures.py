@@ -23,11 +23,13 @@ from acoustic_spaces.demos.pictures import (
     SOURCE,
     TEXT,
     THUMBNAIL,
+    TOUR_BOTTOM,
+    TOUR_ROW,
     Plan,
     axes,
     badge,
     canvas,
-    facts,
+    fitted_facts,
     font,
     footer,
     head,
@@ -39,6 +41,7 @@ from acoustic_spaces.demos.pictures import (
     text,
     thumbnail_badge,
     tour_column,
+    tour_room,
 )
 from acoustic_spaces.demos.pipeline import TourStop
 from acoustic_spaces.parameters import sti_rating
@@ -929,9 +932,10 @@ class Pictures:
         if self.fmt == "binaural":
             badge(draw, x, 172)
         y = place(draw, x, 244, *self.title(stop.key))
-        y = facts(draw, x, y, self.lines(k, t), size=23, step=32)
         entries = [(self.title(s.key)[0], s.at) for s in self.stops]
-        tour_column(draw, x, y + 22, entries, k, row=28)
+        # The facts as large as leaves the tour its title and three rows at the least.
+        y = fitted_facts(draw, x, y, self.lines(k, t), TOUR_BOTTOM - tour_room(len(entries)))
+        tour_column(draw, x, y + 22, entries, k, row=TOUR_ROW, bottom=TOUR_BOTTOM)
         footer(draw, self.credit, self.tool)
         return img
 
