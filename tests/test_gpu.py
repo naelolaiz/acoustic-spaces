@@ -832,6 +832,34 @@ def test_gpu_tracer_counts_reflections_off_face_groups_as_the_cpu_does() -> None
 
 
 @needs_gpu
+def test_the_gpu_tracers_moments_are_those_of_one_set_of_arrivals() -> None:
+    """Down the unit cube's tail, past 85 dB under the first slot, where an arrival
+    brings far less than a step of the moments' fixed point, each slot's moments are
+    still those of some set of arrivals, as re-weighting needs (it takes their ratios:
+    reweight.moment_exponent): the matrix of the second moments of 1, n_0 and n_1 is
+    positive semi-definite in every slot. Rounded term by term, the slots from there on
+    were not (counts whose variance is below zero), and a stadium's spread from the
+    absorption's uncertainty read hundreds of decibels."""
+    from test_native import _stochastic_args
+
+    groups = np.array([1] * 8 + [0] * 4, dtype=np.int64)
+    values = _stochastic_args() | {"face_group": groups, "groups": 2, "max_time": 0.3}
+    energy, _, moments, *_ = gpu_tracer.trace_stochastic(**values)
+    m = moments[0, :, 0]  # 1, n_0, n_1, n_0², n_0 n_1, n_1² by slot
+    square = m[[0, 1, 2, 1, 3, 4, 2, 4, 5]].T.reshape(-1, 3, 3)
+    side = np.sqrt(np.diagonal(square, axis1=1, axis2=2))
+    side = np.where(side > 0.0, side, 1.0)
+    lowest = np.linalg.eigvalsh(square / side[:, :, None] / side[:, None, :])[:, 0]
+    some = m[0] > 0.0
+    # Single precision rounds the products of large counts: a millionth.
+    assert np.all(lowest[some] > -1e-6), np.round(lowest, 6)
+    # The slots with moments go that far down (the last ones, each of a step or two, end
+    # between 98 and 123 dB down over seeds 1 to 40).
+    slots = energy[0, 0].reshape(len(m[0]), -1).sum(1)
+    assert 10.0 * np.log10(slots[some][-1] / slots[0]) < -85.0
+
+
+@needs_gpu
 def test_the_late_stage_traces_face_groups_on_the_gpu() -> None:
     """A late part with face groups (the spread from the absorption's uncertainty, the
     editor's runs) runs where its device says, the GPU's moments within the noise of
