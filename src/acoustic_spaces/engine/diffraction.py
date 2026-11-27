@@ -2245,19 +2245,32 @@ class EdgeDiffraction:
         # it fades out past the end, and the end's own edge takes the path round it
         # (end_fades), on the dark side where the path round the end is found and on the
         # lit side where its reflection point leaves the face past the end, or lies on
-        # another face in the face's plane. Not a reflection off a face of a solid whose
-        # plane the source side lies in or behind, which is no wave of its own there (as
-        # the edge fade has it): with the source in the plane of a wall, the wall's
-        # "reflection" is the incident wave once more, and counted, its term at the far
-        # end of the wall would take that wave off the paths a second time. (A screen's
-        # faces along a way through edges in a row are the incident wave's, _in_line.)
+        # another face in the face's plane, or past another edge of the face: there the
+        # edge fade has the path, found or just missed, and leaves this edge's term of it
+        # to this one, which fades. Not a reflection off a face of a solid whose plane the
+        # source side or the listener side lies in or behind, within the tolerance, which
+        # has no path of its own in the early stage (it follows reflections off the planes
+        # an end lies in front of only) nor in the edge fade: in the plane the end is its
+        # own image, and the reflection runs along the incident wave's way (on a rigid
+        # wall's face the wave has twice the pressure, which the early stage leaves out).
+        # Counted, its term at the wall's end would take the incident wave off the paths a
+        # second time (with the listener on a wall 3 m past its end and the source 7 m
+        # before it, 10 um off its plane: 14 to 23 dB). Both sides alike, as the paths are
+        # the same either way, whichever end is in the plane. (A screen's faces along a
+        # way through edges in a row are the incident wave's, _in_line.)
         tol = _TOLERANCE * self.size
         solid = n < 2.0 - 1e-9
+        rho_r = r2 * sin_beta
         cannot = np.column_stack(
             [
                 np.zeros(len(edge), dtype=bool),
-                solid & (c["rho_s"] * np.sin(c["phi_s"]) <= tol),
-                solid & (c["rho_s"] * np.sin(n * np.pi - c["phi_s"]) <= tol),
+                solid
+                & ((c["rho_s"] * np.sin(c["phi_s"]) <= tol) | (rho_r * np.sin(c["phi_r"]) <= tol)),
+                solid
+                & (
+                    (c["rho_s"] * np.sin(n * np.pi - c["phi_s"]) <= tol)
+                    | (rho_r * np.sin(n * np.pi - c["phi_r"]) <= tol)
+                ),
             ]
         )
         counted = (lit == (found >= 0)) | (near[:, None] & ~cannot)
