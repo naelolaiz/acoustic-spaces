@@ -1596,9 +1596,9 @@ class Demo:
             elif relative_to is not None and option.kind in PATH_KINDS:
                 shown = _relative(Path(value), relative_to)
             elif isinstance(value, tuple):  # several values
-                shown = ",".join(str(each) for each in value)
+                shown = ",".join(_typed(each) for each in value)
             else:
-                shown = str(value)
+                shown = _typed(value)
             if option.positional:
                 lead.append(shown)
             else:
@@ -2022,6 +2022,14 @@ def joined_name(parts: Sequence[str]) -> str:
     first, last, middle = parts[0], parts[-1], "_".join(parts[1:-1])
     room = max(RUN_NAME_MOST - len(first) - len(last) - 9, 0)
     return f"{first}_{middle[:room].rstrip('_-')}-{digest(middle)}_{last}"
+
+
+def _typed(value) -> str:
+    """``value`` as a command line gives it: a whole number of a decimal option without
+    its ``.0`` (``--height 330``, as it is typed, not ``330.0``), others as they read."""
+    if isinstance(value, float) and value.is_integer() and abs(value) < 1e15:
+        return str(int(value))
+    return str(value)
 
 
 def _relative(path: Path, folder: Path) -> str:

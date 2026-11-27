@@ -219,6 +219,18 @@ def label_at(draw, mark: Box, words: str, f, side: str) -> tuple[tuple[float, fl
     return (x0 - gap, top), "ra", (x0 - gap - w, top, x0 - gap, top + h)
 
 
+def head_boxes(at: tuple[float, float], forward: tuple[float, float], r: float) -> list[Box]:
+    """The boxes the head of the listener of the moment takes on the plan
+    (:func:`~acoustic_spaces.demos.pictures.head` at ``at``, facing ``forward``, of
+    radius ``r``): the head with its ears and their letters, and the arrow ahead of it."""
+    x, y = at
+    out: list[Box] = [(x - 2.7 * r, y - 2.7 * r, x + 2.7 * r, y + 2.7 * r)]
+    for along in (3.0, 4.4):
+        ax, ay = x + forward[0] * r * along, y + forward[1] * r * along
+        out.append((ax - 1.2 * r, ay - 1.2 * r, ax + 1.2 * r, ay + 1.2 * r))
+    return out
+
+
 def _overlap(a: Sequence[float], b: Sequence[float]) -> bool:
     return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
 
@@ -229,30 +241,39 @@ def laid_out(
     f,
     taken: Sequence[Box] = (),
     area: Box | None = None,
+    written: Sequence[Box] = (),
 ) -> list[tuple[tuple[float, float], str, str]]:
     """Each of ``labels`` (the box its mark takes, its words and the sides it may take,
-    in the order tried) on the side where it runs into the fewest of the labels laid
-    out before it and what is ``taken`` (the marks' boxes), the first of those tried on
-    a tie, inside ``area`` where it fits there; in the font ``f``. Each as the point,
-    the anchor and the words."""
-    boxes: list[Sequence[float]] = list(taken)
+    in the order tried), in that order, on the side where it runs into none of the words
+    on the picture and what is drawn over the labels after them (``written``, and the
+    labels laid out before it) and the fewest of what is ``taken`` (the marks' boxes),
+    the first of those tried on a tie, inside ``area`` where it fits there; in the font
+    ``f``. A label that would run into words on every side is left out: words written
+    over words cannot be read, and the labels that come first (what is past the panel,
+    the places a tour goes, then the sources) keep theirs. Each as the point, the anchor
+    and the words."""
+    words_on: list[Sequence[float]] = list(written)
     out = []
     for mark, words, sides in labels:
-        best: tuple[int, int] | None = None
+        best: tuple[int, int, int] | None = None
         chosen: tuple[tuple[float, float], str, Box] | None = None
         for side in sides:
             xy, anchor, box = label_at(draw, mark, words, f, side)
             inside = area is None or (
                 area[0] <= box[0] and box[2] <= area[2] and area[1] <= box[1] and box[3] <= area[3]
             )
-            score = (int(not inside), sum(_overlap(box, b) for b in boxes))
+            score = (
+                sum(_overlap(box, b) for b in words_on),
+                int(not inside),
+                sum(_overlap(box, b) for b in taken),
+            )
             if best is None or score < best:
                 best, chosen = score, (xy, anchor, box)
-            if score == (0, 0):
+            if score == (0, 0, 0):
                 break
-        if chosen is None:
+        if chosen is None or best is None or best[0]:
             continue
-        boxes.append(chosen[2])
+        words_on.append(chosen[2])
         out.append((chosen[0], chosen[1], words))
     return out
 
@@ -582,14 +603,16 @@ class Pictures:
         # The listeners' names first, the places the tour goes, then the sources'.
         labels: list[tuple[Box, str, Sequence[str]]] = []
         taken: list[Box] = [(x - rs, y - rs, x + rs, y + rs) for (x, y), rs, _, _ in marks]
-        taken += worded
+        # The head of the listener of the moment is drawn over the labels: none goes there.
+        covered = list(worded)
         for name, lis in listeners.items():
             if lis.get("enabled", True) is False:
                 continue
             x, y = plan(*lis["position"])
-            taken.append((x - r * 1.2, y - r * 1.2, x + r * 1.2, y + r * 1.2))
             if name == current:
+                covered += head_boxes((x, y), axes(plan, lis)[0], r)
                 continue
+            taken.append((x - r * 1.2, y - r * 1.2, x + r * 1.2, y + r * 1.2))
             forward, _left = axes(plan, lis)
             ring(draw, (x, y), forward, r * 0.8, r * 1.2, r * 0.6)
             labels.append(((x - r, y - r, x + r, y + r), name, LISTENER_SIDES))
@@ -602,11 +625,12 @@ class Pictures:
             img, within = target, area
             draw = ImageDraw.Draw(img)
             here = listeners.get(current) if current is not None else None
-            for mark, words, sides in self.draw_beyond(draw, plan, area, beyond, here):
-                taken.append(mark)
-                labels.append((mark, words, sides))
-        for xy, anchor, words in laid_out(draw, labels, label, taken, within):
-            text(draw, xy, words, label, MUTED, anchor)
+            # What is past the panel first: its edge says no more of where it is.
+            edges = self.draw_beyond(draw, plan, area, beyond, here)
+            taken += [mark for mark, _, _ in edges]
+            labels[:0] = edges
+        for xy, anchor, words in laid_out(draw, labels, label, taken, within, covered):
+            text(draw, xy, words, label, MUTED, anchor, halo=2)
         if current is not None and current in listeners:
             lis = listeners[current]
             forward, left = axes(plan, lis)

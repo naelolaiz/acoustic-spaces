@@ -65,8 +65,10 @@ def font(weight: str, size: int, display: bool = False) -> ImageFont.FreeTypeFon
     return _FONTS[key]
 
 
-def text(draw, xy, s, f, fill=TEXT, anchor="la") -> None:
-    draw.text(xy, s, font=f, fill=fill, anchor=anchor)
+def text(draw, xy, s, f, fill=TEXT, anchor="la", halo: int = 0) -> None:
+    """``s`` at ``xy``; with ``halo``, ringed that many pixels wide in the background's
+    colour, so that the lines and marks it is written over do not run through it."""
+    draw.text(xy, s, font=f, fill=fill, anchor=anchor, stroke_width=halo, stroke_fill=BG)
 
 
 def arrow(draw, start, direction, length: float, head: float, colour, width: int) -> None:

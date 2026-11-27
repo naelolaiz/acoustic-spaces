@@ -4665,7 +4665,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     song.pick(str(song_file))
     assert dialog.problem.text() == "" and ok.isEnabled()
     stems.table.item(rows.index("vocal"), stems.FILE).setText(str(song_file))
-    assert f"--recording {song_file} --bpm 120.0 --stem vocal={song_file}" in dialog.command.text()
+    assert f"--recording {song_file} --bpm 120 --stem vocal={song_file}" in dialog.command.text()
     chosen = dialog.chosen()[2]
     assert chosen.bpm == 120.0 and chosen.stems == {"vocal": song_file}
     assert chosen.recording == str(song_file)
@@ -4760,10 +4760,10 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert road.command.text() == "python passby_demo.py all"
     speed.edit.setText("100")
     assert way() == "At 27.78 m/s (100.0 km/h), 150.0 m in 5.4 s, with Doppler"
-    assert road.command.text() == "python passby_demo.py all --speed 100.0"
+    assert road.command.text() == "python passby_demo.py all --speed 100"
     # Several speeds, one pass after another in one video; the column says each.
     speed.edit.setText("50, 100")
-    assert road.command.text() == "python passby_demo.py all --speed 50.0,100.0"
+    assert road.command.text() == "python passby_demo.py all --speed 50,100"
     assert speed.value() == (50.0, 100.0) and road.problem.text() == ""
     assert way() == (
         "At 13.89 m/s (50.0 km/h), 150.0 m in 10.8 s, with Doppler; "

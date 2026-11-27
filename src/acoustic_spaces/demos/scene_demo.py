@@ -2483,7 +2483,31 @@ def trajectories_of(args: argparse.Namespace) -> dict:
     }
 
 
-def levels_along(movement, source, listener: str, offset_db=None, gains=None) -> list[float | None]:
+def held_levels(movement):
+    """A function giving the levels (dB, per octave band) of ``movement``'s response of a
+    source at a listener at moment ``k`` for a sound power (dB per octave band), as
+    :meth:`~acoustic_spaces.engine.response.Response.levels_or_held` gives them: each
+    response read once, however many moments and passes ask for it (a still source's is
+    the same at every moment), and let go of what its echograms keep once read
+    (:meth:`~acoustic_spaces.engine.response.Response.forget`), so that a movement's
+    many responses do not each go on holding their early part's pressure."""
+    found: dict = {}
+
+    def levels(source: str, listener: str, k: int, power) -> np.ndarray:
+        key = movement.key(source, listener, k)
+        mark = (key, np.asarray(power, dtype=float).tobytes())
+        if mark not in found:
+            response = movement.result[key]
+            found[mark] = response.levels_or_held(power)
+            response.forget()
+        return found[mark]
+
+    return levels
+
+
+def levels_along(
+    movement, source, listener: str, offset_db=None, gains=None, held=None
+) -> list[float | None]:
     """The A-weighted level (dB) of ``source`` (a scene source) at ``listener`` at each
     moment of ``movement``, as simulated, as a still listener's and a pass-by's are
     (:meth:`~acoustic_spaces.engine.response.Response.levels_or_held`); None at a
@@ -2494,17 +2518,14 @@ def levels_along(movement, source, listener: str, offset_db=None, gains=None) ->
     added band by band. ``offset_db`` (8,) changes each octave band's level by that much
     (a façade's level difference, for the room behind it); ``gains``, a function of the
     moments' times giving dB, by that much at each moment (an aircraft's thrust along its
-    flight: :func:`~acoustic_spaces.demos.models.gains_along`)."""
+    flight: :func:`~acoustic_spaces.demos.models.gains_along`). ``held``: the run's
+    :func:`held_levels`, shared with its other readings."""
     from acoustic_spaces.parameters import a_weighted
 
+    held = held_levels(movement) if held is None else held
     power = source.power_db("octave")
     times = np.asarray(movement.times, dtype=float)
-    bands = np.array(
-        [
-            movement.result[movement.key(source.name, listener, k)].levels_or_held(power)
-            for k in range(len(times))
-        ]
-    )
+    bands = np.array([held(source.name, listener, k, power) for k in range(len(times))])
     lead, behind = models.trail(source) if source.model is not None else (0.0, ())
     if lead or behind:
         start, end = models.pass_times(source)
@@ -2536,10 +2557,15 @@ def speech_along(movement, scene: Scene, source, listener: str) -> list[float | 
     the scene's background noise: :meth:`~acoustic_spaces.scene.Scene.level_inputs`);
     None at a moment where it is not defined."""
     power, noise, talker = scene.level_inputs(source.name)
+    found: dict[tuple[str, str], float] = {}  # each response read once, as held_levels
     out: list[float | None] = []
     for k in range(len(movement.times)):
-        response = movement.result[movement.key(source.name, listener, k)]
-        sti = float(response.speech(power, noise, talker=talker).sti)
+        key = movement.key(source.name, listener, k)
+        if key not in found:
+            response = movement.result[key]
+            found[key] = float(response.speech(power, noise, talker=talker).sti)
+            response.forget()
+        sti = found[key]
         out.append(round(sti, 3) if math.isfinite(sti) else None)
     return out
 
@@ -2572,7 +2598,7 @@ def lasting(x: np.ndarray, rate: float, seconds: float) -> np.ndarray:
     return np.concatenate([x, np.zeros((n - len(x), *x.shape[1:]), dtype=x.dtype)])
 
 
-def pass_heard(movement, sounding: list, now_and_then: dict | None = None):
+def pass_heard(movement, sounding: list, now_and_then: dict | None = None, held=None):
     """A function giving the pass of the sources of ``sounding`` (scene sources) that
     move at a listener of ``movement`` that stands, by its name (a
     :class:`~acoustic_spaces.walkthrough.PassBy`; None where none of them moves, or the
@@ -2593,11 +2619,13 @@ def pass_heard(movement, sounding: list, now_and_then: dict | None = None):
     trajectory (a train's behind its front, :func:`~acoustic_spaces.demos.models.trail`)
     are heard with it, each as long after it as it is behind, its sound power against
     the source's, their energies added (:func:`~acoustic_spaces.demos.passby.trailed`),
-    every pass going on until the last of them is past."""
+    every pass going on until the last of them is past. ``held``: the run's
+    :func:`held_levels`, shared with its other readings."""
     from acoustic_spaces.demos.passby import Trail, blocks_loudness, heard_together, trailed
     from acoustic_spaces.parameters import a_weighted
     from acoustic_spaces.walkthrough import PassBy, knots
 
+    held = held_levels(movement) if held is None else held
     moving = [s for s in sounding if ("sources", s.name) in movement.copies]
     trails = {
         s.name: Trail(lead, tuple((lag, np.zeros(0), offset) for lag, offset in behind))
@@ -2622,7 +2650,7 @@ def pass_heard(movement, sounding: list, now_and_then: dict | None = None):
             power = source.power_db("octave")
             responses = [movement.result[movement.key(source.name, name, k)] for k in ks]
             heard = times[ks] + np.array([r.direct_delay_s for r in responses])
-            levels = np.array([r.levels_or_held(power) for r in responses])
+            levels = np.array([held(source.name, name, k, power) for k in ks])
             if callable((now_and_then or {}).get(source.name)):
                 levels = levels + np.asarray(now_and_then[source.name](times[ks]))[:, None]
             elif source.name in (now_and_then or {}):
@@ -2647,6 +2675,7 @@ def passes_of(
     temperature_c: float,
     now_and_then: dict | None = None,
     houses=None,
+    held=None,
 ) -> dict[str, dict]:
     """The pass of the sources of ``sounding`` (scene sources) that move, at each listener
     of ``names`` that stands, as a pass-by is measured (:func:`pass_heard`, with
@@ -2662,7 +2691,7 @@ def passes_of(
     (:func:`~acoustic_spaces.demos.models.model_line`); where an aircraft passes (a
     model read through the slow time weighting, Doc 29's), its L_ASmax and its SEL over
     the 10 dB-down time too (:attr:`~acoustic_spaces.walkthrough.PassBy.slow_a`). None
-    for a listener that moves."""
+    for a listener that moves. ``held``: the run's :func:`held_levels`."""
     from types import SimpleNamespace
 
     from acoustic_spaces.demos.models import model_line
@@ -2672,7 +2701,10 @@ def passes_of(
     moving = [s for s in sounding if ("sources", s.name) in movement.copies]
     if not moving:
         return {}
-    heard = houses.passes if houses is not None else pass_heard(movement, sounding, now_and_then)
+    if houses is not None:
+        heard = houses.passes
+    else:
+        heard = pass_heard(movement, sounding, now_and_then, held)
     times = np.asarray(movement.times, dtype=float)
     listeners = {lis.name: lis for lis in movement.room.scene.listeners}
     out: dict[str, dict] = {}
@@ -2883,6 +2915,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
             listeners=here,
             dtype=np.float32,  # as the mixes are written
         )
+        held = held_levels(movement)  # each response's levels, read once in this run
         houses = None
         if house is not None or shaking:
             # The vibration is worked out until the last wheels leave the trajectory's end.
@@ -2892,7 +2925,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
                 str(getattr(args, "indoors", None) or indoors.OFF),
                 inside,
                 {lis.name: tuple(lis.position) for lis in scene.listeners},
-                pass_heard(movement, sounding, now_and_then),
+                pass_heard(movement, sounding, now_and_then, held),
                 frozenset(name for name in fronts if name in here),
                 shaking,
                 indoors.grid(max([float(times[-1]), *ends])),
@@ -2904,7 +2937,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
             facing = houses.house_of(name) if houses is not None else None
             if facing is None or house is None:
                 levels[name] = {
-                    s.name: levels_along(movement, s, name, gains=along.get(s.name))
+                    s.name: levels_along(movement, s, name, gains=along.get(s.name), held=held)
                     for s in sounding
                 }
             elif house.airborne:
@@ -2912,7 +2945,9 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
                 at = indoors.front_name(name) if name in fronts else name
                 through = house.facade.indoor_db()
                 levels[name] = {
-                    s.name: levels_along(movement, s, at, through, gains=along.get(s.name))
+                    s.name: levels_along(
+                        movement, s, at, through, gains=along.get(s.name), held=held
+                    )
                     for s in sounding
                 }
             else:  # the rumble alone: nothing of the sources comes in
@@ -2926,6 +2961,7 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
             scene.air.temperature_c,
             now_and_then,
             houses,
+            held,
         )
         if houses is not None:
             for name in here:

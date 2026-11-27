@@ -229,7 +229,14 @@
 - Fixed: a police car's or a fire engine's walk was simulated again on every run, and
   the tram's credit named a pantograph it does not have.
 - Fixed: a demo's video footer and its run's record gave `--again` and `--no-mp4` in the
-  command the run was made with; they say how a step ran, not what the run is.
+  command the run was made with; they say how a step ran, not what the run is. A
+  decimal option at a whole number is given as typed (`--height 330`, not `330.0`).
+- Fixed: a still's plan wrote labels over each other where marks crowd (the stadium's
+  stage, an orchestra's desks), and under the head of the listener of the moment; each
+  label now goes on a side clear of other words, what is past the panel and the
+  places the tour goes first, and one with no clear side is left out; each is ringed
+  in the background's colour, so that a trajectory or a ray drawn under it does not
+  strike it through.
 - Fixed: a still where a source moves past named neither it in its level plot ("Level
   heard here") nor in its L_Amax, SEL and Doppler lines, though other sources play;
   they name it now, with how far it is under or over the others at its loudest. A tour
@@ -257,6 +264,12 @@
   before it simulates the next. The airport's demo, its three listeners kilometres
   apart, needed about 65 GiB at once, and needs about 22 GiB for the farthest alone, as
   its demo did before 4.4.0.
+- Changed: the demo of any scene reads the levels of each response of a movement once,
+  however many moments and passes ask for them (a still source's is the same at every
+  moment), and then lets go of what its echograms keep of the early part, a megabyte or
+  more for a far source; `pass_by` lets go of it for each place it reads, and
+  `Response.forget()` does so for one response. The stadium's crossing kept it for
+  every place of the helicopter and every listener, and ran out of 13 GiB.
 - Fixed (results change): with the late rays on a GPU (`simulation.late.device` gpu
   or both, or auto where it takes either), the spread from the materials' absorption
   uncertainty could be far too wide, most with the CPU and the GPU sharing the rays: in

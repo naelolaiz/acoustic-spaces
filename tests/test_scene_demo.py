@@ -905,3 +905,43 @@ def test_a_scene_s_tour_names_its_listeners_and_one_length_a_stop(tmp_path: Path
     ):
         heard = scene_demo.toured_for(toured, played)
         assert [s.model_dump(exclude_defaults=True) for s in heard.tour] == stops
+
+
+def test_the_plan_never_writes_a_label_over_words() -> None:
+    """The plan's labels go each on a side clear of the words already there and of what
+    is drawn over them after (the head of the listener of the moment); one with no such
+    side is left out, so that those laid out first (what is past the panel, the places
+    a tour goes) keep theirs; of the sides clear of words, the one over the fewest marks."""
+    pytest.importorskip("PIL")
+    from PIL import Image, ImageDraw
+
+    from acoustic_spaces.demos.pictures import font
+    from acoustic_spaces.demos.scene_pictures import _overlap, head_boxes, label_at, laid_out
+
+    draw = ImageDraw.Draw(Image.new("RGB", (400, 300)))
+    f = font("Regular", 16)
+    sides = ("right", "left", "below", "above")
+    head = head_boxes((200.0, 150.0), (1.0, 0.0), 10.0)
+    mark = (96.0, 96.0, 104.0, 104.0)
+    labels = [
+        (mark, "first", sides),
+        (mark, "second", sides),  # the same place: another side
+        ((196.0, 146.0, 204.0, 154.0), "under the head", sides),  # every side covered
+        ((300.0, 250.0, 308.0, 258.0), "alone", sides),
+    ]
+    out = laid_out(draw, labels, f, written=head)
+    assert [words for _, _, words in out] == ["first", "second", "alone"]
+    shown = [labels[0], labels[1], labels[3]]
+    placed = [
+        box
+        for (xy, anchor, words), (at, _, tried) in zip(out, shown, strict=True)
+        for side in tried
+        for point, how, box in [label_at(draw, at, words, f, side)]
+        if (point, how) == (xy, anchor)
+    ]
+    assert len(placed) == 3
+    assert not any(_overlap(a, b) for k, a in enumerate(placed) for b in placed[k + 1 :])
+    assert not any(_overlap(a, b) for a in placed for b in head)
+    assert out[0][1] == "lm" and out[1][1] == "rm"  # right of the mark, then left of it
+    # A mark where the first side would go: the next side clear of it.
+    assert laid_out(draw, labels[:1], f, [(130.0, 90.0, 140.0, 110.0)])[0][1] == "rm"

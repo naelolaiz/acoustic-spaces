@@ -520,9 +520,9 @@ def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, mo
             each["trajectory"]["to"] = [[20, 0, z]]
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     simulated, outside = [], []
-    real_movement, real_through = walkthrough.simulate_movement, indoors.House.through
+    real_movement, real_through = walkthrough.movements_in_turn, indoors.House.through
 
-    def simulate_movement(room, **kwargs):
+    def movements_in_turn(room, **kwargs):
         simulated.extend((lis.name, lis.position) for lis in room.scene.listeners if lis.in_use)
         return real_movement(room, **kwargs)
 
@@ -536,7 +536,7 @@ def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, mo
         shifts.append((shift_db, times))
         return real_heard(self, wet, rate, shift_db, times)
 
-    monkeypatch.setattr(walkthrough, "simulate_movement", simulate_movement)
+    monkeypatch.setattr(walkthrough, "movements_in_turn", movements_in_turn)
     monkeypatch.setattr(indoors.House, "through", through)
     monkeypatch.setattr(indoors.House, "heard", heard_in)
     demo = load(folder / "passby_demo.py").at(folder)

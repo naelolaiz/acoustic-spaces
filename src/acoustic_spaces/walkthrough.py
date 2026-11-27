@@ -1820,9 +1820,19 @@ def pass_by(responses: TrajectoryResponses, source: str | None = None) -> PassBy
     times = np.asarray(responses.points.times, dtype=float)
     if responses.kind == "sources":
         times = times + np.array([r.direct_delay_s for r in places])
-    levels = np.array([r.levels_or_held(p) for r, p in zip(places, power, strict=True)])
+    levels = np.array([_read_once(r, p) for r, p in zip(places, power, strict=True)])
     levels_a = np.array([a_weighted(row) for row in levels])
     return PassBy(source, listener, times, levels, levels_a)
+
+
+def _read_once(response, power) -> np.ndarray:
+    """``response``'s :meth:`~acoustic_spaces.engine.response.Response.levels_or_held`
+    for the sound power ``power``, letting go of what its echograms keep once read
+    (:meth:`~acoustic_spaces.engine.response.Response.forget`): a trajectory's places
+    are read once each, and kept, they would hold a megabyte or more each."""
+    levels = response.levels_or_held(power)
+    response.forget()
+    return levels
 
 
 #: The names these had before 4.4.0, when a trajectory was called a walk; kept for

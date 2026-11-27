@@ -995,6 +995,7 @@ def test_a_caption_leaves_out_how_a_step_ran() -> None:
     command a video's footer and the run's record give leaves them out, and says every
     option is at its default when they are all that was given; the editor still runs
     them."""
+    pytest.importorskip("PIL")
     from acoustic_spaces.demos.pictures import settings_lines
 
     demo = demo_for("stadium_concert")
@@ -1005,6 +1006,20 @@ def test_a_caption_leaves_out_how_a_step_ran() -> None:
     assert demo.command("all", values, names_only=True) == "python stadium_demo.py all"
     footer = settings_lines(demo, values, {})[1]
     assert footer.endswith("Run as: python stadium_demo.py all (every option at its default)")
+
+
+def test_a_command_line_gives_a_whole_number_as_it_is_typed() -> None:
+    """A decimal option at a whole number is given as typed, ``--height 330``, not as
+    the float it reads as (``330.0``), in the footer and the command the editor runs;
+    one with decimals as it reads."""
+    from acoustic_spaces.demos import demos_of
+
+    crossing = demos_of("stadium_concert")[1]
+    for typed, shown in (("330", "330"), ("330.0", "330"), ("330.5", "330.5")):
+        values = crossing.resolved(crossing.parser().parse_args(["all", "--height", typed]))
+        assert values.height == float(typed)
+        assert crossing.arguments(values, names_only=True) == ["--height", shown]
+        assert crossing.command("all", values, names_only=True).endswith(f" --height {shown}")
 
 
 # --------------------------------------------------------------------------- the mixes
@@ -2248,6 +2263,50 @@ def test_a_demo_of_any_scene_gives_a_level_along_a_walk_wherever_sound_arrives(
     ]
 
 
+def test_a_demo_of_any_scene_reads_each_response_of_a_movement_once(
+    two_sources, monkeypatch
+) -> None:
+    """The demo reads each response of a movement once, however many moments and passes
+    ask for it (a still source's is the same at every moment), to the same levels, and
+    lets go of what its echograms keep once read: a source moving among hundreds of
+    places would else have each hold its early part's pressure, a megabyte or more far
+    away (the stadium's crossing ran out of memory so)."""
+    import dataclasses
+
+    from acoustic_spaces.demos.scene_demo import held_levels, levels_along
+    from acoustic_spaces.engine.response import Response
+    from acoustic_spaces.parameters import a_weighted
+    from acoustic_spaces.walkthrough import Movement
+
+    talker, radio = two_sources.room.scene.sources
+    places = {f"radio@{k}": dataclasses.replace(two_sources["radio", "seat-a"]) for k in range(3)}
+    responses = {(place, "seat-a"): response for place, response in places.items()}
+    still = dataclasses.replace(two_sources["talker", "seat-a"])
+    result = dataclasses.replace(two_sources, responses={("talker", "seat-a"): still, **responses})
+    movement = Movement(
+        two_sources.room, np.array([0.0, 0.5, 1.0]), result, {("sources", "radio"): tuple(places)}
+    )
+    power = radio.power_db("octave")
+    expected = [round(float(a_weighted(r.levels_or_held(power))), 2) for r in places.values()]
+    spoken = round(float(a_weighted(still.levels_or_held(talker.power_db("octave")))), 2)
+    for response in [still, *places.values()]:
+        assert response._pressure is not None  # what a reading keeps
+        response.forget()
+    read = []
+    levels_or_held = Response.levels_or_held
+    monkeypatch.setattr(
+        Response,
+        "levels_or_held",
+        lambda self, *a, **k: read.append(self) or levels_or_held(self, *a, **k),
+    )
+    held = held_levels(movement)
+    for _ in range(2):  # the pass and the stills read them again
+        assert levels_along(movement, radio, "seat-a", held=held) == expected
+        assert levels_along(movement, talker, "seat-a", held=held) == [spoken] * 3
+    assert sorted(map(id, read)) == sorted(map(id, [still, *places.values()]))
+    assert all(response._pressure is None for response in read)
+
+
 def test_a_demo_of_any_scene_plays_the_files_given_to_its_sources(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -2870,6 +2929,7 @@ def test_a_tour_column_lists_the_stops_that_fit_round_the_current_one() -> None:
     """A tour too long for its column keeps its rows apart: as many stops as fit, the
     current one among them, with a row for how many come before and one for after where
     some do; all of them where they fit."""
+    pytest.importorskip("PIL")
     from acoustic_spaces.demos.pictures import tour_window
 
     assert tour_window(11, 3, 11) == (0, 11)

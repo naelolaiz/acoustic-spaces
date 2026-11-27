@@ -157,6 +157,15 @@ class Response:
             self._pressure = (key, {})
         return self._pressure[1]
 
+    def forget(self) -> None:
+        """Let go of what the response keeps of its early part between readings of its
+        echograms (the paths' pressure in the coherent bands, for
+        :func:`~acoustic_spaces.engine.coherent.coherent_energy`: a megabyte or more for
+        a far source, more again where turbulence keeps each path's spectrum); the next
+        reading works it out again, to the same values. For a caller that reads many
+        responses once each, such as each place of a source's trajectory."""
+        self._pressure = None
+
     @property
     def band_hz(self) -> tuple[int, ...]:
         """Centre frequencies (Hz) of the bands: octave or third-octave bands."""

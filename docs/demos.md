@@ -1615,14 +1615,15 @@ longer taken: the scenes a run simulates go to the work folder.
   (the scene's `diffraction: direct`), so that it fades as an edge hides it. Each
   stop's still gives how far under the other sources it is there at its loudest, and
   `--sources helicopter` flies it with the concert left out, to hear it alone. At the
-  mix position it peaks at 81.3 to 81.4 dB(A) over five runs (74.1 from
-  330 m), where the sound system's loudspeakers, simulated at their sound power, give
-  97.0 dB(A): it is some 16 dB under the music, heard most in the song's quiet passages.
-  In the north stand it peaks 9.8 to 10.2 dB lower at the far seats and 8.3 to 12.2 dB
-  lower at the top row, under the roof: the sound there is almost all late sound, which
-  a few rays can lift by several decibels at one place, as they lifted the top row's
-  peak in one of the five runs, for a moment, 2.4 to 4.0 dB over the others', while its
-  SEL there, 72.8 to 73.2 dB(A), hardly moves from run to run.
+  mix position it peaks at 81.4 dB(A), where the sound system's loudspeakers, simulated
+  at their sound power, give 97.0 dB(A): it is some 16 dB under the music, heard most in
+  the song's quiet passages. At its loudest it is 14 to 32 dB under all the other
+  sources together at the tour's stops, 15 dB at the mix position. In the north stand
+  it peaks 11.4 dB lower than at the mix position at the far seats and 14.1 dB lower at
+  the top row, under the roof, where the sound is almost all late sound; its SEL there
+  is 72.3 dB(A). From 330 m it peaks at 73.9 to 74.4 dB(A) at the mix position over
+  three runs, its SEL 82.4: the scene sets no seed, so each run traces rays of its own,
+  which move a peak a few tenths of a decibel and an SEL a few hundredths.
 - **The video** is the stadium demo's (`demo/crossing_binaural.mp4`): the same tour,
   each stop turned up to the loudness of the loudest, the mixes keeping one gain for
   all. The tour goes on as the stadium demo's does: halfway through each of the three
