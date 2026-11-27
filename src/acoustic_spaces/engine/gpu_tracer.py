@@ -25,7 +25,9 @@ with atomic additions of 64-bit fixed-point numbers (two 32-bit words with a car
 rounded at random to the nearest step, so that sums are exact and unbiased; WGSL has no
 atomic floating-point addition), scaled so that a window's sums stay under 2**40 times
 the reflections per ray, where the listeners' sums grow with the ray count (and the GPU
-gives up a run whose sums overflow).
+gives up a run whose sums overflow). An arrival's moments of the reflection counts are
+rounded once, its energy, which each term then takes times its counts, so that they
+stay the moments of one set of arrivals, as re-weighting needs.
 
 The rays advance in rounds of a few reflections each, so that no dispatch runs long
 enough for the operating system to reset the GPU. Rays still going at the end of a
@@ -416,15 +418,26 @@ fn lambert(n: vec3<f32>) -> vec3<f32> {
 // Adds `value` (scaled) to the 64-bit fixed-point number at words at and at + 1, rounded
 // at random to a whole step.
 fn add_fixed(at: u32, value: f32) {
+    add_steps(at, whole_steps(value));
+}
+
+// `value` (scaled) rounded at random to a whole number of steps, up or down with the
+// chances that keep its expectation (0 for none). From 2**24 on every single-precision
+// number is whole already.
+fn whole_steps(value: f32) -> f32 {
     if (!(value > 0.0)) {
-        return;
+        return 0.0;
     }
-    var v = value;
-    if (v < 16777216.0) {
-        v = floor(v + random());
-        if (v == 0.0) {
-            return;
-        }
+    if (value < 16777216.0) {
+        return floor(value + random());
+    }
+    return value;
+}
+
+// Adds `v` whole steps to the 64-bit fixed-point number at words at and at + 1.
+fn add_steps(at: u32, v: f32) {
+    if (!(v > 0.0)) {
+        return;
     }
     if (v >= 9.2e18) {
         atomicStore(&tallies[4], 1u);
@@ -1385,26 +1398,34 @@ fn deposit(k: u32, factor: f32, travel: f32, absorbing: f32, arrival: vec3<f32>)
 
 // With face groups: adds counted[b] * factor * air(absorbing) at `time` to listener
 // k's moments, times each term of the ray's counts (as the CPU's add, ray_tracer.hpp).
+// The energy is rounded to whole steps once, and each term takes it times its counts
+// exactly, so that the sums stay the moments of one set of arrivals. Re-weighting takes
+// their ratios (reweight.moment_exponent): rounded each on its own, the terms of a slot
+// far down the tail, where an arrival brings less than a step, were those of no set of
+// arrivals (counts whose variance is below zero), and the slot's energy could come out
+// up to e**50 times what it was re-weighted.
 fn moments(k: u32, factor: f32, absorbing: f32, time: f32) {
     let mbin = min(run.moment_bins - 1u, u32(max(time, 0.0) / run.moment_step));
     let mb = run.moment_bins;
     let row = run.moment_at + 2u * (k * TERMS * BANDS * mb + mbin);
     for (var b = 0u; b < BANDS; b++) {
-        let e = counted[b] * factor * exp(-num(run.air_at + b) * absorbing) * run.moment_scale;
+        let e = whole_steps(
+            counted[b] * factor * exp(-num(run.air_at + b) * absorbing) * run.moment_scale
+        );
         if (!(e > 0.0)) {
             continue;
         }
-        add_fixed(row + 2u * b * mb, e);
+        add_steps(row + 2u * b * mb, e);
         var t = 1u + GROUPS;
         for (var i = 0u; i < GROUPS; i++) {
             let n_i = f32(hits[i]);
             if (n_i > 0.0) {
-                add_fixed(row + 2u * ((1u + i) * BANDS + b) * mb, e * n_i);
+                add_steps(row + 2u * ((1u + i) * BANDS + b) * mb, e * n_i);
             }
             for (var j = i; j < GROUPS; j++) {
                 let n_j = f32(hits[j]);
                 if (n_i > 0.0 && n_j > 0.0) {
-                    add_fixed(row + 2u * (t * BANDS + b) * mb, e * n_i * n_j);
+                    add_steps(row + 2u * (t * BANDS + b) * mb, e * n_i * n_j);
                 }
                 t += 1u;
             }
