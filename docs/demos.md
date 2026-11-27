@@ -476,8 +476,9 @@ recording of yours. Where a source moves past a listener who stands, the stills 
 as a pass-by is measured, each place's level as if the source stood there at the time it
 is heard: the level at that moment, the loudest (L_Amax) and when, the sound exposure
 level (SEL), how close it comes and how far the pitch of its direct sound falls, with
-the level over the pass drawn under the plan; and, for a vehicle with a model, its
-speed and sound power. In **Run demo** the Trajectories box ticks what the run takes in
+the level over the pass drawn under the plan, each naming what moves; where other
+sources play too, how far it is under or over them at its loudest; and, for a vehicle
+with a model, its speed and sound power. In **Run demo** the Trajectories box ticks what the run takes in
 (`--sources`), and says how each mover goes in the run, at `--speed` too.
 
 **Indoors.** `--indoors` hears what moves past in the room behind each listener of an
@@ -719,7 +720,7 @@ Singing Dataset, the ESMUC Choir Dataset and Cantoría are all for non-commercia
 
 ## A concert in the stadium
 
-![A frame of the stadium video: the stadium from above with the sound system, the monitors and the band, the listener at the mix position facing the stage with a line from each loudspeaker, the crowd standing on the pitch and seated in the stands, the stage close up, the tour and a spectrogram of the sound](images/stadium_demo.png)
+![A frame of the stadium video: the stadium from above with the sound system, the monitors and the band, the listener at the mix position facing the stage with a line from each loudspeaker, the crowd standing on the pitch and seated in the stands, the tour and a spectrogram of the sound](images/stadium_demo.png)
 
 `stadium_demo.py` plays a song by a band on the stage of the `stadium_concert` example,
 through its sound system and stage monitors, and mixes it at each of its 12 listeners.
