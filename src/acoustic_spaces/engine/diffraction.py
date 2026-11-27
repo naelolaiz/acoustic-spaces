@@ -3548,17 +3548,21 @@ def _off_row_pairs(row: Row, waves: np.ndarray, e1: np.ndarray, e2: np.ndarray) 
 
 def _back_past_row(row: Row, waves: np.ndarray, e1, e2, corners) -> None:
     """The terms ``waves`` (C, 3, 3, B, M) of the paths over two edges ``e1`` and then
-    ``e2`` (C,) of ``row`` whose second edge comes before the first along the way, with
-    each leg between the ``corners`` (the source, the points on the two edges (C, 3) and
-    the listener) past the row's other edges between its ends, which the uniform theory
-    of diffraction leaves out: as the row's field has it there
-    (:meth:`~acoustic_spaces.engine.paraxial.Row.passing`), in place."""
+    ``e2`` (C,) of ``row`` whose second edge's node comes before the first's in the
+    row's order along the way (the complement of the pairs of :func:`_off_row_pairs`:
+    not a screen's top and end together), with each leg between the ``corners`` (the
+    source, the points on the two edges (C, 3) and the listener) past the row's other
+    edges between its ends, which the uniform theory of diffraction leaves out: as the
+    row's field has it there (:meth:`~acoustic_spaces.engine.paraxial.Row.passing`),
+    in place. The order is the nodes', not that of the points on the edges: on a way at
+    a slant to the edges the points of a path that runs back lie far along them, and
+    their projections on the way can come in either order."""
     shape = waves.shape[3:]
     source, p1, p2, listener = corners
-    x1 = np.einsum("ij,j->i", p1 - row.origin, row.direction)
-    x2 = np.einsum("ij,j->i", p2 - row.origin, row.direction)
-    back = np.isin(e1, row.edge) & np.isin(e2, row.edge) & (x2 < x1)
-    for c in np.flatnonzero(back):
+    for c in np.flatnonzero(np.isin(e1, row.edge) & np.isin(e2, row.edge)):
+        i, j = row.node(e1[c]), row.node(e2[c])
+        if not row.along[j] < row.along[i] or row.together(i, j):
+            continue
         legs = (source, p1[c], p2[c], listener)
         factor = np.prod([row.passing(a, b) for a, b in itertools.pairwise(legs)], axis=0)
         waves[c] *= factor.reshape(shape)
