@@ -439,11 +439,19 @@ def _cross_y(source, receiver) -> float:
     return source[1] + (receiver[1] - source[1]) * rs / (rs + rr)
 
 
-def _double_path(paths) -> tuple[np.ndarray, np.ndarray]:
-    """The points on the two edges of the one path over two edges (of the edge
-    diffraction alone: products of the fade's terms run over two edges too)."""
-    double = [p for p in paths.points if len(p) == 4]
-    assert len(double) == 1, f"{len(double)} paths over two edges"
+def _double_path(paths, e1: Edge, e2: Edge) -> tuple[np.ndarray, np.ndarray]:
+    """The points on the two edges ``e1`` and ``e2`` of the one path over them (of the
+    edge diffraction alone: products of the fade's terms run over two edges too, and the
+    field over a row of edges stands on the straight way)."""
+
+    def off(point, edge: Edge) -> float:
+        along = np.asarray(point) - edge.origin
+        return float(np.linalg.norm(along - (along @ edge.direction) * edge.direction))
+
+    double = [
+        p for p in paths.points if len(p) == 4 and off(p[1], e1) < 1e-6 and off(p[2], e2) < 1e-6
+    ]
+    assert len(double) == 1, f"{len(double)} paths over the two edges"
     return double[0][1], double[0][2]
 
 
@@ -480,7 +488,7 @@ def second_order(folder: Path) -> list[dict]:
         room = _room(folder, "second", quads, source, receiver)
         _, level = engine(room, "second_order")
         _, pressure = engine(room, "second_order", coherent=COHERENT)
-        p1, p2 = _double_path(engine(room, "second_order", fade=False)[0])
+        p1, p2 = _double_path(engine(room, "second_order", fade=False)[0], e1, e2)
         centres = (float((p1 - e1.origin) @ e1.direction), float((p2 - e2.origin) @ e2.direction))
         began = time.perf_counter()
         btm = btm_second(e1, e2, source, receiver, centres, half)
@@ -588,7 +596,7 @@ def close_screens(folder: Path) -> list[dict]:
         e2 = Edge([gap, 0, rise], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
         quads = screen_quads() + screen_quads(gap, rise)
         room = _room(folder, "close", quads, source, receiver)
-        p1, p2 = _double_path(engine(room, "second_order", fade=False)[0])
+        p1, p2 = _double_path(engine(room, "second_order", fade=False)[0], e1, e2)
         centres = (float((p1 - e1.origin) @ e1.direction), float((p2 - e2.origin) @ e2.direction))
         btm = btm_second(e1, e2, source, receiver, centres, False)
         # Where one end sees past the other screen's top to an edge, BTM's first order
