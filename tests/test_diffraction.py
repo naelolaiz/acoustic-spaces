@@ -1658,9 +1658,16 @@ def test_a_way_through_the_corners_of_two_screens(tmp_path: Path, mode: str, slo
         inside = _past(tmp_path, quads, *(ends + [0.0, 1e-3, 0.0]), mode)
         np.testing.assert_allclose(clear, level, atol=0.15)
         np.testing.assert_allclose(inside, level, atol=0.15)
-        # At 250 and 500 Hz; below, the rigid screens' faces, which Kirchhoff leaves out,
-        # put the level up to 0.9 dB higher.
-        np.testing.assert_allclose(level[2:4], -4.43, atol=0.5)
+        # Kirchhoff's level is the limit at high frequencies, which the level nears as
+        # one over the square root of the frequency, as over two screens at grazing
+        # incidence: from 4 kHz up within 0.25 dB of it. Below, the rigid screens'
+        # faces, which Kirchhoff leaves out, put the level higher: a 3-D wave calculation
+        # (finite differences, 10 and 20 cm cells, extrapolated to the corners) gives
+        # -3.30 and -3.56 dB at 63 and 125 Hz, 1.1 and 0.9 dB above Kirchhoff's level,
+        # and the engine is within 0.18 dB of it (the same extrapolation is within
+        # 0.02 dB of BTM over one screen).
+        np.testing.assert_allclose(level[6:], -4.43, atol=0.25)
+        np.testing.assert_allclose(level[:2], [-3.30, -3.56], atol=0.25)
 
 
 def test_a_way_that_something_else_hides_beside_the_ends_of_two_screens(tmp_path: Path) -> None:
