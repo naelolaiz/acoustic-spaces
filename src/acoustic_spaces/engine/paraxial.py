@@ -349,7 +349,7 @@ def _reflected(
     in the top's part; a top whose front node has left reflects on the link of the
     nodes left on either side of it, by the plane's offsets there, and adds nothing
     where no node is left on one side. Two tops on one link reflect there each alone.
-    Every step is to be at least _CLOSE wide (:func:`_chain`) where there are tops; with
+    Every step is to be at least _APART wide (:func:`_chain`) where there are tops; with
     none, it is :func:`bridge_chain`'s (which takes narrow steps as it does)."""
     if not tops:
         return bridge_chain(h, rho, clear, blocked)
@@ -995,16 +995,15 @@ class Row:
         return out
 
     def _narrow(self) -> bool:
-        """Whether a step of the chain of family 0 is narrower than _CLOSE, where its
-        quadrature would take more than _MOST points and takes nodes as one
-        (:func:`_chain`), which the tops' reflections (:func:`_reflected`) do not: the
-        row's field is then worked out over each set of tops apart (:meth:`_layouts`).
-        Down to _CLOSE the march takes the step with up to _MOST points."""
+        """Whether a step of the chain of family 0 is narrower than _APART, where its
+        quadrature takes nodes as one (:func:`_chain`), which the tops' reflections
+        (:func:`_reflected`) do not: the row's field is then worked out over each set of
+        tops apart (:meth:`_layouts`)."""
         along = np.sort(self.along[self.family == 0])
         if not self.tops or len(along) < 2:
             return False
         rho = correlations(along, self.length)
-        return bool((np.sqrt(np.maximum(1.0 - rho**2, 0.0)) < _CLOSE).any())
+        return bool((np.sqrt(np.maximum(1.0 - rho**2, 0.0)) < _APART).any())
 
     def computable(self) -> Row:
         """The row with its hold at each frequency taken down by :func:`_fade` of its
