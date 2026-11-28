@@ -1298,6 +1298,52 @@ def _lean_error(
     return float(error.max())
 
 
+def _taut(along: np.ndarray, level: np.ndarray, clear: np.ndarray, ends, length: float):
+    """The likeliest path of a bridge along one coordinate (its mean's limit): the
+    shortest line from ``ends`` (the coordinate at 0 and at ``length``) that passes
+    each node (``along``, ``level``) on its ``clear`` side (+1: above its level), as
+    its corners (places along the way, coordinates), by adding the node it passes
+    furthest on the blocked side and dropping a corner the line past it no longer
+    needs, in turn."""
+    active: list[int] = []
+    for _ in range(4 * len(along) + 4):
+        xs = np.concatenate([[0.0], along[active], [length]])
+        ys = np.concatenate([[ends[0]], level[active], [ends[1]]])
+        slack = []
+        for m, i in enumerate(active):
+            line = ys[m] + (along[i] - xs[m]) / (xs[m + 2] - xs[m]) * (ys[m + 2] - ys[m])
+            slack.append(clear[i] * (line - level[i]))
+        if slack and max(slack) > 1e-12:
+            del active[int(np.argmax(slack))]
+            continue
+        passes = clear * (np.interp(along, xs, ys) - level)
+        worst = int(np.argmin(passes)) if len(passes) else -1
+        if worst < 0 or passes[worst] >= -1e-12 or worst in active:
+            break
+        active = sorted(active + [worst], key=lambda i: along[i])
+    xs = np.concatenate([[0.0], along[active], [length]])
+    ys = np.concatenate([[ends[0]], level[active], [ends[1]]])
+    return xs, ys
+
+
+def _paraxial_excess(along, level, clear, family, way, length: float) -> float:
+    """How much longer the bridge's paraxial measure makes the row's likeliest path
+    (:func:`_taut`, in each family's coordinate) than it is: the sum over its straight
+    pieces of da + (dq^2 + dp^2) / (2 da) - sqrt(da^2 + dq^2 + dp^2). The paraxial field
+    holds while the phase of that, k times it, stays small."""
+    corners = []
+    for f in (0, 1):
+        mine = family == f
+        corners.append(_taut(along[mine], level[mine], clear[mine], way[f], length))
+    xs = np.unique(np.concatenate([corners[0][0], corners[1][0]]))
+    q = np.interp(xs, *corners[0])
+    p = np.interp(xs, *corners[1])
+    da, dq, dp = np.diff(xs), np.diff(q), np.diff(p)
+    da = np.maximum(da, 1e-12 * length)
+    across = dq**2 + dp**2
+    return float(np.sum(da + across / (2.0 * da) - np.sqrt(da**2 + across)))
+
+
 def _directions(edges, model, u: np.ndarray, nearest: int, candidates: np.ndarray) -> tuple:
     """The row's directions q and p for the way along ``u`` with ``nearest`` its reference
     edge, and each edge's family, the direction of its constraint and the share of its
@@ -1468,7 +1514,9 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
     level = np.einsum("ij,ij->i", on_edge[nodes], constraint[nodes]) + offsets * (
         1.0 / lean_cosine - 1.0
     )
-    own = membership(np.abs(level - mean)[:, None] / sigma)
+    # A node the way passes on its blocked side is in the row: the bridge goes round it.
+    passes = ((mean - level) * clear)[:, None] / sigma
+    own = np.where(passes < 0.0, 1.0, membership(np.abs(passes)))
     # The ends: a screen's corner with its other edge in the row is a corner of the row;
     # any other end within reach takes the edge out of the row near it and past it.
     corners: list[tuple[int, int]] = []
@@ -1497,6 +1545,10 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
     fit = float(
         _between(_lean_error(clear_normal, fam, clear, along, length), _LEAN_NEAR, _LEAN_FAR)
     )
+    # The row hands over to the edges' paths as the paraxial measure of its likeliest
+    # path errs by a phase of pi / 4 to pi / 2 (an eighth to a quarter of a wavelength).
+    excess = _paraxial_excess(along, level, clear, fam, way_coordinates, length)
+    hold = hold * _between(k * excess, 0.25 * np.pi, 0.5 * np.pi)
     units = []
     for first, second in corners:
         beside = clear[first] * (mean[first] - level[first]) > 0.0
