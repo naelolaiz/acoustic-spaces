@@ -2,39 +2,38 @@
 25 and 50 m away over the grass and 25 m away over the paved yard, its pitch falling as
 it goes by (Doppler); and a video that follows.
 
-The vehicles are the example's own (the sources `car` and `truck`, left out of its
-simulations until ticked); --vehicle picks the one that goes past. The car is a
-passenger car at 50 km/h in the lane on the meadow's side, the truck an articulated one
-with three axles or more at 70 km/h the other way (--speed). Each sends its sound from
-0.05 m above the road with CNOSSOS-EU's sound power per octave band for its speed and
-category (Directive 2002/49/EC, Annex II, Appendix F, Table F-1, as amended in 2021). Its
-sound is made to that power: tyre noise, and the firing of its engine (four cylinders at
-2000 rpm for the car, six at 1200 for the truck; --rpm), each with the spectrum of its
-part; `--input NAME=WAV` plays a dry recording of yours instead (one of a vehicle going
-past has its Doppler and the road in it already). Run it from the folder of the roadside
-example (`acoustic-spaces examples --copy . roadside && cd roadside`), in the Python
-environment acoustic-spaces is installed in, with ffmpeg on the PATH:
+This is the demo of the roadside's scene (``acoustic-spaces demo scene.yaml --sources
+car``, This scene in the editor): a preset of it, which keeps the command lines of the
+script it was. The vehicles are the scene's own sources ``car`` and ``truck``, left out
+of its simulations until picked; ``--vehicle`` (or ``--sources``) picks the one that
+goes past, ``--vehicle car,truck`` each in a part of its own, one after the other in one
+video. The car is a passenger car at 50 km/h in the lane on the meadow's side, the truck
+an articulated one with three axles or more at 70 km/h the other way (``--speed`` sets
+another). Each has a model in the scene: CNOSSOS-EU's sound power per octave band for
+its category at its speed, in the scene's air (Directive 2002/49/EC, Annex II, Appendix
+F, Table F-1, as amended in 2021), from 0.05 m above the road; its sound is made to that
+power: tyre noise, and the firing of its engine (four cylinders at 2000 rpm for the car,
+six at 1200 for the truck; ``--rpm``), each with the spectrum of its part.
+``--input car=WAV`` plays a dry recording of yours instead (one of a vehicle going past
+has its Doppler and the road in it already). Run it from the folder of the roadside
+example (``acoustic-spaces examples --copy . roadside && cd roadside``), in the Python
+environment acoustic-spaces is installed in, with ffmpeg on the PATH::
 
-    python passby_demo.py sound   # car/car.wav (truck/truck.wav): the sound, dry
-    python passby_demo.py scene   # scene_demo.yaml: the vehicle alone, at --speed, with Doppler
-    python passby_demo.py walk    # the vehicle every metre along the road, at every listener
-    python passby_demo.py video   # demo/passby_car_binaural.mp4 (an animation), stills
+    python passby_demo.py all      # every step, leaving out what is there already
+    python passby_demo.py feeds    # the vehicle's sound, made to its sound power
+    python passby_demo.py render   # the pass every metre along the road, at every listener
+    python passby_demo.py video    # the video, its audio and its stills
 
-or `python passby_demo.py all --vehicle truck`, every step, leaving out what is there
-already; the editor's Simulation > Run demo… runs it too. Each run goes to a folder in
-./demo named after its settings (demo/passby_truck_binaural/: the scene, the sound, the
-passes, the stills), with the video, its audio and its thumbnail beside it, so that a run
-with other settings writes over none of them; `python passby_demo.py join` plays finished
-runs one after another in one video. Use headphones; `--hrtf me.sofa` plays it through
-your own or measured HRTFs instead of a spherical head.
-
-Each listener hears the vehicle through every early path, the direct sound and its
-reflection off the ground, each through its own delay as it changes, so the pitch falls
-as it passes; over the grass the ground takes away much of the middle and the treble,
-the more the farther away, while over the yard its reflection adds to the direct sound.
-The captions give the level heard at each moment, the loudest (L_Amax) and the sound
-exposure level (SEL) of the pass, as simulated; the vehicle's walk, edited in the
-editor's Movement panel, is driven as edited, at --speed.
+The script's steps run as the ones that took them over: ``sound`` the feeds, ``scene``
+the simulation of the scene with the vehicle taken in, ``walk`` the mixes. Each listener
+hears the vehicle through every early path, the direct sound and its reflection off the
+ground, each through its own delay as it changes, so the pitch falls as it passes; over
+the grass the ground takes away much of the middle and the treble, the more the farther
+away, while over the yard its reflection adds to the direct sound. The stills give the
+level heard at each moment, the loudest (L_Amax) and the sound exposure level (SEL) of
+the pass, as simulated, how close the vehicle comes and how far the pitch of its direct
+sound falls; the vehicle's trajectory, edited in the editor's Movement panel, is driven
+as edited.
 """
 
 from __future__ import annotations
@@ -42,18 +41,20 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from acoustic_spaces.demos import passby
+from acoustic_spaces.demos.scene_demo import preset
+from acoustic_spaces.i18n import N_
 
-DEMO = passby.demo(
-    Path(__file__),
-    "roadside",
-    "A car or a truck passing the meadow",
-    __doc__,
-    (passby.THE_CAR, passby.TRUCK),
+DEMO = preset(
+    name="passby",
+    example="roadside",
+    title=N_("A car or a truck passing the meadow"),
+    description=__doc__,
+    script=Path(__file__),
+    # The script's car, and its vehicles each in a part of their own.
+    defaults={"sources": "car", "sources_play": "in-turn"},
+    renamed={"scene": (("--from", str),), "sources": (("--vehicle", str),)},
+    steps={"feeds": ("sound",), "simulate": ("scene",), "render": ("walk",)},
 )
-
-__all__ = ["DEMO"]
-
 
 if __name__ == "__main__":
     sys.exit(DEMO.main())

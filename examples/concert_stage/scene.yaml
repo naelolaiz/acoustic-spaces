@@ -62,12 +62,15 @@ assignments:
   stage_roof: stage
 # In a demo of the scene (acoustic-spaces demo) the sound system plays the recording
 # below, downloaded the first time: the stereo mix of "Spicy Funk Cake" by the
-# Rhythmussportgruppe (CC BY 4.0). Give `recording:` a file of yours, a band's stereo
-# mix, to hear that instead. The loudspeakers on the audience's left play its left
+# Rhythmussportgruppe (CC BY 4.0). The loudspeakers on the audience's left play its left
 # channel and those on its right the right one: the names say the stage's side, so
 # main_left, on stage left, is on the audience's right. The subwoofers play both
-# channels mixed down. The monitors and the band play nothing: a stereo mix has none
-# of the parts they play.
+# channels mixed down. The monitors play mixes of its stems, the parts it was mixed
+# from, downloaded with it (249 MB): the singer's wedges the vocal, the drum fill the
+# drums and the bass, the side fills the whole band with the vocal up and the drums well
+# down, as the kit is loud on stage itself. The singer sings the vocal stem. Give
+# `recording:` a file of yours, a band's stereo mix, to hear that instead, and its stems
+# in the run (--stem vocal=vox.wav); a source whose stems it lacks stays silent.
 recording: spicy_funk_cake
 sources:
   - name: main_left
@@ -113,35 +116,39 @@ sources:
     delay_ms: 33
     directivity: {file: wedge.csv}
   - name: vocal_wedges
+    channel: {vocal: 0, backing: -6, keys: -8, guitar: -12, bass: -14, drums: -16}
     group: Monitors
     position: [-43.3, 0, 2.25]
     orientation: {yaw: 180, pitch: 45}
     level_db: 115
     directivity: {file: monitor_wedges.yaml, near_field: true}
   - name: drum_fill
+    channel: {drums: 0, bass: 0, vocal: -6, guitar: -8, keys: -8}
     group: Monitors
     position: [-54.5, 1.8, 2.6]
     orientation: {yaw: -50, pitch: 25}
     level_db: 115
     directivity: {file: wedge.csv}
   - name: side_fill_left
+    channel: {drums: -20, bass: 0, guitar: 0, keys: 0, brass: 0, vocal: 3, backing: 0}
     group: Monitors
     position: [-49, 15.5, 3]
     orientation: {yaw: -90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
   - name: side_fill_right
+    channel: {drums: -20, bass: 0, guitar: 0, keys: 0, brass: 0, vocal: 3, backing: 0}
     group: Monitors
     position: [-49, -15.5, 3]
     orientation: {yaw: 90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
   # The singer's voice: the sound power (dB re 1 pW) of a singer singing loud, just in
-  # front of the singer's head. It is left out of simulations until ticked; feedback.py
-  # takes it.
+  # front of the singer's head, singing the vocal stem in a demo of the scene;
+  # feedback.py takes it.
   - name: singer_voice
+    channel: vocal
     group: Band
-    enabled: false
     position: [-44.6, 0, 3.7]
     orientation: {yaw: 0}
     level_db: 98

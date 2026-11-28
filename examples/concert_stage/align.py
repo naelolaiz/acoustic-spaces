@@ -27,6 +27,9 @@ from acoustic_spaces import Room, simulate
 ECHO_BANDS = slice(3, 7)
 ECHO_WINDOW_S = 0.050
 ECHO_RANGE_DB = 10.0
+#: The group of the band's own instruments and voice on the stage, which are no
+#: loudspeakers.
+BAND = "Band"
 
 
 class Arrival(NamedTuple):
@@ -51,7 +54,8 @@ def arrivals(
     room: Room, rays: int | None = None, seed: int | None = None
 ) -> dict[str, list[Arrival]]:
     """Each listener's arrivals, earliest first (``rays`` per band, or the scene's; a
-    ``seed`` repeats a run's random rays), of the sources and listeners in use."""
+    ``seed`` repeats a run's random rays), of the loudspeakers and listeners in use: the
+    sources in use but the band's own (:data:`BAND`)."""
     settings = room.scene.simulation
     if rays:
         settings = settings.model_copy(
@@ -64,7 +68,7 @@ def arrivals(
     # Those left out of simulations (``enabled: false``) have no responses.
     for listener in (item for item in room.scene.listeners if item.in_use):
         rows = []
-        for source in (item for item in room.scene.sources if item.in_use):
+        for source in (s for s in room.scene.sources if s.in_use and s.group != BAND):
             response = result[source.name, listener.name]
             power = source.power_db()
             # The direct sound is the path without reflections, of a source of unit power

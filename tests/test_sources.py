@@ -66,6 +66,103 @@ def test_sources_check_their_levels() -> None:
         _source(delay_ms=-1.0)
 
 
+def test_a_talker_s_vocal_effort_sets_its_sound_power() -> None:
+    """A talker's vocal effort sets its sound power per band so that its speech is the
+    effort's level 1 m in front of it in free field (ISO 9921: 60 dB(A) at normal, 6 dB
+    a step), with the standard's spectrum there, through its directivity ahead; with
+    level_db too, or without a speech spectrum, it is refused, and the scene file keeps
+    the effort, not the level it gives."""
+    from acoustic_spaces.directivity import load_directivity
+    from acoustic_spaces.parameters import VOCAL_EFFORT_DB_A
+
+    voice = {"pattern": ["omni"] * 3 + ["subcardioid"] * 2 + ["cardioid"] * 3}
+    for talker, effort in (("male", "normal"), ("female", "loud")):
+        source = _source(directivity=voice, spectrum=f"speech_{talker}", vocal_effort=effort)
+        ahead = load_directivity(source.directivity).energy([[1.0, 0.0, 0.0]])[0]
+        at_1m = source.power_db() + 10 * np.log10(ahead / (4 * math.pi))
+        assert a_weighted(at_1m) == pytest.approx(VOCAL_EFFORT_DB_A[effort])
+        spectrum = np.array(SPEECH_SPECTRUM_DB[talker])
+        np.testing.assert_allclose(np.diff(at_1m), np.diff(spectrum), atol=1e-5)
+    # The gallery's guide: a man at normal effort through a cardioid, 73.3 dB in all.
+    guide = _source(directivity="cardioid", spectrum="speech_male", vocal_effort="normal")
+    assert guide.sound_power_db == pytest.approx(73.27, abs=0.01)
+    assert guide.talking("raised").sound_power_db == pytest.approx(guide.sound_power_db + 6)
+    assert guide.talking(None) is guide and guide.talking("loud").vocal_effort == "loud"
+    with pytest.raises(ValueError, match="does not talk"):
+        _source().talking("normal")
+    with pytest.raises(ValidationError, match="give it or level_db, not both"):
+        _source(level_db=70.0, spectrum="speech_male", vocal_effort="normal")
+    with pytest.raises(ValidationError, match="give the source a speech spectrum"):
+        _source(vocal_effort="normal")
+    scene = Scene.from_yaml(SHOEBOX)
+    data = scene.to_data()
+    data["sources"][0] |= {"spectrum": "speech_male", "vocal_effort": "raised"}
+    data["sources"][0].pop("level_db", None)
+    talking = Scene.model_validate(data)
+    written = talking.to_data()["sources"][0]
+    assert "level_db" not in written and written["vocal_effort"] == "raised"
+    again = Scene.model_validate(talking.to_data()).sources[0]
+    np.testing.assert_allclose(again.power_db(), talking.sources[0].power_db())
+
+
+def test_a_road_vehicle_s_model_sets_its_sound_power() -> None:
+    """A source with a cnossos-eu model has CNOSSOS-EU's sound power per octave band
+    for its category at the speed its trajectory goes, in the scene's air: by hand from
+    the method's Table F-1 for a car at 50 km/h at 20 °C, the rolling noise 0.08 dB a
+    degree louder in colder air; at another speed (a run's) it follows; level_db beside
+    it, a speech spectrum, a line or no trajectory are refused, keyframes too that go at
+    two speeds; and the scene file keeps the model, not the level it gives."""
+    from acoustic_spaces.demos.road import CATEGORIES
+    from acoustic_spaces.walkthrough import at_speed
+
+    model = {"method": "cnossos-eu", "category": "1", "rpm": 2000, "cylinders": 4}
+    car = _source(model=model, trajectory={"to": [[100.0, 0.0, 0.0]], "speed_m_s": 50 / 3.6})
+    kind = CATEGORIES["1"]
+    rolling = np.array(kind.rolling_a) + np.array(kind.rolling_b) * math.log10(50 / 70)
+    pushing = np.array(kind.propulsion_a) + np.array(kind.propulsion_b) * (50 - 70) / 70
+    by_hand = 10 * np.log10(10 ** (rolling / 10) + 10 ** (pushing / 10))
+    np.testing.assert_allclose(car.power_db(), by_hand, atol=1e-5)
+    faster = at_speed(car, 70 / 3.6)
+    np.testing.assert_allclose(
+        faster.power_db(),
+        10
+        * np.log10(
+            10 ** (np.array(kind.rolling_a) / 10) + 10 ** (np.array(kind.propulsion_a) / 10)
+        ),
+        atol=1e-5,
+    )
+    scene = Scene.from_yaml(SHOEBOX)
+    data = scene.to_data()
+    data["sources"][0] |= {"model": model, "trajectory": {"to": [[2.0, 2.0, 1.2]]}}
+    for key in ("level_db", "spectrum", "vocal_effort", "directivity"):
+        data["sources"][0].pop(key, None)
+    data["air"] = {"temperature_c": 10.0}
+    cold = Scene.model_validate(data).sources[0]
+    walking = _source(model=model, trajectory={"to": [[2.0, 2.0, 1.2]]})  # 1.2 m/s, 20 °C
+    assert cold.power_db()[4] - walking.power_db()[4] > 0.0  # louder tyres in the cold
+    written = Scene.model_validate(data).to_data()["sources"][0]
+    assert "level_db" not in written and written["model"]["category"] == "1"
+    path = {"to": [[10.0, 0.0, 0.0]]}
+    with pytest.raises(ValidationError, match="give it or level_db, not both"):
+        _source(model=model, level_db=90.0, trajectory=path)
+    with pytest.raises(ValidationError, match="does not talk"):
+        _source(model=model, spectrum="speech_male", trajectory=path)
+    with pytest.raises(ValidationError, match="a model's source is a point"):
+        _source(model=model, line_m=4.0)
+    with pytest.raises(ValidationError, match="give the source a trajectory"):
+        _source(model=model)
+    two_speeds = {
+        "keyframes": [
+            {"time_s": 1.0, "position": [10.0, 0.0, 0.0]},
+            {"time_s": 2.0, "position": [30.0, 0.0, 0.0]},
+        ]
+    }
+    with pytest.raises(ValidationError, match="36.0 to 72.0 km/h, but CNOSSOS-EU"):
+        _source(model=model, trajectory=two_speeds)
+    with pytest.raises(ValidationError, match="category"):
+        _source(model={**model, "category": "5"}, trajectory=path)
+
+
 def test_speech_spectra_of_iec_60268_16() -> None:
     # Relative to the A-weighted level, so their A-weighted sum is 0 dB.
     for talker, levels in SPEECH_SPECTRUM_DB.items():

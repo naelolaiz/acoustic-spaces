@@ -36,13 +36,14 @@ loudspeaker formats.
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker
   formats, or through a listener's microphone (first-order patterns, XY, Blumlein and MS
   pairs), as WAV files; dry recordings run through them offline or in real time on the
-  sound card, head-tracked on headphones, or heard along a walk through the room:
+  sound card, head-tracked on headphones, or heard along a trajectory through the room:
   [spatial audio and listening](docs/spatial-audio.md).
 - **Demos**, binaural for headphones: an orchestra in the concert hall, a choir and an
   organ in the church, a band in the stadium and across a lake, a walk through the
   gallery, road vehicles with sirens and horns, trains and a tram passing by, road works
   in a street, a helicopter over a meadow and over the stadium, and a jet taking off and
-  landing; any scene makes a demo of its own: [demos](docs/demos.md), and videos in one
+  landing, each a preset of the demo that any scene makes of its own:
+  [demos](docs/demos.md), and videos in one
   [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
 - **Measuring real rooms** with sine sweeps, comparing them with their model in just
   noticeable differences, and fitting the model's absorption to them:

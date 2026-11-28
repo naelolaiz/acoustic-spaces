@@ -131,6 +131,7 @@ def two_sources(tmp_path_factory):
     shoebox = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
     scene = yaml.safe_load(shoebox.read_text(encoding="utf-8"))
     scene["geometry"]["file"] = str(shoebox.parent / scene["geometry"]["file"])
+    scene["sources"][0].pop("vocal_effort")  # a sound power in its place
     scene["sources"][0]["level_db"] = 94.0
     scene["sources"].append({"name": "radio", "position": [3.0, 2.0, 1.0], "level_db": 74.0})
     path = tmp_path_factory.mktemp("two") / "scene.yaml"

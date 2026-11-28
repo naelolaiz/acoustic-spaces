@@ -1,7 +1,7 @@
 """The 3D view of the editor: the room's surfaces coloured by material, sources and
 listeners, the selection, early reflection paths and a coverage map; outdoors the
 vegetation, and the wind with the weather zones. While a run goes on, a ring around
-each source and listener it works on, and its walkers where it simulates them
+each source and listener it works on, and its movers where it simulates them
 (:mod:`acoustic_spaces.gui.following`).
 
 A click selects what is under the mouse (sources and listeners before the surfaces in
@@ -202,7 +202,7 @@ class Viewport(QWidget):
         listeners in ``hidden`` ((kind, name) pairs) are left out; those left out of
         simulations are drawn faded. Outdoors, ``wind`` draws the wind and the weather
         zones, and ``wind_profile`` a mast in each weather with the wind up it (see
-        :func:`acoustic_spaces.viz.plot_wind`). Every walk is drawn as a line; with
+        :func:`acoustic_spaces.viz.plot_wind`). Every trajectory is drawn as a line; with
         ``mover`` (a source or listener as (kind, index)), its keyframes get handles to
         drag, and with ``time`` every mover stands where it is then (:meth:`set_time`
         moves them without drawing the room again); ``run`` is what a run going on works
@@ -278,13 +278,13 @@ class Viewport(QWidget):
         for (group, colour, index, item), radius, arrow in zip(shown, radii, arrows, strict=True):
             chosen = kind == group and key == index
             scale = 1.6 if chosen else 1.0
-            walk = path_of(item)
-            if walk is not None and len(walk.positions) > 1:  # the way it goes
+            path = path_of(item)
+            if path is not None and len(path.positions) > 1:  # the way it goes
                 plotter.add_mesh(
-                    pv.lines_from_points(walk.positions),
+                    pv.lines_from_points(path.positions),
                     color=SELECTED_COLOUR if chosen else colour,
                     line_width=2.0,
-                    opacity=0.8 if item.in_use and item.walk.enabled else 0.25,
+                    opacity=0.8 if item.in_use and item.trajectory.enabled else 0.25,
                     render=False,
                 )
             if mover == (group, index):  # its keyframes, to drag
@@ -401,7 +401,7 @@ class Viewport(QWidget):
 
     def show_run(self, run: RunView) -> None:
         """Ring the sources and listeners a run going on works on, and at a place along a
-        walk stand its walkers where it simulates them (:class:`RunView`), rather than
+        trajectory stand its movers where it simulates them (:class:`RunView`), rather than
         where the Movement panel's playhead has them; :data:`NO_RUN`: as before the run.
         Moves what is drawn rather than drawing the room again."""
         self.run = run

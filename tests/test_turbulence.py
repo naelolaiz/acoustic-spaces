@@ -615,25 +615,25 @@ def test_half_way_between_two_moments_each_path_is_half_way_there() -> None:
 
 
 def test_a_walk_goes_through_the_eddies() -> None:
-    from acoustic_spaces.walkthrough import render_walk, simulate_walk
+    from acoustic_spaces.walkthrough import render_trajectory, simulate_trajectory
 
     data = in_turbulence({"preset": "strong", "outer_scale_m": 2.0}, ir_length_s=0.4).to_data()
     data["listeners"][0]["position"] = [60.0, 0.0, 1.5]
-    data["listeners"][0]["walk"] = {"to": [[64.0, 0.0, 1.5]], "speed_m_s": 2.0}
+    data["listeners"][0]["trajectory"] = {"to": [[64.0, 0.0, 1.5]], "speed_m_s": 2.0}
     data["sources"].append({"name": "t", "position": [-30.0, 5.0, 2.0]})
-    walked = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=1.0)
+    walked = simulate_trajectory(Room.from_scene(Scene.model_validate(data)), step_m=1.0)
     assert all(flickers(r) for r in walked.result)
     rate = 8000
     tone = np.sin(2 * np.pi * 1000.0 * np.arange(3 * rate) / rate)
     signals = {"s": tone, "t": tone}
-    wet = render_walk(walked, signals, sample_rate=rate)
+    wet = render_trajectory(walked, signals, sample_rate=rate)
     assert np.all(np.isfinite(wet)) and np.array_equal(
-        wet, render_walk(walked, signals, sample_rate=rate)
+        wet, render_trajectory(walked, signals, sample_rate=rate)
     )
     for key, response in walked.result.responses.items():
         early = dataclasses.replace(response.early, wander=None)
         walked.result.responses[key] = dataclasses.replace(response, early=early)
-    steady = render_walk(walked, signals, sample_rate=rate)
+    steady = render_trajectory(walked, signals, sample_rate=rate)
     assert wet.shape == steady.shape and not np.allclose(wet, steady)
 
 

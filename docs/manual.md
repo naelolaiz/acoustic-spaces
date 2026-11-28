@@ -22,7 +22,7 @@ lists them all, in the groups the editor's **File > Open example** shows.
    corners, low frequencies and the wave solver, how far a result may be off, coverage
    maps, and speed and memory.
 4. [Listening in space](#listening-in-space): binaural, Ambisonics, loudspeakers and
-   microphones, mixing several sources, real-time playback and head tracking, walks
+   microphones, mixing several sources, real-time playback and head tracking, trajectories
    through a scene and moving sources.
 5. [Advanced workflows](#advanced-workflows): sound systems, outdoor noise, demos,
    measuring a real room and fitting its model, long runs on another computer, and
@@ -247,7 +247,7 @@ an Ambisonics response, `--head-tracking` keeps the sound in place while the hea
 
 ### Walking through a scene
 
-A listener or a source can follow a [walk](scenes.md#walks), drawn in the editor's
+A listener or a source can follow a [trajectory](scenes.md#trajectories), drawn in the editor's
 **Movement** panel, and be heard as it goes. In `gallery` a visitor walks away from the
 guide and round the corner ([Walkthroughs](spatial-audio.md#walkthroughs)); a fast
 source, such as a passing car, also drops in pitch
@@ -302,8 +302,9 @@ works shake a building, in [Vibration through the ground](outdoor.md#vibration-t
 `acoustic-spaces demo my_room/scene.yaml` (or **Simulation > Run demo…**) has each
 source play its recording, mixes what every listener hears and makes a video that tours
 them ([A demo of any scene](demos.md#a-demo-of-any-scene)). Several examples come with
-demos of their own, run step by step ([Running a demo](demos.md#running-a-demo)); each
-shows one space and one kind of sound, not the simulator as a whole.
+demos of their own, presets of the demo of their scene that keep their scripts' command
+lines, run step by step ([Running a demo](demos.md#running-a-demo)); each shows one
+space and one kind of sound, not the simulator as a whole.
 
 ### Measuring a real room and fitting its model
 
@@ -345,7 +346,7 @@ before relying on a result for a decision.
   to Blender.
 - [Example scenes](examples.md): every bundled scene and what it shows.
 - [Scene files](scenes.md): geometry, materials, walls and openings, seating, sources,
-  walks, air.
+  trajectories, air.
 - [Simulation](simulation.md): the methods and their settings, diffraction, low
   frequencies, performance.
 - [Spatial audio and listening](spatial-audio.md): output formats, convolution,

@@ -37,7 +37,7 @@ from acoustic_spaces.demos.plant import MACHINES
 from acoustic_spaces.demos.rail import TRAINS
 from acoustic_spaces.scene import Scene
 
-#: The scene's tram (its walk is its track), houses and office block.
+#: The scene's tram (its trajectory is its track), houses and office block.
 TRAM, HOUSES, OFFICES = "tram", "houses", "offices"
 #: Residences and buildings where people normally sleep (the manual's land use 2).
 RESIDENCES = 2
@@ -86,9 +86,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     scene = Scene.from_yaml(args.scene)
     tram = _named(scene.sources, TRAM)
-    if tram.walk is None:
-        raise SystemExit(f"error: the scene's {TRAM!r} has no walk")
-    track = [tuple(tram.position), *(tuple(p) for p in tram.walk.to)]
+    if tram.trajectory is None:
+        raise SystemExit(f"error: the scene's {TRAM!r} has no trajectory")
+    track = [tuple(tram.position), *(tuple(p) for p in tram.trajectory.to)]
     buildings = {
         name: _named(scene.geometry.buildings, name).footprint for name in (HOUSES, OFFICES)
     }

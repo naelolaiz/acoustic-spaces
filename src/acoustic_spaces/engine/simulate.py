@@ -555,6 +555,34 @@ def is_fed(source) -> bool:
     return source.gain_db != 0 or source.eq_db is not None or source.delay_ms > 0
 
 
+def late_need(
+    room: Room,
+    *,
+    settings: SimulationSettings | None = None,
+    sources: Sequence[str] | None = None,
+    listeners: Sequence[str] | None = None,
+    threads: int | None = None,
+    groups: np.ndarray | None = None,
+    late_from: Mapping[str, Mapping[str, float]] | None = None,
+) -> run_size.Need:
+    """The memory the late part of :func:`simulate` with these arguments needs
+    (:func:`~acoustic_spaces.engine.run_size.simulation_need`), which it checks before
+    it starts: a run that needs more than the computer has is refused."""
+    settings = settings or room.scene.simulation
+    if threads is None:
+        threads = settings.performance.threads
+    faces = 0 if groups is None else int(np.max(groups, initial=-1)) + 1
+    return run_size.simulation_need(
+        room,
+        settings,
+        _pick(room.scene.sources, sources, "source"),
+        _pick(room.scene.listeners, listeners, "listener"),
+        threads,
+        groups=faces,
+        mixed=late_from or (),
+    )
+
+
 def simulate(
     room: Room | Scene | str | Path,
     *,
@@ -588,7 +616,7 @@ def simulate(
     ``{name: {other: weight}}``, the others being listeners (for a listener) or sources
     (for a source) that keep their own. Only those are traced by the stochastic ray
     tracer, by far the costliest stage; the statistical method gives everyone their own.
-    Walks use it (:func:`acoustic_spaces.walkthrough.simulate_walk`): the late field
+    Trajectories use it (:func:`acoustic_spaces.walkthrough.simulate_trajectory`): the late field
     changes slowly from place to place, the early sound does not. The traced late parts
     are kept once, and a response makes its mix of them when it reads its late part
     (:class:`~acoustic_spaces.engine.response.Deferred`); only a line's or a surface's is
@@ -598,8 +626,8 @@ def simulate(
     or temperature gradients) may serve one another: those at one height over one
     ground, the sound going the same way to their listeners, where the weather and the
     grounds have no zones (:func:`~acoustic_spaces.engine.refracted.solve`), each
-    listener getting what its own source's run would give it. Walks give it the places
-    of a walking source, which would otherwise each run the equation anew.
+    listener getting what its own source's run would give it. Trajectories give it the places
+    of a moving source, which would otherwise each run the equation anew.
     """
     room = _as_room(room)
     # Sources or listeners named are simulated even when left out.
@@ -620,16 +648,15 @@ def simulate(
     chosen_listeners = _pick(scene.listeners, listeners, "listener")
     if not chosen_listeners:
         raise ValueError("no listener to simulate")
-    faces = 0 if groups is None else int(np.max(groups, initial=-1)) + 1
     run_size.check(
-        run_size.simulation_need(
+        late_need(
             room,
-            settings,
-            chosen_sources,
-            chosen_listeners,
-            threads,
-            groups=faces,
-            mixed=late_from or (),
+            settings=settings,
+            sources=sources,
+            listeners=listeners,
+            threads=threads,
+            groups=groups,
+            late_from=late_from,
         )
     )
     # Seeds follow the scene's order, so a run of some sources or listeners gives them
@@ -1107,6 +1134,7 @@ __all__ = [
     "SimulationResult",
     "check_late_method",
     "early_paths",
+    "late_need",
     "mixing_time",
     "response_length",
     "simulate",

@@ -1,6 +1,7 @@
-"""The road works of the street example (:mod:`acoustic_spaces.demos.plant`,
-:mod:`acoustic_spaces.demos.works`): Defra's rows, their sound power, the EU's limits,
-the reversing alarm, the made sounds and the demo that plays them."""
+"""The road works of the street example (:mod:`acoustic_spaces.demos.plant`, the scene's
+``defra`` and ``sae-j994`` models): Defra's rows, their sound power, the EU's limits,
+the reversing alarm, the made sounds and works_demo.py, the preset of the demo of the
+street's scene that plays them."""
 
 import argparse
 import math
@@ -9,12 +10,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from acoustic_spaces.demos import plant, works
+from acoustic_spaces.demos import plant
 from acoustic_spaces.examples import example_path
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import A_WEIGHTING_DB, a_weighted
 
 RATE = 16_000
+#: The works' sources in the street's scene (the group Road works), as works_demo.py
+#: plays them.
+WORKS = (plant.BREAKER.name, plant.GENERATOR.name, plant.DUMPER.name, plant.ALARM)
 
 
 def test_each_rows_octaves_add_up_to_its_level() -> None:
@@ -31,17 +35,24 @@ def test_each_rows_octaves_add_up_to_its_level() -> None:
 
 
 def test_the_streets_works_have_their_sound_power() -> None:
-    """The street's scene holds each source of the works at the sound power the code
-    gives it, at the scene's rate, where the demo says, left out until ticked."""
+    """The street's scene holds each source of the works with its model, Defra's row or
+    SAE J994's alarm, at the sound power the code gives it, in the group Road works,
+    where the demo says, left out until picked."""
     from acoustic_spaces import Scene
 
     scene = Scene.from_yaml(example_path("street"))
-    rate = int(scene.simulation.sample_rate)
     found = {s.name: s for s in scene.sources}
-    for name in works.SOURCES:
+    for name in WORKS:
         source = found[name]
-        assert not source.enabled
-        assert list(source.level_db) == works.level_of(name, rate)
+        assert not source.enabled and source.group == "Road works"
+        machine = plant.MACHINES.get(name)
+        if machine is None:
+            assert source.model.method == "sae-j994"
+            wanted = plant.alarm_power(48_000)
+        else:
+            assert (source.model.method, source.model.machine) == ("defra", name)
+            wanted = machine.sound_power()
+        np.testing.assert_allclose(source.power_db(), wanted, atol=1e-6)
     assert found["breaker"].position[2] == plant.BREAKER.height_m
     assert found["generator"].position[2] == plant.GENERATOR.height_m
     assert found["dumper"].position[2] == plant.DUMPER.height_m
@@ -157,16 +168,22 @@ def _street(tmp_path):
     return folder
 
 
+def _works_demo(folder):
+    from acoustic_spaces.demos import load
+
+    return load(folder / "works_demo.py").at(folder)
+
+
 def test_the_works_demo_plays_each_machine_at_its_sound_power(tmp_path, monkeypatch) -> None:
-    """works_demo.py on the quick street: the scene with the works alone, at the sound
-    power of the scene's rate, a feed per source as long as the tour at the made sounds'
-    RMS, the mixes and the stills; at every listener each source's sound in the mix is as
-    far under the breaker's as its simulated level is (within 1.5 dB), not as loud as
-    it; each as its response is at the frequencies it holds (the alarm's tone, an
-    engine's firing), not on average over each octave."""
+    """works_demo.py on the quick street: the scene with the works taken in, at their
+    models' sound power, a feed per source as long as the tour at the made sounds' RMS,
+    the mixes and the stills; at every listener each source's sound in the mix is as far
+    under the breaker's as its simulated level is (within 1.5 dB), not as loud as it;
+    each as its response is at the frequencies it holds (the alarm's tone, an engine's
+    firing), not on average over each octave."""
     pytest.importorskip("PIL")
     from acoustic_spaces import Scene, render
-    from acoustic_spaces.demos import audio, load, pipeline, scene_demo
+    from acoustic_spaces.demos import audio, pipeline, run_folder, scene_demo
     from acoustic_spaces.synthesis import split_bands
 
     heard = []
@@ -180,30 +197,31 @@ def test_the_works_demo_plays_each_machine_at_its_sound_power(tmp_path, monkeypa
 
     monkeypatch.setattr(render, "convolve", convolve)
     folder = _street(tmp_path)
-    demo = load(folder / "works_demo.py").at(folder)
+    demo = _works_demo(folder)
     run = ["all", "--seconds", "4", "--no-mp4"]
     args = demo.resolved(demo.parser().parse_args(run))
     assert demo.check(args) is None
-    assert set(demo.plays(args)) == set(works.SOURCES)
+    assert {k for k, v in demo.plays(args).items() if v != "silent"} == set(WORKS)
     assert demo.main(run) == 0
-    scene = Scene.from_yaml(folder / "scene_works.yaml")
-    assert [s.name for s in scene.sources] == list(works.SOURCES)
-    assert all(s.in_use for s in scene.sources)
-    for source in scene.sources:
-        assert list(source.level_db) == works.level_of(source.name, RATE)
-    # The feeds of the scene, its simulation for the output and the run's stills, each
-    # in its folder.
+    scene = Scene.from_yaml(scene_demo.run_scene_file(args))
+    found = {s.name: s for s in scene.sources}
+    assert all(found[name].in_use for name in WORKS)
+    for name in WORKS:
+        machine = plant.MACHINES.get(name)
+        wanted = plant.alarm_power(48_000) if machine is None else machine.sound_power()
+        np.testing.assert_allclose(found[name].power_db(), wanted, atol=1e-6)
+    # The feeds of the scene so run, its simulation for the output and the run's
+    # stills, each in its folder.
     feeds = scene_demo.feeds_folder(args)
-    assert feeds == folder / "demo_works" / "feeds" / "scene_works"
+    assert feeds == folder / "demo" / "feeds" / "scene_with-breaker+generator+dumper+dumper_alarm"
     results = demo.simulations(args)[0].results
-    assert results == folder / "demo_works" / "results" / "scene_works" / "binaural"
-    table = pipeline.read_json(feeds / "feeds.json")
-    assert table["length_s"] == pytest.approx(12.0)
-    for name in works.SOURCES:
+    assert results == scene_demo.results_of(args) and results.name == "binaural"
+    for name in WORKS:
         x, rate = audio.read(feeds / f"{name}.wav")
         assert rate == RATE and len(x) == 12 * RATE
         assert float(np.sqrt(np.mean(x**2))) == pytest.approx(plant.SOUND_RMS, rel=0.01)
-    assert (args.run_folder / "stills" / "00_pavement.png").exists()
+    assert run_folder(args).name == "works_seconds-4_binaural"
+    assert sorted(p.name for p in (run_folder(args) / "stills").glob("*.png"))
     report = pipeline.read_json(results / pipeline.PARAMETERS)
     levels = {(r["source"], r["listener"]): r["spl_a_db"] for r in report["responses"]}
     weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
@@ -235,40 +253,53 @@ def test_the_works_demo_plays_each_machine_at_its_sound_power(tmp_path, monkeypa
         return 10.0 * math.log10(heard / said)
 
     listeners = [lis.name for lis in scene.listeners if lis.in_use]
-    count = len(works.SOURCES)
+    count = len(WORKS)
     assert len(heard) == count * len(listeners)
     for k, listener in enumerate(listeners):
         wet = heard[k * count : (k + 1) * count]
         first = a_energy(wet[0])
-        for name, x in zip(works.SOURCES[1:], wet[1:], strict=True):
+        for name, x in zip(WORKS[1:], wet[1:], strict=True):
             under = 10.0 * math.log10(first / a_energy(x))
             told = levels[("breaker", listener)] - levels[(name, listener)]
             told += fine_db("breaker", listener) - fine_db(name, listener)
             assert under == pytest.approx(told, abs=1.5), (listener, name)
-    # Another rate of blows makes the feeds again, not the scene.
+    # Another rate of blows makes the feeds again, not the simulation.
     again = demo.resolved(demo.parser().parse_args([*run, "--blows", "320"]))
-    assert demo.is_done(demo.step("scene"), again)
+    assert demo.is_done(demo.step("simulate"), again)
     assert not demo.is_done(demo.step("feeds"), again)
 
 
-def test_the_works_demo_says_what_is_wrong(tmp_path) -> None:
-    """A rate of blows that is no rate, an input for a source the works do not have,
-    and a listener the street does not have; the listeners it can play are the street's
-    in use, and its earlier --tour still picks them."""
-    from acoustic_spaces.demos import load
+def test_the_works_demo_keeps_the_scripts_command_lines(tmp_path) -> None:
+    """The script's options and steps, as the demo of the street's scene reads them: a
+    rate of blows that is no rate, an input for a source that does not play and a
+    listener the street does not have are refused; its listeners are the street's in
+    use, its --tour still picks them, its scene step simulates, its --from names the
+    scene and its --indoors works and works_and_rumble read as airborne and
+    airborne_and_rumble."""
+    from acoustic_spaces.demos import run_folder
 
     folder = _street(tmp_path)
-    demo = load(folder / "works_demo.py").at(folder)
-    args = demo.resolved(demo.parser().parse_args(["feeds", "--blows", "0"]))
-    assert "--blows is a positive number" in demo.check(args)
-    args = demo.resolved(demo.parser().parse_args(["feeds", "--input", "car=x.wav"]))
-    assert "--input car: no such source plays here" in demo.check(args)
-    args = demo.resolved(demo.parser().parse_args(["all"]))
-    assert demo.listeners(args) == ["pavement", "balcony", "garden"]
-    args = demo.resolved(demo.parser().parse_args(["all", "--listeners", "garden,roof"]))
-    assert "roof" in demo.check(args)
-    args = demo.resolved(demo.parser().parse_args(["all", "--tour", "garden,pavement"]))
-    assert demo.check(args) is None and args.listeners == "garden,pavement"
+    demo = _works_demo(folder)
+
+    def run(*argv: str):
+        return demo.parser().parse_args(list(argv))
+
+    assert demo.check(run("feeds", "--blows", "0")) == "--blows is a positive number, not 0.0"
+    assert demo.check(run("feeds", "--input", "car=x.wav")) == (
+        "--input car: no such source plays here; it has breaker, generator, dumper, dumper_alarm"
+    )
+    assert demo.listeners(demo.resolved(run("all"))) == ["pavement", "balcony", "garden"]
+    assert "roof" in demo.check(run("all", "--listeners", "garden,roof"))
+    toured = run("all", "--tour", "garden,pavement")
+    assert demo.check(toured) is None and demo.resolved(toured).tour == "garden,pavement"
+    assert demo.steps_named("scene") == ["simulate"]
+    given = demo.resolved(run("all", "--from", "scene.yaml"))
+    assert Path(given.scene) == folder / "scene.yaml"
+    for old, new in (("works", "airborne"), ("works_and_rumble", "airborne_and_rumble")):
+        assert demo.resolved(run("render", "--indoors", old)).indoors == new
+        assert run_folder(demo.resolved(run("render", "--indoors", old))).name == (
+            f"works_indoors-{new}_binaural"
+        )
 
 
 def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monkeypatch) -> None:
@@ -289,14 +320,16 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     vibration, a shaker track. Another --indoors mixes again, in its run's folder."""
     pytest.importorskip("PIL")
     from acoustic_spaces import Scene, vibration
-    from acoustic_spaces.demos import audio, indoors, load, pipeline, scene_pictures
+    from acoustic_spaces.demos import audio, indoors, pipeline, scene_demo, scene_pictures
     from acoustic_spaces.facade import HOUSE
 
     folder = _street(tmp_path)
-    demo = load(folder / "works_demo.py").at(folder)
-    assert demo.option("indoors").choices == indoors.choices("works")
+    demo = _works_demo(folder)
+    assert demo.option("indoors").choices == indoors.choices(indoors.AIRBORNE)
     common = ["--seconds", "4", "--no-mp4", "--format", "mono"]
-    work = folder / "demo_works"
+
+    def resolved(*more: str):
+        return demo.resolved(demo.parser().parse_args(["render", *common, *more]))
 
     def held(*more: str) -> Path:
         """The folder of the mixes of the run with ``common`` and ``more``."""
@@ -319,15 +352,18 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     assert demo.main(["all", *common]) == 0
     _, outdoors = mixes()
     heard = {}
-    for choice in ("works", "rumble", "works_and_rumble"):
-        assert demo.main(["render", *common, "--indoors", choice]) == 0
+    for choice in ("airborne", "rumble", "airborne_and_rumble"):
+        assert demo.main(["all", *common, "--indoors", choice]) == 0
         heard[choice] = mixes("--indoors", choice)
-    scene = Scene.from_yaml(folder / "scene_works.yaml")
-    loudest = max(s.sound_power_db for s in scene.sources if s.in_use)
+    args = resolved("--indoors", "airborne")
+    scene = Scene.from_yaml(scene_demo.run_scene_file(args))
     sources = {s.name: s for s in scene.sources}
-    report = pipeline.read_json(work / "results" / "scene_works" / "mono" / pipeline.PARAMETERS)
-    out = pipeline.read_json(work / "results" / "scene_works_2m" / "mono" / pipeline.PARAMETERS)
-    (front,) = Scene.from_yaml(folder / "scene_works_2m.yaml").listeners
+    loudest = max(sources[name].sound_power_db for name in WORKS)
+    report = pipeline.read_json(scene_demo.results_of(args) / pipeline.PARAMETERS)
+    front_file = scene_demo.front_scene_file(args)
+    assert front_file.name == f"{scene_demo.run_scene_file(args).stem}_2m.yaml"
+    out = pipeline.read_json(scene_demo.results_at(args, front_file) / pipeline.PARAMETERS)
+    (front,) = Scene.from_yaml(front_file).listeners
     assert front.name == "balcony_2m"
     assert front.position == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
     assert {r["listener"] for r in out["responses"]} == {"balcony_2m"}
@@ -357,15 +393,17 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
                 assert a_energy(mixed[name]) == pytest.approx(a_energy(outdoors[name]), rel=1e-6)
             felt = vibration_at(lambda s, h=here: np.hypot(*(np.asarray(s.position[:2]) - h)))
             continue
-        levels = [r for r in report["responses"] if r["listener"] == name]
+        levels = [r for r in report["responses"] if r["listener"] == name and r["source"] in WORKS]
         outside = sum(10.0 ** (a_weighted(r["spl_db"]) / 10.0) for r in levels)
-        there = [r for r in out["responses"] if r["listener"] == f"{name}_2m"] or levels
+        there = [
+            r for r in out["responses"] if r["listener"] == f"{name}_2m" and r["source"] in WORKS
+        ] or levels
         assert len(there) == len(levels) == 4
         inside = sum(
             10.0 ** (a_weighted(np.add(r["spl_db"], HOUSE.indoor_db())) / 10.0) for r in there
         )
         told = 10.0 * math.log10(outside / inside)
-        window = heard["works"][1][name]
+        window = heard["airborne"][1][name]
         drop = 10.0 * math.log10(a_energy(outdoors[name]) / a_energy(window))
         assert drop == pytest.approx(told, abs=2.0), name
         # The listener's own sound, each octave band changed by the façade's level
@@ -381,7 +419,7 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
         through = house.heard(outdoors[name][:, None], RATE, shift)[:, 0]
         assert a_energy(window) == pytest.approx(a_energy(through), rel=1e-4), name
         vdb = vibration_at(lambda s, f=facing: f.distances([s.position])[0])
-        seat = heard["works_and_rumble"][0]["seats"][name]
+        seat = heard["airborne_and_rumble"][0]["seats"][name]
         assert seat["vibration_vdb"] == pytest.approx(vdb, abs=0.01)
         assert seat["rumble_a_db"] == pytest.approx(vdb - 50.0, abs=0.01)
         rumble = heard["rumble"][1][name]
@@ -395,7 +433,7 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
         assert 10.0 * math.log10(a_energy(rumble) / len(rumble) / wanted) == pytest.approx(
             0.0, abs=0.05
         )
-        both = heard["works_and_rumble"][1][name]
+        both = heard["airborne_and_rumble"][1][name]
         assert a_energy(both) == pytest.approx(a_energy(window) + a_energy(rumble), rel=0.02)
     # The stills: the level in the house, the works through the window and the rumble.
     drawn = []
@@ -408,24 +446,24 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     monkeypatch.setattr(scene_pictures, "Pictures", pictures)
     # Each --indoors mixes in its run's folder: none over another's.
     assert len({held(), *(held("--indoors", choice) for choice in heard)}) == 4
-    assert demo.main(["video", *common, "--indoors", "works_and_rumble"]) == 0
+    assert demo.main(["video", *common, "--indoors", "airborne_and_rumble"]) == 0
     lines = [line if isinstance(line, str) else line[0] for line in drawn[-1].lines(0)]
     first = drawn[-1].stops[0].key
-    seat = heard["works_and_rumble"][0]["seats"][first]
+    seat = heard["airborne_and_rumble"][0]["seats"][first]
     inside = sum(
         10.0 ** (a_weighted(np.add(r["spl_db"], HOUSE.indoor_db())) / 10.0)
         for r in report["responses"]
-        if r["listener"] == first
+        if r["listener"] == first and r["source"] in WORKS
     )
     level = 10.0 * math.log10(inside + 10.0 ** (seat["rumble_a_db"] / 10.0))
-    assert first == "pavement" and lines[0] == f"{level:.0f} dB(A) here, as simulated"
+    assert first == "pavement" and f"{level:.0f} dB(A) here, as simulated" in lines[0]
     # The rooms' levels the stills give: each source's 2 m in front of the wall, less the
     # façade's level difference; the balcony's from the point 1 m farther out.
     given = {(r["listener"], r["source"]): r["spl_db"] for r in report["responses"]}
     given |= {(r["listener"], r["source"]): r["spl_db"] for r in out["responses"]}
     for entry in drawn[-1].report["responses"]:
         name = entry["listener"]
-        if fronts[name] is not None:
+        if fronts[name] is not None and entry["source"] in WORKS:
             at = indoors.front_name(name) if name == "balcony" else name
             room = np.add(given[(at, entry["source"])], HOUSE.indoor_db())
             np.testing.assert_allclose(entry["spl_db"], room, atol=0.006, err_msg=name)
@@ -435,13 +473,13 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     told = drawn[-1].indoors["vibration_vdb"]["garden"]
     assert told == pytest.approx(felt, abs=0.01) and "garden" not in drawn[-1].indoors["about"]
     # What is felt: a shaker track at each listener, and along the tour.
-    seats = heard["works_and_rumble"][0]
+    seats = heard["airborne_and_rumble"][0]
     assert seats["shaker"]["hz"] == 25.0
-    shaken = held("--indoors", "works_and_rumble")
+    shaken = held("--indoors", "airborne_and_rumble")
     assert all((shaken / f"{key}.shaker.wav").exists() for key in seats["seats"])
     assert (shaken.parent.with_name(shaken.parent.name + "_shaker.wav")).exists()
     # Outdoors again: the mixes made again, without the house.
-    assert demo.main(["render", *common]) == 0
+    assert demo.main(["render", *common, "--again"]) == 0
     seats, again = mixes()
     assert all("post" not in seat for seat in seats["seats"].values())
     for name, x in again.items():
@@ -450,26 +488,91 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
 
 def test_the_rumble_indoors_needs_something_that_shakes_the_ground(tmp_path) -> None:
     """With the breaker and the dumper left out, nothing shakes the ground: --indoors
-    rumble says so, --indoors works hears the rest through the window, once the level
-    2 m in front of the offices, 1 m out from the balcony, is simulated; without the
-    balcony at once."""
+    rumble says so before anything runs; --indoors airborne hears the rest through the
+    window once the level 2 m in front of the offices, 1 m out from the balcony, is
+    simulated, and says to simulate it first; without the balcony at once. A breaker
+    standing in a run where a tram moves past is refused the rumble too."""
     import yaml
 
+    from acoustic_spaces.demos import scene_demo
+
     folder = _street(tmp_path)
-    scene = folder / "scene_works.yaml"
-    works.scene(argparse.Namespace(source=folder / "scene.yaml", scene=scene))
-    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
-    for source in data["sources"]:
-        if source["name"] in ("breaker", "dumper"):
-            source["enabled"] = False
-    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    args = argparse.Namespace(scene=scene, indoors="rumble", format="binaural", hrtf=None)
-    with pytest.raises(SystemExit, match="nothing that plays shakes it"):
-        works.houses(args)
-    args.indoors = "works"
-    args.work = folder / "demo_works"
+    demo = _works_demo(folder)
+    pick = ["--sources", "generator,dumper_alarm"]
+    args = demo.parser().parse_args(["render", *pick, "--indoors", "rumble"])
+    assert "nothing that plays shakes it (generator, dumper_alarm;" in demo.check(args)
+    args = demo.parser().parse_args(["render", *pick, "--indoors", "airborne"])
+    assert demo.check(args) is None
     with pytest.raises(SystemExit, match="no simulation in"):
-        works.houses(args)
+        scene_demo.still_houses(demo.resolved(args), demo)
+    args = demo.parser().parse_args(["render", "--sources", "tram,breaker", "--indoors", "rumble"])
+    assert "but breaker stands and shakes the ground too" in demo.check(args)
+    data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     data["listeners"] = [each for each in data["listeners"] if each["name"] != "balcony"]
-    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    assert works.houses(args) is not None
+    (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    args = demo.parser().parse_args(["render", *pick, "--indoors", "airborne"])
+    houses = scene_demo.still_houses(demo.resolved(args), demo)
+    assert houses is not None and houses.plant == () and not houses.fronts
+
+
+def test_the_works_demo_plays_the_machines_picked(tmp_path) -> None:
+    """``--sources``: every machine and the alarm play by default, under the run's name
+    of the script; a pick plays those alone, named after them: the stills' line credits
+    them alone, the houses hear them alone (their loudest the reference of the rumble),
+    and a pick with nothing that shakes the ground is refused the rumble indoors before
+    anything runs, in each part of a run in turn too."""
+    from acoustic_spaces.demos import run_folder, scene_demo
+
+    folder = _street(tmp_path)
+    demo = _works_demo(folder)
+
+    def run(*argv: str) -> tuple[argparse.Namespace, argparse.Namespace]:
+        args = demo.parser().parse_args(["render", *argv])
+        return args, demo.resolved(args)
+
+    args, resolved = run()
+    assert [(s.name, s.group, s.on) for s in demo.source_list(resolved) if s.name in WORKS] == [
+        (name, "Road works", True) for name in WORKS
+    ]
+    assert resolved.playing == WORKS and demo.check(args) is None
+    assert run_folder(resolved).name == "works_binaural"
+    args, resolved = run("--sources", "generator,dumper_alarm")
+    assert run_folder(resolved).name == "works_generator+dumper_alarm_binaural"
+    assert resolved.playing == ("generator", "dumper_alarm") and demo.check(args) is None
+    plays = demo.plays(resolved)
+    assert {k for k, v in plays.items() if v != "silent"} == {"generator", "dumper_alarm"}
+    assert plays["generator"] == (
+        "a 6 kVA diesel generator, made to Defra's sound power (its engine firing at "
+        f"{plant.GENERATOR.rpm:g} rpm)"
+    )
+    alarm = {s.name: s for s in scene_demo.scene_of(resolved).sources}["dumper_alarm"]
+    assert f"{plant.ALARM_HZ:g} Hz beeps" in scene_demo.models.made_credit(alarm)
+    # The rumble indoors needs a machine that shakes the ground among those picked.
+    args, _ = run("--sources", "generator,dumper_alarm", "--indoors", "rumble")
+    assert demo.check(args).startswith(
+        "--indoors rumble hears the rumble of the ground's vibration, but nothing that "
+        "plays shakes it (generator, dumper_alarm;"
+    )
+    args, _ = run("--sources", "generator,dumper", "--indoors", "rumble")
+    assert demo.check(args) is None
+    args, _ = run("--sources-play", "in-turn", "--indoors", "airborne_and_rumble")
+    assert [run_folder(part).name for part in demo.each(args)] == [
+        f"works_{name}_indoors-airborne_and_rumble_binaural" for name in WORKS
+    ]
+    assert demo.check(args).startswith(
+        "works_generator_indoors-airborne_and_rumble_binaural: --indoors airborne_and_rumble "
+        "hears the rumble"
+    )
+    # The houses hear the machines picked alone: outdoors, nothing then shakes the
+    # ground unless the breaker or the dumper plays.
+    assert scene_demo.still_houses(run("--sources", "generator")[1]) is None
+    heard = scene_demo.still_houses(run("--sources", "generator,breaker")[1])
+    assert [p.source for p in heard.plant] == ["breaker"]
+    assert heard.loudest_db == pytest.approx(max(_power(n) for n in ("generator", "breaker")))
+
+
+def _power(name: str) -> float:
+    """The sound power of a source of the works (dB re 1 pW), all bands together."""
+    machine = plant.MACHINES.get(name)
+    level = plant.alarm_power(48_000) if machine is None else machine.sound_power()
+    return 10.0 * math.log10(sum(10.0 ** (v / 10.0) for v in level))

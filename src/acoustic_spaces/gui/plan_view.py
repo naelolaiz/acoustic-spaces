@@ -342,7 +342,7 @@ class PlanCanvas(QWidget):
         return "plan" if geometry.floor_plan is not None else "box" if geometry.box else "file"
 
     def fit(self) -> None:
-        """Show the whole room and every source and listener, with the places their walks
+        """Show the whole room and every source and listener, with the places their trajectories
         go through; resizing the view keeps them in it until the view is zoomed or
         panned."""
         self._user_view = False
@@ -413,7 +413,7 @@ class PlanCanvas(QWidget):
 
     def show_run(self, run: RunView) -> None:
         """Ring the sources and listeners a run going on works on, and at a place along a
-        walk draw its walkers where it simulates them, rather than where the Movement
+        trajectory draw its movers where it simulates them, rather than where the Movement
         panel's playhead has them; :data:`~acoustic_spaces.gui.following.NO_RUN`: as
         before the run."""
         self.run = run
@@ -687,7 +687,7 @@ class PlanCanvas(QWidget):
                     fmt(
                         _(
                             "Not moved: {name} is drawn where the run simulates it, "
-                            "{time:.2f} s along its walk; drag it once the run is over"
+                            "{time:.2f} s along its trajectory; drag it once the run is over"
                         ),
                         name=item.name,
                         time=self.run.time,
@@ -810,7 +810,7 @@ class PlanCanvas(QWidget):
                 self._paint_outline(painter)
             if self.room.outdoor is not None:
                 self._paint_outdoors(painter)
-            self._paint_walks(painter)
+            self._paint_trajectories(painter)
             self._paint_points(painter)
             self._paint_wind_key(painter)
         if self.drawing is not None:
@@ -1035,8 +1035,8 @@ class PlanCanvas(QWidget):
             text,
         )
 
-    def _paint_walks(self, painter: QPainter) -> None:
-        """Every walk as a dashed line through its knots, faded when it is left standing,
+    def _paint_trajectories(self, painter: QPainter) -> None:
+        """Every trajectory as a dashed line through its knots, faded when it is left standing,
         and the handles of the mover's keyframes, numbered as the table's rows."""
         kind, key = self.selection
         for group in ("sources", "listeners"):
@@ -1050,7 +1050,7 @@ class PlanCanvas(QWidget):
                     if chosen
                     else (SOURCE_COLOUR if group == "sources" else LISTENER_COLOUR)
                 )
-                alpha = 200 if item.in_use and item.walk.enabled else 70
+                alpha = 200 if item.in_use and item.trajectory.enabled else 70
                 painter.setPen(QPen(_qcolor(colour, alpha), 1.5, Qt.PenStyle.DashLine))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawPolyline(QPolygonF([self.to_screen(p) for p in path.positions]))

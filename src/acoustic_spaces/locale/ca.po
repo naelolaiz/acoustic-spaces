@@ -27,6 +27,14 @@ msgstr "idioma: {language} ({source})"
 msgid "Scene"
 msgstr "Escena"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Recording"
+msgstr "Gravació"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Vocal effort"
+msgstr "Esforç vocal"
+
 #: acoustic_spaces/demos/__init__.py
 msgid "Time per listener"
 msgstr "Temps per receptor"
@@ -34,6 +42,10 @@ msgstr "Temps per receptor"
 #: acoustic_spaces/demos/__init__.py
 msgid "Tour"
 msgstr "Recorregut"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Atmosphere"
+msgstr "Atmosfera"
 
 #: acoustic_spaces/demos/__init__.py
 msgid "Credit"
@@ -71,7 +83,7 @@ msgstr "Escena de l'exemple"
 msgid "Results folder"
 msgstr "Carpeta de resultats"
 
-#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/tree.py
 msgid "Listeners"
 msgstr "Receptors"
 
@@ -84,8 +96,8 @@ msgid "Voice"
 msgstr "Veu"
 
 #: acoustic_spaces/demos/__init__.py
-msgid "Where the visitor stands"
-msgstr "On és el visitant"
+msgid "Where a listener stands"
+msgstr "On és un receptor"
 
 #: acoustic_spaces/demos/__init__.py
 msgid "Head turns"
@@ -128,6 +140,18 @@ msgid "Last stop's phrases"
 msgstr "Frases de l'última parada"
 
 #: acoustic_spaces/demos/__init__.py
+msgid "Last stop"
+msgstr "Última parada"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Levels between listeners"
+msgstr "Nivells entre receptors"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Leave out"
+msgstr "Omet"
+
+#: acoustic_spaces/demos/__init__.py
 msgid "Downloads folder"
 msgstr "Carpeta de baixades"
 
@@ -151,6 +175,10 @@ msgstr "Escena del vol"
 msgid "Stadium's scene"
 msgstr "Escena de l'estadi"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Start time"
+msgstr "Temps d'inici"
+
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
 msgid "Height"
 msgstr "Alçada"
@@ -171,6 +199,10 @@ msgstr "Primer temps fort"
 msgid "Stems"
 msgstr "Pistes"
 
+#: acoustic_spaces/demos/__init__.py
+msgid "Response length"
+msgstr "Llargada de la resposta"
+
 #: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
 msgid "Rays per band"
 msgstr "Raigs per banda"
@@ -180,8 +212,76 @@ msgid "Written to"
 msgstr "S'escriu a"
 
 #: acoustic_spaces/demos/__init__.py
-msgid "Runs"
-msgstr "Execucions"
+msgid "Vehicle"
+msgstr "Vehicle"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Train"
+msgstr "Tren"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Track"
+msgstr "Via"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Siren"
+msgstr "Sirena"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Horn"
+msgstr "Botzina"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Heard indoors"
+msgstr "Escoltat a dins"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/tree.py
+msgid "Sources"
+msgstr "Fonts"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Sources play"
+msgstr "Com sonen les fonts"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py
+msgid "Order of the parts"
+msgstr "Ordre de les parts"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Timeline"
+msgstr "Línia de temps"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Pieces"
+msgstr "Peces"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "Moving"
+msgstr "En moviment"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Trains a day"
+msgstr "Trens al dia"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tram passes"
+msgstr "Passos del tramvia"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "House"
+msgstr "Casa"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Floor"
+msgstr "Planta"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Terreny"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Vibration peak"
+msgstr "Pic de la vibració"
 
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
@@ -541,7 +641,7 @@ msgstr "Mapa de cobertura"
 msgid "Messages"
 msgstr "Missatges"
 
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/demo_dialog.py
+#: acoustic_spaces/gui/app.py
 msgid "Movement"
 msgstr "Moviment"
 
@@ -844,12 +944,12 @@ msgstr "Seg&uir l'execució"
 msgid ""
 "While a run, coverage map, export or demo goes on, ring the sources and "
 "listeners its latest step works on in the 3D view and the plan, and draw the "
-"walkers where the place along a walk it simulates has them"
+"movers where the place along a trajectory it simulates has them"
 msgstr ""
 "Mentre hi ha en curs un càlcul, un mapa de cobertura, una exportació o una "
 "demostració, marcar amb un anell a la vista 3D i a la planta les fonts i els "
-"receptors amb què treballa el seu darrer pas, i dibuixar els mòbils on els "
-"situa el lloc del recorregut que simula"
+"receptors amb què treballa el seu últim pas, i dibuixar els mòbils on els "
+"situa el lloc de la trajectòria que simula"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
@@ -1138,10 +1238,11 @@ msgstr "Espereu que acabi el càlcul en curs i després renderitzeu el moviment.
 
 #: acoustic_spaces/gui/app.py
 msgid ""
-"Nothing moves: add a keyframe to a source or listener in use, and tick Moves."
+"Nothing moves: add a keyframe to a source or listener in use, and tick "
+"Moving."
 msgstr ""
 "No es mou res: afegiu un fotograma clau a una font o un receptor en ús i "
-"marqueu Es mou."
+"marqueu En moviment."
 
 #: acoustic_spaces/gui/app.py
 msgid "Nothing to play: give a source in use a WAV file under Plays first."
@@ -1886,8 +1987,8 @@ msgid "What the source plays in the demo, unless a file is given"
 msgstr "El que reprodueix la font a la demostració, si no se li dona un fitxer"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Instead"
-msgstr "En lloc seu"
+msgid "Your WAV"
+msgstr "El teu WAV"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -1941,10 +2042,8 @@ msgid "All"
 msgstr "Tots"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick every finished run: the video joins them all, its default"
-msgstr ""
-"Marca totes les execucions acabades: el vídeo les uneix totes, el valor per "
-"defecte"
+msgid "None"
+msgstr "Cap"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Tick every listener: the demo plays them all, its default"
@@ -1952,16 +2051,98 @@ msgstr ""
 "Marca tots els receptors: la demo els reprodueix tots, el predeterminat"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "None"
-msgstr "Cap"
-
-#: acoustic_spaces/gui/demo_dialog.py
-msgid "Untick every run, to tick the ones to join"
-msgstr "Desmarca totes les execucions, per marcar les que es volen unir"
-
-#: acoustic_spaces/gui/demo_dialog.py
 msgid "Untick every listener, to tick the few to hear"
 msgstr "Desmarca tots els receptors, per marcar els pocs que es volen sentir"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Several…"
+msgstr "Diversos…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Play several of them, one after another in one video: a tick for each, "
+"dragged into the order they play"
+msgstr ""
+"Fes-ne sonar diversos, un darrere l'altre en un sol vídeo: una marca per a "
+"cadascun, arrossegats en l'ordre en què sonen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "One only"
+msgstr "Només un"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Back to one of them, the first ticked"
+msgstr "Torna a un de sol, el primer marcat"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "File…"
+msgstr "Fitxer…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours in place of one of the choices"
+msgstr "Un fitxer teu en lloc d'una de les opcions"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every one: the run plays them one after another"
+msgstr "Marca'ls tots: l'execució els reprodueix un darrere l'altre"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every one, to tick those to play"
+msgstr "Desmarca'ls tots, per marcar els que han de sonar"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A file of yours"
+msgstr "Un fitxer teu"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every source"
+msgstr "Marca totes les fonts"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every source, to tick those to hear"
+msgstr "Desmarca totes les fonts, per marcar les que es volen sentir"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo's pick"
+msgstr "La tria de la demo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick the sources the demo plays by default"
+msgstr "Marca les fonts que la demo reprodueix per defecte"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick the sources that play; a group ticks all of its own"
+msgstr "Marqueu les fonts que sonen; un grup marca totes les seves"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"The WAV file the source plays instead ({option} SOURCE=WAV), typed after a "
+"double click or chosen with Choose WAV…; empty: what Plays says"
+msgstr ""
+"El fitxer WAV que la font reprodueix en lloc d'això ({option} SOURCE=WAV), "
+"escrit després d'un doble clic o triat amb Tria un WAV…; buit: el que diu "
+"Reprodueix"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo plays it whatever is ticked"
+msgstr "La demo el reprodueix, sigui el que sigui el que estigui marcat"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A tour in each part visits them"
+msgstr "Un recorregut en cada part els visita"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Each in a part of its own"
+msgstr "Per separat, en una part pròpia"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"How the listeners are heard: one after another in the video of each part, or "
+"each in a part of its own, at its place in the order of the parts"
+msgstr ""
+"Com se senten els receptors: un darrere l'altre en el vídeo de cada part, o "
+"cadascun en una part pròpia, al seu lloc en l'ordre de les parts"
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -1980,20 +2161,20 @@ msgid ", with Doppler"
 msgstr ", amb Doppler"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid ""
-"The sources and listeners with a walk. Ticked ones move along it while the "
-"piece plays, all on one clock; the others stand where they start"
-msgstr ""
-"Les fonts i els receptors amb recorregut. Els marcats el segueixen mentre "
-"sona la peça, tots amb un mateix rellotge; els altres es queden on comencen"
-
-#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
-msgid "Moves"
-msgstr "Es mou"
+msgid "Trajectories"
+msgstr "Trajectòries"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick to move it along its walk in this run"
-msgstr "Marqueu perquè segueixi el seu recorregut en aquesta execució"
+msgid ""
+"The sources and listeners with a trajectory. Ticked ones move along it while "
+"the piece plays, all on one clock; the others stand where they start"
+msgstr ""
+"Les fonts i els receptors amb trajectòria. Els marcats la segueixen mentre "
+"sona la peça, tots amb un mateix rellotge; els altres es queden on comencen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick to move it along its trajectory in this run"
+msgstr "Marqueu-ho perquè segueixi la seva trajectòria en aquesta execució"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "The source or listener, as the scene names it"
@@ -2008,8 +2189,8 @@ msgid "A source or a listener"
 msgstr "Una font o un receptor"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Walk"
-msgstr "Recorregut"
+msgid "Trajectory"
+msgstr "Trajectòria"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "How it goes, how far and for how long"
@@ -2033,12 +2214,12 @@ msgstr "Edita el moviment…"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"Close this window and open the Movement panel on the selected walker, to "
-"change its walk or give a source or listener one; save the scene before "
-"running the demo"
+"Close this window and open the Movement panel on the selected mover, to "
+"change its trajectory or give a source or listener one; save the scene "
+"before running the demo"
 msgstr ""
 "Tanca aquesta finestra i obre el tauler Moviment en l'element seleccionat, "
-"per canviar-ne el recorregut o donar-ne un a una font o un receptor; deseu "
+"per canviar-ne la trajectòria o donar-ne una a una font o un receptor; deseu "
 "l'escena abans d'executar la demo"
 
 #: acoustic_spaces/gui/demo_dialog.py
@@ -2046,8 +2227,92 @@ msgid "As in the scene"
 msgstr "Com a l'escena"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Tick what Moves ticks in the scene again"
-msgstr "Torna a marcar el que marca Es mou a l'escena"
+msgid "Tick what Moving ticks in the scene again"
+msgstr "Torna a marcar el que marca En moviment a l'escena"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"What the scene's sources play: a free recording or one of yours, and its "
+"pieces"
+msgstr ""
+"Què toquen les fonts de l'escena: un enregistrament lliure o un de vostre, i "
+"les seves peces"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The sources that play, what each plays and how they play: together or in turn"
+msgstr ""
+"Les fonts que sonen, què toca cadascuna i com sonen: alhora o per torns"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Where the run listens: the listeners in the order of the tour, and how long "
+"each"
+msgstr ""
+"On escolta l'execució: els receptors en l'ordre del recorregut, i quant de "
+"temps cadascun"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Video"
+msgstr "Vídeo"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/movement.py
+msgid "Output"
+msgstr "Sortida"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What the run mixes to: the format, and the HRTFs of a binaural mix"
+msgstr "A què mescla l'execució: el format, i les HRTF d'una mescla binaural"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "All together, in each part"
+msgstr "Totes juntes, en cada part"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Each turned up to the loudest"
+msgstr "Cadascun pujat fins al més fort"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "As simulated, one gain for all"
+msgstr "Com s'ha simulat, un sol guany per a tots"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start where something moves, else shared"
+msgstr ""
+"Des de l'inici de cada receptor quan alguna cosa es mou; si no, compartida"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Shared: the tour goes on as the piece plays"
+msgstr "Compartida: el recorregut avança mentre sona la peça"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "From each listener's start"
+msgstr "Des de l'inici de cada receptor"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The scene's own weather"
+msgstr "El temps de l'escena"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Still air"
+msgstr "Aire en calma"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "every one"
+msgstr "tots"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "the demo's pick"
+msgstr "la tria de la demo"
+
+#. Translators: no draws at all, so no spread of the results.
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "none"
+msgstr "cap"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "as by default"
+msgstr "com per defecte"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
@@ -2084,6 +2349,14 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Demostració"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The video the run makes: one part, or several one after another, each after "
+"a title card that says what sets it apart"
+msgstr ""
+"El vídeo que fa l'execució: una part, o diverses una darrere l'altra, "
+"cadascuna després d'un rètol que diu què la distingeix"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Advanced"
@@ -2140,43 +2413,41 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "Nothing in this scene moves. Edit movement… gives a source or a listener a "
-"walk along keyframes."
+"trajectory along keyframes."
 msgstr ""
 "Res no es mou en aquesta escena. Edita el moviment… dona a una font o a un "
-"receptor un recorregut per fotogrames clau."
+"receptor una trajectòria per fotogrames clau."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
 msgid ""
-"Ticked sources and listeners move along their walks while the piece plays; "
-"the others stand where they start. The ticks start as Moves sets them in the "
-"scene, and change this run only ({option})."
+"Ticked sources and listeners move along their trajectories while the piece "
+"plays; the others stand where they start. The ticks start as Moving sets "
+"them in the scene, and change this run only ({option})."
 msgstr ""
-"Les fonts i els receptors marcats segueixen els seus recorreguts mentre sona "
-"la peça; els altres es queden on comencen. Les marques comencen com les posa "
-"Es mou a l'escena i només canvien aquesta execució ({option})."
+"Les fonts i els receptors marcats segueixen les seves trajectòries mentre "
+"sona la peça; els altres es queden on comencen. Les marques comencen com les "
+"posa En moviment a l'escena i només canvien aquesta execució ({option})."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"This demo moves what is ticked; Moves in the scene turns a walk on or off, "
-"and Edit movement… changes it."
+"What this run moves along its trajectory, as the options below pick what "
+"plays; Edit movement… changes a trajectory."
 msgstr ""
-"Aquesta demo mou el que està marcat; Es mou a l'escena activa o desactiva un "
-"recorregut, i Edita el moviment… el canvia."
+"El que aquesta execució mou per la seva trajectòria, segons el que trien les "
+"opcions de sota; Edita el moviment… canvia una trajectòria."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "This demo moves nothing: every source and listener stands where it starts. "
-"This scene plays the walks."
+"This scene plays the trajectories."
 msgstr ""
 "Aquesta demo no mou res: cada font i cada receptor es queden on comencen. "
-"Aquesta escena reprodueix els recorreguts."
+"Aquesta escena reprodueix les trajectòries."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "all: every step in order but join, leaving out what is done already."
-msgstr ""
-"all: tots els passos en ordre excepte join, deixant de banda el que ja està "
-"fet."
+msgid "all: every step in order, leaving out what is done already."
+msgstr "all: tots els passos en ordre, deixant de banda el que ja està fet."
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -2187,6 +2458,11 @@ msgstr "S'executa a {folder}"
 #, python-brace-format
 msgid "This run downloads {what}."
 msgstr "Aquesta execució baixa {what}."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "{option} names none: tick one at least"
+msgstr "{option} no n'indica cap: marca'n un com a mínim"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "save the scene first (File > Save): the demo reads it from its file"
@@ -2208,6 +2484,33 @@ msgstr ""
 "Canviades respecte als valors per defecte i desades per a la propera vegada: "
 "{options}. Per defecte les restableix."
 
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "This run makes one video, {name}.mp4."
+msgstr "Aquesta execució fa un vídeo, {name}.mp4."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"This run makes one video, {name}.mp4, of {count} part, each after a title "
+"card of 4 s:"
+msgid_plural ""
+"This run makes one video, {name}.mp4, of {count} parts, one after another, "
+"each after a title card of 4 s:"
+msgstr[0] ""
+"Aquesta execució fa un vídeo, {name}.mp4, de {count} part, després d'un "
+"rètol de 4 s:"
+msgstr[1] ""
+"Aquesta execució fa un vídeo, {name}.mp4, de {count} parts, una darrere "
+"l'altra, cadascuna després d'un rètol de 4 s:"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "… and {count} more"
+msgid_plural "… and {count} more"
+msgstr[0] "… i {count} més"
+msgstr[1] "… i {count} més"
+
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
 msgstr "no hi ha cap fitxer on desar; cal indicar un camí"
@@ -2228,7 +2531,7 @@ msgstr "moure font"
 msgid "move listener"
 msgstr "moure receptor"
 
-#: acoustic_spaces/gui/document.py
+#: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
 msgid "change source"
 msgstr "modificar font"
 
@@ -2266,16 +2569,16 @@ msgstr[1] "excloure {count} receptors"
 
 #: acoustic_spaces/gui/document.py
 #, python-brace-format
-msgid "{name} has no walk yet: add a keyframe first"
-msgstr "{name} encara no té recorregut: afegiu primer un fotograma clau"
+msgid "{name} has no trajectory yet: add a keyframe first"
+msgstr "{name} encara no té trajectòria: afegiu primer un fotograma clau"
 
 #: acoustic_spaces/gui/document.py
-msgid "turn the walk on"
-msgstr "activar recorregut"
+msgid "turn the trajectory on"
+msgstr "activar la trajectòria"
 
 #: acoustic_spaces/gui/document.py
-msgid "turn the walk off"
-msgstr "desactivar recorregut"
+msgid "turn the trajectory off"
+msgstr "desactivar la trajectòria"
 
 #: acoustic_spaces/gui/document.py
 msgid "turn Doppler on"
@@ -2525,6 +2828,39 @@ msgstr "veu masculina"
 msgid "speech_female"
 msgstr "veu femenina"
 
+#. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
+#: acoustic_spaces/gui/inspector.py
+msgid "(none)"
+msgstr "(cap)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "relaxed"
+msgstr "relaxat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "normal"
+msgstr "normal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "raised"
+msgstr "elevat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "loud"
+msgstr "fort"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How hard the talker talks (ISO 9921): relaxed, normal, raised or loud is its "
+"speech at 54, 60, 66 or 72 dB(A) 1 m in front of it, which sets its sound "
+"power through its spectrum and directivity; (none) keeps the sound power you "
+"give. For a speech spectrum only"
+msgstr ""
+"Amb quina força parla el locutor (ISO 9921): relaxat, normal, elevat o fort "
+"és la seva veu a 54, 60, 66 o 72 dB(A) a 1 m davant seu, que en fixa la "
+"potència acústica a través del seu espectre i la seva directivitat; (cap) "
+"manté la potència acústica que doneu. Només per a un espectre de veu"
+
 #: acoustic_spaces/gui/inspector.py
 msgid "omni"
 msgstr "omnidireccional"
@@ -2584,11 +2920,6 @@ msgstr "traçat de raigs"
 #: acoustic_spaces/gui/inspector.py
 msgid "image_sources"
 msgstr "fonts imatge"
-
-#. Translators: no draws at all, so no spread of the results.
-#: acoustic_spaces/gui/inspector.py
-msgid "none"
-msgstr "cap"
 
 #. Translators: the direct sound's paths, in a plot's legend.
 #: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
@@ -2696,11 +3027,6 @@ msgstr "més o menys 0,1"
 msgid "twice ISO 12999-2"
 msgstr "el doble d'ISO 12999-2"
 
-#. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
-#: acoustic_spaces/gui/inspector.py
-msgid "(none)"
-msgstr "(cap)"
-
 #: acoustic_spaces/gui/inspector.py
 msgid "neutral"
 msgstr "neutre"
@@ -2779,14 +3105,19 @@ msgid ""
 "The channel the source plays in a demo of the scene: left or right, or both "
 "mixed down (mono), of its WAV file or, without one, of the scene's recording "
 "(on the scene's page), so that a sound system's left and right loudspeakers "
-"play the two sides of one stereo recording. (none): its WAV file mixed down "
-"to mono, or silent"
+"play the two sides of one stereo recording; or a stem of the recording, a "
+"part it was mixed from, as a band's drum kit plays the drums (a mix of "
+"stems, as a monitor's, is set in the scene file). (none): its WAV file mixed "
+"down to mono, or silent"
 msgstr ""
 "El canal que reprodueix la font en una demostració de l'escena: l'esquerre o "
 "el dret, o tots dos mesclats (mono), del seu fitxer WAV o, sense fitxer, de "
 "la gravació de l'escena (a la pàgina de l'escena), perquè els altaveus "
 "esquerre i dret d'un sistema de so reprodueixin els dos costats d'una "
-"mateixa gravació estèreo. (cap): el seu fitxer WAV mesclat a mono, o silenci"
+"mateixa gravació estèreo; o una pista de la gravació, una de les parts amb "
+"què es va mesclar, com la bateria d'un grup reprodueix la pista de bateria "
+"(una mescla de pistes, com la d'un monitor, es fixa al fitxer de l'escena). "
+"(cap): el seu fitxer WAV mesclat a mono, o silenci"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2815,6 +3146,35 @@ msgstr "dreta"
 msgid "mono"
 msgstr "mono"
 
+#. Translators: this and the entries below are stems of a song, the parts it was mixed from, as the scene file names them (drums, bass, ...).
+#: acoustic_spaces/gui/inspector.py
+msgid "drums stem"
+msgstr "pista de bateria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "bass stem"
+msgstr "pista de baix"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "guitar stem"
+msgstr "pista de guitarra"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "keys stem"
+msgstr "pista de teclats"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "brass stem"
+msgstr "pista de metalls"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "vocal stem"
+msgstr "pista de veu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "backing vocals stem"
+msgstr "pista de cors"
+
 #: acoustic_spaces/gui/inspector.py
 msgid "a song in stereo"
 msgstr "una cançó en estèreo"
@@ -2822,6 +3182,265 @@ msgstr "una cançó en estèreo"
 #: acoustic_spaces/gui/inspector.py
 msgid "speech"
 msgstr "veu parlada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a multitrack recording"
+msgstr "un enregistrament multipista"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The method that gives the source's sound power in place of the one you give, "
+"and the sound a demo of the scene plays for it (model: in the scene file): a "
+"road vehicle's by CNOSSOS-EU, at the speed of its trajectory, in the scene's "
+"air; a siren's, that of the 100 W electronic siren NBS measured; a horn's, "
+"its blasts as loud as its rule or its maker gives them, averaged over its "
+"blasts and pauses; a train's or a tram's by Schall 03, at the speed of its "
+"trajectory, that of the first of its points at one height, a demo playing "
+"those behind it too; construction plant's, Defra's row for the machine plus "
+"28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its beeps and "
+"pauses; a helicopter's, its rotors' sound in level flight at its speed "
+"through the air, its directivity too; an aircraft's by ECAC Doc 29, its NPD "
+"curves at the highest thrust of the flight it flies along the trajectory's "
+"ground track, its flight and directivity too"
+msgstr ""
+"El mètode que dona la potència acústica de la font en lloc de la que hi "
+"poseu, i el so que hi reprodueix una demostració de l'escena (model: al "
+"fitxer de l'escena): la d'un vehicle de carretera segons CNOSSOS-EU, a la "
+"velocitat de la seva trajectòria, en l'aire de l'escena; la d'una sirena, la "
+"de la sirena electrònica de 100 W que va mesurar el NBS; la d'una botzina, "
+"amb els tocs tan forts com els dona la seva norma o el seu fabricant, en "
+"mitjana sobre els tocs i les pauses; la d'un tren o un tramvia segons Schall "
+"03, a la velocitat de la seva trajectòria, la del primer dels seus punts a "
+"una alçada, i una demostració també reprodueix els que van darrere; la de "
+"maquinària d'obra, la fila de Defra per a la màquina més 28 dB; la d'una "
+"alarma de marxa enrere, la del tipus B de la SAE J994, en mitjana sobre els "
+"senyals i les pauses; la d'un helicòpter, el so dels seus rotors en vol "
+"horitzontal a la seva velocitat respecte a l'aire, i també la seva "
+"directivitat; la d'una aeronau segons l'ECAC Doc 29, les seves corbes NPD a "
+"l'empenta més alta del vol que fa al llarg de la traça a terra de la "
+"trajectòria, i també el seu vol i la seva directivitat"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the "
+"100 W electronic siren NBS measured"
+msgstr ""
+"Sirena: sona {pattern} (pot sonar {patterns}), amb la potència acústica de "
+"la sirena electrònica de 100 W que va mesurar el NBS"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the "
+"100 W electronic siren NBS measured, {gain} dB"
+msgstr ""
+"Sirena: sona {pattern} (pot sonar {patterns}), amb la potència acústica de "
+"la sirena electrònica de 100 W que va mesurar el NBS, {gain} dB"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Horn: {kind}, {tones} Hz {how}, in blasts, {level} dB({weighting}) {at} m "
+"ahead"
+msgstr ""
+"Botzina: {kind}, {tones} Hz {how}, en tocs, {level} dB({weighting}) a {at} m "
+"al davant"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an air horn"
+msgstr "una botzina d'aire"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a pair of disc horns"
+msgstr "un parell de botzines de disc"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a train horn"
+msgstr "una botzina de tren"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "in turn"
+msgstr "per torns"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "together"
+msgstr "alhora"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Helicopter: {helicopter}, its rotors in level flight at {speed} m/s through "
+"the air, their broadband noise by {broadband}; its directivity too"
+msgstr ""
+"Helicòpter: {helicopter}, els seus rotors en vol horitzontal a {speed} m/s "
+"respecte a l'aire, el seu soroll de banda ampla segons {broadband}; també la "
+"seva directivitat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an Airbus Helicopters AS350 B3 at 2,250 kg"
+msgstr "un Airbus Helicopters AS350 B3 de 2250 kg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Pegg's method"
+msgstr "el mètode de Pegg"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Brooks, Pope and Marcolini's airfoil self-noise"
+msgstr "el soroll propi del perfil aerodinàmic de Brooks, Pope i Marcolini"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Doc 29: {aircraft} {operation}, flown along the trajectory's ground track; "
+"its sound power at {thrust} lb of thrust, the highest of its flight, its "
+"directivity too"
+msgstr ""
+"Doc 29: {aircraft} {operation}, que vola al llarg de la traça a terra de la "
+"trajectòria; la seva potència acústica a {thrust} lb d'empenta, la més alta "
+"del seu vol, i també la seva directivitat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "JETW, Volume 3's hypothetical twin jet,"
+msgstr "JETW, el birreactor hipotètic del volum 3,"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "taking off by the ICAO-A procedure"
+msgstr "enlairant-se pel procediment ICAO-A"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "landing down a 3° approach"
+msgstr "aterrant per una aproximació de 3°"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "given by its model"
+msgstr "donada pel seu model"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Schall 03: {train} on {track}; its sources {height}, the sound power the "
+"first's, the others played behind it"
+msgstr ""
+"Schall 03: {train} sobre {track}; les seves fonts {height}, amb la potència "
+"acústica de la primera, i les altres reproduïdes darrere"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an S-Bahn"
+msgstr "un S-Bahn"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a regional train"
+msgstr "un tren regional"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an intercity train"
+msgstr "un tren intercity"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a freight train"
+msgstr "un tren de mercaderies"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a low-floor tram"
+msgstr "un tramvia de pis baix"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "sleepers in ballast"
+msgstr "travesses sobre balast"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "slab track"
+msgstr "via en placa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "slab track with absorbers"
+msgstr "via en placa amb absorbents"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a level crossing"
+msgstr "un pas a nivell"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "track set in the street"
+msgstr "via encastada al carrer"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grassed track, the grass low"
+msgstr "via amb gespa, la gespa baixa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grassed track, the grass up to the rail top"
+msgstr "via amb gespa, la gespa fins a dalt del carril"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "at the rail top (its bogies)"
+msgstr "a dalt del carril (els seus bogis)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "on its roof, 4 m up"
+msgstr "al seu sostre, a 4 m d'alçada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "at its pantograph's head, 5 m up"
+msgstr "al cap del seu pantògraf, a 5 m d'alçada"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C)"
+msgstr ""
+"Maquinària d'obra: la fila de Defra per a {machine} (2005, BS 5228-1, annex "
+"C)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C); its "
+"made sound's blows: {blows} a minute"
+msgstr ""
+"Maquinària d'obra: la fila de Defra per a {machine} (2005, BS 5228-1, annex "
+"C); els cops del so generat: {blows} per minut"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 1650 kg breaker on a 15 t excavator"
+msgstr "un martell trencador de 1650 kg en una excavadora de 15 t"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 6 kVA diesel generator"
+msgstr "un generador dièsel de 6 kVA"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a 9 t dumper"
+msgstr "un dúmper de 9 t"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Reversing alarm: SAE J994 Type B, {hz} Hz beeps {per_s} times a second, "
+"{level} dB(A) {at} m in front of it"
+msgstr ""
+"Alarma de marxa enrere: SAE J994 tipus B, senyals de {hz} Hz {per_s} vegades "
+"per segon, {level} dB(A) a {at} m davant seu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "light motor vehicles"
+msgstr "vehicles lleugers"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "medium heavy vehicles"
+msgstr "vehicles pesants mitjans"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "heavy vehicles"
+msgstr "vehicles pesants"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "mopeds"
+msgstr "ciclomotors"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "motorcycles"
+msgstr "motocicletes"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2960,10 +3579,6 @@ msgstr "Humitat relativa"
 #: acoustic_spaces/gui/inspector.py
 msgid "Air pressure"
 msgstr "Pressió de l'aire"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Recording"
-msgstr "Gravació"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Choose recording…"
@@ -4577,10 +5192,6 @@ msgstr ""
 "fines. No amb el model de dos paràmetres"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Ground"
-msgstr "Terreny"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Model"
 msgstr "Model"
 
@@ -4784,6 +5395,15 @@ msgstr "la gravació de l'escena: {what}"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid ""
+"CNOSSOS-EU category {category} ({kind}); its made sound's engine: "
+"{cylinders} cylinders at {rpm} rpm"
+msgstr ""
+"CNOSSOS-EU categoria {category} ({kind}); el motor del seu so fet: "
+"{cylinders} cilindres a {rpm} rpm"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "file: {name}"
 msgstr "fitxer: {name}"
 
@@ -4799,6 +5419,12 @@ msgstr[1] "conjunt de {count} elements"
 #, python-brace-format
 msgid "per band: {patterns}"
 msgstr "per banda: {patterns}"
+
+#. Translators: {parts} are stems and their gains, "vocal; backing -6 dB".
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "mix of stems: {parts}"
+msgstr "mescla de pistes: {parts}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "The source's name, as the results and the exported files show it"
@@ -4893,10 +5519,10 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Only a point source moves: a line or a surface stands where it is. Set Shape "
-"to point to give the source a walk"
+"to point to give the source a trajectory"
 msgstr ""
 "Només una font puntual es mou: una línia o una superfície es queda on és. "
-"Posa Forma a puntual per donar un recorregut a la font"
+"Posa Forma a puntual per donar una trajectòria a la font"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -5265,6 +5891,30 @@ msgstr "Índex de directivitat: {values} dB (de 63 Hz a 8 kHz)"
 #. Translators: {tip} is the sound power's tip.
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid "{tip}. Given by the model, at the highest thrust of the flight"
+msgstr "{tip}. La dona el model, a l'empenta més alta del vol"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the model, at the speed of the trajectory"
+msgstr "{tip}. La dona el model, a la velocitat de la trajectòria"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the model"
+msgstr "{tip}. La dona el model"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given by the vocal effort"
+msgstr "{tip}. La fixa l'esforç vocal"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "{tip}. Given per band in the scene file; this is their sum"
 msgstr "{tip}. Indicat per banda al fitxer d'escena; això és la suma"
 
@@ -5375,7 +6025,7 @@ msgid ""
 "their paths in pressure: the solver for whole rows (one field over all of "
 "them, with the ground and the roofs in it, where their tops go on far enough "
 "to both sides of the way; seconds for each source and listener) or the paths "
-"over one edge or two alone. Maps and walks take the paths"
+"over one edge or two alone. Maps and trajectories take the paths"
 msgstr ""
 "A l'aire lliure, el so sobre pantalles i edificis al pla vertical que passa "
 "per una font i un receptor, a les bandes d'octava fins a 500 Hz que sumen "
@@ -5383,7 +6033,7 @@ msgstr ""
 "camp sobre tots ells, amb el terreny i les cobertes dins, on les seves parts "
 "superiors continuen prou lluny a banda i banda del camí; segons per a cada "
 "font i receptor) o les trajectòries sobre una aresta o dues soles. Els mapes "
-"i els recorreguts prenen les trajectòries"
+"i les trajectòries dels mòbils fan servir aquestes últimes"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -6555,14 +7205,15 @@ msgstr "Doppler"
 msgid ""
 "Tick for a vehicle or an aircraft: the early sound goes through delays that "
 "change as it goes, so its pitch shifts as it passes (doppler in the scene "
-"file). A walk with Doppler moves alone: Render movement… and the demos play "
-"it while every other walk is off"
+"file). Sources with Doppler move together, beside other sources that move, "
+"while no listener moves; a listener with Doppler moves alone: Render "
+"movement… and the demos play them so"
 msgstr ""
 "Marca-ho per a un vehicle o un avió: el so primerenc passa per retards que "
 "canvien mentre avança, de manera que el to canvia quan passa (doppler al "
-"fitxer d'escena). Un recorregut amb Doppler es mou sol: Renderitza el "
-"moviment… i les demos el reprodueixen mentre tots els altres recorreguts "
-"estan desactivats"
+"fitxer d'escena). Les fonts amb Doppler es mouen juntes, al costat d'altres "
+"fonts que es mouen, mentre cap receptor no es mou; un receptor amb Doppler "
+"es mou sol: Renderitza el moviment… i les demos els reprodueixen així"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
@@ -6576,10 +7227,6 @@ msgstr ""
 "quan no en té cap de binaural. La binaural, per a auriculars, va primer: una "
 "font que passa va d'una orella a l'altra, cosa que el mono, un sol canal, no "
 "pot mostrar"
-
-#: acoustic_spaces/gui/movement.py
-msgid "Output"
-msgstr "Sortida"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Render movement…"
@@ -6663,14 +7310,14 @@ msgstr ""
 msgid ""
 "How fast it goes from this keyframe to the next: the distance between them "
 "over the time between them (m/s; 3.6 km/h each). Nothing to set: change a "
-"time or a position and the speed follows. A walk through points goes at one "
-"speed: type it here and the times follow"
+"time or a position and the speed follows. A trajectory through points goes "
+"at one speed: type it here and the times follow"
 msgstr ""
 "A quina velocitat va d'aquest fotograma clau al següent: la distància entre "
 "tots dos dividida pel temps entre tots dos (m/s; 3,6 km/h cadascun). No hi "
 "ha res a ajustar: canvieu un temps o una posició i la velocitat se'n "
-"dedueix. Un recorregut per punts va a una sola velocitat: escriviu-la aquí i "
-"els temps se'n dedueixen"
+"dedueix. Una trajectòria per punts va a una sola velocitat: escriviu-la aquí "
+"i els temps se'n dedueixen"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Convert to keyframes"
@@ -6678,10 +7325,10 @@ msgstr "Converteix en fotogrames clau"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
-"Turn a walk along points at a speed (to, speed_m_s) into keyframes that move "
-"the same way, timed, so that they can be edited here"
+"Turn a trajectory along points at a speed (to, speed_m_s) into keyframes "
+"that move the same way, timed, so that they can be edited here"
 msgstr ""
-"Converteix un recorregut per punts a una velocitat (to, speed_m_s) en "
+"Converteix una trajectòria per punts a una velocitat (to, speed_m_s) en "
 "fotogrames clau que es mouen igual, amb els seus temps, per poder editar-los "
 "aquí"
 
@@ -6707,13 +7354,13 @@ msgstr ""
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
-"Where the timeline ends: at least the longest walk; make it longer to add "
-"keyframes past the end, and the movers that have ended stand where their "
-"walks end"
+"Where the timeline ends: at least the longest trajectory; make it longer to "
+"add keyframes past the end, and the movers that have ended stand where their "
+"trajectories end"
 msgstr ""
-"On acaba la línia de temps: com a mínim el recorregut més llarg; "
+"On acaba la línia de temps: com a mínim la trajectòria més llarga; "
 "allargueu-la per afegir fotogrames clau més enllà del final; els mòbils que "
-"han acabat es queden on acaben els seus recorreguts"
+"han acabat es queden on acaben les seves trajectòries"
 
 #: acoustic_spaces/gui/movement.py
 msgid "End"
@@ -6771,13 +7418,14 @@ msgstr "Fotograma clau {n}"
 #, python-brace-format
 msgid ""
 "{name} goes through its points at one speed, {speed:.2f} m/s ({kmh:.1f} "
-"km/h): type or drag a point to move it, type a speed for the whole walk, and "
-"the times follow. Convert to keyframes to time each point yourself."
+"km/h): type or drag a point to move it, type a speed for the whole "
+"trajectory, and the times follow. Convert to keyframes to time each point "
+"yourself."
 msgstr ""
 "{name} recorre els seus punts a una sola velocitat, {speed:.2f} m/s "
 "({kmh:.1f} km/h): escriviu o arrossegueu un punt per moure'l, escriviu una "
-"velocitat per a tot el recorregut, i els temps se'n dedueixen. Converteix en "
-"fotogrames clau per fixar vosaltres el temps de cada punt."
+"velocitat per a tota la trajectòria, i els temps se'n dedueixen. Converteix "
+"en fotogrames clau per fixar vosaltres el temps de cada punt."
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
@@ -6818,10 +7466,10 @@ msgstr "Suprimeix el punt"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Remove the selected point; the mover goes straight from the one before to "
-"the one after. With the last one, the walk goes too"
+"the one after. With the last one, the trajectory goes too"
 msgstr ""
 "Suprimeix el punt seleccionat; el mòbil va en línia recta de l'anterior al "
-"següent. Amb l'últim, el recorregut també desapareix"
+"següent. Amb l'últim, la trajectòria també desapareix"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Add keyframe"
@@ -6830,12 +7478,12 @@ msgstr "Afegeix un fotograma clau"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Add a keyframe at the playhead, where the mover is then (on a keyframe "
-"already, or at 0 s: a second past the end of its walk, where it ends), then "
-"drag it into place or type where it is"
+"already, or at 0 s: a second past the end of its trajectory, where it ends), "
+"then drag it into place or type where it is"
 msgstr ""
 "Afegeix un fotograma clau al cursor de temps, on és el mòbil en aquell "
-"instant (si ja n'hi ha un, o a 0 s: un segon després del final del seu "
-"recorregut, on acaba); després arrossegueu-lo al seu lloc o escriviu on és"
+"instant (si ja n'hi ha un, o a 0 s: un segon després del final de la seva "
+"trajectòria, on acaba); després arrossegueu-lo al seu lloc o escriviu on és"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Remove keyframe"
@@ -6844,10 +7492,10 @@ msgstr "Suprimeix el fotograma clau"
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "Remove the selected keyframe; the mover goes straight from the one before to "
-"the one after. With the last one, the walk goes too"
+"the one after. With the last one, the trajectory goes too"
 msgstr ""
 "Suprimeix el fotograma clau seleccionat; el mòbil va directe de l'anterior "
-"al següent. Amb l'últim se'n va també el recorregut"
+"al següent. Amb l'últim se'n va també la trajectòria"
 
 #: acoustic_spaces/gui/movement.py
 #, python-brace-format
@@ -6855,8 +7503,8 @@ msgid "{text} is not a number"
 msgstr "{text} no és un nombre"
 
 #: acoustic_spaces/gui/movement.py
-msgid "a walk goes at a speed above 0 m/s"
-msgstr "un recorregut va a una velocitat més gran que 0 m/s"
+msgid "a trajectory goes at a speed above 0 m/s"
+msgstr "una trajectòria va a una velocitat més gran que 0 m/s"
 
 #: acoustic_spaces/gui/movement.py
 msgid "change speed"
@@ -6918,8 +7566,8 @@ msgid "remove keyframe"
 msgstr "suprimir fotograma clau"
 
 #: acoustic_spaces/gui/movement.py
-msgid "convert walk to keyframes"
-msgstr "convertir recorregut en fotogrames clau"
+msgid "convert trajectory to keyframes"
+msgstr "convertir trajectòria en fotogrames clau"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Pause"
@@ -7127,10 +7775,10 @@ msgstr "moure vèrtex"
 #, python-brace-format
 msgid ""
 "Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
-"its walk; drag it once the run is over"
+"its trajectory; drag it once the run is over"
 msgstr ""
 "No s'ha mogut: {name} es dibuixa on el simula l'execució, als {time:.2f} s "
-"del seu recorregut; arrossegueu-lo quan l'execució acabi"
+"de la seva trajectòria; arrossegueu-lo quan l'execució acabi"
 
 #: acoustic_spaces/gui/plan_view.py
 #, python-brace-format
@@ -7980,10 +8628,6 @@ msgid "Materials"
 msgstr "Materials"
 
 #: acoustic_spaces/gui/tree.py
-msgid "Sources"
-msgstr "Fonts"
-
-#: acoustic_spaces/gui/tree.py
 msgid "Simulation"
 msgstr "Simulació"
 
@@ -8215,6 +8859,62 @@ msgid "In step with the scene"
 msgstr "Al dia amb l'escena"
 
 #: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F1)"
+msgstr "Una dona que parla (corpus ACE, locutora F1)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F2)"
+msgstr "Una dona que parla (corpus ACE, locutora F2)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F3)"
+msgstr "Una dona que parla (corpus ACE, locutora F3)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F4)"
+msgstr "Una dona que parla (corpus ACE, locutora F4)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F5)"
+msgstr "Una dona que parla (corpus ACE, locutora F5)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M1)"
+msgstr "Un home que parla (corpus ACE, locutor M1)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M2)"
+msgstr "Un home que parla (corpus ACE, locutor M2)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M3)"
+msgstr "Un home que parla (corpus ACE, locutor M3)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M4)"
+msgstr "Un home que parla (corpus ACE, locutor M4)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M5)"
+msgstr "Un home que parla (corpus ACE, locutor M5)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M6)"
+msgstr "Un home que parla (corpus ACE, locutor M6)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M7)"
+msgstr "Un home que parla (corpus ACE, locutor M7)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M8)"
+msgstr "Un home que parla (corpus ACE, locutor M8)"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M9)"
+msgstr "Un home que parla (corpus ACE, locutor M9)"
+
+#: acoustic_spaces/recordings.py
 msgid "\"Spicy Funk Cake\", Rhythmussportgruppe"
 msgstr "\"Spicy Funk Cake\", Rhythmussportgruppe"
 
@@ -8227,12 +8927,20 @@ msgid "\"Potassium\", Software-Entwicklungskit"
 msgstr "\"Potassium\", Software-Entwicklungskit"
 
 #: acoustic_spaces/recordings.py
-msgid "A man talking (ACE corpus, talker M4)"
-msgstr "Un home que parla (corpus ACE, locutor M4)"
+msgid "\"Francium\", Software-Entwicklungskit"
+msgstr "\"Francium\", Software-Entwicklungskit"
 
 #: acoustic_spaces/recordings.py
-msgid "A woman talking (ACE corpus, talker F2)"
-msgstr "Una dona que parla (corpus ACE, locutora F2)"
+msgid "\"Rubidium\", Software-Entwicklungskit"
+msgstr "\"Rubidium\", Software-Entwicklungskit"
+
+#: acoustic_spaces/recordings.py
+msgid "\"Dona nobis pacem\", a choir of 19 singers and an organ"
+msgstr "\"Dona nobis pacem\", un cor de 19 cantants i un orgue"
+
+#: acoustic_spaces/recordings.py
+msgid "Beethoven's Symphony No. 8, an orchestra of 61 players"
+msgstr "Simfonia núm. 8 de Beethoven, una orquestra de 61 músics"
 
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py
@@ -8531,6 +9239,54 @@ msgstr "nivell {number}, terra aproximadament a {height:.1f} m"
 msgid "{source}: {title}, {count} points {spacing:g} m apart"
 msgstr "{source}: {title}, {count} punts separats {spacing:g} m"
 
+#: examples/airport/flight_demo.py
+msgid "A jet taking off and landing"
+msgstr "Un avió de reacció enlairant-se i aterrant"
+
+#: examples/church/church_demo.py
+msgid "A choir and an organ in the church"
+msgstr "Un cor i un orgue a l'església"
+
+#: examples/gallery/walk_demo.py
+msgid "A walk through the gallery"
+msgstr "Un passeig per la galeria"
+
+#: examples/helicopter_flyover/flyover_demo.py
+msgid "A helicopter flying over"
+msgstr "Un helicòpter que passa per sobre"
+
+#: examples/lakeside_concert/lakeside_demo.py
+msgid "A concert across a lake"
+msgstr "Un concert a l'altra banda d'un llac"
+
+#: examples/orchestra/orchestra_demo.py
+msgid "Beethoven's 8th in the concert hall"
+msgstr "La 8a de Beethoven a la sala de concerts"
+
+#: examples/railway/passby_demo.py
+msgid "A train running past"
+msgstr "Un tren que passa"
+
+#: examples/roadside/passby_demo.py
+msgid "A car or a truck passing the meadow"
+msgstr "Un cotxe o un camió que passa pel prat"
+
+#: examples/stadium_concert/helicopter_demo.py
+msgid "A helicopter over the stadium concert"
+msgstr "Un helicòpter sobre el concert de l'estadi"
+
+#: examples/stadium_concert/stadium_demo.py
+msgid "A band in the stadium"
+msgstr "Un grup a l'estadi"
+
+#: examples/street/passby_demo.py
+msgid "A vehicle driving down the street"
+msgstr "Un vehicle que circula pel carrer"
+
+#: examples/street/works_demo.py
+msgid "Road works in the street"
+msgstr "Obres al carrer"
+
 #: examples/airport/scene.yaml
 msgctxt "example"
 msgid "Aerodrome by a meadow"
@@ -8825,11 +9581,13 @@ msgid ""
 "round the corner hear them only by the sound that bends round it (edge "
 "diffraction) and by reflections. The plan's corners go round the floor; "
 "wall_3 and wall_4 meet at the inner corner (8, 8). One visitor sees the "
-"guide, one stands round the corner, and one walks from 3 m in front of the "
-"guide down the long arm and round the corner at 1.2 m/s: `acoustic-spaces "
-"walkthrough` plays a recording along that walk, and walk_demo.py makes a "
-"video of it. Turn the walk off (Moves, or `enabled: false`) and that visitor "
-"stands where it starts."
+"guide, one stands round the corner, one walks from 3 m in front of the guide "
+"down the long arm and round the corner at 1.2 m/s, and one stands 4 m from "
+"the guide and turns their head a quarter at a time: the demo of the scene "
+"(`acoustic-spaces demo`, or walk_demo.py with the walker and the one turning "
+"alone) plays the guide's talk as each hears it. Turn a trajectory off "
+"(Moving, or `enabled: false`) and that visitor stands where they start, "
+"facing as they do there."
 msgstr ""
 "Una galeria en forma de L, de 4 m d'alçada (1150 m3), amb terra de marbre, "
 "parets de maó rugós i sostre absorbent: un guia parla al braç llarg i els "
@@ -8837,11 +9595,12 @@ msgstr ""
 "seu voltant (difracció en arestes) i per les reflexions. Els vèrtexs de la "
 "planta recorren el contorn del terra; wall_3 i wall_4 es troben al vèrtex "
 "interior (8, 8). Un visitant veu el guia, un altre és a l'altra banda del "
-"vèrtex i un tercer camina des de 3 m davant del guia pel braç llarg i gira "
-"el vèrtex a 1,2 m/s: `acoustic-spaces walkthrough` reprodueix un "
-"enregistrament al llarg d'aquest recorregut, i walk_demo.py en fa un vídeo. "
-"Desactiveu el recorregut (Es mou, o `enabled: false`) i aquest visitant es "
-"queda on comença."
+"vèrtex, un altre camina des de 3 m davant del guia pel braç llarg i gira el "
+"vèrtex a 1,2 m/s, i un altre és a 4 m del guia i gira el cap un quart de "
+"volta cada cop: la demo de l'escena (`acoustic-spaces demo`, o walk_demo.py "
+"només amb el que camina i el que gira) reprodueix la xerrada del guia tal "
+"com la sent cadascú. Desactiveu una trajectòria (En moviment, o `enabled: "
+"false`) i aquest visitant es queda on comença, mirant cap on mira allà."
 
 #: examples/helicopter_flyover/scene.yaml
 msgctxt "example"
@@ -9072,13 +9831,17 @@ msgid ""
 "The orchestra of an anechoic recording of Beethoven's Symphony No. 8 on the "
 "stage of the concert hall: 61 sources, one per track, and four seats. The "
 "tracks (TU Berlin, CC BY 4.0, https://doi.org/10.14279/depositonce-6729.2) "
-"are not included: download a movement and mix it at a seat with auralize.sh."
+"are not included: the demo of the scene (acoustic-spaces demo scene.yaml, or "
+"orchestra_demo.py) downloads each movement it plays the first time, or mix "
+"one movement at a seat with auralize.sh."
 msgstr ""
 "L'orquestra d'un enregistrament anecoic de la Simfonia núm. 8 de Beethoven a "
 "l'escenari de la sala de concerts: 61 fonts, una per pista, i quatre "
 "seients. Les pistes (TU Berlin, CC BY 4.0, "
-"https://doi.org/10.14279/depositonce-6729.2) no s'inclouen: cal descarregar "
-"un moviment i mesclar-lo en un seient amb auralize.sh."
+"https://doi.org/10.14279/depositonce-6729.2) no s'inclouen: la demo de "
+"l'escena (acoustic-spaces demo scene.yaml, o orchestra_demo.py) descarrega "
+"la primera vegada cada moviment que reprodueix, o bé mescleu un moviment en "
+"un seient amb auralize.sh."
 
 #: examples/railway/scene.yaml
 msgctxt "example"
@@ -9098,12 +9861,13 @@ msgid ""
 "km/h, its sound power per metre and its directivity round the track Schall "
 "03's (Germany's method for the noise of railways, 2014), all of it at the "
 "rail top. A train runs past at 160 km/h, its pitch falling as it goes by "
-"(Doppler): three sources along one walk, at the rail top, on the roof and at "
-"the pantograph, Schall 03's heights; each plays the train's points at that "
-"height one behind the other (its bogies, its cars' roofs, its pantograph), "
-"so the train goes by as long as it is. They are left out of simulations "
-"until ticked, as is the train's horn at its front, and passby_demo.py runs "
-"one of four trains past, its horn sounding with --horn blasts."
+"(Doppler): three sources along one trajectory, at the rail top, on the roof "
+"and at the pantograph, Schall 03's heights; each plays the train's points at "
+"that height one behind the other (its bogies, its cars' roofs, its "
+"pantograph), so the train goes by as long as it is. They are left out of "
+"simulations until ticked, as is the train's horn at its front (the group "
+"Train), and passby_demo.py runs one of four trains past, its horn sounding "
+"with --sources Train."
 msgstr ""
 "A l'aire lliure: una via de tren sobre balast a través d'un prat, escoltada "
 "on la norma de la UE per al soroll dels trens en mesura un en passar (a 7,5 "
@@ -9116,13 +9880,13 @@ msgstr ""
 "acústica per metre i la directivitat al voltant de la via de Schall 03 (el "
 "mètode alemany per al soroll dels ferrocarrils, 2014), tota al cap del "
 "carril. Un tren passa a 160 km/h i el seu to baixa quan passa (Doppler): "
-"tres fonts al llarg d'un mateix recorregut, al cap del carril, al sostre i "
-"al pantògraf, les alçades de Schall 03; cadascuna reprodueix els punts del "
+"tres fonts al llarg d'una mateixa trajectòria, al cap del carril, al sostre "
+"i al pantògraf, les alçades de Schall 03; cadascuna reprodueix els punts del "
 "tren a aquella alçada l'un darrere l'altre (els seus bogies, els sostres "
 "dels seus cotxes, el seu pantògraf), de manera que el tren triga a passar "
 "tant com és de llarg. Queden fora de les simulacions fins que es marquen, "
-"com la botzina del tren al seu davant, i passby_demo.py fa passar un de "
-"quatre trens, amb la botzina sonant amb --horn blasts."
+"com la botzina del tren al seu davant (el grup Train), i passby_demo.py fa "
+"passar un de quatre trens, amb la botzina sonant amb --sources Train."
 
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"
@@ -9163,8 +9927,9 @@ msgid ""
 "kHz. The meadow, the road and the yard are parts of the ground, each with "
 "its impedance; a reflection near where two meet takes some of each, as much "
 "as each covers of its Fresnel zone. A car at 50 km/h and a truck at 70 km/h "
-"drive along the road, their pitch falling as they pass (Doppler): they are "
-"left out of simulations until ticked, and passby_demo.py plays one."
+"drive along the road, their pitch falling as they pass (Doppler), each with "
+"CNOSSOS-EU's sound power for its kind and speed: they are left out of "
+"simulations until ticked, and a demo of the scene plays them."
 msgstr ""
 "A l'aire lliure: trànsit en una carretera entre un prat i un pati "
 "pavimentat, escoltat a 7,5, 25 i 50 m sobre l'herba, i a 25 m sobre el pati. "
@@ -9175,8 +9940,10 @@ msgstr ""
 "són parts del terreny, cadascuna amb la seva impedància; una reflexió prop "
 "d'on dues es troben pren una mica de cadascuna, tant com cadascuna cobreix "
 "de la seva zona de Fresnel. Un cotxe a 50 km/h i un camió a 70 km/h circulen "
-"per la carretera i el seu to baixa quan passen (Doppler): queden fora de les "
-"simulacions fins que es marquen, i passby_demo.py en reprodueix un."
+"per la carretera i el seu to baixa quan passen (Doppler), cadascun amb la "
+"potència acústica de CNOSSOS-EU per al seu tipus i la seva velocitat: queden "
+"fora de les simulacions fins que es marquen, i una demostració de l'escena "
+"els reprodueix."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"
@@ -9280,28 +10047,28 @@ msgid ""
 "stand nearer the arrays than their far-field patterns hold, so every array "
 "adds up its boxes one by one (`near_field: true`). The sources and listeners "
 "sit in groups: the PA's mains, subwoofers, fills and delays, the monitors, "
-"the stage, the audience standing and seated, and the band and the "
-"helicopter, which the concert's simulations leave out until they are ticked, "
-"as they do the singer's microphone. The editor's scene tree shows or hides "
-"each group, and its tick uses it in simulations or leaves it out: with the "
-"monitors and the stage left out, the sound system plays alone, for the "
-"crowd.  acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
+"the band, the stage, the audience standing and seated, and the helicopter, "
+"which the concert's simulations leave out until it is ticked, as they do the "
+"singer's microphone. The editor's scene tree shows or hides each group, and "
+"its tick uses it in simulations or leaves it out: with the monitors, the "
+"band and the stage left out, the sound system plays alone, for the crowd.  "
+"acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
 "align.py python near_field.py python feedback.py python make_model.py  On "
 "the pitch from the mix position back, nine points of the map in ten get the "
 "same level within 2.3 to 2.5 dB (all bands together; it differs from run to "
-"run, as the scene sets no seed). The map takes under five minutes on 4 "
-"cores. align.py prints when and how loud each loudspeaker arrives at each "
-"listener, and which would be heard as an echo: none, and each player hears "
-"their own monitor loudest. near_field.py prints how far each array's "
-"far-field pattern would be off at each listener: within 3.5 dB up to 2 kHz, "
-"but up to 10.2 dB at 4 and 8 kHz near the main arrays. feedback.py finds how "
-"much gain the singer's microphone allows before the loudspeakers that play "
-"it make it ring, at the mix position and at the singer's ears, and the "
-"frequencies where it rings first, then renders the loop below and above that "
-"gain. Its microphone is an ideal supercardioid and the reverberation's "
-"phases are random, so take the frequencies as an example of where such a "
-"stage rings. make_model.py writes the model and the arrays; their boxes are "
-"a generic box made up for this example, not any product's data."
+"run, as the scene sets no seed). The map takes about 8 minutes on 4 cores. "
+"align.py prints when and how loud each loudspeaker arrives at each listener, "
+"and which would be heard as an echo: none, and each player hears their own "
+"monitor loudest. near_field.py prints how far each array's far-field pattern "
+"would be off at each listener: within 3.5 dB up to 2 kHz, but up to 10.2 dB "
+"at 4 and 8 kHz near the main arrays. feedback.py finds how much gain the "
+"singer's microphone allows before the loudspeakers that play it make it "
+"ring, at the mix position and at the singer's ears, and the frequencies "
+"where it rings first, then renders the loop below and above that gain. Its "
+"microphone is an ideal supercardioid and the reverberation's phases are "
+"random, so take the frequencies as an example of where such a stage rings. "
+"make_model.py writes the model and the arrays; their boxes are a generic box "
+"made up for this example, not any product's data."
 msgstr ""
 "Un concert en un estadi de futbol, amb un sistema de so com els que pengen "
 "les gires i els monitors de l'escenari (concert_stage té l'escenari sol). "
@@ -9346,30 +10113,30 @@ msgstr ""
 "camp llunyà, així que cada conjunt suma les seves caixes una a una "
 "(`near_field: true`). Les fonts i els receptors són en grups: els "
 "principals, els subgreus, els reforços i els retards del PA, els monitors, "
-"l'escenari, el públic dret i assegut, i la banda i l'helicòpter, que les "
-"simulacions del concert exclouen fins que es marquen, com fan amb el "
-"micròfon de veu. L'arbre de l'escena de l'editor mostra o amaga cada grup, i "
-"la seva casella l'inclou a les simulacions o l'exclou: amb els monitors i "
+"la banda, l'escenari, el públic dret i assegut, i l'helicòpter, que les "
+"simulacions del concert exclouen fins que es marca, com fan amb el micròfon "
+"de veu. L'arbre de l'escena de l'editor mostra o amaga cada grup, i la seva "
+"casella l'inclou a les simulacions o l'exclou: amb els monitors, la banda i "
 "l'escenari exclosos, el sistema de so sona sol, per al públic.  "
 "acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
 "align.py python near_field.py python feedback.py python make_model.py  Al "
 "camp, des de la posició de mescla cap enrere, nou de cada deu punts del mapa "
 "reben el mateix nivell amb 2,3 a 2,5 dB de diferència com a màxim (totes les "
 "bandes juntes; canvia d'un càlcul a un altre, perquè l'escena no fixa cap "
-"llavor). El mapa de cobertura triga menys de cinc minuts amb 4 nuclis. "
-"align.py mostra quan i amb quin nivell arriba cada altaveu a cada receptor, "
-"i quin se sentiria com a eco: cap, i cada músic sent més fort el seu propi "
-"monitor. near_field.py mostra quant es desviaria el patró de camp llunyà de "
-"cada conjunt a cada receptor: menys de 3,5 dB fins a 2 kHz, però fins a 10,2 "
-"dB a 4 i 8 kHz a prop dels conjunts principals. feedback.py calcula quant "
-"guany admet el micròfon del cantant abans que els altaveus que el "
-"reprodueixen el facin acoblar, a la posició de mescla i a les orelles del "
-"cantant, i les freqüències on s'acobla primer, i després genera l'àudio del "
-"llaç per sota i per sobre d'aquest guany. El seu micròfon és un "
-"supercardioide ideal i les fases de la reverberació són aleatòries, així que "
-"les freqüències són un exemple d'on s'acobla un escenari així. make_model.py "
-"escriu el model i els conjunts; les seves caixes són una caixa genèrica "
-"inventada per a aquest exemple, no dades de cap producte."
+"llavor). El mapa de cobertura triga uns 8 minuts amb 4 nuclis. align.py "
+"mostra quan i amb quin nivell arriba cada altaveu a cada receptor, i quin se "
+"sentiria com a eco: cap, i cada músic sent més fort el seu propi monitor. "
+"near_field.py mostra quant es desviaria el patró de camp llunyà de cada "
+"conjunt a cada receptor: menys de 3,5 dB fins a 2 kHz, però fins a 10,2 dB a "
+"4 i 8 kHz a prop dels conjunts principals. feedback.py calcula quant guany "
+"admet el micròfon del cantant abans que els altaveus que el reprodueixen el "
+"facin acoblar, a la posició de mescla i a les orelles del cantant, i les "
+"freqüències on s'acobla primer, i després genera l'àudio del llaç per sota i "
+"per sobre d'aquest guany. El seu micròfon és un supercardioide ideal i les "
+"fases de la reverberació són aleatòries, així que les freqüències són un "
+"exemple d'on s'acobla un escenari així. make_model.py escriu el model i els "
+"conjunts; les seves caixes són una caixa genèrica inventada per a aquest "
+"exemple, no dades de cap producte."
 
 #: examples/street/scene.yaml
 msgctxt "example"

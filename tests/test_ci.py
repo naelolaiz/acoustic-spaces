@@ -388,3 +388,24 @@ def test_the_sanitizer_jobs_run_every_part_of_the_tests() -> None:
     assert parts == list(range(1, len(parts) + 1))
     (test,) = [step for step in job["steps"] if step.get("name") == "Test"]
     assert test["run"].endswith(" --shard ${{ matrix.part }}/${{ strategy.job-total }}")
+
+
+def test_the_windows_test_jobs_run_every_part_of_the_tests() -> None:
+    """Windows runs the tests in parts, one job each, numbered from 1, each running its
+    part of as many as there are; every other system runs them whole, in one job."""
+    if not WORKFLOWS.exists():
+        pytest.skip("the workflows are in the source checkout only")
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))
+    job = ci["jobs"]["test"]
+    matrix = job["strategy"]["matrix"]
+    parts = matrix["part"]
+    assert parts == list(range(1, len(parts) + 1)) and len(parts) > 1
+    left_out = [entry for entry in matrix["exclude"] if "part" in entry]
+    others = [os for os in matrix["os"] if os != "windows-latest"]
+    assert sorted((e["os"], e["part"]) for e in left_out) == sorted(
+        (os, part) for os in others for part in parts[1:]
+    )
+    shard = f"format('--shard {{0}}/{len(parts)}', matrix.part)"
+    assert f"format(', part {{0}} of {len(parts)}', matrix.part)" in job["name"]
+    (test,) = [step for step in job["steps"] if step.get("name") == "Test"]
+    assert f"matrix.os == 'windows-latest' && {shard}" in test["run"]

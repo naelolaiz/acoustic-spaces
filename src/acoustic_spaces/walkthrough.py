@@ -1,58 +1,59 @@
 """Walkthroughs: a listener or a source walking through the room, heard as it goes.
 
-A listener or a point source with a ``walk`` in the scene goes from its position
-through the points of ``walk.to``, at ``walk.speed_m_s``, facing the way it goes unless
-``walk.face_forward`` is false (it then keeps its orientation)::
+A listener or a point source with a ``trajectory`` in the scene goes from its position
+through the points of ``trajectory.to``, at ``trajectory.speed_m_s``, facing the way it goes unless
+``trajectory.face_forward`` is false (it then keeps its orientation)::
 
     listeners:
       - name: visitor
         position: [2.0, 3.0, 1.6]
-        walk: {to: [[12.0, 3.0, 1.6], [12.0, 8.0, 1.6]], speed_m_s: 1.2}
+        trajectory: {to: [[12.0, 3.0, 1.6], [12.0, 8.0, 1.6]], speed_m_s: 1.2}
 
-:func:`walk_points` places the walker every ``step_m`` along its path, and
-:func:`simulate_walk` simulates a response at each place. The early sound changes
+:func:`trajectory_points` places the mover every ``step_m`` along its path, and
+:func:`simulate_trajectory` simulates a response at each place. The early sound changes
 quickly from place to place, the late field slowly, so the late part, the costliest to
 trace, is traced only every ``late_step_m``; the places in between mix the late parts of
-those on either side, in proportion to how near they are. :func:`render_walk` then
-plays signals through them: the response of the place the walker is nearest to, with a
+those on either side, in proportion to how near they are. :func:`render_trajectory` then
+plays signals through them: the response of the place the mover is nearest to, with a
 crossfade of ``crossfade_s`` half-way between two places, so that the sound changes
-smoothly as it walks. In each octave band the crossfade's power goes from one place's
+smoothly as it moves. In each octave band the crossfade's power goes from one place's
 to the next's along a raised cosine, however alike the two sound
 (:func:`~acoustic_spaces.render.crossfaded`): a tone heard in another phase at the next
 place keeps its level, except near antiphase, where the two cancel in the middle of
 the crossfade by more than its gain, at most +6 dB, makes up. Each place's late part is
 drawn from the same random sequence, so the crossfades join tails that only differ in
-their decay. The walker stands at the end of its path once it is there, for as long as
+their decay. The mover stands at the end of its path once it is there, for as long as
 the signals last.
 
-At walking speed there is no Doppler shift (it is under half a percent, 8 cents). A
-walk with ``doppler: true`` (a car, a train, an aircraft) plays each early path through
-a delay that changes as the walker goes (:mod:`acoustic_spaces.doppler`), so the pitch
+At a walking pace there is no Doppler shift (it is under half a percent, 8 cents). A
+trajectory with ``doppler: true`` (a car, a train, an aircraft) plays each early path through
+a delay that changes as the mover goes (:mod:`acoustic_spaces.doppler`), so the pitch
 of each shifts as it does on its way; the late part is crossfaded by weights that add
 up to one (:func:`crossfade_weights`), which keep the power of tails this alike, a
-walking source's as its sound is sent and a walking listener's as it is heard; and
+moving source's as its sound is sent and a moving listener's as it is heard; and
 :func:`pass_by` gives the level over time, its maximum and the sound exposure level,
 also as a sound level meter's slow time weighting reads them. Outdoors in turbulence
-the early sound flickers along the walk as in :func:`~acoustic_spaces.render.auralize`,
+the early sound flickers along the trajectory as in :func:`~acoustic_spaces.render.auralize`,
 through the same eddies from place to place.
 
-A walk may instead give ``keyframes``: where the walker is and how it faces at given
+A trajectory may instead give ``keyframes``: where the mover is and how it faces at given
 times after its start, between which it moves and turns evenly, so that it can wait,
-turn on the spot or go at any pace (:func:`knots` gives either kind of walk as the knots
+turn on the spot or go at any pace (:func:`knots` gives either kind of trajectory as the knots
 it moves between). Several listeners and sources may move at once, each on its own
-walk, all on one clock: :func:`simulate_movement` simulates them together, every mover
+trajectory, all on one clock: :func:`simulate_movement` simulates them together, every mover
 as a copy at each place it takes, in one simulation; :func:`render_movement` plays the
 signals through it as heard at every listener in use, still or moving; and
-:func:`save_movement` writes one WAV per listener. A walk with Doppler moves alone, there
-as in a walk of its own: every listener hears each early path through its changing
-delay. ``walk.enabled: false`` keeps a walk
-but leaves its walker standing still, and :func:`with_moving` picks which walks are on
+:func:`save_movement` writes one WAV per listener. A trajectory with Doppler plays as in a
+trajectory of its own: every listener hears each early path through its changing delay. A
+listener's moves alone; sources' move together, beside other sources that move, while no
+listener moves (:func:`doppler_clash`). ``trajectory.enabled: false`` keeps a trajectory
+but leaves its mover standing still, and :func:`with_moving` picks which trajectories are on
 for one run, so that one scene serves both still and moving.
 
-Each copy is named for its walker, its place and its time on the walk
+Each copy is named for its mover, its place and its time on the trajectory
 (:func:`place_name`, ``car #12 @ 3.40 s``), and the simulation's progress messages name
-it so; a demo's video names the moment of each walk it shows (:func:`moment_name`,
-``car @ 3.40 s``): :func:`place_of` reads the walker and the time back from both. A head
+it so; a demo's video names the moment of each trajectory it shows (:func:`moment_name`,
+``car @ 3.40 s``): :func:`place_of` reads the mover and the time back from both. A head
 turned as a demo scripts it is named with its yaw (:func:`facing_name`, ``standing
 facing 90.0 deg``), which :func:`facing_of` reads back.
 """
@@ -62,15 +63,18 @@ from __future__ import annotations
 import dataclasses
 import math
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 from acoustic_spaces.emission import Emission
-from acoustic_spaces.engine.simulate import SimulationResult, simulate
+from acoustic_spaces.engine import run_size
+from acoustic_spaces.engine.response import LATE_ARRAYS, Deferred
+from acoustic_spaces.engine.simulate import SimulationResult, late_need, simulate
 from acoustic_spaces.materials.bands import resolution_of
 from acoustic_spaces.parameters import EventLevels, event_levels
 from acoustic_spaces.render import (
@@ -87,15 +91,18 @@ from acoustic_spaces.room import Room, every_left_out
 from acoustic_spaces.scene.model import Orientation
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 
-#: Distance (m) between the places a walk is simulated at.
+#: Distance (m) between the places a trajectory is simulated at.
 STEP_M = 0.25
-#: Angle (degrees) a walker turns between the places of a walk along keyframes where it
+#: Angle (degrees) a mover turns between the places of a trajectory along keyframes where it
 #: turns without moving on (on the spot, or nearly).
 STEP_DEG = 20.0
-#: Distance (m) between the places a walk's late part is traced at.
+#: Distance (m) between the places a trajectory's late part is traced at.
 LATE_STEP_M = 2.0
 #: Length (s) of the crossfade from one place's response to the next.
 CROSSFADE_S = 0.05
+#: The Ambisonics order a listener heard through the head tracker is rendered in, before
+#: its field is turned against the head and decoded to the ears (:func:`render_movement`).
+HEAD_ORDER = 7
 
 #: A place's name (:func:`place_name`), whole.
 _PLACE = re.compile(r"(?P<name>.+?)(?: #\d+)? @ (?P<time>\d+(?:\.\d+)?) s")
@@ -103,14 +110,14 @@ _FACING = re.compile(r"(?P<name>.+) facing (?P<yaw>\d+(?:\.\d+)?) deg")
 
 
 def place_name(name: str, k: int, time_s: float) -> str:
-    """The name of the copy of the walker ``name`` at its ``k``-th place, ``time_s`` (s)
-    into its walk: ``car #12 @ 3.40 s``. Numbered, as places less than 10 ms apart would
+    """The name of the copy of the mover ``name`` at its ``k``-th place, ``time_s`` (s)
+    into its trajectory: ``car #12 @ 3.40 s``. Numbered, as places less than 10 ms apart would
     share a time."""
     return f"{name} #{k} @ {time_s:.2f} s"
 
 
 def moment_name(name: str, time_s: float) -> str:
-    """The walker ``name`` ``time_s`` (s) into its walk, as a demo's video says what it
+    """The mover ``name`` ``time_s`` (s) into its trajectory, as a demo's video says what it
     shows: ``car @ 3.40 s``."""
     return f"{name} @ {max(time_s, 0.0):.2f} s"
 
@@ -131,7 +138,7 @@ def facing_of(label: str) -> tuple[str, float] | None:
 
 
 def place_of(label: str) -> tuple[str, float] | None:
-    """The walker and the time (s) of a place's name (:func:`place_name`) or a moment's
+    """The mover and the time (s) of a place's name (:func:`place_name`) or a moment's
     (:func:`moment_name`); None for any other name."""
     found = _PLACE.fullmatch(label)
     if found is None:
@@ -140,8 +147,8 @@ def place_of(label: str) -> tuple[str, float] | None:
 
 
 @dataclass(frozen=True)
-class WalkPoints:
-    """The places a walker is simulated at."""
+class TrajectoryPoints:
+    """The places a mover is simulated at."""
 
     #: When it is at each place (s from the start).
     times: np.ndarray
@@ -154,23 +161,23 @@ class WalkPoints:
 
 
 @dataclass(frozen=True)
-class WalkResponses:
-    """Responses along a walk, from :func:`simulate_walk`."""
+class TrajectoryResponses:
+    """Responses along a trajectory, from :func:`simulate_trajectory`."""
 
-    #: The walker's name.
+    #: The mover's name.
     name: str
-    #: ``"listeners"`` or ``"sources"``: what walks.
+    #: ``"listeners"`` or ``"sources"``: what moves.
     kind: str
     #: The places it was simulated at.
-    points: WalkPoints
-    #: The names the walker has at its places in :attr:`result`, in order
+    points: TrajectoryPoints
+    #: The names the mover has at its places in :attr:`result`, in order
     #: (``"<name> #<place> @ <time> s"``).
     names: tuple[str, ...]
-    #: The simulation, with the walker at every place.
+    #: The simulation, with the mover at every place.
     result: SimulationResult
     #: The places that have their own late part (indices); the others mix theirs.
     late_places: tuple[int, ...] = ()
-    #: Whether the early paths go through delays that change as it goes (``walk.doppler``).
+    #: Whether the early paths go through delays that change as it goes (``trajectory.doppler``).
     doppler: bool = False
 
     @property
@@ -179,30 +186,42 @@ class WalkResponses:
 
 
 def _walker(room: Room, name: str | None):
-    """The listener or source that walks: ``name``, or the only one with a walk that is
-    enabled."""
+    """The listener or source that moves: ``name``, or the only one with a trajectory that is
+    enabled; of several, the only listener that goes from place to place where the others
+    are listeners that stay in theirs (:func:`stays_in_place`), as a listener walking
+    hears none of the other listeners."""
     scene = room.scene
     found = [
         (kind, item)
         for kind in ("listeners", "sources")
         for item in getattr(scene, kind)
-        if (item.name == name if name is not None else item.walk is not None and item.walk.enabled)
+        if (
+            item.name == name
+            if name is not None
+            else item.trajectory is not None and item.trajectory.enabled
+        )
     ]
     if name is not None and not found:
         raise ValueError(f"no listener or source named {name!r}")
     if not found:
-        raise ValueError("no listener or source walks: give one a walk")
+        raise ValueError("no listener or source moves: give one a trajectory")
+    if len(found) > 1 and name is None:
+        going = [(kind, item) for kind, item in found if not stays_in_place(item)]
+        if len(going) == 1 and all(kind == "listeners" for kind, _ in found):
+            found = going
     if len(found) > 1:
         names = ", ".join(item.name for _, item in found)
         raise ValueError(
-            f"more than one walks ({names}): pick one, or play them together (--all, "
-            "simulate_movement)"
+            f"more than one listener or source moves ({names}): pick one, or play them "
+            "together (--all, simulate_movement)"
         )
     kind, item = found[0]
-    if item.walk is None:
-        raise ValueError(f"{item.name!r} has no walk")
-    if not item.walk.enabled:
-        raise ValueError(f"the walk of {item.name!r} is off (enabled: false): it stands still")
+    if item.trajectory is None:
+        raise ValueError(f"{item.name!r} has no trajectory")
+    if not item.trajectory.enabled:
+        raise ValueError(
+            f"the trajectory of {item.name!r} is off (enabled: false): it stands still"
+        )
     return kind, item
 
 
@@ -217,7 +236,7 @@ def _angles(orientation: Orientation) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Knots:
-    """The knots of a walk: where the walker is and how it faces at each, moving and
+    """The knots of a trajectory: where the mover is and how it faces at each, moving and
     turning evenly from one to the next (:func:`knots`)."""
 
     #: When it is at each knot (s from the start; the first is 0).
@@ -234,7 +253,7 @@ class Knots:
 
     @property
     def length_m(self) -> float:
-        """How far the walk goes."""
+        """How far the trajectory goes."""
         return float(np.linalg.norm(np.diff(self.positions, axis=0), axis=1).sum())
 
     @property
@@ -254,33 +273,61 @@ class Knots:
 
 
 def knots(item) -> Knots:
-    """The knots of ``item``'s walk (a scene listener or source): along ``to``, its
-    corners at ``speed_m_s`` and, facing forward, where each turn through a corner starts
-    and ends; along ``keyframes``, its position at 0 s and each keyframe, facing as it
-    says or as before."""
-    walk = item.walk
-    if walk is None:
-        raise ValueError(f"{item.name!r} has no walk")
+    """The knots of ``item``'s trajectory (a scene listener or source) on the run's clock:
+    along ``to``, its corners at ``speed_m_s`` and, facing forward, where each turn through
+    a corner starts and ends; along ``keyframes``, its position at 0 s and each keyframe,
+    facing as it says or as before; all of them ``start_s`` later, standing at its
+    position until then."""
+    path = _knots(item)
+    start = item.trajectory.start_s
+    if start <= 0.0:
+        return path
+    return Knots(
+        np.concatenate([[0.0], path.times + start]),
+        np.vstack([path.positions[:1], path.positions]),
+        np.vstack([path.angles[:1], path.angles]),
+    )
+
+
+def heading(item) -> np.ndarray:
+    """The way ``item`` (a scene listener or source with a trajectory) sets off, a unit
+    vector: along the first leg of its trajectory that goes somewhere, from where it
+    starts (not where it stands before ``start_s``)."""
+    path = _knots(item).positions
+    for leg in np.diff(path, axis=0):
+        length = math.hypot(*leg)
+        if length > 1e-12:
+            return leg / length
+    raise ValueError(f"{item.name!r}: its trajectory goes nowhere")
+
+
+def _knots(item) -> Knots:
+    """The knots of ``item``'s trajectory from the moment it sets off (:func:`knots`)."""
+    trajectory = item.trajectory
+    if trajectory is None:
+        raise ValueError(f"{item.name!r} has no trajectory")
     own = _angles(item.orientation)
-    if walk.keyframes is not None:
-        times = np.array([0.0, *(frame.time_s for frame in walk.keyframes)])
+    if trajectory.keyframes is not None:
+        times = np.array([0.0, *(frame.time_s for frame in trajectory.keyframes)])
         positions = np.array(
-            [item.position, *(frame.position for frame in walk.keyframes)], dtype=np.float64
+            [item.position, *(frame.position for frame in trajectory.keyframes)], dtype=np.float64
         )
         angles, facing = [own], own
-        for frame in walk.keyframes:
+        for frame in trajectory.keyframes:
             if frame.orientation is not None:
                 facing = _angles(frame.orientation)
             angles.append(facing)
         unwrapped = np.degrees(np.unwrap(np.radians(np.array(angles)), axis=0))
         return Knots(times, positions, unwrapped)
-    corners = np.array([item.position, *walk.to], dtype=np.float64)
+    corners = np.array([item.position, *trajectory.to], dtype=np.float64)
     legs = np.linalg.norm(np.diff(corners, axis=0), axis=1)
     along = np.concatenate([[0.0], np.cumsum(legs)])
     if along[-1] == 0.0:
-        raise ValueError(f"the walk of {item.name!r} goes nowhere: it never leaves its position")
-    if not walk.face_forward:
-        return Knots(along / walk.speed_m_s, corners, np.tile(own, (len(corners), 1)))
+        raise ValueError(
+            f"the trajectory of {item.name!r} goes nowhere: it never leaves its position"
+        )
+    if not trajectory.face_forward:
+        return Knots(along / trajectory.speed_m_s, corners, np.tile(own, (len(corners), 1)))
     heading = np.diff(corners, axis=0)[:, :2]
     flat = np.hypot(heading[:, 0], heading[:, 1]) < 1e-9
     yaws = np.degrees(np.arctan2(heading[:, 1], heading[:, 0]))
@@ -299,7 +346,7 @@ def knots(item) -> Knots:
     for j, turn in enumerate(turns, start=1):
         if turn == 0.0:
             continue
-        half = 0.5 * walk.speed_m_s * abs(turn) / walk.turn_deg_s
+        half = 0.5 * trajectory.speed_m_s * abs(turn) / trajectory.turn_deg_s
         half = min(half, 0.5 * legs[j - 1], 0.5 * legs[j])
         along_turn += [along[j] - half, along[j] + half]
         yaw_turn += [yaws[j - 1], yaws[j]]
@@ -310,11 +357,11 @@ def knots(item) -> Knots:
     positions = np.column_stack([np.interp(distances, along, corners[:, k]) for k in range(3)])
     angles = np.tile(own, (len(distances), 1))
     angles[:, 0] = np.interp(distances, along_turn, yaw_turn)
-    return Knots(distances / walk.speed_m_s, positions, angles)
+    return Knots(distances / trajectory.speed_m_s, positions, angles)
 
 
 def _sample_times(path: Knots, step_m: float, step_deg: float) -> np.ndarray:
-    """When to place a walker along ``path``: at its knots, and along each leg every
+    """When to place a mover along ``path``: at its knots, and along each leg every
     ``step_m`` or a little less and every ``step_deg`` of its turn or a little less,
     whichever gives more places (a wait on the spot gives none)."""
     times = [path.times]
@@ -327,19 +374,22 @@ def _sample_times(path: Knots, step_m: float, step_deg: float) -> np.ndarray:
     return np.unique(np.concatenate(times))
 
 
-def walk_points(item, step_m: float = STEP_M, step_deg: float = STEP_DEG) -> WalkPoints:
-    """The places along ``item``'s walk (a scene listener or source), ``step_m`` or a
-    little less apart, from its position to the walk's last point; along keyframes also
-    every ``step_deg`` of a turn on the spot."""
-    if step_m <= 0:
-        raise ValueError("step_m must be positive")
+def trajectory_points(
+    item, step_m: float | None = None, step_deg: float = STEP_DEG
+) -> TrajectoryPoints:
+    """The places along ``item``'s trajectory (a scene listener or source), ``step_m`` or a
+    little less apart (by default the trajectory's own ``step_m``, else :data:`STEP_M`),
+    from its position to the trajectory's last point, timed on the run's clock (from
+    ``start_s``); along keyframes also every ``step_deg`` of a turn on the spot."""
+    step_m = step_of(item, step_m)
     if step_deg <= 0:
         raise ValueError("step_deg must be positive")
-    path = knots(item)
-    if item.walk.keyframes is not None:
+    path = _knots(item)
+    start = item.trajectory.start_s
+    if item.trajectory.keyframes is not None:
         times = _sample_times(path, step_m, step_deg)
         positions, angles = path.at(times)
-        return WalkPoints(times, positions, angles[:, 0], angles)
+        return TrajectoryPoints(times + start, positions, angles[:, 0], angles)
     # Along ``to``, evenly spaced over the whole path, as its legs join without a stop.
     along = np.concatenate(
         [[0.0], np.cumsum(np.linalg.norm(np.diff(path.positions, axis=0), axis=1))]
@@ -347,12 +397,44 @@ def walk_points(item, step_m: float = STEP_M, step_deg: float = STEP_DEG) -> Wal
     count = max(int(math.ceil(along[-1] / step_m)) + 1, 2)
     s = np.linspace(0.0, along[-1], count)
     positions, angles = path.at(np.interp(s, along, path.times))
-    yaws = angles[:, 0] if item.walk.face_forward else None
-    return WalkPoints(s / item.walk.speed_m_s, positions, yaws)
+    yaws = angles[:, 0] if item.trajectory.face_forward else None
+    return TrajectoryPoints(start + s / item.trajectory.speed_m_s, positions, yaws)
+
+
+def step_of(item, step_m: float | None = None) -> float:
+    """How far apart the places along ``item``'s trajectory are (m): ``step_m`` when
+    given, else the trajectory's own ``step_m``, else :data:`STEP_M`."""
+    if step_m is None:
+        step_m = item.trajectory.step_m or STEP_M
+    if step_m <= 0:
+        raise ValueError("step_m must be positive")
+    return float(step_m)
+
+
+def at_speed(item, speed_m_s: float):
+    """``item`` (a scene listener or source with a trajectory) going along it at
+    ``speed_m_s``: through its points at that speed, or, along keyframes, through their
+    places in turn at that speed, facing the way it goes (their times and facings left
+    out). Keyframes that never leave its position (a turn on the spot) stay as they are."""
+    if not math.isfinite(speed_m_s) or speed_m_s <= 0.0:
+        raise ValueError(f"a speed is a positive number of m/s, not {speed_m_s!r}")
+    trajectory = item.trajectory
+    update: dict = {"speed_m_s": float(speed_m_s)}
+    if trajectory.keyframes is not None:
+        places: list[tuple[float, ...]] = []
+        last = tuple(item.position)
+        for frame in trajectory.keyframes:
+            if tuple(frame.position) != last:
+                places.append(tuple(frame.position))
+                last = tuple(frame.position)
+        if not places:
+            return item
+        update |= {"to": places, "keyframes": None}
+    return item.model_copy(update={"trajectory": trajectory.model_copy(update=update)})
 
 
 def late_mixing(distances: np.ndarray, late_step_m: float) -> dict[int, dict[int, float]]:
-    """The places of a walk (``distances`` along it, m, rising) that take their late part
+    """The places of a trajectory (``distances`` along it, m, rising) that take their late part
     from others, each with the places it mixes and their weights: places are traced every
     ``late_step_m`` or a little less, from the first to the last."""
     distances = np.asarray(distances, dtype=np.float64)
@@ -378,23 +460,24 @@ def late_mixing(distances: np.ndarray, late_step_m: float) -> dict[int, dict[int
     return mixing
 
 
-def simulate_walk(
+def simulate_trajectory(
     room: Room,
     name: str | None = None,
     *,
     listener: str | None = None,
-    step_m: float = STEP_M,
+    step_m: float | None = None,
     late_step_m: float | None = LATE_STEP_M,
     settings: SimulationSettings | None = None,
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
-) -> WalkResponses:
-    """Simulate the responses along a walk: ``name`` walks (by default the only
-    listener or source with a walk), placed every ``step_m``.
+) -> TrajectoryResponses:
+    """Simulate the responses along a trajectory: ``name`` moves (by default the only
+    listener or source with a trajectory), placed every ``step_m`` (by default its
+    trajectory's own, :func:`step_of`).
 
-    A walking listener hears every source in use; a walking source is heard at
+    A moving listener hears every source in use; a moving source is heard at
     ``listener``, even one left out (``enabled: false``), by default the only listener
-    in use, with the other sources in use standing still. The walk must go slower than
+    in use, with the other sources in use standing still. The trajectory must go slower than
     sound.
 
     The late part is traced every ``late_step_m`` (see the module's description), or at
@@ -406,8 +489,8 @@ def simulate_walk(
     """
     settings = _over_the_edges(settings, room.scene)
     kind, item = _walker(room, name)
-    points = walk_points(item, step_m)
-    doppler = item.walk.doppler
+    points = trajectory_points(item, step_m)
+    doppler = item.trajectory.doppler
     _check_speed(room, item, knots(item).top_speed)
     if doppler:
         _check_doppler(room, settings)
@@ -429,7 +512,7 @@ def simulate_walk(
     else:
         listeners = [lis for lis in scene.listeners if lis.in_use]
         if listener is not None:
-            # Named, it hears the walk even when left out, and is checked as in use.
+            # Named, it hears the trajectory even when left out, and is checked as in use.
             listeners = [
                 lis.model_copy(update={"enabled": None})
                 for lis in scene.listeners
@@ -439,8 +522,7 @@ def simulate_walk(
                 raise ValueError(f"no listener named {listener!r}")
         elif not listeners:
             raise ValueError(
-                f"{every_left_out('listener')}: name the one to hear the walk at "
-                "(--listener, listener)"
+                f"{every_left_out('listener')}: name the one to hear it at (--listener, listener)"
             )
         elif len(listeners) != 1:
             raise ValueError(f"pick a listener: {', '.join(lis.name for lis in listeners)}")
@@ -455,7 +537,7 @@ def simulate_walk(
             k = out[0]
             where = ", ".join(f"{v:.2f}" for v in points.positions[k])
             raise ValueError(
-                f"the walk of {item.name!r} leaves the room at ({where}) m, "
+                f"the trajectory of {item.name!r} leaves the room at ({where}) m, "
                 f"{points.times[k]:.2f} s in"
             )
     mixing = _late_mixing_of(points.positions, late_step_m, settings or scene.simulation)
@@ -463,7 +545,7 @@ def simulate_walk(
         names[k]: {names[other]: weight for other, weight in parts.items()}
         for k, parts in mixing.items()
     }
-    # A walking source's places share the parabolic equation's runs where they can.
+    # A moving source's places share the parabolic equation's runs where they can.
     result = simulate(
         walked,
         settings=settings,
@@ -473,23 +555,23 @@ def simulate_walk(
         share_waves=names if kind == "sources" else None,
     )
     late_places = tuple(k for k in range(len(names)) if k not in mixing)
-    return WalkResponses(item.name, kind, points, names, result, late_places, doppler)
+    return TrajectoryResponses(item.name, kind, points, names, result, late_places, doppler)
 
 
 def _check_speed(room: Room, item, speed: float) -> None:
-    """A walk goes slower than sound, with Doppler or without: the walker is heard as it
+    """A trajectory goes slower than sound, with Doppler or without: the mover is heard as it
     would be standing at each place, through sound that keeps to linear acoustics, which
     has no meaning as fast as sound or faster (no shock wave, no sonic boom)."""
     c = room.speed_of_sound()
     if speed >= c:
         raise ValueError(
-            f"{item.name!r} walks at {speed:g} m/s, as fast as sound or faster "
-            f"({c:.0f} m/s): walks must go slower, as shock waves are not simulated"
+            f"{item.name!r} moves at {speed:g} m/s, as fast as sound or faster "
+            f"({c:.0f} m/s): trajectories must go slower, as shock waves are not simulated"
         )
 
 
 def _over_the_edges(settings: SimulationSettings | None, scene) -> SimulationSettings:
-    """The settings a walk's places are simulated with: ``settings`` (the scene's when
+    """The settings a trajectory's places are simulated with: ``settings`` (the scene's when
     None) with the paths over the edges of barriers and buildings (``early.rows:
     edges``). The solver for whole rows would run for every place apart, and where it
     takes one place and not the next the level would step between them."""
@@ -501,19 +583,19 @@ def _over_the_edges(settings: SimulationSettings | None, scene) -> SimulationSet
 
 
 def _check_doppler(room: Room, settings: SimulationSettings | None) -> None:
-    """What a walk with Doppler cannot do: take the wave solver."""
+    """What a trajectory with Doppler cannot do: take the wave solver."""
     if (settings or room.scene.simulation).wave.enabled:
         raise ValueError(
-            "a walk with Doppler does not take the wave solver's bands: turn "
-            "simulation.wave off, or the walk's doppler"
+            "a trajectory with Doppler does not take the wave solver's bands: turn "
+            "simulation.wave off, or the trajectory's doppler"
         )
 
 
 def _copy_at(item, label: str, place, angles=None, yaw: float | None = None):
     """``item`` standing at ``place`` as ``label``, facing ``angles`` (yaw, pitch, roll)
-    or turned to ``yaw``, or as it does itself. The walk is asked for by name: its
+    or turned to ``yaw``, or as it does itself. The trajectory is asked for by name: its
     places are in use."""
-    update = {"name": label, "position": tuple(place), "walk": None, "enabled": None}
+    update = {"name": label, "position": tuple(place), "trajectory": None, "enabled": None}
     if angles is not None:
         yaw, pitch, roll = (float(a) for a in angles)
         update["orientation"] = Orientation(yaw=yaw, pitch=pitch, roll=roll)
@@ -542,41 +624,43 @@ def _late_mixing_of(
 
 
 def movers(scene) -> list[tuple[str, object]]:
-    """The listeners and sources of ``scene`` that move: in use, with a walk that is
+    """The listeners and sources of ``scene`` that move: in use, with a trajectory that is
     enabled, as ("listeners" or "sources", item), listeners first."""
     return [
         (kind, item)
         for kind in ("listeners", "sources")
         for item in getattr(scene, kind)
-        if item.in_use and item.walk is not None and item.walk.enabled
+        if item.in_use and item.trajectory is not None and item.trajectory.enabled
     ]
 
 
 def with_moving(scene, names: Iterable[str] | None):
-    """``scene`` with only ``names`` moving: their walks turned on and every other walk
-    off, so that its walker stands where it starts. None keeps the scene's own. Each
-    name must be a source or listener in use with a walk."""
+    """``scene`` with only ``names`` moving: their trajectories turned on and every other trajectory
+    off, so that its mover stands where it starts. None keeps the scene's own. Each
+    name must be a source or listener in use with a trajectory."""
     if names is None:
         return scene
     names = set(names)
-    walkers = [
+    with_trajectory = [
         item.name
         for kind in ("listeners", "sources")
         for item in getattr(scene, kind)
-        if item.in_use and item.walk is not None
+        if item.in_use and item.trajectory is not None
     ]
-    unknown = sorted(names - set(walkers))
+    unknown = sorted(names - set(with_trajectory))
     if unknown:
-        have = ", ".join(walkers) if walkers else "nothing"
-        raise ValueError(f"{unknown[0]!r} has no walk to move along; the scene's walks: {have}")
+        have = ", ".join(with_trajectory) if with_trajectory else "nothing"
+        raise ValueError(
+            f"{unknown[0]!r} has no trajectory to move along; the scene's trajectories: {have}"
+        )
     update = {}
     for kind in ("listeners", "sources"):
         items = []
         for item in getattr(scene, kind):
             on = item.name in names
-            if item.walk is not None and item.walk.enabled != on:
+            if item.trajectory is not None and item.trajectory.enabled != on:
                 item = item.model_copy(
-                    update={"walk": item.walk.model_copy(update={"enabled": on})}
+                    update={"trajectory": item.trajectory.model_copy(update={"enabled": on})}
                 )
             items.append(item)
         update[kind] = items
@@ -585,10 +669,10 @@ def with_moving(scene, names: Iterable[str] | None):
 
 @dataclass(frozen=True)
 class Movement:
-    """Responses with every mover at each moment of its walk, from
+    """Responses with every mover at each moment of its trajectory, from
     :func:`simulate_movement`."""
 
-    #: The scene's room, as it was given (the movers with their walks).
+    #: The scene's room, as it was given (the movers with their trajectories).
     room: Room
     #: The moments the responses are at (s from the start, the first 0).
     times: np.ndarray
@@ -600,9 +684,19 @@ class Movement:
     copies: dict[tuple[str, str], tuple[str, ...]]
     #: How many of the movers' places have a late part of their own; the others mix theirs.
     late_places: int = 0
-    #: Whether the mover, then alone, walks with Doppler (``walk.doppler``): each pair it
-    #: is part of plays its early paths through delays that change as it goes.
+    #: Whether a mover moves with Doppler (``trajectory.doppler``): each pair it is part of
+    #: plays its early paths through delays that change as it goes.
     doppler: bool = False
+    #: The listeners heard through the head tracker, each with the knots it turns along:
+    #: simulated facing ahead (yaw, pitch and roll 0) at each position it takes, its
+    #: field turned against the head as it faces then (:func:`render_movement`).
+    turning: Mapping[str, Knots] = dataclasses.field(default_factory=dict)
+    #: The movers ((``"listeners"`` or ``"sources"``, name)) that move with Doppler; when
+    #: :attr:`doppler` is set and this is empty, the one mover.
+    with_doppler: frozenset[tuple[str, str]] = frozenset()
+    #: The listeners simulated (:func:`simulate_movement`'s ``listeners``), by their names
+    #: in the scene; None for every one in use.
+    heard: frozenset[str] | None = None
 
     @property
     def duration_s(self) -> float:
@@ -623,30 +717,156 @@ class Movement:
         """Whether either of the pair moves."""
         return ("sources", source) in self.copies or ("listeners", listener) in self.copies
 
+    def moves_with_doppler(self, source: str, listener: str) -> bool:
+        """Whether either of the pair moves with Doppler (:attr:`with_doppler`)."""
+        if not self.doppler:
+            return False
+        if not self.with_doppler:
+            return self.moves(source, listener)
+        return ("sources", source) in self.with_doppler or (
+            "listeners",
+            listener,
+        ) in self.with_doppler
+
+
+def turns_on_the_spot(item) -> bool:
+    """Whether ``item``'s trajectory (a scene listener or source) turns somewhere without
+    moving on: a keyframe that faces another way where the one before it stood."""
+    path = knots(item)
+    legs = np.linalg.norm(np.diff(path.positions, axis=0), axis=1)
+    turns = np.abs(np.diff(path.angles, axis=0)).max(axis=1)
+    return bool(np.any((legs < 1e-9) & (turns > 1e-9)))
+
+
+def stays_in_place(item) -> bool:
+    """Whether ``item``'s trajectory (a scene listener or source) never leaves the place
+    it starts at: it turns there, if it moves at all."""
+    return bool(np.all(np.ptp(knots(item).positions, axis=0) < 1e-9))
+
+
+def doppler_clash(moving: Sequence[tuple[str, Any]]) -> tuple[str, str, list[str]] | None:
+    """The first mover of ``moving`` ((kind, item) pairs, as :func:`movers` gives them)
+    that moves with Doppler and cannot beside the others, why in words, and the movers
+    that would have to stand for it to; None when they can all move. A listener with
+    Doppler moves alone; a source with Doppler moves beside other sources, with Doppler
+    or without (each pair then has one mover, whose delays change), but beside no
+    listener that moves (a pair whose two ends both move)."""
+    for kind, item in moving:
+        if not item.trajectory.doppler:
+            continue
+        if kind == "listeners":
+            others = [other.name for _, other in moving if other is not item]
+            why = "a listener does alone"
+        else:
+            others = [other.name for k, other in moving if k == "listeners"]
+            why = "no listener that moves hears"
+        if others:
+            return item.name, why, others
+    return None
+
+
+def head_turners(scene, fmt=None) -> list[str]:
+    """The listeners of ``scene`` that move (:func:`movers`) and turn on the spot
+    (:func:`turns_on_the_spot`), without Doppler: those a binaural run hears through the
+    head tracker (:func:`simulate_movement`'s ``head_tracked``). Given the run's format
+    ``fmt``, none unless it is binaural."""
+    from acoustic_spaces.spatial import Binaural
+
+    if fmt is not None and not isinstance(fmt, Binaural):
+        return []
+    return [
+        item.name
+        for kind, item in movers(scene)
+        if kind == "listeners" and not item.trajectory.doppler and turns_on_the_spot(item)
+    ]
+
 
 def simulate_movement(
     room: Room,
     *,
-    step_m: float = STEP_M,
+    step_m: float | None = None,
     step_deg: float = STEP_DEG,
     late_step_m: float | None = LATE_STEP_M,
     settings: SimulationSettings | None = None,
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
+    head_tracked: Iterable[str] = (),
+    listeners: Iterable[str] | None = None,
 ) -> Movement:
     """Simulate the scene with every mover (:func:`movers`) on one clock, in one
-    simulation: the moments are every mover's places (every ``step_m`` along its walk,
-    every ``step_deg`` of a turn on the spot, and its knots), and at each moment each
-    mover stands as a copy where its walk has it then, a copy serving every moment it
-    stands still at (once its walk is over, say). Every listener in use hears every
+    simulation: the moments are every mover's places (every ``step_m`` along its trajectory,
+    by default its own, :func:`step_of`; every ``step_deg`` of a turn on the spot; and its
+    knots), and at each moment each
+    mover stands as a copy where its trajectory has it then, a copy serving every moment it
+    stands still at (once its trajectory is over, say). Every listener in use hears every
     source in use, still or moving. The late part is traced every ``late_step_m`` along
-    each mover's walk, and barriers and buildings have the paths over their edges, as in
-    :func:`simulate_walk`.
+    each mover's trajectory, and barriers and buildings have the paths over their edges, as in
+    :func:`simulate_trajectory`.
 
-    Every mover goes slower than sound. A walk with Doppler moves alone: with another
-    mover it is refused. It goes without the wave solver, as in :func:`simulate_walk`.
+    Every mover goes slower than sound. A listener's trajectory with Doppler moves alone,
+    and sources' with Doppler move beside other sources but no listener that moves
+    (:func:`doppler_clash`): the rest is refused. They go without the wave solver, as in
+    :func:`simulate_trajectory`.
+
+    The listeners ``head_tracked`` names (moving listeners, without Doppler; by
+    :func:`head_turners` those that turn on the spot) are heard through the head tracker:
+    each is simulated at the positions it takes alone, facing ahead (yaw, pitch and roll
+    0), and :func:`render_movement` turns its field against the head as it faces at each
+    moment, rather than at every ``step_deg`` of its turns.
+
+    ``listeners`` (names of listeners in use; by default, every one) are the only ones
+    simulated, a moving one at each of its places, on the same moments as with every
+    listener: :func:`render_movement` hears them alone. Where all of them at once would
+    need more memory for their late parts than the computer has
+    (:func:`~acoustic_spaces.engine.simulate.late_need`), they are simulated one at a
+    time, a moving one with all its places, each getting what a run of all would give it:
+    the rays are traced again for each (:func:`movements_in_turn` gives each run as it
+    ends, to be mixed and let go before the next).
     """
-    if step_m <= 0:
+    parts = list(
+        movements_in_turn(
+            room,
+            step_m=step_m,
+            step_deg=step_deg,
+            late_step_m=late_step_m,
+            settings=settings,
+            threads=threads,
+            progress=progress,
+            head_tracked=head_tracked,
+            listeners=listeners,
+        )
+    )
+    if len(parts) == 1:
+        return parts[0]
+    return dataclasses.replace(
+        parts[0],
+        result=_joined([part.result for part in parts]),
+        turning={name: knots for part in parts for name, knots in part.turning.items()},
+        heard=None if listeners is None else frozenset(listeners),
+    )
+
+
+def movements_in_turn(
+    room: Room,
+    *,
+    step_m: float | None = None,
+    step_deg: float = STEP_DEG,
+    late_step_m: float | None = LATE_STEP_M,
+    settings: SimulationSettings | None = None,
+    threads: int | None = None,
+    progress: Callable[[str], None] | None = None,
+    head_tracked: Iterable[str] = (),
+    listeners: Iterable[str] | None = None,
+    together: Mapping[str, Sequence[str]] | None = None,
+) -> Iterator[Movement]:
+    """The movement :func:`simulate_movement` gives, as one :class:`Movement`, or, where
+    all its listeners at once would need more memory for their late parts than the
+    computer has, as one for each listener (a moving one with all its places), each
+    given as its run ends, its late parts held where they have energy: a caller may mix
+    one and let it go before the next is simulated. Each listener gets what a run of all
+    would give it. ``together`` names, for a listener, those simulated in its run then
+    (where the demo of a scene takes a room's level outdoors, 2 m in front of its wall)."""
+    if step_m is not None and step_m <= 0:
         raise ValueError("step_m must be positive")
     if step_deg <= 0:
         raise ValueError("step_deg must be positive")
@@ -654,26 +874,62 @@ def simulate_movement(
     settings = _over_the_edges(settings, scene)
     moving = movers(scene)
     if not moving:
-        raise ValueError("nothing moves: give a listener or a source a walk that is enabled")
+        raise ValueError("nothing moves: give a listener or a source a trajectory that is enabled")
+    heard = None
+    if listeners is not None:
+        heard = frozenset(listeners)
+        in_use = {lis.name for lis in scene.listeners if lis.in_use}
+        unknown = sorted(heard - in_use)
+        if unknown:
+            raise ValueError(f"no listener {unknown[0]!r} in use to hear the movement")
+        if not heard:
+            raise ValueError("no listener to hear the movement")
     paths = {item.name: knots(item) for _, item in moving}
+    tracked = set(head_tracked)
+    turners = {item.name for kind, item in moving if kind == "listeners"}
+    if not tracked <= turners:
+        raise ValueError(
+            f"the head tracker hears a listener that moves, not {sorted(tracked - turners)[0]!r}"
+        )
     for _, item in moving:
         _check_speed(room, item, paths[item.name].top_speed)
-    doppler = next((item for _, item in moving if item.walk.doppler), None)
-    if doppler is not None:
-        if len(moving) > 1:
-            others = ", ".join(item.name for _, item in moving if item is not doppler)
-            raise ValueError(
-                f"{doppler.name!r} walks with Doppler, which moves alone: leave {others} "
-                f"standing (turn their walks off), or turn its doppler off"
-            )
+    if tracked and progress is not None:
+        names = ", ".join(sorted(tracked))
+        progress(f"{names}: the head turned through Ambisonics of order {HEAD_ORDER}")
+    with_doppler = frozenset((kind, item.name) for kind, item in moving if item.trajectory.doppler)
+    clash = doppler_clash(moving)
+    if clash is not None:
+        name, why, others = clash
+        raise ValueError(
+            f"{name!r} moves with Doppler, which {why}: leave {', '.join(others)} standing "
+            "(turn their trajectories off), or turn its doppler off"
+        )
+    if with_doppler:
         _check_doppler(room, settings)
-    times = np.unique(np.concatenate([_sample_times(k, step_m, step_deg) for k in paths.values()]))
+        for kind, name in sorted(with_doppler):
+            if kind == "listeners" and name in tracked:
+                raise ValueError(f"{name!r} moves with Doppler: the head tracker does not hear it")
+    times = np.unique(
+        np.concatenate(
+            [
+                _sample_times(
+                    paths[item.name],
+                    step_of(item, step_m),
+                    math.inf if item.name in tracked else step_deg,
+                )
+                for _, item in moving
+            ]
+        )
+    )
     copies: dict[tuple[str, str], tuple[str, ...]] = {}
     added: dict[str, list] = {"listeners": [], "sources": []}
     mixing: dict[str, dict[str, float]] = {}
     late_places = 0
     for kind, item in moving:
         positions, angles = paths[item.name].at(times)
+        if item.name in tracked:
+            # Facing ahead, its field turned against the head as it renders.
+            angles = np.zeros_like(angles)
         # One copy per distinct place: the same while it stands still.
         places: list[int] = []  # the moment each place was first seen at
         at: list[int] = []  # each moment's place
@@ -690,6 +946,8 @@ def simulate_movement(
             _copy_at(item, names[j], positions[first], angles[first])
             for j, first in enumerate(places)
         ]
+        if kind == "listeners" and heard is not None and item.name not in heard:
+            continue  # a copy at each place, not simulated
         parts = _late_mixing_of(positions[places], late_step_m, settings or scene.simulation)
         mixing |= {
             names[j]: {names[other]: weight for other, weight in mix.items()}
@@ -715,10 +973,20 @@ def simulate_movement(
                 where = ", ".join(f"{v:.2f}" for v in copy.position)
                 name, when = place_of(copy.name)
                 raise ValueError(
-                    f"the walk of {name!r} leaves the room at ({where}) m, {when:.2f} s in"
+                    f"the trajectory of {name!r} leaves the room at ({where}) m, {when:.2f} s in"
                 )
+    simulated = None
+    if heard is not None:
+        simulated = [lis.name for lis in still["listeners"] if lis.name in heard]
+        simulated += [
+            name
+            for (kind, mover), names in copies.items()
+            if kind == "listeners" and mover in heard
+            for name in dict.fromkeys(names)
+        ]
     # The moving sources' places share the parabolic equation's runs where they can.
-    result = simulate(
+    run = partial(
+        simulate,
         walked,
         settings=settings,
         threads=threads,
@@ -726,7 +994,126 @@ def simulate_movement(
         late_from=mixing,
         share_waves=[copy.name for copy in added["sources"]],
     )
-    return Movement(room, times, result, copies, late_places, doppler is not None)
+    groups = _listener_groups(walked, simulated, copies, together or {})
+    need = late_need(
+        walked, settings=settings, listeners=simulated, threads=threads, late_from=mixing
+    )
+    memory = run_size.machine_memory()
+    if len(groups) == 1 or memory is None or need.bytes <= memory:
+        result = run(listeners=simulated)
+        if not mixing:
+            # Where a place mixes others' late parts, it reads them from what they were
+            # traced in, which stays whole however the places hold theirs.
+            _held_where_heard(result)
+        turning = {name: paths[name] for name in sorted(tracked) if heard is None or name in heard}
+        yield Movement(
+            room,
+            times,
+            result,
+            copies,
+            late_places,
+            bool(with_doppler),
+            turning,
+            with_doppler,
+            heard,
+        )
+        return
+    # Each listener's response is what a run of all gives it (the rays' seeds follow the
+    # scene's order), so the listeners may be simulated one at a time.
+    if progress is not None:
+        progress(
+            f"the {len(groups)} listeners at once would need about "
+            f"{need.bytes / 2.0**30:,.1f} GiB of memory, more than this computer's "
+            f"{memory / 2.0**30:,.1f} GiB: simulating them one at a time"
+        )
+    heard_by = {lis.name for lis in walked.scene.listeners}
+    in_scene = {lis.name for lis in scene.listeners}
+    for name, group in groups.items():
+        # The sources' late mixes, and those of the listeners this run hears.
+        mixed = {
+            place: mix for place, mix in mixing.items() if place not in heard_by or place in group
+        }
+        part = run(listeners=group, late_from=mixed)
+        if not mixed:
+            _held_where_heard(part)
+        # By their names in the scene: a moving listener's, and those still in its run.
+        named = frozenset([name, *(place for place in group if place in in_scene)])
+        turning = {name: paths[name]} if name in tracked else {}
+        yield Movement(
+            room, times, part, copies, late_places, bool(with_doppler), turning, with_doppler, named
+        )
+        del part  # held by the caller alone, who may let it go before the next run
+
+
+def _whole(kept: np.ndarray, first: int, shape: tuple[int, ...]) -> np.ndarray:
+    """An array of zeros of ``shape``, its time slots (the last axis) ``first`` on those
+    of ``kept``."""
+    whole = np.zeros(shape, dtype=kept.dtype)
+    whole[..., first : first + kept.shape[-1]] = kept
+    return whole
+
+
+def _listener_groups(
+    walked: Room,
+    simulated: Sequence[str] | None,
+    copies: Mapping[tuple[str, str], Sequence[str]],
+    together: Mapping[str, Sequence[str]],
+) -> dict[str, list[str]]:
+    """The listeners a movement's simulation hears (``simulated``, or every one in use in
+    ``walked``), one at a time, by their names in the scene: each still listener alone,
+    each moving one with its copies at all its places, and with each those ``together``
+    names for it."""
+    names = (
+        list(dict.fromkeys(simulated))
+        if simulated is not None
+        else [lis.name for lis in walked.scene.listeners if lis.in_use]
+    )
+    mover_of = {
+        copy: mover
+        for (kind, mover), places in copies.items()
+        if kind == "listeners"
+        for copy in places
+    }
+    groups: dict[str, list[str]] = {}
+    for name in names:
+        groups.setdefault(mover_of.get(name, name), []).append(name)
+    for name, others in together.items():
+        for other in others:
+            if name in groups and other in groups and other != name:
+                groups[name] += groups.pop(other)
+    return groups
+
+
+def _joined(parts: Sequence[SimulationResult]) -> SimulationResult:
+    """The runs of one movement at listeners apart, as one: their responses, insertion
+    losses and spreads together, the run details of the first (every run traces the same
+    sources with the same rays)."""
+    first = parts[0]
+    return dataclasses.replace(
+        first,
+        responses={key: r for part in parts for key, r in part.responses.items()},
+        insertion_loss={key: v for part in parts for key, v in part.insertion_loss.items()},
+        spreads={key: v for part in parts for key, v in part.spreads.items()},
+    )
+
+
+def _held_where_heard(result: SimulationResult) -> None:
+    """Has each response of ``result`` hold its late arrays from the first time slot with
+    energy in any of them to the last, made whole as they are read (a
+    :class:`~acoustic_spaces.engine.response.Deferred`): they read as they were. A movement
+    holds a response for every listener at every place, and a mover far off hears nothing
+    of its late part for seconds (the stadium's helicopter, 600 m out, for 1.8 s of 4)."""
+    for response in result:
+        for name in LATE_ARRAYS:
+            held = vars(response).get(name)
+            if not isinstance(held, np.ndarray) or not held.size:
+                continue
+            slots = held.shape[-1]
+            used = np.flatnonzero(held.reshape(-1, slots).any(axis=0))
+            first, end = (int(used[0]), int(used[-1]) + 1) if used.size else (0, 0)
+            if end - first < slots:
+                kept = np.array(held[..., first:end])
+                setattr(response, name, Deferred(partial(_whole, kept, first, held.shape)).field())
 
 
 def render_movement(
@@ -738,24 +1125,46 @@ def render_movement(
     sample_rate: int | None = None,
     seed: int | None = None,
     equal_power: bool = False,
+    followers: Mapping[str, Sequence[tuple[float, np.ndarray | tuple[np.ndarray, float]]]]
+    | None = None,
+    leads: Mapping[str, float] | None = None,
+    listeners: Sequence[str] | None = None,
+    dtype: type = np.float64,
 ) -> dict[str, np.ndarray]:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
-    pair) played through the movement, as heard at every listener in use: each as
-    (samples, channels) in format ``fmt`` (default mono; mono through each listener's
-    microphone when it has a pattern) at ``sample_rate`` (default: the simulation's), all
-    of one length and, as in :func:`render_walk`, each signal scaled by its source's
-    sound power against the loudest one's unless ``equal_power``. A pair
-    that moves crossfades from each moment's response to the next's, as a walk does, or
-    with Doppler (:attr:`Movement.doppler`) plays each early path through its changing
-    delay and crossfades the late part, as :func:`render_walk` does; a still pair plays
+    pair) played through the movement, as heard at every listener in use that it
+    simulated (:attr:`Movement.heard`; those of ``listeners`` alone, when given): each as
+    (samples, channels) of ``dtype`` (each mixed in 64-bit floats) in format ``fmt``
+    (default mono; mono through each listener's microphone when it has a pattern) at
+    ``sample_rate`` (default: the simulation's), all of one length and, as in
+    :func:`render_trajectory`, each signal scaled by its source's sound power against the
+    loudest one's unless ``equal_power``. A pair that moves crossfades from each moment's
+    response to the next's, as a trajectory does, or with Doppler
+    (:attr:`Movement.doppler`) plays each early path through its changing delay and
+    crossfades the late part, as :func:`render_trajectory` does; a still pair plays
     through its one response. A source that moves with Doppler, or that a listener
     passes with it, may send an :class:`~acoustic_spaces.emission.Emission` at
-    ``sample_rate``, the sound it sends each way, as :func:`render_walk` plays it."""
-    from acoustic_spaces.spatial import Mono, for_listener
+    ``sample_rate``, the sound it sends each way, as :func:`render_trajectory` plays it.
+    A source that moves with Doppler at every listener may be heard ``leads`` seconds
+    (by its name) after its trajectory has it at each place, its ``followers`` (by its
+    name: each a (lag_s, signal), as :func:`render_trajectory`'s) that much later and
+    ``lag_s`` more, each scaled as its own signal is: the points of a train behind its
+    front. The mixes are long enough for the last of them.
+
+    A listener the movement hears through the head tracker (:attr:`Movement.turning`;
+    ``fmt`` binaural) is heard in Ambisonics of :data:`HEAD_ORDER` at each place, facing
+    ahead, and the field is turned against the head as its trajectory faces every 256
+    samples, crossfaded over them, and decoded to the ears through ``fmt``'s HRTFs
+    (:class:`~acoustic_spaces.headtracking.FieldToEars`), as the gallery's listener who
+    looks round is."""
+    from acoustic_spaces.headtracking import FieldToEars
+    from acoustic_spaces.spatial import Ambisonics, Binaural, Mono, for_listener
 
     if not signals:
         raise ValueError("no signals to render")
     fmt = fmt or Mono()
+    if movement.turning and not isinstance(fmt, Binaural):
+        raise ValueError("a listener heard through the head tracker is heard binaurally")
     result = movement.result
     scene = movement.room.scene
     rate = int(sample_rate or result.settings.sample_rate)
@@ -769,23 +1178,67 @@ def render_movement(
     unknown = sorted(set(signals) - sources)
     if unknown:
         raise ValueError(f"no source {unknown[0]!r}; the scene has {', '.join(sorted(sources))}")
-    listeners = [lis.name for lis in scene.listeners if lis.in_use]
+    in_use = [lis.name for lis in scene.listeners if lis.in_use]
+    if listeners is not None:
+        unheard = [name for name in listeners if name not in in_use]
+        if unheard:
+            raise ValueError(f"no listener {unheard[0]!r} in use to hear the movement")
+        unsimulated = [
+            n for n in listeners if movement.heard is not None and n not in movement.heard
+        ]
+        if unsimulated:
+            raise ValueError(
+                f"listener {unsimulated[0]!r} was not simulated in the movement "
+                "(simulate_movement's listeners)"
+            )
+        in_use = list(listeners)
+    elif movement.heard is not None:
+        in_use = [name for name in in_use if name in movement.heard]
+    listeners = in_use
     if not listeners:
         raise ValueError("no listener in use to hear the movement")
     gains = {} if equal_power else power_gains(scene.sources, signals)
-    each_way = set()
-    if movement.doppler:
-        each_way = {s for s in signals if all(movement.moves(s, lis) for lis in listeners)}
+    each_way = {s for s in signals if all(movement.moves_with_doppler(s, lis) for lis in listeners)}
     dry = _dry(signals, gains, rate, each_way)
+    followers, leads = followers or {}, leads or {}
+    behind: dict[str, list[tuple[int, np.ndarray]]] = {}
+    shifts: dict[str, int] = {}
+    for source in {*followers, *leads}:
+        if source not in dry:
+            raise ValueError(f"sounds follow {source!r}, which plays nothing here")
+        if source not in each_way or not all(
+            movement.moves_with_doppler(source, lis) for lis in listeners
+        ):
+            raise ValueError(
+                f"sounds follow {source!r} along its trajectory with Doppler, which it does "
+                "not move with at every listener"
+            )
+        if isinstance(dry[source], Emission):
+            raise ValueError("sounds follow a moving source that sends one sound every way")
+        lead = float(leads.get(source, 0.0))
+        if not math.isfinite(lead) or lead < 0.0:
+            raise ValueError(f"a source plays 0 s or more behind its trajectory, not {lead}")
+        shifts[source] = int(round(lead * rate))
+        behind[source] = []
+        for lag_s, value in followers.get(source, ()):
+            if not math.isfinite(lag_s) or lag_s < 0.0:
+                raise ValueError(
+                    f"a sound follows the moving source 0 s or more behind it, not {lag_s}"
+                )
+            (follower,) = _dry({source: value}, gains, rate, set()).values()
+            assert isinstance(follower, np.ndarray)
+            behind[source].append((int(round(lag_s * rate)), follower))
     taps = int(math.ceil(max(r.length_s for r in result) * rate))
-    length = max(_samples(x) for x in dry.values()) + taps - 1
+    ends = [_samples(x) + shifts.get(name, 0) for name, x in dry.items()]
+    ends += [shifts[name] + lag + len(x) for name, more in behind.items() for lag, x in more]
+    length = max(ends) + taps - 1
     # Outdoors in turbulence the early paths flicker as the eddies drift past, the same
     # eddies all along.
     turbulent = [r for r in result if flickers(r)]
     gusts = gusts_for(turbulent[0], length / rate, seed) if turbulent else None
     times = movement.times
     cache: dict[tuple[str, str], np.ndarray] = {}
-    # Where each mover's copies stand, for the steps of a walk with Doppler.
+    # Where each mover's copies stand, for the steps of a trajectory with Doppler.
     places = {
         item.name: item.position
         for kind in ("listeners", "sources")
@@ -802,11 +1255,15 @@ def render_movement(
     items = {item.name: item for item in scene.listeners}
     outputs = {}
     for listener in listeners:
-        heard = for_listener(fmt, items[listener])
+        turning = movement.turning.get(listener)
+        heard = Ambisonics(HEAD_ORDER) if turning else for_listener(fmt, items[listener])
         out = np.zeros((length, heard.channels))
         for source, signal in dry.items():
-            if not movement.moves(source, listener):
-                key = movement.key(source, listener, 0)
+            keys = [movement.key(source, listener, k) for k in range(len(times))]
+            doppler = movement.moves_with_doppler(source, listener)
+            if len(set(keys)) == 1 and not doppler:
+                # The pair stays where it is (a head that turns on the spot, too): one place.
+                key = keys[0]
                 if flickers(result[key]):
                     end = len(signal) + len(response(key, heard)) - 1
                     out[:end] += through_eddies(
@@ -816,23 +1273,25 @@ def render_movement(
                     wet = convolve(signal, response(key, heard))
                     out[: len(wet)] += wet
                 continue
-            keys = [movement.key(source, listener, k) for k in range(len(times))]
-            if movement.doppler:
+            if doppler:
                 walks = ("sources", source) in movement.copies
                 positions = np.array([places[key[0] if walks else key[1]] for key in keys])
+                # Heard that much after its trajectory has it there: a view of the mix
+                # from then on, which it adds to.
                 _doppler(
                     result,
                     keys,
                     times,
                     positions,
                     signal,
-                    out,
+                    out[shifts.get(source, 0) :],
                     heard,
                     rate,
                     seed,
                     gusts,
-                    source_walks=walks,
+                    source_moves=walks,
                     crossfade_s=crossfade_s,
+                    followers=behind.get(source, ()),
                 )
                 continue
 
@@ -841,7 +1300,10 @@ def render_movement(
                 return _heard(signal, result[keys[k]], ir, heard, rate, seed, gusts, begin, end)
 
             _crossfade_places(place, times, crossfade_s, rate, out)
-        outputs[listener] = out
+        if turning is not None:
+            ears = FieldToEars(HEAD_ORDER, rate, hrtf=fmt.at(rate))
+            out = ears.run(out, head=lambda t, path=turning: tuple(path.at(t)[1]))[:length]
+        outputs[listener] = out.astype(dtype, copy=False)
     return outputs
 
 
@@ -908,10 +1370,10 @@ def _past(starts, lengths, k: int, t: np.ndarray) -> np.ndarray:
 
 
 def crossfade_weights(times, t, crossfade_s: float = CROSSFADE_S) -> np.ndarray:
-    """Each place's weight (N, len(t)) at times ``t``: 1 while the walker is nearest
+    """Each place's weight (N, len(t)) at times ``t``: 1 while the mover is nearest
     to it, falling to 0 over the crossfade to the next (a raised cosine centred half-way
-    between them). They add up to 1. They are the gains of the late part of a walk with
-    Doppler, and each place's share of the power in each band of a walk without."""
+    between them). They add up to 1. They are the gains of the late part of a trajectory with
+    Doppler, and each place's share of the power in each band of a trajectory without."""
     starts, lengths = _boundaries(np.asarray(times, dtype=np.float64), crossfade_s)
     t = np.asarray(t, dtype=np.float64)
     return np.array(
@@ -936,7 +1398,7 @@ def _heard(signal, response, ir, fmt, rate, seed, gusts, begin: int, end: int) -
 def _crossfade_places(place, times, crossfade_s: float, rate: int, out: np.ndarray) -> None:
     """Adds to ``out`` (samples, channels) the sound of each place in turn, as
     ``place(k, begin, end)`` gives place ``k``'s over samples ``begin`` to ``end`` (fewer
-    where it is over): each alone while the walker is nearest to it, and over the
+    where it is over): each alone while the mover is nearest to it, and over the
     crossfade half-way to the next (:func:`_boundaries`) the two crossfaded band by band,
     each band's power going from one's to the other's along the raised cosine of
     :func:`_past` however alike the two are (:func:`~acoustic_spaces.render.crossfaded`).
@@ -954,7 +1416,7 @@ def _crossfade_places(place, times, crossfade_s: float, rate: int, out: np.ndarr
         begin = 0 if k == 0 else int(lo[k - 1])
         end = length if k == last else int(hi[k])
         if begin >= end:
-            continue  # the signals are over before the walker gets here
+            continue  # the signals are over before the mover gets here
         x = np.zeros((end - begin, channels))
         sound = place(k, begin, end)
         x[: len(sound)] = sound
@@ -967,16 +1429,16 @@ def _crossfade_places(place, times, crossfade_s: float, rate: int, out: np.ndarr
         held = x[alone:]
 
 
-def _sound_powers(walk: WalkResponses) -> dict[str, float]:
-    """Sound power (dB re 1 pW) of each source of the walk's simulation, a walking source
+def _sound_powers(responses: TrajectoryResponses) -> dict[str, float]:
+    """Sound power (dB re 1 pW) of each source of the trajectory's simulation, a moving source
     under its own name rather than its places'."""
-    places = set(walk.names) if walk.kind == "sources" else set()
-    sources = walk.result.room.scene.sources
-    return {walk.name if s.name in places else s.name: s.sound_power_db for s in sources}
+    places = set(responses.names) if responses.kind == "sources" else set()
+    sources = responses.result.room.scene.sources
+    return {responses.name if s.name in places else s.name: s.sound_power_db for s in sources}
 
 
-def render_walk(
-    walk: WalkResponses,
+def render_trajectory(
+    responses: TrajectoryResponses,
     signals: Mapping[str, np.ndarray | tuple[np.ndarray, float] | Emission],
     fmt=None,
     *,
@@ -987,31 +1449,33 @@ def render_walk(
     followers: Sequence[tuple[float, np.ndarray | tuple[np.ndarray, float]]] = (),
 ) -> np.ndarray:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
-    pair) played along the walk, as (samples, channels) in format ``fmt`` (default
+    pair) played along the trajectory, as (samples, channels) in format ``fmt`` (default
     mono; mono through the listener's microphone when it has a pattern) at
     ``sample_rate`` (default: the simulation's). As in
     :func:`~acoustic_spaces.render.auralize`, each signal is scaled by its source's
-    sound power against the loudest one's, unless ``equal_power``. Along a walk with
-    Doppler, the source that walks (or every source, for a walking listener) may send an
+    sound power against the loudest one's, unless ``equal_power``. Along a trajectory with
+    Doppler, the source that moves (or every source, for a moving listener) may send an
     :class:`~acoustic_spaces.emission.Emission` at ``sample_rate``, the sound it sends
     each way: each early path carries what is sent the way it leaves the source, and the
     late part the emission's sound averaged over the directions.
 
-    ``followers`` are more sounds of a walking source with Doppler, each (lag_s,
-    signal) going along its walk ``lag_s`` seconds after it, as the wheels and the cars
-    of a train follow its front: each is heard as the walker's own signal would be,
+    ``followers`` are more sounds of a moving source with Doppler, each (lag_s,
+    signal) going along its trajectory ``lag_s`` seconds after it, as the wheels and the cars
+    of a train follow its front: each is heard as the mover's own signal would be,
     ``lag_s`` later, and scaled as it is. The result is long enough for the last
     follower's."""
     from acoustic_spaces.spatial import Mono, for_listener
 
     if not signals:
         raise ValueError("no signals to render")
-    if followers and (walk.kind != "sources" or not walk.doppler or walk.name not in signals):
+    if followers and (
+        responses.kind != "sources" or not responses.doppler or responses.name not in signals
+    ):
         raise ValueError(
-            "sounds follow a walking source along a walk with Doppler, with its own signal"
+            "sounds follow a moving source along a trajectory with Doppler, with its own signal"
         )
     fmt = fmt or Mono()
-    result = walk.result
+    result = responses.result
     rate = int(sample_rate or result.settings.sample_rate)
     if seed is None:
         # One random sequence for every place's late part, so that crossfades join
@@ -1019,39 +1483,43 @@ def render_walk(
         seed = result.settings.seed
         if seed is None:
             seed = next(iter(result)).seed
-    if walk.kind == "listeners":
+    if responses.kind == "listeners":
         sources = {s for s, _ in result.responses}
         listener = None
     else:
         (listener,) = {lis for _, lis in result.responses}
-        sources = {s for s, _ in result.responses if s not in walk.names} | {walk.name}
-    # A walking listener's places are copies of it, its microphone too.
+        sources = {s for s, _ in result.responses if s not in responses.names} | {responses.name}
+    # A moving listener's places are copies of it, its microphone too.
     items = {item.name: item for item in result.room.scene.listeners}
-    fmt = for_listener(fmt, items.get(walk.names[0] if listener is None else listener))
+    fmt = for_listener(fmt, items.get(responses.names[0] if listener is None else listener))
     unknown = sorted(set(signals) - sources)
     if unknown:
-        raise ValueError(f"no source {unknown[0]!r}; the walk has {', '.join(sorted(sources))}")
-    gains = {} if equal_power else power_gains(_sound_powers(walk), signals)
+        raise ValueError(
+            f"no source {unknown[0]!r}; the trajectory has {', '.join(sorted(sources))}"
+        )
+    gains = {} if equal_power else power_gains(_sound_powers(responses), signals)
     each_way = set()
-    if walk.doppler:
-        each_way = set(signals) if walk.kind == "listeners" else {walk.name}
+    if responses.doppler:
+        each_way = set(signals) if responses.kind == "listeners" else {responses.name}
     dry = _dry(signals, gains, rate, each_way)
     behind: list[tuple[int, np.ndarray]] = []
     for lag_s, value in followers:
         if not math.isfinite(lag_s) or lag_s < 0.0:
-            raise ValueError(f"a sound follows the walker 0 s or more behind it, not {lag_s}")
-        if isinstance(dry[walk.name], Emission):
-            raise ValueError("sounds follow a walker that sends one sound every way")
-        (follower,) = _dry({walk.name: value}, gains, rate, set()).values()
+            raise ValueError(
+                f"a sound follows the moving source 0 s or more behind it, not {lag_s}"
+            )
+        if isinstance(dry[responses.name], Emission):
+            raise ValueError("sounds follow a moving source that sends one sound every way")
+        (follower,) = _dry({responses.name: value}, gains, rate, set()).values()
         assert isinstance(follower, np.ndarray)
         behind.append((int(round(lag_s * rate)), follower))
 
     cache: dict[tuple[str, str], np.ndarray] = {}
 
     def key_of(source: str, k: int) -> tuple[str, str]:
-        if walk.kind == "listeners":
-            return (source, walk.names[k])
-        return (walk.names[k] if source == walk.name else source, listener)
+        if responses.kind == "listeners":
+            return (source, responses.names[k])
+        return (responses.names[k] if source == responses.name else source, listener)
 
     def response(source: str, k: int) -> np.ndarray:
         key = key_of(source, k)
@@ -1060,18 +1528,20 @@ def render_walk(
             cache[key] = result[key].spatial_impulse_response(fmt, rate, seed)
         return cache[key]
 
-    moving = list(dry) if walk.kind == "listeners" else [s for s in dry if s == walk.name]
+    moving = list(dry) if responses.kind == "listeners" else [s for s in dry if s == responses.name]
     still = [s for s in dry if s not in moving]
     taps = max(len(response(s, 0)) for s in dry)
-    if walk.doppler:
-        # The paths' delays change along the walk: as long as the longest response.
-        longest = max(result[key_of(s, k)].length_s for s in moving for k in range(len(walk.names)))
+    if responses.doppler:
+        # The paths' delays change along the trajectory: as long as the longest response.
+        longest = max(
+            result[key_of(s, k)].length_s for s in moving for k in range(len(responses.names))
+        )
         taps = max(taps, int(math.ceil(longest * rate)))
     length = max([_samples(x) for x in dry.values()] + [lag + len(x) for lag, x in behind])
     length += taps - 1
     out = np.zeros((length, fmt.channels))
     # Outdoors in turbulence the early paths flicker as the eddies drift past, the same
-    # eddies all along the walk.
+    # eddies all along the trajectory.
     turbulent = [r for r in result if flickers(r)]
     gusts = gusts_for(turbulent[0], length / rate, seed) if turbulent else None
     for source in still:
@@ -1085,8 +1555,8 @@ def render_walk(
         out[: len(wet)] += wet
     if not moving:
         return out
-    times = walk.points.times
-    if not walk.doppler:
+    times = responses.points.times
+    if not responses.doppler:
         for source in moving:
 
             def place(k: int, begin: int, end: int, source=source) -> np.ndarray:
@@ -1101,16 +1571,16 @@ def render_walk(
                 result,
                 [key_of(source, k) for k in range(len(times))],
                 times,
-                walk.points.positions,
+                responses.points.positions,
                 dry[source],
                 out,
                 fmt,
                 rate,
                 seed,
                 gusts,
-                source_walks=walk.kind == "sources",
+                source_moves=responses.kind == "sources",
                 crossfade_s=crossfade_s,
-                followers=behind if source == walk.name else (),
+                followers=behind if source == responses.name else (),
             )
     return out
 
@@ -1127,15 +1597,15 @@ def _doppler(
     seed,
     gusts,
     *,
-    source_walks: bool,
+    source_moves: bool,
     crossfade_s: float,
     followers: Sequence[tuple[int, np.ndarray]] = (),
 ) -> None:
     """Adds to ``out`` the mono ``signal`` (or the sound the source sends each way)
-    heard along a walk with Doppler, through ``keys`` (the pair's response in ``result``
-    at each place, the walker there at ``times`` and ``positions``; ``source_walks``
-    when the walker is the source): the late parts crossfaded from place to place (a
-    walking source's sound as it is sent, a walking listener's as it is heard), the
+    heard along a trajectory with Doppler, through ``keys`` (the pair's response in ``result``
+    at each place, the mover there at ``times`` and ``positions``; ``source_moves``
+    when the mover is the source): the late parts crossfaded from place to place (a
+    moving source's sound as it is sent, a moving listener's as it is heard), the
     early paths each through its own changing delay
     (:func:`acoustic_spaces.doppler.render`); and each of ``followers`` (lag, signal)
     the same way, ``lag`` samples later."""
@@ -1164,8 +1634,8 @@ def _doppler(
             late[keys[k]] = chosen.spatial_impulse_response(fmt, rate, seed)
         ir = late[keys[k]]
         for lag, played in [(0, signal), *followers]:
-            if source_walks:
-                # A walking source: what it sends while at the place, through all of
+            if source_moves:
+                # A moving source: what it sends while at the place, through all of
                 # the place's late part, heard after its early paths from there.
                 piece = played[begin:end]
                 piece = piece * weight[: len(piece), 0]
@@ -1173,7 +1643,7 @@ def _doppler(
                     continue
                 wet = convolve(piece, ir)[: length - begin - lag]
             else:
-                # A walking listener: what reaches the place while it is there.
+                # A moving listener: what reaches the place while it is there.
                 first = max(begin - len(ir) + 1, 0)
                 piece = played[first:end]
                 if len(piece) == 0 or begin + lag >= length:
@@ -1198,7 +1668,7 @@ def _doppler(
         fmt,
         rate,
         length,
-        source_walks=source_walks,
+        source_moves=source_moves,
         planes=doppler.plane_ids(result.room.mesh),
         step_s=step_s,
         gusts=gusts,
@@ -1222,8 +1692,8 @@ def _dry(
         if isinstance(value, Emission):
             if source not in each_way:
                 raise ValueError(
-                    f"the sound {source!r} sends each way plays only along a walk with "
-                    "Doppler, as the source that walks or the one a listener passes"
+                    f"the sound {source!r} sends each way plays only along a trajectory with "
+                    "Doppler, as the source that moves or the one a listener passes"
                 )
             if value.sample_rate != rate:
                 raise ValueError(
@@ -1244,13 +1714,13 @@ def _samples(signal: np.ndarray | Emission) -> int:
 
 @dataclass(frozen=True)
 class PassBy:
-    """The level at a listener along a walk, from :func:`pass_by`: as a source passes
+    """The level at a listener along a trajectory, from :func:`pass_by`: as a source passes
     it, or as it passes a source."""
 
     source: str
     listener: str
     #: (N,) when the sound of each place is heard (s from the start): for a walking
-    #: source, when it is there plus its direct sound's delay; for a walking listener,
+    #: source, when it is there plus its direct sound's delay; for a moving listener,
     #: when it is there.
     times: np.ndarray
     #: (N, 8) the sound pressure level per octave band (dB) at each place, of the
@@ -1262,13 +1732,13 @@ class PassBy:
 
     @property
     def duration_s(self) -> float:
-        """How long the walk is heard for (s), from the first place's sound to the
+        """How long the trajectory is heard for (s), from the first place's sound to the
         last's."""
         return float(self.times[-1] - self.times[0])
 
     @property
     def max_a(self) -> float:
-        """The highest A-weighted level along the walk (dB(A)), L_Amax."""
+        """The highest A-weighted level along the trajectory (dB(A)), L_Amax."""
         return float(np.max(self.levels_a))
 
     @property
@@ -1279,7 +1749,7 @@ class PassBy:
     @property
     def exposure(self) -> np.ndarray:
         """(8,) the sound exposure level per octave band (dB): the level that, held for
-        one second, carries the energy of the whole walk."""
+        one second, carries the energy of the whole trajectory."""
         return _exposure(self.times, self.levels)
 
     @property
@@ -1289,7 +1759,7 @@ class PassBy:
 
     @property
     def equivalent_a(self) -> float:
-        """The A-weighted equivalent level over the walk (dB(A)), L_Aeq,T with T its
+        """The A-weighted equivalent level over the trajectory (dB(A)), L_Aeq,T with T its
         :attr:`duration_s`."""
         return self.exposure_a - 10.0 * math.log10(max(self.duration_s, 1e-12))
 
@@ -1314,26 +1784,26 @@ def _exposure(times: np.ndarray, levels: np.ndarray) -> np.ndarray:
         return 10.0 * np.log10(energy)
 
 
-def pass_by(walk: WalkResponses, source: str | None = None) -> PassBy:
-    """The level along ``walk`` at its listener (a walking source) or of ``source`` (a
-    walking listener; by default the only source): each place's level, of the source's
-    sound power, at the time it is heard (quasi-static: as with the source standing
+def pass_by(responses: TrajectoryResponses, source: str | None = None) -> PassBy:
+    """The level along the trajectory of ``responses`` at its listener (a moving source) or
+    of ``source`` (a moving listener; by default the only source): each place's level, of
+    the source's sound power, at the time it is heard (quasi-static: as with the source standing
     there), with its maximum, the sound exposure level and the equivalent level. In a
     band where a place's G is undefined (no sound arrives in it, or its decay cannot be
     read), the place's level is that of the energy its response holds, as outdoors
     (:meth:`~acoustic_spaces.engine.response.Response.levels_or_held`)."""
     from acoustic_spaces.parameters import a_weighted
 
-    result = walk.result
+    result = responses.result
     scene = result.room.scene
-    if walk.kind == "sources":
+    if responses.kind == "sources":
         (listener,) = {lis for _, lis in result.responses}
-        if source is not None and source != walk.name:
-            raise ValueError(f"{source!r} does not walk; {walk.name!r} does")
-        source = walk.name
-        keys = [(name, listener) for name in walk.names]
+        if source is not None and source != responses.name:
+            raise ValueError(f"{source!r} does not move; {responses.name!r} does")
+        source = responses.name
+        keys = [(name, listener) for name in responses.names]
         powers = {s.name: s.power_db("octave") for s in scene.sources}
-        power = [powers[name] for name in walk.names]
+        power = [powers[name] for name in responses.names]
     else:
         sources = sorted({s for s, _ in result.responses})
         if source is None:
@@ -1341,33 +1811,55 @@ def pass_by(walk: WalkResponses, source: str | None = None) -> PassBy:
                 raise ValueError(f"pick a source: {', '.join(sources)}")
             source = sources[0]
         if source not in sources:
-            raise ValueError(f"no source {source!r}; the walk has {', '.join(sources)}")
-        listener = walk.name
-        keys = [(source, name) for name in walk.names]
+            raise ValueError(f"no source {source!r}; the trajectory has {', '.join(sources)}")
+        listener = responses.name
+        keys = [(source, name) for name in responses.names]
         level = next(s for s in scene.sources if s.name == source).power_db("octave")
         power = [level] * len(keys)
-    responses = [result[key] for key in keys]
-    times = np.asarray(walk.points.times, dtype=float)
-    if walk.kind == "sources":
-        times = times + np.array([r.direct_delay_s for r in responses])
-    levels = np.array([r.levels_or_held(p) for r, p in zip(responses, power, strict=True)])
+    places = [result[key] for key in keys]
+    times = np.asarray(responses.points.times, dtype=float)
+    if responses.kind == "sources":
+        times = times + np.array([r.direct_delay_s for r in places])
+    levels = np.array([_read_once(r, p) for r, p in zip(places, power, strict=True)])
     levels_a = np.array([a_weighted(row) for row in levels])
     return PassBy(source, listener, times, levels, levels_a)
 
 
+def _read_once(response, power) -> np.ndarray:
+    """``response``'s :meth:`~acoustic_spaces.engine.response.Response.levels_or_held`
+    for the sound power ``power``, letting go of what its echograms keep once read
+    (:meth:`~acoustic_spaces.engine.response.Response.forget`): a trajectory's places
+    are read once each, and kept, they would hold a megabyte or more each."""
+    levels = response.levels_or_held(power)
+    response.forget()
+    return levels
+
+
+#: The names these had before 4.4.0, when a trajectory was called a walk; kept for
+#: scripts written then.
+simulate_walk = simulate_trajectory
+render_walk = render_trajectory
+walk_points = trajectory_points
+WalkPoints = TrajectoryPoints
+WalkResponses = TrajectoryResponses
+
 __all__ = [
     "CROSSFADE_S",
+    "HEAD_ORDER",
     "LATE_STEP_M",
     "STEP_DEG",
     "STEP_M",
     "Knots",
     "Movement",
     "PassBy",
-    "WalkPoints",
-    "WalkResponses",
+    "TrajectoryPoints",
+    "TrajectoryResponses",
+    "at_speed",
     "crossfade_weights",
+    "doppler_clash",
     "facing_name",
     "facing_of",
+    "head_turners",
     "knots",
     "late_mixing",
     "moment_name",
@@ -1376,10 +1868,14 @@ __all__ = [
     "place_name",
     "place_of",
     "render_movement",
-    "render_walk",
+    "render_trajectory",
     "save_movement",
+    "movements_in_turn",
     "simulate_movement",
-    "simulate_walk",
-    "walk_points",
+    "simulate_trajectory",
+    "stays_in_place",
+    "step_of",
+    "trajectory_points",
+    "turns_on_the_spot",
     "with_moving",
 ]

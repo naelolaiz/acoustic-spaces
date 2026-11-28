@@ -43,7 +43,7 @@ assignments:
 # In a demo of the scene (acoustic-spaces demo) the sound system plays the recording
 # below, downloaded the first time: the ACE corpus's talker M4 (CC BY 4.0), a man
 # talking, each loudspeaker all of it (mono).
-recording: speech_male
+recording: ace_m4
 sources:
   - name: column_left
     channel: mono

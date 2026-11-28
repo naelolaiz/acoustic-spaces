@@ -3,6 +3,11 @@
 # 1 kHz, and longer in the bass. wall_1 and wall_6 are the long sides, wall_2 to wall_5
 # the apse, wall_7 the entrance wall with the organ gallery.
 name: Church (stone nave, 9500 m3)
+# What its choir and organ play in a demo of the scene (church_demo.py, or This scene
+# with --sources Choir,"Organ pipes"): the round "Dona nobis pacem", sung by 19 singers
+# of VocalSet, retuned and timed, with an organ from VCSL's samples, built the first
+# time from what it is made of (127 MB); each of them plays its stem.
+recording: dona_nobis_pacem
 geometry:
   floor_plan: [[0, -7], [34, -7], [38, -4], [40, 0], [38, 4], [34, 7], [0, 7]]
   height: 18
@@ -34,14 +39,15 @@ sources:
   - name: organ
     position: [1.5, 0.0, 9.0]    # in the gallery above the entrance
     orientation: {yaw: 0}
-  # The choir and the organ church_demo.py plays, left out of the church's simulations
-  # until ticked. Nineteen singers stand in two gently curved rows 0.6 m apart in front
+  # The choir and the organ a demo of the scene plays, left out of the church's
+  # simulations until ticked or picked (--sources Choir). Nineteen singers stand in two gently curved rows 0.6 m apart in front
   # of the altar, facing the nave: the women in the front row, the men on a step behind
   # them, the back row's middle left free for the listener in-the-choir. Each sings at
   # 88 dB of sound power (re 1 pW), near omni in the bass and beaming forward in the
   # treble.
   - name: singer_f1
     group: Choir
+    channel: singer_f1
     enabled: false
     position: [30.712, -2.4, 1.6]
     orientation: {yaw: 180}
@@ -51,6 +57,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_f5
     group: Choir
+    channel: singer_f5
     enabled: false
     position: [30.838, -1.8, 1.6]
     orientation: {yaw: 180}
@@ -60,6 +67,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_f2
     group: Choir
+    channel: singer_f2
     enabled: false
     position: [30.928, -1.2, 1.6]
     orientation: {yaw: 180}
@@ -69,6 +77,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_f3
     group: Choir
+    channel: singer_f3
     enabled: false
     position: [30.982, -0.6, 1.6]
     orientation: {yaw: 180}
@@ -78,6 +87,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_f8
     group: Choir
+    channel: singer_f8
     enabled: false
     position: [31, 0, 1.6]
     orientation: {yaw: 180}
@@ -87,6 +97,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_f4
     group: Choir
+    channel: singer_f4
     enabled: false
     position: [30.982, 0.6, 1.6]
     orientation: {yaw: 180}
@@ -96,6 +107,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_f6
     group: Choir
+    channel: singer_f6
     enabled: false
     position: [30.928, 1.2, 1.6]
     orientation: {yaw: 180}
@@ -105,6 +117,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_f7
     group: Choir
+    channel: singer_f7
     enabled: false
     position: [30.838, 1.8, 1.6]
     orientation: {yaw: 180}
@@ -114,6 +127,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_f9
     group: Choir
+    channel: singer_f9
     enabled: false
     position: [30.712, 2.4, 1.6]
     orientation: {yaw: 180}
@@ -123,6 +137,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m1
     group: Choir
+    channel: singer_m1
     enabled: false
     position: [31.45, -3, 1.95]
     orientation: {yaw: 180}
@@ -132,6 +147,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m4
     group: Choir
+    channel: singer_m4
     enabled: false
     position: [31.612, -2.4, 1.95]
     orientation: {yaw: 180}
@@ -141,6 +157,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m2
     group: Choir
+    channel: singer_m2
     enabled: false
     position: [31.738, -1.8, 1.95]
     orientation: {yaw: 180}
@@ -150,6 +167,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m10
     group: Choir
+    channel: singer_m10
     enabled: false
     position: [31.828, -1.2, 1.95]
     orientation: {yaw: 180}
@@ -159,6 +177,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m3
     group: Choir
+    channel: singer_m3
     enabled: false
     position: [31.882, -0.6, 1.95]
     orientation: {yaw: 180}
@@ -168,6 +187,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m5
     group: Choir
+    channel: singer_m5
     enabled: false
     position: [31.882, 0.6, 1.95]
     orientation: {yaw: 180}
@@ -177,6 +197,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m8
     group: Choir
+    channel: singer_m8
     enabled: false
     position: [31.828, 1.2, 1.95]
     orientation: {yaw: 180}
@@ -186,6 +207,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m7
     group: Choir
+    channel: singer_m7
     enabled: false
     position: [31.738, 1.8, 1.95]
     orientation: {yaw: 180}
@@ -195,6 +217,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m6
     group: Choir
+    channel: singer_m6
     enabled: false
     position: [31.612, 2.4, 1.95]
     orientation: {yaw: 180}
@@ -204,6 +227,7 @@ sources:
                 cardioid, cardioid, cardioid]
   - name: singer_m11
     group: Choir
+    channel: singer_m11
     enabled: false
     position: [31.45, 3, 1.95]
     orientation: {yaw: 180}
@@ -216,6 +240,7 @@ sources:
   # the manual's at 105 dB of sound power each, the pedal towers' at 102.
   - name: organ_manual_c
     group: Organ pipes
+    channel: organ_manual_c
     enabled: false
     position: [1.2, -1.6, 9.5]
     orientation: {yaw: 0}
@@ -224,6 +249,7 @@ sources:
       pattern: [omni, omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid]
   - name: organ_manual_cis
     group: Organ pipes
+    channel: organ_manual_cis
     enabled: false
     position: [1.2, 1.6, 9.5]
     orientation: {yaw: 0}
@@ -232,6 +258,7 @@ sources:
       pattern: [omni, omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid]
   - name: organ_pedal_c
     group: Organ pipes
+    channel: organ_pedal_c
     enabled: false
     position: [0.9, -3.8, 8.6]
     orientation: {yaw: 0}
@@ -240,6 +267,7 @@ sources:
       pattern: [omni, omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid]
   - name: organ_pedal_cis
     group: Organ pipes
+    channel: organ_pedal_cis
     enabled: false
     position: [0.9, 3.8, 8.6]
     orientation: {yaw: 0}
@@ -254,8 +282,8 @@ listeners:
     position: [18.0, -4.0, 1.2]
   - name: nave-back
     position: [5.0, 2.0, 1.2]
-  # The other places church_demo.py tours, with nave-back and nave-middle, left out of
-  # the church's simulations until ticked.
+  # The other places the tour visits, with nave-back and nave-middle, left out of the
+  # church's simulations until ticked or visited.
   - name: side-aisle
     group: Choir concert
     enabled: false
@@ -276,6 +304,17 @@ listeners:
     enabled: false
     position: [31.8, 0, 1.95]
     orientation: {yaw: 180}
+# The tour of a demo of the scene: six places, each cut at a breath of the music, the
+# organ's first verse heard under the gallery and from the side, the choir alone from
+# the front pews and the conductor, the third verse from among the singers and in the
+# pews to the end.
+tour:
+  - {listener: nave-back, seconds: 11.5}
+  - {listener: side-aisle, seconds: 13.5}
+  - {listener: front-pews, seconds: 12.5}
+  - {listener: conductor, seconds: 13.5}
+  - {listener: in-the-choir, seconds: 12.5}
+  - {listener: nave-middle, to_end: true}
 simulation:
   early: {method: ray_tracing, max_order: 3}
   late: {method: stochastic_ray_tracing, rays: 25000}

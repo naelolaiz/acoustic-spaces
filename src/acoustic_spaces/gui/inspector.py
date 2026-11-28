@@ -85,6 +85,20 @@ SPECTRA = [
     ("speech_male", N_("speech_male")),
     ("speech_female", N_("speech_female")),
 ]
+#: A talker's vocal efforts, quietest first, after "none" (the sound power as given).
+VOCAL_EFFORTS = [
+    (None, N_("(none)")),
+    ("relaxed", N_("relaxed")),
+    ("normal", N_("normal")),
+    ("raised", N_("raised")),
+    ("loud", N_("loud")),
+]
+VOCAL_EFFORT_TIP = N_(
+    "How hard the talker talks (ISO 9921): relaxed, normal, raised or loud is its speech "
+    "at 54, 60, 66 or 72 dB(A) 1 m in front of it, which sets its sound power through its "
+    "spectrum and directivity; (none) keeps the sound power you give. For a speech "
+    "spectrum only"
+)
 DIRECTIVITIES = [
     ("omni", N_("omni")),
     ("subcardioid", N_("subcardioid")),
@@ -193,7 +207,9 @@ CHANNEL_TIP = N_(
     "The channel the source plays in a demo of the scene: left or right, or both mixed "
     "down (mono), of its WAV file or, without one, of the scene's recording (on the "
     "scene's page), so that a sound system's left and right loudspeakers play the two "
-    "sides of one stereo recording. (none): its WAV file mixed down to mono, or silent"
+    "sides of one stereo recording; or a stem of the recording, a part it was mixed from, "
+    "as a band's drum kit plays the drums (a mix of stems, as a monitor's, is set in the "
+    "scene file). (none): its WAV file mixed down to mono, or silent"
 )
 RECORDING_TIP = N_(
     "What the sources with a channel and no WAV file of their own play in a demo of the "
@@ -209,9 +225,129 @@ CHANNELS = [
     ("left", N_("left")),
     ("right", N_("right")),
     ("mono", N_("mono")),
+    # Translators: this and the entries below are stems of a song, the parts it was
+    # mixed from, as the scene file names them (drums, bass, ...).
+    ("drums", N_("drums stem")),
+    ("bass", N_("bass stem")),
+    ("guitar", N_("guitar stem")),
+    ("keys", N_("keys stem")),
+    ("brass", N_("brass stem")),
+    ("vocal", N_("vocal stem")),
+    ("backing", N_("backing vocals stem")),
 ]
+#: The Channel list's entry for a mix of stems, which only the scene file sets.
+MIX = "mix"
 #: What each kind of free recording is, for the scene's Recording list.
-RECORDING_KINDS = {"song": N_("a song in stereo"), "speech": N_("speech")}
+RECORDING_KINDS = {
+    "song": N_("a song in stereo"),
+    "speech": N_("speech"),
+    "multitrack": N_("a multitrack recording"),
+}
+MODEL_TIP = N_(
+    "The method that gives the source's sound power in place of the one you give, and the "
+    "sound a demo of the scene plays for it (model: in the scene file): a road vehicle's "
+    "by CNOSSOS-EU, at the speed of its trajectory, in the scene's air; a siren's, that of "
+    "the 100 W electronic siren NBS measured; a horn's, its blasts as loud as its rule or "
+    "its maker gives them, averaged over its blasts and pauses; a train's or a tram's by "
+    "Schall 03, at the speed of its trajectory, that of the first of its points at one "
+    "height, a demo playing those behind it too; construction plant's, Defra's row for "
+    "the machine plus 28 dB; a reversing alarm's, SAE J994 Type B's, averaged over its "
+    "beeps and pauses; a helicopter's, its rotors' sound in level flight at its speed "
+    "through the air, its directivity too; an aircraft's by ECAC Doc 29, its NPD curves at "
+    "the highest thrust of the flight it flies along the trajectory's ground track, its "
+    "flight and directivity too"
+)
+#: A siren model on its page, as loud as the siren NBS measured, or louder or quieter.
+SIREN_TEXT = N_(
+    "Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the 100 W "
+    "electronic siren NBS measured"
+)
+SIREN_GAIN_TEXT = N_(
+    "Siren: sounds {pattern} (it can sound {patterns}), at the sound power of the 100 W "
+    "electronic siren NBS measured, {gain} dB"
+)
+#: A horn model on its page: what horn, its notes, how they sound and how loud.
+HORN_TEXT = N_("Horn: {kind}, {tones} Hz {how}, in blasts, {level} dB({weighting}) {at} m ahead")
+HORN_KINDS = {
+    "air_horn": N_("an air horn"),
+    "disc_horns": N_("a pair of disc horns"),
+    "train_horn": N_("a train horn"),
+}
+HORN_HOW = {True: N_("in turn"), False: N_("together")}
+#: A rotorcraft model on its page: the helicopter, its speed through the air and its
+#: broadband noise's method.
+ROTORCRAFT_TEXT = N_(
+    "Helicopter: {helicopter}, its rotors in level flight at {speed} m/s through the air, "
+    "their broadband noise by {broadband}; its directivity too"
+)
+ROTORCRAFT_HELICOPTERS = {"as350_b3": N_("an Airbus Helicopters AS350 B3 at 2,250 kg")}
+ROTORCRAFT_BROADBAND = {
+    "pegg": N_("Pegg's method"),
+    "bpm": N_("Brooks, Pope and Marcolini's airfoil self-noise"),
+}
+#: A Doc 29 model on its page: the aircraft, its operation and the highest thrust of its
+#: flight, at which its sound power is given.
+AIRCRAFT_TEXT = N_(
+    "Doc 29: {aircraft} {operation}, flown along the trajectory's ground track; its sound "
+    "power at {thrust} lb of thrust, the highest of its flight, its directivity too"
+)
+AIRCRAFT_NAMES = {"jetw": N_("JETW, Volume 3's hypothetical twin jet,")}
+AIRCRAFT_OPERATIONS = {
+    "departure": N_("taking off by the ICAO-A procedure"),
+    "arrival": N_("landing down a 3° approach"),
+}
+#: The directivity list's choice for a source whose model gives its directivity.
+MODEL_DIRECTIVITY = N_("given by its model")
+#: A rail model on its page: the train, its track and the height of its sources.
+RAIL_TEXT = N_(
+    "Schall 03: {train} on {track}; its sources {height}, the sound power the first's, "
+    "the others played behind it"
+)
+RAIL_TRAINS = {
+    "s_bahn": N_("an S-Bahn"),
+    "regional": N_("a regional train"),
+    "intercity": N_("an intercity train"),
+    "freight": N_("a freight train"),
+    "tram": N_("a low-floor tram"),
+}
+RAIL_TRACKS = {
+    "ballast": N_("sleepers in ballast"),
+    "slab": N_("slab track"),
+    "slab_absorber": N_("slab track with absorbers"),
+    "level_crossing": N_("a level crossing"),
+    "street": N_("track set in the street"),
+    "grass_low": N_("grassed track, the grass low"),
+    "grass_high": N_("grassed track, the grass up to the rail top"),
+}
+RAIL_HEIGHTS = {
+    "rail_top": N_("at the rail top (its bogies)"),
+    "roof": N_("on its roof, 4 m up"),
+    "pantograph": N_("at its pantograph's head, 5 m up"),
+}
+#: A plant model on its page: Defra's row for the machine, and a breaker's blows.
+PLANT_TEXT = N_("Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C)")
+BREAKER_TEXT = N_(
+    "Construction plant: Defra's row for {machine} (2005, BS 5228-1 Annex C); its made "
+    "sound's blows: {blows} a minute"
+)
+PLANT_MACHINES = {
+    "breaker": N_("a 1650 kg breaker on a 15 t excavator"),
+    "generator": N_("a 6 kVA diesel generator"),
+    "dumper": N_("a 9 t dumper"),
+}
+#: An alarm model on its page: its beeps and how loud it is.
+ALARM_TEXT = N_(
+    "Reversing alarm: SAE J994 Type B, {hz} Hz beeps {per_s} times a second, {level} "
+    "dB(A) {at} m in front of it"
+)
+#: CNOSSOS-EU's road vehicle categories, as a source's model names them.
+ROAD_CATEGORIES = {
+    "1": N_("light motor vehicles"),
+    "2": N_("medium heavy vehicles"),
+    "3": N_("heavy vehicles"),
+    "4a": N_("mopeds"),
+    "4b": N_("motorcycles"),
+}
 LEVEL_TIP = N_(
     "The source's sound power level in all bands together (dB re 1 pW); Spectrum spreads "
     "it over the bands"
@@ -3260,7 +3396,8 @@ def recording_text(item: recordings.Recording) -> str:
     """How the scene's Recording list shows a free recording: what it is, its licence and
     what it costs to download, or that it is downloaded."""
     title, kind = _(item.title), _(RECORDING_KINDS[item.kind])
-    if recordings.file_of(item).exists():
+    size = recordings.to_download_mb(item)
+    if not size:
         # Translators: {title} is a recording's title, {kind} what it is ("a song in
         # stereo") and {licence} its licence (CC BY 4.0).
         return _("{title}: {kind}, {licence}, downloaded").format(
@@ -3269,7 +3406,7 @@ def recording_text(item: recordings.Recording) -> str:
     # Translators: {title} is a recording's title, {kind} what it is ("a song in
     # stereo"), {licence} its licence (CC BY 4.0) and {size} the MB it downloads.
     return _("{title}: {kind}, {licence}, {size} MB to download").format(
-        title=title, kind=kind, licence=item.licence, size=number(item.download_mb, "g")
+        title=title, kind=kind, licence=item.licence, size=number(size, "g")
     )
 
 
@@ -3287,6 +3424,80 @@ def plays_text(scene, item) -> str:
     else:
         what = scene.recording.name
     return _("the scene's recording: {what}").format(what=what)
+
+
+def model_text(model, speed_m_s: float | None = None, thrust_lb: float | None = None) -> str:
+    """A source's model (``model``) in words, on its page: none; a road vehicle's
+    method, its category and the engine of its made sound; a siren's pattern, those it
+    can sound and how loud it is; a horn's kind, its notes and how loud they sound; a
+    rail vehicle's train, its track and the height of its sources; construction
+    plant's row of Defra's database (a breaker's blows); an alarm's beeps; a
+    helicopter's rotors at ``speed_m_s`` through the air; an aircraft's operation and
+    the highest thrust of its flight, ``thrust_lb``."""
+    if model is None:
+        return _("none")
+    if model.method == "doc-29":
+        return _(AIRCRAFT_TEXT).format(
+            aircraft=_(AIRCRAFT_NAMES[model.aircraft]),
+            operation=_(AIRCRAFT_OPERATIONS[model.operation]),
+            thrust=f"{thrust_lb:.0f}",
+        )
+    if model.method == "rotorcraft":
+        return _(ROTORCRAFT_TEXT).format(
+            helicopter=_(ROTORCRAFT_HELICOPTERS[model.helicopter]),
+            speed=f"{speed_m_s:.1f}",
+            broadband=_(ROTORCRAFT_BROADBAND[model.broadband]),
+        )
+    if model.method == "defra":
+        from acoustic_spaces.demos.plant import BLOWS_PER_MINUTE
+
+        machine = _(PLANT_MACHINES[model.machine])
+        if model.machine != "breaker":
+            return _(PLANT_TEXT).format(machine=machine)
+        blows = model.blows_per_minute or BLOWS_PER_MINUTE
+        return _(BREAKER_TEXT).format(machine=machine, blows=f"{blows:g}")
+    if model.method == "sae-j994":
+        from acoustic_spaces.demos import plant
+
+        return _(ALARM_TEXT).format(
+            hz=f"{plant.ALARM_HZ:g}",
+            per_s=f"{plant.ALARM_PER_S:g}",
+            level=f"{plant.ALARM_ON_AXIS_DB_A:g}",
+            at=f"{plant.ALARM_AT_M:g}",
+        )
+    if model.method == "schall-03":
+        return _(RAIL_TEXT).format(
+            train=_(RAIL_TRAINS[model.train]),
+            track=_(RAIL_TRACKS[model.track]),
+            height=_(RAIL_HEIGHTS[model.height]),
+        )
+    if model.method == "siren":
+        values = {"pattern": model.pattern, "patterns": ", ".join(model.patterns)}
+        if model.gain_db == 0.0:
+            return _(SIREN_TEXT).format(**values)
+        return _(SIREN_GAIN_TEXT).format(**values, gain=f"{model.gain_db:+g}")
+    if model.method == "horn":
+        from acoustic_spaces.demos.models import horn_kind
+
+        kind = horn_kind(model)
+        return _(HORN_TEXT).format(
+            kind=_(HORN_KINDS[model.kind]),
+            tones=" / ".join(f"{f:g}" for f in kind.hz),
+            how=_(HORN_HOW[kind.in_turn]),
+            level=f"{kind.on_axis_db:g}",
+            weighting=kind.weighting,
+            at=f"{kind.at_m:g}",
+        )
+    kind = ROAD_CATEGORIES.get(model.category)
+    return _(
+        "CNOSSOS-EU category {category} ({kind}); its made sound's engine: {cylinders} "
+        "cylinders at {rpm} rpm"
+    ).format(
+        category=model.category,
+        kind=_(kind) if kind else model.category,
+        cylinders=model.cylinders,
+        rpm=f"{model.rpm:g}",
+    )
 
 
 def _fill(combo: QComboBox, choices) -> None:
@@ -3317,6 +3528,22 @@ def _per_band_label(patterns) -> str:
     """How a list shows a pattern (a name or a value of a) per band."""
     # Translators: {patterns} lists a pattern name per band, such as omni, cardioid.
     return _("per band: {patterns}").format(patterns=", ".join(str(v) for v in patterns))
+
+
+def _choose_channel(combo: QComboBox, value) -> None:
+    """Fill ``combo`` with :data:`CHANNELS` and show ``value``: one of them, or a mix of
+    stems (set in the scene file), shown as an entry of its own."""
+    combo.clear()
+    _fill(combo, CHANNELS)
+    if isinstance(value, dict):
+        parts = "; ".join(
+            name if gain == 0 else f"{name} {number(gain, '+g')} dB" for name, gain in value.items()
+        )
+        # Translators: {parts} are stems and their gains, "vocal; backing -6 dB".
+        combo.addItem(_("mix of stems: {parts}").format(parts=parts), MIX)
+        combo.setCurrentIndex(len(CHANNELS))
+    else:
+        _choose(combo, value)
 
 
 def _choose_pattern(combo: QComboBox, choices, value) -> None:
@@ -3383,7 +3610,7 @@ class PointPage(Page):
         )
         self.in_use.toggled.connect(self._in_use)
         form.addRow(self.in_use)
-        self.moves = QCheckBox(_("Moves"))
+        self.moves = QCheckBox(_("Moving"))
         self.moves.setToolTip(
             _(
                 "Tick to have the source go along its keyframes in a movement; untick to keep "
@@ -3413,7 +3640,7 @@ class PointPage(Page):
         self._moves_tip, self._edit_tip = self.moves.toolTip(), self.edit_movement.toolTip()
         self._still_tip = _(
             "Only a point source moves: a line or a surface stands where it is. Set Shape "
-            "to point to give the source a walk"
+            "to point to give the source a trajectory"
         )
         self.movement_row = QWidget()
         movement = QHBoxLayout(self.movement_row)
@@ -3549,6 +3776,13 @@ class PointPage(Page):
             )
         )
         self.spectrum.activated.connect(self._spectrum)
+        self.model = QLabel()
+        self.model.setWordWrap(True)
+        self.model.setToolTip(_(MODEL_TIP))
+        self.vocal_effort = QComboBox()
+        _fill(self.vocal_effort, VOCAL_EFFORTS)
+        self.vocal_effort.setToolTip(_(VOCAL_EFFORT_TIP))
+        self.vocal_effort.activated.connect(self._vocal_effort)
         self.gain = spin(-100, 60, 1, 1, "dB")
         self.gain.setToolTip(
             _("Gain of the source's feed (dB): on its level and its impulse responses")
@@ -3595,9 +3829,7 @@ class PointPage(Page):
         self.channel = QComboBox()
         _fill(self.channel, CHANNELS)
         self.channel.setToolTip(_(CHANNEL_TIP))
-        self.channel.activated.connect(
-            lambda index: self._update(channel=self.channel.itemData(index))
-        )
+        self.channel.activated.connect(self._pick_channel)
         self.shape = QComboBox()
         _fill(self.shape, SHAPES)
         self.shape.setToolTip(
@@ -3671,8 +3903,12 @@ class PointPage(Page):
             form.addRow(self.directivity_index)
             form.addRow(self.near_field)
             form.addRow(self.pattern)
+            form.addRow(_("Model"), self.model)
+            self._form.labelForField(self.model).setToolTip(_(MODEL_TIP))
             form.addRow(_("Sound power"), self.level)
             form.addRow(_("Spectrum"), self.spectrum)
+            form.addRow(_("Vocal effort"), self.vocal_effort)
+            self._form.labelForField(self.vocal_effort).setToolTip(_(VOCAL_EFFORT_TIP))
             form.addRow(_("Gain"), self.gain)
             form.addRow(_("Equalizer"), self.eq)
             form.addRow(_("Delay"), self.delay)
@@ -3716,8 +3952,8 @@ class PointPage(Page):
         self.movement_row.setEnabled(not still)
         self.moves.setToolTip(self._moves_tip if not still else self._still_tip)
         self.edit_movement.setToolTip(self._edit_tip if not still else self._still_tip)
-        self.moves.setEnabled(item.walk is not None)
-        self.moves.setChecked(item.walk is not None and item.walk.enabled)
+        self.moves.setEnabled(item.trajectory is not None)
+        self.moves.setChecked(item.trajectory is not None and item.trajectory.enabled)
         for box, value in zip(self.position, item.position, strict=True):
             box.setValue(value)
         o = item.orientation
@@ -3744,13 +3980,18 @@ class PointPage(Page):
             label.setToolTip(tip)
         if self.kind == "sources":
             self.directivity.clear()
-            _fill(self.directivity, DIRECTIVITIES)
-            if isinstance(item.directivity, str):
-                _choose(self.directivity, item.directivity)
+            radiates = item.model is not None and getattr(item.model, "radiates", False)
+            if radiates:  # a helicopter's: its rotors' sound's, at its airspeed
+                self.directivity.addItem(_(MODEL_DIRECTIVITY), "")
             else:
-                self.directivity.addItem(_directivity_label(item.directivity), "")
-                self.directivity.setCurrentIndex(len(DIRECTIVITIES))
-            self.directivity.addItem(_(MEASURED), MEASURED)
+                _fill(self.directivity, DIRECTIVITIES)
+                if isinstance(item.directivity, str):
+                    _choose(self.directivity, item.directivity)
+                else:
+                    self.directivity.addItem(_directivity_label(item.directivity), "")
+                    self.directivity.setCurrentIndex(len(DIRECTIVITIES))
+                self.directivity.addItem(_(MEASURED), MEASURED)
+            self.directivity.setEnabled(not radiates)
             # Translators: the directivity list's tip, then the choice it shows.
             tip = _("{tip}. Now: {choice}").format(
                 tip=_(DIRECTIVITY_TIP), choice=self.directivity.currentText()
@@ -3776,12 +4017,32 @@ class PointPage(Page):
             else:
                 text = _("Directivity index: {values} dB (63 Hz to 8 kHz)").format(values=values)
             self.directivity_index.setText(text)
-            per_band = isinstance(item.level_db, list)
-            total = 10.0 * np.log10(np.sum(10.0 ** (np.array(item.level_db) / 10.0)))
-            self.level.setValue(float(total))
-            self.level.setEnabled(not per_band)
+            talking = item.vocal_effort is not None
+            modelled = item.model is not None
+            per_band = isinstance(item.level_db, list) and not talking and not modelled
+            through_air = modelled and getattr(item.model, "through_air", False)
+            speed = item.model_speed_m_s() if through_air else None
+            flight = item.model_flight()
+            thrust = max(flight.powers) if flight is not None else None
+            self.model.setText(model_text(item.model, speed, thrust))
+            self.level.setValue(item.sound_power_db)
+            self.level.setEnabled(not per_band and not talking and not modelled)
             tip = _(LEVEL_TIP)
-            if per_band:
+            if flight is not None:
+                # Translators: {tip} is the sound power's tip.
+                tip = _("{tip}. Given by the model, at the highest thrust of the flight").format(
+                    tip=tip
+                )
+            elif modelled and item.model.needs is not None:
+                # Translators: {tip} is the sound power's tip.
+                tip = _("{tip}. Given by the model, at the speed of the trajectory").format(tip=tip)
+            elif modelled:  # a siren's or a horn's, at any speed
+                # Translators: {tip} is the sound power's tip.
+                tip = _("{tip}. Given by the model").format(tip=tip)
+            elif talking:
+                # Translators: {tip} is the sound power's tip.
+                tip = _("{tip}. Given by the vocal effort").format(tip=tip)
+            elif per_band:
                 # Translators: {tip} is the sound power's tip.
                 tip = _("{tip}. Given per band in the scene file; this is their sum").format(
                     tip=tip
@@ -3789,12 +4050,14 @@ class PointPage(Page):
             self.level.setToolTip(tip)
             self._form.labelForField(self.level).setToolTip(tip)
             _choose(self.spectrum, item.spectrum)
-            self.spectrum.setEnabled(not per_band)
+            self.spectrum.setEnabled(not per_band and not modelled)
+            _choose(self.vocal_effort, item.vocal_effort)
+            self.vocal_effort.setEnabled(item.spectrum != "flat" and not modelled)
             self.gain.setValue(item.gain_db)
             self.eq.setText("" if item.eq_db is None else numbers_text(item.eq_db))
             self.delay.setValue(item.delay_ms)
             self.signal.setText(plays_text(self.document.scene, item))
-            _choose(self.channel, item.channel)
+            _choose_channel(self.channel, item.channel)
             self.signal.setToolTip(
                 f"{_(PLAYS_TIP)}. {item.signal}" if item.signal is not None else _(PLAYS_TIP)
             )
@@ -3832,6 +4095,12 @@ class PointPage(Page):
         if not self._loading:
             self.run(lambda: self.document.update_point(self.kind, self.key, **fields))
 
+    def _pick_channel(self, index: int) -> None:
+        """The channel picked in the list; the entry of a mix of stems keeps the mix."""
+        value = self.channel.itemData(index)
+        if value != MIX:
+            self._update(channel=value)
+
     def _name(self) -> None:
         name = self.name.text().strip()
         if name and name != self._item().name:
@@ -3848,7 +4117,7 @@ class PointPage(Page):
 
     def _moves(self, on: bool) -> None:
         if not self._loading:
-            self.run(lambda: self.document.set_walk_enabled(self.kind, self.key, on))
+            self.run(lambda: self.document.set_trajectory_enabled(self.kind, self.key, on))
 
     def _position(self, axis: int, value: float) -> None:
         # One value at a time (the orientation too): the other boxes show theirs rounded,
@@ -3961,7 +4230,33 @@ class PointPage(Page):
         self._update(level_db=value)
 
     def _spectrum(self, index: int) -> None:
-        self._update(spectrum=self.spectrum.itemData(index))
+        spectrum = self.spectrum.itemData(index)
+        if spectrum == "flat" and self._item().vocal_effort is not None:
+            self._talking(None, spectrum)  # only a talker has a vocal effort
+        else:
+            self._update(spectrum=spectrum)
+
+    def _vocal_effort(self, index: int) -> None:
+        self._talking(self.vocal_effort.itemData(index))
+
+    def _talking(self, effort: str | None, spectrum: str | None = None) -> None:
+        """Give the source a vocal effort, the sound power following from it, or take it
+        away, keeping the sound power it gave (rounded to 0.1 dB); ``spectrum`` too."""
+        item, index = self._item(), self.key
+
+        def change(data: dict) -> None:
+            entry = data[self.kind][index]
+            if spectrum is not None:
+                entry["spectrum"] = spectrum
+            if effort is None:
+                entry.pop("vocal_effort", None)
+                entry["level_db"] = round(item.sound_power_db, 1)
+            else:
+                entry["vocal_effort"] = effort
+                entry.pop("level_db", None)
+
+        if effort != item.vocal_effort or spectrum is not None:
+            self.apply(_("change source"), change)
 
     def _eq(self) -> None:
         try:
@@ -4048,7 +4343,7 @@ class SimulationPage(Page):
                 "500 Hz that add their paths in pressure: the solver for whole rows (one "
                 "field over all of them, with the ground and the roofs in it, where their "
                 "tops go on far enough to both sides of the way; seconds for each source "
-                "and listener) or the paths over one edge or two alone. Maps and walks take "
+                "and listener) or the paths over one edge or two alone. Maps and trajectories take "
                 "the paths"
             )
         )

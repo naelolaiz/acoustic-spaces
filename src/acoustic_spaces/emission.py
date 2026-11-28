@@ -1,4 +1,4 @@
-"""The sound a source sends each way, for a walk with Doppler.
+"""The sound a source sends each way, for a trajectory with Doppler.
 
 A source's directivity (:mod:`acoustic_spaces.directivity`) weighs each path's energy
 per octave band, and every path carries the same signal. The sound of a rotor changes
@@ -6,7 +6,7 @@ with the direction in more than its band levels: each harmonic of the blades has
 pattern and a phase of its own, and the broadband noise has another. An
 :class:`Emission` gives the signal itself in every direction, in the source's own frame
 (x forward, y left, z up, as :class:`acoustic_spaces.scene.Orientation` turns it), and a
-walk with Doppler (:func:`acoustic_spaces.doppler.render`) plays down each early path
+trajectory with Doppler (:func:`acoustic_spaces.doppler.render`) plays down each early path
 the sound sent the way the path leaves the source, at the time it leaves.
 
 What the early paths carry then comes from the emission alone: each path's share of
@@ -21,9 +21,10 @@ emission in pascals 1 m away, its sound power (:meth:`Emission.sound_power_db`).
   (harmonics, as a cosine and a sine each, and noises in separate bands), each with an
   amplitude in every direction on the grid of :func:`acoustic_spaces.directivity.on_grid`.
 - :class:`Periodic` is a sound that repeats, such as a rotor's tones: one period of it
-  in every direction, which keeps a long walk's emission small.
+  in every direction, which keeps a long trajectory's emission small.
 - :class:`Sum` sends several emissions at once, such as a helicopter's two rotors.
 - :class:`Faded` fades one in and out, so that it does not start or stop at once.
+- :class:`Delayed` sends one later, from a time on a run's clock.
 """
 
 from __future__ import annotations
@@ -435,4 +436,45 @@ class Faded(Emission):
         return self.part._powers(bands, directions)
 
 
-__all__ = ["Emission", "Faded", "Mixture", "Periodic", "Sum"]
+@dataclass(frozen=True)
+class Delayed(Emission):
+    """An emission sent ``delay`` samples later, nothing before, as a source that sets
+    off on its trajectory some time into a run sends its sound on the run's clock. Its
+    bands and its directivity are the emission's own."""
+
+    part: Emission = dataclasses.field(repr=False)
+    #: How many samples later it is sent.
+    delay: int = 0
+
+    def __post_init__(self) -> None:
+        if self.delay < 0:
+            raise ValueError(f"an emission is sent 0 samples later or more, not {self.delay}")
+
+    @property
+    def sample_rate(self) -> int:  # type: ignore[override]
+        return self.part.sample_rate
+
+    @property
+    def length(self) -> int:
+        return self.delay + self.part.length
+
+    def sent(self, start: int, stop: int, directions: np.ndarray) -> np.ndarray:
+        out = np.zeros(stop - start)
+        lo = max(start, self.delay)
+        if lo < stop:
+            out[lo - start :] = self.part.sent(
+                lo - self.delay, stop - self.delay, directions[lo - start :]
+            )
+        return out
+
+    def averaged(self) -> np.ndarray:
+        return np.concatenate([np.zeros(self.delay), self.part.averaged()])
+
+    def scaled(self, gain: float) -> Delayed:
+        return Delayed(self.part.scaled(gain), self.delay)
+
+    def _powers(self, bands: Resolution, directions: np.ndarray) -> np.ndarray:
+        return self.part._powers(bands, directions)
+
+
+__all__ = ["Delayed", "Emission", "Faded", "Mixture", "Periodic", "Sum"]

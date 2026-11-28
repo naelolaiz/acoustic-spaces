@@ -161,9 +161,9 @@ Edge diffraction:
   rows in place of the paths over one edge and two, in still air and in wind
   (`simulation.early.rows`, see [Sound over rows of barriers and
   buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
-- [ ] The solver for whole rows in coverage maps and along walks, which take the paths
-  over the edges: a run for every point takes seconds, and along a walk the level would
-  step where the solver takes one place and not the next.
+- [ ] The solver for whole rows in coverage maps and along trajectories, which take the
+  paths over the edges: a run for every point takes seconds, and along a trajectory the
+  level would step where the solver takes one place and not the next.
 - [ ] The solver for whole rows where it does not hold yet: rigid screens on a rigid
   ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind three
   screens, and up to 8.2 dB where the way crosses them at a slant of 75°; part of what
@@ -538,8 +538,8 @@ Examples:
   a lawn concert's line arrays and subwoofers, in the evening's weather and in still
   air, and the orchestra in the concert hall, its four seats toured through three
   movements; each downloads its recordings, mixes them at every listener and makes a
-  video that tours them. The stadium's pictures show where the crowd stands and sits,
-  the empty seats, and how much each takes up.
+  video that tours them. The stills show where the crowd stands and sits, the empty
+  seats, and how much each takes up, in any scene with an audience.
 - [x] Everything a demo plays in its example's scene, left out of the example's own
   simulations until ticked, so the editor shows it: the stadium's band and the singer's
   microphone, the church's choir, organ pipes and toured places, the lakeside's sound
@@ -567,6 +567,10 @@ Examples:
   and each source's `channel` of it (left, right or mono), on the scene's and the
   source's pages in the editor; every example with a stage, a sound system or a talker
   plays one out of the box, its talkers at the normal vocal effort of IEC 60268-16.
+- [x] One demo per scene: every example's demo is a preset of the demo of its scene,
+  whose script's command lines and steps still work; a scene's source of a model
+  (`model:`, as `cnossos-eu`, `schall-03` or `doc-29`) has its sound power and the sound
+  the demo makes for it, and the pass-by demos' own engine is gone.
 
 Movement:
 
@@ -605,12 +609,14 @@ Movement:
   sections' own, which leaves out the blades cutting through the wake of those ahead
   and through turbulence.
 - [x] A helicopter flying over a meadow: the `helicopter_flyover` example and its
-  flyover demo, the rotors trimmed at the helicopter's airspeed against the wind.
-- [x] A helicopter crossing over the stadium concert: `helicopter_demo.py`, its pass
-  added to the concert's mixes at their simulated levels, 150 m up halfway through the
-  song, or 330 m as the rules of the air ask over a crowd without leave. The helicopter
-  and its walk are in the stadium's scene, left out of the concert's simulations, to
-  see and change in the editor.
+  flyover demo, the rotors trimmed at the helicopter's airspeed against the wind; a
+  scene's source of a rotorcraft model (`model: {method: rotorcraft}`) has their sound
+  power and directivity.
+- [x] A helicopter crossing over the stadium concert: `helicopter_demo.py`, heard with
+  the concert at their simulated levels, 150 m up halfway through the song, or 330 m as
+  the rules of the air ask over a crowd without leave. The helicopter, of a rotorcraft
+  model, and its trajectory are in the stadium's scene, left out of the concert's
+  simulations, to see and change in the editor.
 - [x] Trucks, buses, motorcycles and a police car with its siren on, in the pass-by
   demos as the car is (`--vehicle`): CNOSSOS-EU's sound power of their category, and the
   siren's level and directivity as measured, checked against California's and the
@@ -631,12 +637,12 @@ Movement:
   excavator, a generator and a dumper reversing with its alarm on) from Defra's noise
   database for construction sites, and a demo that plays them; checked against Defra's
   rows, the EU's limits for outdoor machines and SAE J994.
-- [x] Car horns: the street's car with a pair of disc horns (`passby_demo.py --car
-  car_and_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
+- [x] Car horns: the street's car with a pair of disc horns (`passby_demo.py --sources
+  car+car_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
   rule for vehicles' horns; a horn's levels in the captions follow its blasts.
-- [x] A train's warning horn (`passby_demo.py --horn blasts` on the railway): the TSI's
-  two notes in turn (or together, `--horn chord`), as loud as EN 15153-2 allows 25 m
-  ahead, the measuring site's ground taken out harmonic by harmonic.
+- [x] A train's warning horn (`train_horn` in the railway's `passby_demo.py --sources`):
+  the TSI's two notes in turn (or together, `--horn chord`), as loud as EN 15153-2
+  allows 25 m ahead, the measuring site's ground taken out harmonic by harmonic.
 - [ ] A train horn's directivity measured, mounted on a train's front (Toward et al.
   found one 1 dB down 30 degrees off its axis, where the siren the horns take is 3.6 dB
   down).
@@ -651,12 +657,14 @@ Movement:
   Appendix B5, eq. B-14) for the engines' installation correction, and their effect on
   the climb in the performance calculation.
 - [x] Aircraft taking off and landing in a scene, heard in a demo, its levels checked
-  against Doc 29's: the airport example's twin jet, flown by Doc 29's Appendix B.
+  against Doc 29's: the airport example's twin jet, flown by Doc 29's Appendix B; a
+  scene's source of a Doc 29 model (`model: {method: doc-29}`) is flown along its
+  trajectory's ground track, with its sound power and directivity.
 - [ ] Houses under the airport example's flights, and an aircraft flying over at
   cruise.
 - [ ] The L_Amax of a pass with fast time weighting, and with slow time weighting in the
-  captions of vehicles other than the aircraft (whose captions give it), as measured,
-  beside the highest quasi-static level the captions give now.
+  stills of sources other than an aircraft's (whose stills give it), as measured,
+  beside the highest quasi-static level they give now.
 - [x] Ground-borne vibration from trains, trams and construction plant, and the rumble
   it makes in a building's rooms, by the US FTA's general method: overall levels from
   its curves and tables against its limits and damage criteria, for the railway's
@@ -689,8 +697,9 @@ Editor:
   and, for what names something in a scene, per scene file, with **Defaults** to put
   them back.
 - [x] Every demo run named after its settings, in a folder and a video of its own, so
-  that runs with other settings write over none of each other's files, and a `join`
-  step that plays finished runs one after another in one video, ticked in Run demo.
+  that runs with other settings write over none of each other's files; several values
+  of an option, sources picked by name or group and listeners played one after another
+  in one video, in an order of choice, the same way in every demo and in Run demo.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.
@@ -894,8 +903,8 @@ Next:
   fast as the linear-algebra library's, with the same bits: wider vector instructions
   chosen when it runs, and less to do for a small product. A rotor's `bpm` broadband
   noise takes 23 % longer than it did with the library's sums.
-- [ ] A walk's places rendered on the run's threads, as a run's files are: they are
-  rendered one after the other.
+- [ ] A trajectory's places rendered on the run's threads, as a run's files are: they
+  are rendered one after the other.
 - [ ] A response's echogram worked out once for all that read it: a run works it out
   for the parameters, for the speech results, for the standard errors and, outdoors,
   for the level against the free field. And the early paths' signals on the run's

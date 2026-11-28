@@ -1,11 +1,10 @@
-"""The horns of the pass-by demos: the fire engine's air horn
-(:class:`~acoustic_spaces.demos.siren.FireEngine`) and the street car's pair of disc
-horns (:class:`~acoustic_spaces.demos.siren.HonkingCar`), their sound, their blasts and
-their level as the rule for vehicles' horns sets them (Council Directive 70/388/EEC,
-Annex I), and the train's warning horn
-(:class:`~acoustic_spaces.demos.rail.TrainVehicle`) as the rule for trains' horns sets
-it; each a :class:`Kind`, the air horn's (:data:`AIR_HORN`) the default of every
-function here. Nothing of the simulation uses it.
+"""The horns of a scene's sources of a horn model (``model: {method: horn}``): an air
+horn (the street's fire engine's) and a car's pair of disc horns (the street's car's),
+their sound, their blasts and their level as the rule for vehicles' horns sets them
+(Council Directive 70/388/EEC, Annex I), and a train's warning horn (the railway's) as
+the rule for trains' horns sets it; each a :class:`Kind`, the air horn's
+(:data:`AIR_HORN`) the default of every function here. Nothing of the simulation uses
+it.
 
 The rule tests a horn on a bench, in a free field or an anechoic room, 2 m in front of
 it in the direction it is loudest, the horn and the microphone 1.2 m above the ground
@@ -455,6 +454,26 @@ def horn_power(sample_rate: int, kind: Kind = AIR_HORN) -> np.ndarray:
     return 10.0 * np.log10(energy)
 
 
+#: The horns a scene's horn model sounds (:class:`~acoustic_spaces.scene.HornModel`), by
+#: its kind and signal.
+KINDS: dict[tuple[str, str], Kind] = {
+    ("air_horn", "blasts"): AIR_HORN,
+    ("disc_horns", "blasts"): CAR_HORN,
+    ("train_horn", "blasts"): TRAIN_HORN,
+    ("train_horn", "chord"): TRAIN_CHORD,
+}
+#: :func:`horn_power` of each of :data:`KINDS` at 48 kHz (dB re 1 pW, 63 Hz to 8 kHz, to
+#: 0.01 dB), which the horn model takes: its sound made and split into octave bands
+#: takes seconds, a scene is read at once (tests/test_sources.py checks the table against
+#: the function).
+POWER_DB: dict[tuple[str, str], tuple[float, ...]] = {
+    ("air_horn", "blasts"): (89.91, 124.1, 121.41, 119.24, 117.72, 114.29, 111.14, 110.29),
+    ("disc_horns", "blasts"): (56.07, 55.67, 68.81, 79.93, 91.46, 104.02, 107.65, 102.73),
+    ("train_horn", "blasts"): (86.79, 86.92, 123.64, 134.78, 130.62, 128.63, 126.22, 125.33),
+    ("train_horn", "chord"): (89.48, 89.55, 123.73, 134.75, 130.61, 128.59, 126.17, 125.28),
+}
+
+
 __all__ = [
     "AIR_HORN",
     "AT_M",
@@ -462,6 +481,7 @@ __all__ = [
     "CAR_HORN",
     "DISC_HZ",
     "DISC_Q",
+    "KINDS",
     "Kind",
     "BLOCK_S",
     "BLASTS",
@@ -473,6 +493,7 @@ __all__ = [
     "HEIGHT_M",
     "HORN_HZ",
     "ON_AXIS_DB_A",
+    "POWER_DB",
     "RISE_S",
     "RULE_BAND_HZ",
     "SOUND_RMS",

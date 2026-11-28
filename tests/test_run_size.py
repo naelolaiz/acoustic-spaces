@@ -182,7 +182,10 @@ def test_a_refusal_gives_what_each_setting_lowered_would_need() -> None:
             ),
             (need(batches=1), "simulation.late.batches 1 (no standard errors)"),
             (need(listeners=listeners[:1]), "1 of the 2 listeners"),
-            (need(sources=sources[:1]), "1 of the 2 sources (a walk's places count as sources)"),
+            (
+                need(sources=sources[:1]),
+                "1 of the 2 sources (a trajectory's places count as sources)",
+            ),
         ]
     )
     sizes = [f"{run_size._size(size)} with {label}" for size, label in expected]

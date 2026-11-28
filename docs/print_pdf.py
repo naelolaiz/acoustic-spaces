@@ -278,7 +278,9 @@ def add_bookmarks(
         page, dest = dests[id]
         top = dest.get("/Top")
         fit = Fit.xyz(left=dest.get("/Left"), top=top) if top is not None else Fit.fit()
-        return writer.add_outline_item(title, page, parent=parent, fit=fit, is_open=open_)
+        return writer.add_outline_item(
+            title=title, page_number=page, parent=parent, fit=fit, is_open=open_
+        )
 
     add("Contents", "pdf-contents")
     part, part_item = None, None

@@ -5070,7 +5070,7 @@ the rule asks 93 at least (point 2.1.4). The horn's pitch, its spectrum, its bla
 height and its directivity are assumptions, as no measured air horn of a fire engine was
 found; the rule bounds them only as above.
 
-**The car's horn.** The street car's pair of disc horns (`--car car_and_horn`), at 360
+**The car's horn.** The street car's pair of disc horns (`--sources car+car_horn`), at 360
 and 430 Hz, 0.5 m up, against the same rule. On its bench, 2 m in front of it on its
 axis in a free field, a blast gives 109.9 dB(A) (the rule: 105 to 118; Hella gives its
 S77 110 +/- 3, the air over the 2 m taking the last 0.1 dB of the treble); between 1800
@@ -5085,7 +5085,7 @@ fundamental, it would give only 102.8 dB(A) between 1800 and 3550 Hz, under the 
 which a horn sold as approved meets. Its blasts, its height and its directivity are
 assumed.
 
-**The train's horn.** The railway train's warning horn (`--horn blasts`) sounds the
+**The train's horn.** The railway train's warning horn (`train_horn` in `--sources`) sounds the
 two notes of the EU's rule for locomotives and passenger trains (TSI LOC&PAS,
 Regulation (EU) No 1302/2014, point 4.2.7.2.1), 660 and 370 Hz (the rule: 660 +/- 30
 and 370 +/- 20), one after the other. EN 15153-2:2020, which the rule names for the
@@ -5360,12 +5360,12 @@ straight).
 
 ## An aircraft in the engine against Doc 29
 
-`validation/aircraft_noise.py` holds the airport example's flight demo
-(`acoustic_spaces.demos.aircraft`, see [Aircraft taking off and
-landing](demos.md#aircraft-taking-off-and-landing)) against Doc 29's own levels: JETW's
-source (`doc29.source`), simulated in the engine, against its NPD curves in the
-scene's air, and the example's flights against Doc 29's sum over the same flight
-path's segments. Over the meadow and the runway, which scatter nothing, the late rays
+`validation/aircraft_noise.py` holds a scene's Doc 29 aircraft (a source of `model:
+{method: doc-29}`, `acoustic_spaces.demos.aircraft`; the airport example's jets, see
+[Aircraft taking off and landing](demos.md#aircraft-taking-off-and-landing)) against
+Doc 29's own levels: JETW's source (`doc29.source`), simulated in the engine, against
+its NPD curves in the scene's air, and the example's flights against Doc 29's sum over
+the same flight path's segments. Over the meadow and the runway, which scatter nothing, the late rays
 bring the microphones no sound.
 
 **The source against its NPD curves.** JETW flies straight and level at 160 kt, the
@@ -5401,14 +5401,14 @@ absorbs nothing. Measured as Doc 29 defines its levels, that source's SEL - L_AS
 departure's curves are 1.9 to 2.2 dB under 10 lg(πd/V). Volume 3's aircraft are
 hypothetical, and its arrival curves seem not to follow those definitions.
 
-**The airport's flights.** The demo's departure and arrival, simulated every 20 m at
-each listener, their level following their thrust:
+**The airport's flights.** The example's departure and arrival as their model flies
+them, simulated every 20 m at each listener, their level following their thrust:
 
 | listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| departure_4km | 87.1 (87.2) | 95.9 (96.0) | 50.2 (43.1) | 64.4 (60.7) |
-| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 41.8 (54.4) | 56.4 (68.8) |
-| approach_2000m | 52.0 (54.8) | 67.3 (68.6) | 90.5 (91.5) | 96.8 (98.8) |
+| departure_4km | 87.1 (87.2) | 95.9 (96.2) | 50.2 (43.1) | 64.4 (60.7) |
+| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 41.8 (54.4) | 56.4 (68.9) |
+| approach_2000m | 52.0 (54.8) | 67.3 (68.7) | 90.5 (91.5) | 96.9 (98.8) |
 
 (dB(A); Doc 29's in brackets.) Where the arrival is heard rolling, the walk starts or ends
 less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down

@@ -718,6 +718,15 @@ sources:
     position: [2.0, 3.0, 1.5]
     level_db: 78            # sound power in all, dB re 1 pW
     spectrum: speech_male   # or flat (default) or speech_female
+  - name: guide
+    position: [6.0, 3.0, 1.6]
+    spectrum: speech_female
+    directivity: cardioid
+    vocal_effort: raised    # its sound power from its voice: relaxed, normal, raised, loud
+  - name: car
+    position: [75, 2, 0.05]
+    model: {method: cnossos-eu, category: '1', rpm: 2000, cylinders: 4}  # its sound power
+    trajectory: {to: [[-75, 2, 0.05]], speed_m_s: 13.89, doppler: true}
   - name: delay-speaker
     position: [12.0, 3.0, 2.5]
     level_db: [95, 98, 100, 100, 100, 99, 97, 92]   # or per band (8 or 24 values)
@@ -729,7 +738,8 @@ sources:
 ```
 
 The scene's `recording` is what its sources with a `channel` and no `signal` play,
-so a stage's loudspeakers play the two channels of a band's stereo master:
+so a stage's loudspeakers play the two channels of a band's stereo master, and its
+monitors and the band themselves the stems it was mixed from:
 
 ```yaml
 recording: spicy_funk_cake   # a free song, downloaded the first time; or a file
@@ -737,6 +747,10 @@ sources:
   - {name: house_left, position: [0, 6, 6], channel: left}   # on the audience's left
   - {name: house_right, position: [0, -6, 6], channel: right}
   - {name: subs, position: [0, 0, 0.5], channel: mono}
+  - {name: drum_kit, position: [-8, 0, 1.5], channel: drums}  # a stem
+  - name: vocal_wedges                                         # a mix of stems, dB
+    position: [-4, 0, 1.2]
+    channel: {vocal: 0, backing: -6, keys: -8, guitar: -12, bass: -14, drums: -16}
 ```
 
 - `level_db` is the sound power level, in all or per band. A level in all is spread
@@ -746,6 +760,90 @@ sources:
   power with either speech spectrum and an omnidirectional source. It gives no level
   at 63 Hz, nor at 125 Hz for female speech; those bands are taken 12 dB below the next
   one up, an assumption that does not reach the STI.
+- `vocal_effort` gives a talker's sound power instead of `level_db`: its speech, with
+  the standard's spectrum, is 54, 60, 66 or 72 dB(A) 1 m in front of it in free field
+  (`relaxed`, `normal`, `raised`, `loud`; ISO 9921), and its directivity ahead sets
+  the sound power per band that gives it. It needs a speech spectrum and no
+  `level_db`. The editor's **Vocal effort** sets it on the source's page, and a demo
+  run can have every talker talk louder or quieter (`--vocal-effort`, [a demo of any
+  scene](demos.md#a-demo-of-any-scene)). Every effort keeps the spectrum's shape: a
+  raised voice leans towards the treble (ANSI S3.5-1997's speech spectra per vocal
+  effort), which this leaves out.
+- `model` gives a source's sound power by a method instead of `level_db`. With
+  `method: cnossos-eu` it is a road vehicle of CNOSSOS-EU's `category` (`1` light motor
+  vehicles, `2` medium heavy, `3` heavy, `4a` mopeds, `4b` motorcycles; Directive
+  2002/49/EC, Annex II, Appendix F, Table F-1, as amended in 2021): its rolling and
+  propulsion noise per octave band at the speed of its trajectory, the rolling noise
+  corrected for the scene's air temperature. So it needs a point source with a
+  trajectory at one steady speed (points at a speed, or keyframes timed for one), and
+  no `level_db`, `spectrum` or `vocal_effort`; a demo run at another `--speed` takes
+  the power at that speed. `rpm` and `cylinders` are what [a demo of the
+  scene](demos.md#a-demo-of-any-scene) makes its sound of where it has no `signal` or
+  `channel`: tyre noise and an engine of that many cylinders firing at that speed,
+  each with the spectrum of its part of the power, along its pass. With `method: siren`
+  it is a vehicle's siren, a square wave in its `pattern` (`wail` or `yelp`, swept from
+  500 to 1500 Hz 12 or 180 times a minute, or `two_tone`, 440 and 586.7 Hz in turn) of
+  the `patterns` it can sound, which a demo's `--siren` picks from, as loud in each as
+  the 100 W electronic siren the National Bureau of Standards measured (NBS SP 480-28,
+  1978), `gain_db` louder, whatever its speed. With `method: horn` it is a
+  vehicle's horn in blasts, of the `kind` `air_horn` (a fire engine's two trumpets, as
+  loud as the EU's rule for vehicles' horns lets one be), `disc_horns` (a car's pair,
+  Hella's S77) or `train_horn` (the two notes of the EU's rule for trains, in turn, or
+  together with `signal: chord`), its sound power the average over its blasts and
+  pauses. With `method: schall-03` it is a `train` (`s_bahn`, `regional`, `intercity`,
+  `freight` or `tram`) of Schall 03 (Germany's method for the noise of railways and
+  tramways, 2014) on its `track` (a train's `ballast`, `slab`, `slab_absorber` or
+  `level_crossing`; a tram's `ballast`, `street`, `grass_low` or `grass_high`), its
+  sources at one `height`: `rail_top` (its wheels, bogies, motors and the fans under its
+  floor), `roof` (4 m up) or `pantograph` (5 m up). The source is the train's front, on
+  a trajectory at one steady speed, and its sound power that of the train's first point
+  at that height; a demo of the scene plays every point at that height (a tram's four
+  bogies at the rail top, the two halves of its roof) as far behind the front as it is,
+  each a noise of its own at its own sound power, with Doppler; its `--train` and
+  `--track` set every one's train and track, the train then running at its own speed
+  (the S-Bahn's 120 km/h, the regional train's 160, the intercity's 200, the freight
+  train's 100, the tram's 50) with what goes along with it, unless `--speed` says. With
+  `method: defra` it
+  is construction plant, a `machine` (`breaker`, `generator` or `dumper`) of Defra's
+  noise database for construction sites (2005, the data of BS 5228-1 Annex C): the
+  row's level 10 m away plus 28 dB in each octave band; a demo of the scene makes the
+  breaker's blows (`blows_per_minute`, 480 unless set; a demo's `--blows`) or the
+  engines' firing, and hears the breaker's and the dumper's vibration as a rumble in a
+  room ([road works](demos.md#road-works-in-the-street)). With `method: sae-j994` it is a
+  reversing alarm, 1200 Hz beeps 1.5 times a second, 107 dB(A) 1.2 m in front of it
+  (SAE J994 Type B), its sound power the average over its beeps and pauses. Plant and
+  alarms need no trajectory: standing, a demo plays their sound all through the run.
+  With `method: rotorcraft` it is a `helicopter` (`as350_b3`, an Airbus Helicopters
+  AS350 B3 at its maximum mass) in steady level flight, the source its main rotor's
+  hub: its rotors trimmed at its airspeed, the speed of its trajectory less the wind of
+  the scene's own atmosphere at its height, as vectors, in the scene's air
+  ([helicopters](outdoor.md#helicopters)), give it the sound power and the directivity
+  of what they send, its broadband noise by `broadband` (`pegg`, Pegg's method, or
+  `bpm`, each blade section's own noise; a demo's `--broadband`). So it gives the
+  source's directivity too, which is refused beside it, and needs a trajectory through
+  `to` at one speed, facing forward, with Doppler, that keeps one height (within 0.5
+  m); finding its rotors' sound takes some seconds, once for each flight in a run of the
+  tool. A demo of the scene plays down each early path what the rotors send the way the
+  path leaves the helicopter, at the time it leaves ([a helicopter flying
+  over](demos.md#a-helicopter-flying-over)). With `method: doc-29` it is an `aircraft`
+  (`jetw`, the hypothetical twin jet of ECAC Doc 29's Volume 3, its engines under its
+  wings) on an `operation`, a `departure` or an `arrival`: the model flies it along the
+  ground track of its trajectory's places as Doc 29 does (Appendix B, at Volume 3's
+  default weights, in the scene's air), the departure by the ICAO-A noise abatement
+  procedure from its start of roll at the source's position, the arrival down a 3°
+  approach to touch down where its places first come down to the runway, at most 1 m
+  up, then its reverse thrust and roll-out. It gives the trajectory the flight's
+  heights, speeds, timing and facing as keyframes, and the source the sound power of its
+  NPD curves at the flight's highest thrust, with its spectral class's spectrum, and
+  its engines' installation correction as directivity ([an aircraft in a
+  scene](outdoor.md#aircraft-by-ecac-doc-29)). So it needs a trajectory with Doppler and
+  no `speed_m_s` of its own; a demo of the scene plays noise with that spectrum, louder
+  and softer as the thrust changes along the flight, and a run's `--speed` changes
+  nothing of it ([aircraft taking off and
+  landing](demos.md#aircraft-taking-off-and-landing)). A siren's, a horn's, an alarm's
+  and a train's directivity is the source's own (the examples' `siren.csv`, `train.csv`
+  and `tram.csv`; see [demos](demos.md#vehicles-passing-by)). The editor shows the model on
+  the source's page (**Model**), with the sound power it gives.
 - `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
   the sound power and on the impulse responses, so a mix made with `auralize` hears
   them. G stays the room's: it is measured against the same source, fed the same way,
@@ -763,13 +861,24 @@ sources:
   mixed down; without a channel it is mixed down to mono.
 - The scene's `recording` is the file a source with a `channel` and no `signal` plays: a
   file relative to the scene's folder, or the name of one of the free recordings
-  (`spicy_funk_cake`, `great_british_summer`, `potassium`, `speech_male`,
-  `speech_female`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which the
-  demo downloads the first time and keeps for every scene. A name without a suffix must
-  be a free recording's or a file that is there, so a mistyped free name is refused.
-  Left and right are the recording's, so the loudspeaker on the audience's left plays
-  `left`. A source with neither a signal nor a channel is silent in the demo. The
-  simulation reads neither.
+  (`spicy_funk_cake`, `great_british_summer`, `potassium`, `francium`, `rubidium`, the
+  church's choir and organ `dona_nobis_pacem`, and the ACE corpus's talkers `ace_f1` to
+  `ace_m9`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which the demo
+  downloads (or builds) the first time and keeps for every scene. A name without a suffix must be a free recording's or a file
+  that is there, so a mistyped free name is refused. Left and right are the
+  recording's, so the loudspeaker on the audience's left plays `left`. A source with
+  neither a signal nor a channel is silent in the demo. The simulation reads neither.
+- A `channel` may instead name one of the recording's stems, the parts it was mixed
+  from (`drums`, `bass`, `guitar`, `keys`, `brass`, `vocal`, `backing`), or a mix of
+  them, each at its gain in dB, as a monitor mix is: the source plays it mixed down to
+  mono. The free songs `spicy_funk_cake`, `francium` and `rubidium` have their stems,
+  downloaded with them the first time a source plays one; a recording of yours takes
+  its stems from the run (`--stem vocal=vox.wav`). A stem the recording has not is left
+  out of a mix, and a source none of whose stems it has stays silent. The multitrack
+  `dona_nobis_pacem` has a stem per singer and per side of the organ's divisions, named
+  after the church's sources that play them (`singer_f1`, `organ_pedal_c`); a source
+  plays such a stem as it is, at the level it was built at, so that its sound power is
+  where it plays loudest.
 - `simulate` reports the sound pressure level per octave band and A-weighted (`spl_db`
   and `spl_a_db` in `parameters.json`), the editor's results show it per band, and
   `inspect` lists each source's sound power. In a band whose G is undefined, the level
@@ -839,8 +948,8 @@ listeners:
 
 - `group` sorts the scene tree of the editor; groups nest with `/`, and a source and
   a listener may share a group's name. It changes no result.
-- `enabled: false` leaves a source or listener out of `simulate`, `map`, `walk` (the
-  sources that do not walk) and the scene's checks, as if it were not there, but keeps
+- `enabled: false` leaves a source or listener out of `simulate`, `map`, `walkthrough`
+  (the sources that do not move) and the scene's checks, as if it were not there, but keeps
   it in the scene; the others get the same responses as in a run of all, since seeds
   follow the scene's order. Named on the command line (`--source`), it is simulated all
   the same, and checked. `inspect` marks it "left out". With every source, or every listener, left
@@ -853,66 +962,104 @@ listeners:
   hidden, and an eye follows its tick when that changes; shown by their eye, they are
   drawn faded.
 
-## Walks
+## Trajectories
 
-A listener or a point source can walk through the room, for
+A listener or a point source can move through the scene along a trajectory, for
 [walkthroughs](spatial-audio.md#walkthroughs):
 
 ```yaml
 listeners:
   - name: visitor
-    position: [17.0, 4.0, 1.6]   # where the walk starts
-    walk:
+    position: [17.0, 4.0, 1.6]   # where the trajectory starts
+    trajectory:
       to: [[4.0, 4.0, 1.6], [4.0, 16.0, 1.6]]   # the corners it goes through
-      speed_m_s: 1.2       # walking pace (default 1.2 m/s)
+      speed_m_s: 1.2       # its speed (default 1.2 m/s, a walking pace)
       face_forward: true   # turn to face the way it goes (default); false keeps its yaw
       turn_deg_s: 90       # how fast it turns through a corner (default 90 degrees/s)
       doppler: false       # pitch shifts as it goes: cars, trains (default false)
+      step_m: 0.25         # how far apart it is simulated along (default 0.25 m)
+      start_s: 0.0         # when it sets off (s); it stands at its position until then
 ```
 
-- A walk goes in straight lines from the position through each point of `to`, at an
-  even pace, and stops at the last one. Facing forward sets the yaw along each leg and
-  keeps the pitch and roll; on a leg straight up or down the yaw stays as it was. At a
-  corner the walker turns the shorter way round at `turn_deg_s`, half of the turn
-  before the corner and half after it (no further than half-way along either leg), so
-  a sound to one side moves round the head instead of jumping.
-- `doppler: true` plays the early sound through delays that change as the walker goes,
-  so that its pitch shifts: for vehicles and aircraft, which go faster than anyone
-  walks (see [Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)).
-  It needs a speed below the speed of sound and no wave solver.
-- Everything else (`simulate`, `map`, the editor) sees the walker standing where its
-  walk starts; `inspect` lists how far each walk goes and for how long. Lines and
-  surfaces do not walk.
+- A trajectory goes in straight lines from the position through each point of `to`, at
+  an even pace, and stops at the last one. Facing forward sets the yaw along each leg
+  and keeps the pitch and roll; on a leg straight up or down the yaw stays as it was.
+  At a corner it turns the shorter way round at `turn_deg_s`, half of the turn before
+  the corner and half after it (no further than half-way along either leg), so a sound
+  to one side moves round the head instead of jumping.
+- `doppler: true` plays the early sound through delays that change as the source or
+  listener goes, so that its pitch shifts: for vehicles and aircraft (see [Moving
+  sources and Doppler](spatial-audio.md#moving-sources-and-doppler)). It needs a speed
+  below the speed of sound and no wave solver.
+- `step_m` is how far apart along the trajectory its responses are simulated: finer
+  is smoother and costs more (see [Walkthroughs](spatial-audio.md#walkthroughs)); a
+  run's `--step` sets one for every trajectory. `start_s` is when it sets off on the
+  run's clock, of either kind: it stands at its position until then, and its keyframes'
+  times count from then.
+- Everything else (`simulate`, `map`, the editor) sees it standing where its trajectory
+  starts; `inspect` lists how far each trajectory goes and for how long. Lines and
+  surfaces do not move.
+- Scenes written before 4.4.0 call the trajectory `walk`; that name is still read, and
+  the editor saves it as `trajectory`.
 
-A walk may instead be timed, through `keyframes`:
+A trajectory may instead be timed, through `keyframes`:
 
 ```yaml
 sources:
   - name: speaker
     position: [2.0, 3.0, 1.7]        # where it is at 0 s
     orientation: {yaw: 0}            # and how it faces then
-    walk:
+    trajectory:
       keyframes:
         - {time_s: 4.0, position: [6.0, 3.0, 1.7]}                        # 1 m/s, facing as before
         - {time_s: 6.0, position: [6.0, 3.0, 1.7], orientation: {yaw: 90}} # turns on the spot
         - {time_s: 10.0, position: [6.0, 7.0, 1.7]}                       # on, facing +y
-      enabled: true                  # false keeps the walk but leaves it standing (default true)
+      enabled: true                  # false keeps the trajectory but leaves it standing (default true)
 ```
 
-- Each keyframe says where the walker is at `time_s` (seconds from the start, in
-  order, each later than the last) and, if given, how it faces there. Between two
-  keyframes it moves and turns evenly, so each leg's speed is its distance over its
+- Each keyframe says where the source or listener is at `time_s` (seconds from the
+  start, in order, each later than the last) and, if given, how it faces there. Between
+  two keyframes it moves and turns evenly, so each leg's speed is its distance over its
   time: it can wait, turn on the spot, or go at any pace. A keyframe without an
-  `orientation` keeps the facing of the one before (at first, the walker's own); the
-  keyframes say how it faces, so `face_forward` and `turn_deg_s` do not apply. A turn
-  goes the shorter way round.
-- `enabled: false` keeps a walk, of either kind, but leaves its walker standing still:
-  `walkthrough --all` and the editor's movement leave it out, and `walkthrough` picks
-  the one walk that is enabled. Giving it by name (`--walker`) is refused.
-- Several listeners and sources may each have a walk; `walkthrough --all` plays them
-  all together on one clock (see [Walkthroughs](spatial-audio.md#walkthroughs)). The
-  editor's Movement panel edits keyframes in a table and along a timeline (see
+  `orientation` keeps the facing of the one before (at first, its own); the keyframes
+  say how it faces, so `face_forward` and `turn_deg_s` do not apply. A turn goes the
+  shorter way round.
+- `enabled: false` keeps a trajectory, of either kind, but leaves its source or
+  listener standing still: `walkthrough --all` and the editor's movement leave it out,
+  and `walkthrough` picks the one trajectory that is enabled. Giving it by name
+  (`--mover`) is refused.
+- Several listeners and sources may each have a trajectory; `walkthrough --all` plays
+  them all together on one clock (see [Walkthroughs](spatial-audio.md#walkthroughs)).
+  The editor's Movement panel edits keyframes in a table and along a timeline (see
   [Graphical editor](editor.md)).
+
+## Tour of a demo
+
+A scene may say the tour its [demo](demos.md#a-demo-of-any-scene) plays: which
+listener is heard when, and for how long, while the recording runs on.
+
+```yaml
+tour:
+  - {listener: front, phrases: 2}                     # two phrases of the recording
+  - {listener: back, atmosphere: still, seconds: 12}  # in still air, for 12 s
+  - {listener: front, to_end: true}                   # to the recording's end
+```
+
+- Each stop names a listener of the scene and one length at most: `phrases` of 8 bars
+  of 4 beats at the recording's tempo, `seconds`, or `to_end`; one without a length
+  lasts the run's `--seconds` (20 s by default).
+- `atmosphere: still` hears that listener in still air, the scene without its
+  atmosphere and `long_term`, simulated beside the scene itself: for an outdoor scene
+  whose air bends sound (where the air is still already, it is refused).
+- For a recording of several pieces (a symphony's movements), `piece` names the one a
+  stop is heard in (`{piece: IV, listener: conductor}`); a run plays each piece the
+  tour stops in, in its order, in a part of its own. The stops of a piece that give no
+  length share it out, each cut at its quietest moment within 10 s.
+- `tours` gives the tour for another recording than the scene's own, by its name (a
+  free recording's, or a file of yours without its suffix), in place of `tour`: a song
+  whose phrases or sections fit other stops (the stadium's, one for each of its songs).
+- A run's `--tour` and `--listeners` give the demo another tour, without changing the
+  scene.
 
 ## Air, response length and seed
 

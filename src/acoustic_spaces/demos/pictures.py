@@ -65,8 +65,10 @@ def font(weight: str, size: int, display: bool = False) -> ImageFont.FreeTypeFon
     return _FONTS[key]
 
 
-def text(draw, xy, s, f, fill=TEXT, anchor="la") -> None:
-    draw.text(xy, s, font=f, fill=fill, anchor=anchor)
+def text(draw, xy, s, f, fill=TEXT, anchor="la", halo: int = 0) -> None:
+    """``s`` at ``xy``; with ``halo``, ringed that many pixels wide in the background's
+    colour, so that the lines and marks it is written over do not run through it."""
+    draw.text(xy, s, font=f, fill=fill, anchor=anchor, stroke_width=halo, stroke_fill=BG)
 
 
 def arrow(draw, start, direction, length: float, head: float, colour, width: int) -> None:
@@ -122,7 +124,8 @@ def canvas(size: tuple[int, int] = SIZE) -> Image.Image:
 
 def title_card(size: tuple[int, int], title: str, name: str, lines) -> Image.Image:
     """A title card of ``size``: ``title`` in large, ``name`` under it and ``lines`` under
-    that, each cut to the width (the ``join`` step's card before each run)."""
+    that, each cut to the width (the card before each part of a run of several parts,
+    :func:`~acoustic_spaces.demos.join.join_parts`)."""
     img = canvas(size)
     draw = ImageDraw.Draw(img)
     text(draw, (MARGIN, 300), title, font("Bold", 64, display=True))
@@ -148,6 +151,9 @@ class Plan:
         self.left, self.top, self.s = left, top, scale
         self.x0, self.y0, self.x1, self.y1 = box
         self.rotated = rotated
+        #: The panel the plan is drawn in (left, top, right, bottom), where labels may go
+        #: beyond the scene's own box; None where it is not given.
+        self.area: tuple[float, float, float, float] | None = None
 
     def __call__(self, x: float, y: float, z: float = 0.0) -> tuple[float, float]:
         if self.rotated:
@@ -327,15 +333,57 @@ def place(
     return y + size + 14 + 50
 
 
-def facts(draw, x: float, y: float, lines: Sequence, size: int = 24, step: int = 36) -> float:
-    """Lines of facts under the stop's name, each a string or (string, colour); returns
-    the y under them."""
+def _fact_rows(draw, line, size: int, width: float) -> tuple[list[str], object, str]:
+    """A fact (a string or (string, colour)) in rows no wider than ``width`` pixels,
+    broken between words, with its font and colour."""
+    s, colour = line if isinstance(line, tuple) else (line, TEXT)
+    f = font("SemiBold" if colour == LISTENER else "Regular", size)
+    rows: list[str] = []
+    for word in s.split(" "):
+        longer = f"{rows[-1]} {word}" if rows else word
+        if rows and draw.textlength(longer, font=f) > width:
+            rows.append(word)
+        else:
+            rows[-1:] = [longer]
+    return rows, f, colour
+
+
+def facts(
+    draw,
+    x: float,
+    y: float,
+    lines: Sequence,
+    size: int = 24,
+    step: int = 36,
+    right: float = RIGHT,
+) -> float:
+    """Lines of facts under the stop's name, each a string or (string, colour), one
+    longer than reaches ``right`` going on on the next, between words; returns the y
+    under them."""
     for line in lines:
-        s, colour = line if isinstance(line, tuple) else (line, TEXT)
-        weight = "SemiBold" if colour == LISTENER else "Regular"
-        text(draw, (x, y), s, font(weight, size), colour)
-        y += step
+        rows, f, colour = _fact_rows(draw, line, size, right - x)
+        for row in rows:
+            text(draw, (x, y), row, f, colour)
+            y += step
     return y
+
+
+#: The sizes the facts under a stop's name are set in, with their rows' step (px),
+#: largest first (:func:`fitted_facts`).
+FACT_SIZES = ((23, 32), (21, 29), (19, 26), (17, 23))
+
+
+def fitted_facts(
+    draw, x: float, y: float, lines: Sequence, bottom: float, right: float = RIGHT
+) -> float:
+    """:func:`facts` in the largest of :data:`FACT_SIZES` whose rows end by ``bottom``
+    (the smallest where none does), so that what comes under them keeps its room;
+    returns the y under them."""
+    for size, step in FACT_SIZES:
+        rows = sum(len(_fact_rows(draw, line, size, right - x)[0]) for line in lines)
+        if y + rows * step <= bottom:
+            break
+    return facts(draw, x, y, lines, size=size, step=step, right=right)
 
 
 def tour_column(
@@ -352,23 +400,69 @@ def tour_column(
     title: str = "The tour",
 ) -> None:
     """The tour's stops (label, start s) with their times under ``title``, the current
-    one bright, the ones to come faint, in rows of ``row`` pixels, closer when they
-    would pass ``bottom``."""
+    one bright, the ones to come faint, in rows of ``row`` pixels. Where they would pass
+    ``bottom``, as many as fit, the current one among them, with how many stops come
+    before and after them (:func:`tour_window`)."""
     text(draw, (x, y), title, font("SemiBold", 22), MUTED)
     y += 36
-    row = min(row, (bottom - y) // max(1, len(entries)))
-    for j, (label, t0) in enumerate(entries):
+    first, last = tour_window(len(entries), current, max(1, int((bottom - y) // row)))
+    if first > 0:
+        text(draw, (x, y), f"   … {_stops(first)} before", font("Regular", size), FAINT)
+        y += row
+    for j in range(first, last):
+        label, t0 = entries[j]
         colour = LISTENER if j == current else (MUTED if j < current else FAINT)
         weight = "SemiBold" if j == current else "Regular"
         mark = "▶ " if j == current else "   "
         text(draw, (x, y), mark + label, font(weight, size), colour)
         text(draw, (right, y), mmss(t0), font(weight, size), colour, "ra")
         y += row
+    if last < len(entries):
+        more = len(entries) - last
+        text(draw, (x, y), f"   … {_stops(more)} after", font("Regular", size), FAINT)
+
+
+#: The tour column's title and the gap over it, its rows and how far down it may go (px).
+TOUR_HEAD, TOUR_ROW, TOUR_BOTTOM = 58, 28, 860
+
+
+def tour_room(count: int) -> float:
+    """How tall a tour column of ``count`` stops is at the least (px): its title and
+    three rows, the current stop with a row for those before it and one for those after
+    (all of them where there are fewer)."""
+    return TOUR_HEAD + min(count, 3) * TOUR_ROW
+
+
+def _stops(n: int) -> str:
+    """``1 stop``, ``3 stops``."""
+    return f"{n} stop" if n == 1 else f"{n} stops"
+
+
+def tour_window(count: int, current: int, rows: int) -> tuple[int, int]:
+    """Which of ``count`` stops a tour column of ``rows`` rows lists (first, end): all
+    where they fit; else as many as fit with a row saying how many come before them and
+    one how many after (where some do), the ``current`` one among them, as near their
+    middle as the ends let it be."""
+    if count <= rows:
+        return 0, count
+    shown = max(1, rows - 2)
+    first = min(max(current - shown // 2, 0), count - shown)
+    # At either end no row says what is hidden there: one more stop takes it.
+    if first == 0:
+        return 0, shown + 1
+    if first + shown == count:
+        return count - shown - 1, count
+    return first, first + shown
 
 
 #: The smallest size a footer line is set in to fit the width; a line that does not fit
 #: even so is cut with an ellipsis.
 FOOTER_MIN = 13
+#: The smallest size the credit is set in on one line: a longer credit (the church's
+#: singers and organ, each with its licence) takes two lines, so that it is read whole.
+CREDIT_ONE_MIN = 16
+#: The size of the footer's lines under a credit of two lines.
+FOOTER_TWO = 16
 
 
 def fitted(draw, line: str, size: int, width: float) -> tuple[str, ImageFont.FreeTypeFont]:
@@ -383,22 +477,54 @@ def fitted(draw, line: str, size: int, width: float) -> tuple[str, ImageFont.Fre
     return line.rstrip() + "…", f
 
 
+def credit_lines(draw, credit: str, width: float) -> list[str]:
+    """``credit`` as the footer sets it: one line where it fits ``width`` pixels in
+    :data:`CREDIT_ONE_MIN`, else two, split nearest its middle where each line fits the
+    width in :data:`FOOTER_TWO`: at the `` · `` between its parts if one does, else
+    after a semicolon, a comma or at a space; nearest the middle where none does."""
+    if draw.textlength(credit, font=font("Regular", CREDIT_ONE_MIN)) <= width:
+        return [credit]
+    f = font("Regular", FOOTER_TWO)
+    middle = len(credit) / 2
+    for mark in (" · ", "; ", ", ", " "):
+        cuts = [k for k in range(len(credit)) if credit.startswith(mark, k)]
+        cuts.sort(key=lambda k: abs(k - middle))
+        kept = mark.strip() if mark.strip() in (";", ",") else ""  # the · goes with the break
+        for k in cuts:
+            first, second = credit[:k] + kept, credit[k + len(mark) :]
+            if max(draw.textlength(first, font=f), draw.textlength(second, font=f)) <= width:
+                return [first, second]
+    k = credit.rfind(" ", 0, round(middle) + 1)
+    k = k if k > 0 else round(middle)
+    return [credit[:k].rstrip(), credit[k:].lstrip()]
+
+
 def footer(draw, credit: str, tool: str | Sequence[str], size: int = 19) -> None:
     """The spectrogram's panel (the video draws over it), the credit line and under it
     up to two lines that say how the sound was made (:func:`settings_lines`, or one
     line such as :func:`tool_line`'s). The credit is set in ``size`` pixels, the others
-    in 18; each is made smaller, down to :data:`FOOTER_MIN`, to fit the still's width."""
+    in 18; each is made smaller, down to :data:`FOOTER_MIN`, to fit the still's width.
+    A credit too long for one line (:func:`credit_lines`) takes two, and every line
+    under the panel is then set in :data:`FOOTER_TWO` at most."""
     left, top, width, height = SPECTRUM_BOX
     draw.rounded_rectangle([left - 20, top - 7, left + width + 20, top + height + 7], 14, PANEL)
     lines = [tool] if isinstance(tool, str) else list(tool)
     if len(lines) > 2:
         raise ValueError("the footer has room for two lines about the sound")
     room = SIZE[0] - 2 * MARGIN
-    line, f = fitted(draw, credit, size, room)
-    text(draw, (MARGIN, 1002), line, f, MUTED)
+    credits = credit_lines(draw, credit, room)
+    if len(credits) == 1:
+        line, f = fitted(draw, credit, size, room)
+        text(draw, (MARGIN, 1002), line, f, MUTED)
+        y, step, tool_size = 1028, 24, 18
+    else:
+        for k, line in enumerate(credits):
+            line, f = fitted(draw, line, FOOTER_TWO, room)
+            text(draw, (MARGIN, 1000 + 19 * k), line, f, MUTED)
+            y, step, tool_size = 1040, 20, FOOTER_TWO
     for k, line in enumerate(lines):
-        line, f = fitted(draw, line, 18, room)
-        text(draw, (MARGIN, 1028 + 24 * k), line, f, MUTED)
+        line, f = fitted(draw, line, tool_size, room)
+        text(draw, (MARGIN, y + step * k), line, f, MUTED)
 
 
 def thumbnail_badge(draw, x: float, y: float, label: str = "BINAURAL", size: int = 34) -> None:
@@ -412,9 +538,10 @@ def thumbnail_badge(draw, x: float, y: float, label: str = "BINAURAL", size: int
     text(draw, (x + pad, y + height / 2), label, pill, BG, "lm")
 
 
-#: What each kind of diffraction (``simulation.early.diffraction``) bends round edges.
+#: What each kind of diffraction (``simulation.early.diffraction``) bends round edges;
+#: without it, a path an edge blocks is cut off at once as something moves.
 DIFFRACTION = {
-    "none": "",
+    "none": ", without diffraction round edges",
     "direct": ", the direct sound diffracted round edges",
     "first_order": ", the direct sound and first reflections diffracted round edges",
     "second_order": (
@@ -524,9 +651,11 @@ def settings_lines(demo, args, scene: dict, report: dict | None = None) -> list[
 __all__ = [
     "BADGE",
     "BG",
+    "CREDIT_ONE_MIN",
     "DIFFRACTION",
     "FAINT",
     "FOOTER_MIN",
+    "FOOTER_TWO",
     "LINE",
     "LISTENER",
     "MARGIN",
@@ -544,9 +673,11 @@ __all__ = [
     "badge",
     "canvas",
     "cone",
+    "credit_lines",
     "ears_text",
     "facing",
     "facts",
+    "fitted_facts",
     "fitted",
     "font",
     "footer",
@@ -565,4 +696,6 @@ __all__ = [
     "title_card",
     "tool_line",
     "tour_column",
+    "tour_room",
+    "tour_window",
 ]

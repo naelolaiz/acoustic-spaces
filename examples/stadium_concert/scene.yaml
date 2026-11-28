@@ -29,11 +29,12 @@
 # surfaces smaller than the wavelength would only mirror sound falsely. Many listeners
 # stand nearer the arrays than their far-field patterns hold, so every array adds up its
 # boxes one by one (`near_field: true`). The sources and listeners sit in groups: the
-# PA's mains, subwoofers, fills and delays, the monitors, the stage, the audience
-# standing and seated, and the band and the helicopter, which the concert's simulations
-# leave out until they are ticked, as they do the singer's microphone. The editor's scene
+# PA's mains, subwoofers, fills and delays, the monitors, the band, the stage, the
+# audience standing and seated, and the helicopter, which the concert's simulations
+# leave out until it is ticked, as they do the singer's microphone. The editor's scene
 # tree shows or hides each group, and its tick uses it in simulations or leaves it out:
-# with the monitors and the stage left out, the sound system plays alone, for the crowd.
+# with the monitors, the band and the stage left out, the sound system plays alone, for
+# the crowd.
 #
 #   acoustic-spaces map scene.yaml --parameter spl --plot spl.png
 #   python align.py
@@ -43,7 +44,7 @@
 #
 # On the pitch from the mix position back, nine points of the map in ten get the same
 # level within 2.3 to 2.5 dB (all bands together; it differs from run to run, as the
-# scene sets no seed). The map takes under five minutes on 4 cores.
+# scene sets no seed). The map takes about 8 minutes on 4 cores.
 # align.py prints when and how loud each loudspeaker arrives at each listener, and which
 # would be heard as an echo: none, and each player hears their own monitor loudest.
 # near_field.py prints how far each array's far-field pattern would be off at each
@@ -107,12 +108,16 @@ assignments:
   stage_roof: stage
 # In a demo of the scene (acoustic-spaces demo) the sound system plays the recording
 # below, downloaded the first time: the stereo mix of "Spicy Funk Cake" by the
-# Rhythmussportgruppe (CC BY 4.0). Give `recording:` a file of yours, a band's stereo
-# mix, to hear that instead. The loudspeakers on the audience's left play its left
+# Rhythmussportgruppe (CC BY 4.0). The loudspeakers on the audience's left play its left
 # channel and those on its right the right one: the names say the stage's side, so
 # main_left, on stage left, is on the audience's right. The subwoofers play both
-# channels mixed down. The monitors and the band play nothing: a stereo mix has none
-# of the parts they play (stadium_demo.py plays its song's stems through them).
+# channels mixed down. The monitors play mixes of its stems, the parts it was mixed
+# from, downloaded with it (249 MB): the singer's wedges the vocal, the drum fill the
+# drums and the bass, the side fills the whole band with the vocal up and the drums well
+# down, as the kit is loud on stage itself. The band plays its own stems: the drum kit
+# the drums, the singer the vocal, the guitarist's amplifier the guitar. Give
+# `recording:` a file of yours, a band's stereo mix, to hear that instead, and its stems
+# in the run (--stem vocal=vox.wav); a source whose stems it lacks stays silent.
 recording: spicy_funk_cake
 sources:
   - name: main_left
@@ -246,64 +251,72 @@ sources:
     delay_ms: 314
     directivity: {file: fill_array.yaml, near_field: true}
   - name: vocal_wedges
+    channel: {vocal: 0, backing: -6, keys: -8, guitar: -12, bass: -14, drums: -16}
     group: Monitors
     position: [-43.3, 0, 2.25]
     orientation: {yaw: 180, pitch: 45}
     level_db: 115
     directivity: {file: monitor_wedges.yaml, near_field: true}
   - name: drum_fill
+    channel: {drums: 0, bass: 0, vocal: -6, guitar: -8, keys: -8}
     group: Monitors
     position: [-54.5, 1.8, 2.6]
     orientation: {yaw: -50, pitch: 25}
     level_db: 115
     directivity: {file: wedge.csv}
   - name: side_fill_left
+    channel: {drums: -20, bass: 0, guitar: 0, keys: 0, brass: 0, vocal: 3, backing: 0}
     group: Monitors
     position: [-49, 15.5, 3]
     orientation: {yaw: -90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
   - name: side_fill_right
+    channel: {drums: -20, bass: 0, guitar: 0, keys: 0, brass: 0, vocal: 3, backing: 0}
     group: Monitors
     position: [-49, -15.5, 3]
     orientation: {yaw: 90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
-  # An Airbus Helicopters AS350 B3 crossing the stadium 150 m up at 63 m/s, 1200 m along
-  # its long axis from behind the stage to past the east stand: the sound power per
-  # octave band and the directivity (helicopter.csv) of its rotors' sound in the still
-  # air (acoustic_spaces.rotorcraft). It is left out of the concert's simulations until
-  # ticked; helicopter_demo.py flies it over the concert.
+  # An Airbus Helicopters AS350 B3 at its maximum mass, a rotorcraft model, crossing the
+  # stadium 150 m up at 63 m/s, 1200 m along its long axis from behind the stage to past
+  # the east stand: the sound of its rotors in the still air (acoustic_spaces.rotorcraft)
+  # gives it its sound power per octave band and its directivity. It sets off 87.976 s
+  # into the run, so that it is over the centre spot 97.5 s in, halfway through "Spicy
+  # Funk Cake". It is left out of the concert's simulations until ticked;
+  # helicopter_demo.py flies it over the concert, simulated every 4 m.
   - name: helicopter
     group: Helicopter
     enabled: false
     position: [-600, 0, 150]
-    level_db: [129.8, 129.5, 130.8, 130.2, 126.9, 125.1, 122.0, 120.1]
-    directivity: {file: helicopter.csv}
-    walk:
+    model: {method: rotorcraft, helicopter: as350_b3}
+    trajectory:
       to: [[600, 0, 150]]
       speed_m_s: 63
       doppler: true
-  # The band's own sound on the stage, as stadium_demo.py plays it: the sound power
-  # (dB re 1 pW) of a rock drum kit, of a singer singing loud, just in front of the
-  # singer's head, and of a guitar amplifier turned up. It is left out of the concert's
-  # simulations until ticked; feedback.py takes the singer's voice.
+      face_forward: true
+      step_m: 4
+      start_s: 87.976
+  # The band's own sound on the stage: the sound power (dB re 1 pW) of a rock drum kit,
+  # of a singer singing loud, just in front of the singer's head, and of a guitar
+  # amplifier turned up, each playing its stem in a demo of the scene. feedback.py takes
+  # the singer's voice.
   - name: drum_kit
+    channel: drums
     group: Band
-    enabled: false
     position: [-52.3, 0, 2.8]
     level_db: 116
     directivity: omni
   - name: singer_voice
+    channel: vocal
     group: Band
-    enabled: false
     position: [-44.6, 0, 3.7]
     orientation: {yaw: 0}
     level_db: 98
     directivity: subcardioid
   - name: guitar_amp
+    channel: guitar
     group: Band
-    enabled: false
     position: [-49, 8, 2.5]
     orientation: {yaw: 0, pitch: 20}
     level_db: 112
@@ -363,8 +376,59 @@ listeners:
     position: [-44.55, 0, 3.7]
     orientation: {yaw: 180}
     pattern: supercardioid
+# The tour a demo of the scene plays as the song runs on: the mix position, the front of
+# the pitch, the players on the stage, the pitch's side, the stands and the back of the
+# pitch, each for a phrase of 8 bars, and the mix position again to the end. Each song
+# of the catalogue has a tour of its own (tours): "Spicy Funk Cake" is eleven phrases
+# long, so its tour leaves out the side of the pitch and the north stand's near seats;
+# "Francium" is nineteen and a half, so the stops that take one of its sections' start
+# last two. `--tour` gives another, `--listeners pitch_side,...` a tour of those.
+tour:
+  - {listener: mix_position, phrases: 1}
+  - {listener: pitch_front, phrases: 1}
+  - {listener: singer, phrases: 1}
+  - {listener: drummer, phrases: 1}
+  - {listener: guitarist, phrases: 1}
+  - {listener: pitch_side, phrases: 1}
+  - {listener: north_stand_near, phrases: 1}
+  - {listener: north_stand_far, phrases: 1}
+  - {listener: north_stand_top, phrases: 1}
+  - {listener: east_stand, phrases: 1}
+  - {listener: pitch_back, phrases: 1}
+  - {listener: pitch_behind_towers, phrases: 1}
+  - {listener: mix_position, to_end: true}
+tours:
+  spicy_funk_cake:
+    - {listener: mix_position, phrases: 1}
+    - {listener: pitch_front, phrases: 1}
+    - {listener: singer, phrases: 1}
+    - {listener: drummer, phrases: 1}
+    - {listener: guitarist, phrases: 1}
+    - {listener: north_stand_far, phrases: 1}
+    - {listener: north_stand_top, phrases: 1}
+    - {listener: east_stand, phrases: 1}
+    - {listener: pitch_back, phrases: 1}
+    - {listener: pitch_behind_towers, phrases: 1}
+    - {listener: mix_position, to_end: true}
+  francium:
+    - {listener: mix_position, phrases: 1}
+    - {listener: pitch_front, phrases: 2}
+    - {listener: singer, phrases: 1}
+    - {listener: drummer, phrases: 1}
+    - {listener: guitarist, phrases: 1}
+    - {listener: pitch_side, phrases: 1}
+    - {listener: north_stand_near, phrases: 1}
+    - {listener: north_stand_far, phrases: 1}
+    - {listener: north_stand_top, phrases: 2}
+    - {listener: east_stand, phrases: 2}
+    - {listener: pitch_back, phrases: 2}
+    - {listener: pitch_behind_towers, phrases: 2}
+    - {listener: mix_position, to_end: true}
 simulation:
-  early: {method: image_sources, max_order: 2, diffraction: none}
+  # The direct sound bends round the edges of the stands and of the stage roof, so a
+  # source that moves (the helicopter crossing) fades as an edge hides it instead of
+  # dropping by ten decibels or more from one moment to the next.
+  early: {method: image_sources, max_order: 2, diffraction: direct}
   # The late sound radiates from every reflection to the listeners: in a bowl this size
   # a detector sphere catches so few rays that a single one would be heard as an echo.
   late: {method: stochastic_ray_tracing, reception: secondary_sources}

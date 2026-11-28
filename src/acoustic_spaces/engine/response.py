@@ -37,7 +37,7 @@ LATE_ARRAYS = ("late", "late_directional", "late_moments", "late_batches")
 @dataclass(frozen=True)
 class Deferred:
     """A late array that a :class:`Response` makes when it is read instead of holding
-    it: what ``make()`` gives. A walk's places between those traced for their
+    it: what ``make()`` gives. A trajectory's places between those traced for their
     late part have theirs so, each mixed from the traced ones on either side
     (``simulate(late_from=...)``), which are held once however many places read them."""
 
@@ -156,6 +156,15 @@ class Response:
         ):
             self._pressure = (key, {})
         return self._pressure[1]
+
+    def forget(self) -> None:
+        """Let go of what the response keeps of its early part between readings of its
+        echograms (the paths' pressure in the coherent bands, for
+        :func:`~acoustic_spaces.engine.coherent.coherent_energy`: a megabyte or more for
+        a far source, more again where turbulence keeps each path's spectrum); the next
+        reading works it out again, to the same values. For a caller that reads many
+        responses once each, such as each place of a source's trajectory."""
+        self._pressure = None
 
     @property
     def band_hz(self) -> tuple[int, ...]:
