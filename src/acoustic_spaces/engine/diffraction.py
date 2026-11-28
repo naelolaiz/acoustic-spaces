@@ -3359,17 +3359,21 @@ class EdgeDiffraction:
         t = np.einsum("ij,ij->i", row.point - edges.start[edge], edges.direction[edge])
         points = edges.start[edge] + t[:, None] * edges.direction[edge]
         _, rho_s, phi_s, _ = edges.frame(edge, np.broadcast_to(self.source, points.shape))
-        _, _, phi_r, _ = edges.frame(edge, np.broadcast_to(listener, points.shape))
+        _, rho_r, phi_r, _ = edges.frame(edge, np.broadcast_to(listener, points.shape))
         # The source or the listener behind the edge's own faces (the way passes the
-        # edge on its blocked side): the edge's wave goes to it along its nearer face,
-        # past the row's other nodes (a top's other edge among them), and comes from it
-        # so; its angle is that face's.
+        # edge on its blocked side): the edge's wave goes to it past the row's other
+        # nodes (a top's other edge among them), along the face that faces the node next
+        # to it on that side, and comes from it so; its angle is that face's.
         n = edges.wedge[edge]
-        phi_s, phi_r = _onto_faces(phi_s, n), _onto_faces(phi_r, n)
+        before, after = _faces_to_neighbours(edges, edge, points, row.along)
+        phi_s, phi_r = _onto_faces(phi_s, n, before), _onto_faces(phi_r, n, after)
         r1 = np.linalg.norm(points - self.source, axis=1)
         r2 = np.linalg.norm(listener - points, axis=1)
         distance = r1 + r2
-        sin_beta = np.clip(rho_s / np.maximum(r1, 1e-300), 1e-12, 1.0)
+        # The sine of the angle of the path with the edge, the same both ways (on the
+        # path over the edge rho_s / r1 = rho_r / r2; the point nearest the way is
+        # near it, but off it at a slant).
+        sin_beta = np.clip((rho_s + rho_r) / np.maximum(distance, 1e-300), 1e-12, 1.0)
         length_param = r1 * r2 / distance * sin_beta**2
         kl = k[None] * length_param[:, None, None]
         terms = wedge_terms(n[:, None, None], phi_r[:, None, None], phi_s[:, None, None], kl)
@@ -3573,12 +3577,43 @@ def _on_own_face(
     return _on_triangles(np.asarray(point, dtype=float), vertices[faces[own]], tolerance)
 
 
-def _onto_faces(phi: np.ndarray, n: np.ndarray) -> np.ndarray:
+def _onto_faces(phi: np.ndarray, n: np.ndarray, faces: np.ndarray | None = None) -> np.ndarray:
     """The angles ``phi`` round edges of open angle ``n`` pi (from face 0, as
-    :meth:`Edges.frame` has them), those within the solid (beyond n pi) on the nearer
-    face: n pi, or 0."""
+    :meth:`Edges.frame` has them), those within the solid (beyond n pi) on a face: the
+    one of ``faces`` (the angle of a face, 0 or n pi, or nan) where it has one, else the
+    nearer face, n pi or 0."""
     solid = n * np.pi
-    return np.where(phi <= solid, phi, np.where(phi - solid < 2.0 * np.pi - phi, solid, 0.0))
+    nearer = np.where(phi - solid < 2.0 * np.pi - phi, solid, 0.0)
+    if faces is not None:
+        nearer = np.where(np.isnan(faces), nearer, faces)
+    return np.where(phi <= solid, phi, nearer)
+
+
+def _faces_to_neighbours(edges: Edges, edge: np.ndarray, points: np.ndarray, along: np.ndarray):
+    """(m,), (m,) for each of the edges ``edge`` of a row (``points`` on them, ``along``
+    the way from the source), the angle round it of its face that faces the row's node
+    before it along the way, and of the one that faces the node after it: the face (0
+    or n pi) on the side of the bisector of its open angle where that node lies, or the
+    nearer face if the node lies within its solid; nan where no node lies that way. A
+    wave the edge sends past the row's other nodes leaves it along that face, whichever
+    way the path is taken."""
+    count = len(edge)
+    faces = np.full((2, count), np.nan)
+    n = edges.wedge[edge]
+    for i in range(count):
+        before = np.flatnonzero(along < along[i] - 1e-9)
+        after = np.flatnonzero(along > along[i] + 1e-9)
+        for side, others, nearest in ((0, before, np.argmax), (1, after, np.argmin)):
+            if not len(others):
+                continue
+            j = others[nearest(along[others])]
+            _, _, psi, _ = edges.frame(edge[i : i + 1], points[j : j + 1])
+            solid = n[i] * np.pi
+            if psi[0] > solid:
+                faces[side, i] = _onto_faces(psi, n[i : i + 1])[0]
+            else:
+                faces[side, i] = 0.0 if psi[0] <= 0.5 * solid else solid
+    return faces[0], faces[1]
 
 
 def _off_row(row: Row, waves: np.ndarray, edge, planes, points) -> tuple:
