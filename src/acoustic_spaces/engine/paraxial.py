@@ -121,8 +121,10 @@ _PARALLEL = math.radians(1.0)
 _LEAN_NEAR = 0.1
 _LEAN_FAR = 0.5
 #: A face lies along the way where the sine of its angle to the way's direction across
-#: its edge (:func:`_across`) is at most this (a block's top), and across it otherwise.
-_CROSSING = 0.25
+#: its edge (:func:`_across`) is at most this (a block's top, level or pitched: 45
+#: degrees), and across it otherwise (a wall). Where a pitched top bends the way much,
+#: the row hands over by its paraxial error (:func:`_paraxial_excess`).
+_ALONG = math.sqrt(0.5)
 #: An edge's obstacle stands across the way where the direction from the edge into it
 #: has at least this share along the direction of the edge's constraint.
 _ACROSS = 0.5
@@ -848,15 +850,23 @@ class Row:
                 weight = weight * self.share[front] * self.share[back] * reflection
                 hard |= {front, back}
             # The mirror each node of family 0 is seen in from the listener's side: the
-            # planes of the tops after it (and its own, at a top's front edge).
-            fronts = {front: level for front, _, level, _ in chosen}
+            # planes of the tops after it (and its own, at a top's front edge), each
+            # through its two edges' lines, level or sloping along the way (as
+            # _reflections has them): the image is mirror * y + offset + tilt * along.
+            fronts = {}
+            for front, back, _, _ in chosen:
+                slope = (self.level[back] - self.level[front]) / (
+                    self.along[back] - self.along[front]
+                )
+                fronts[front] = (self.level[front] - slope * self.along[front], slope)
             sign, shift = np.ones(count), np.zeros(count)
-            mirror, offset = 1.0, 0.0
+            mirror, offset, tilt = 1.0, 0.0, 0.0
             for i in order:
                 if i in fronts:
-                    plane = mirror * fronts[i] + offset
-                    mirror, offset = -mirror, 2.0 * plane - offset
-                sign[i], shift[i] = mirror, offset
+                    level, slope = fronts[i]
+                    plane, incline = mirror * level + offset, mirror * slope + tilt
+                    mirror, offset, tilt = -mirror, 2.0 * plane - offset, 2.0 * incline - tilt
+                sign[i], shift[i] = mirror, offset + tilt * self.along[i]
             source = mirror * self.way[0, 0] + offset
             # The straight line's and the image's distances to the listener.
             square = self.length**2 + (self.way[1, 1] - self.way[1, 0]) ** 2
@@ -1349,7 +1359,8 @@ def _directions(edges, model, u: np.ndarray, nearest: int, candidates: np.ndarra
     edge, and each edge's family, the direction of its constraint and the share of its
     obstacle along that (:func:`find_row`): q at right angles to the way and to the
     edge, or the normal of a face along the way (its sine to the way across the edge,
-    :func:`_across`, at most _CROSSING: a block's top) of the first of ``candidates``
+    :func:`_across`, at most _ALONG: a block's top), at right angles to the way, of
+    the first of ``candidates``
     (by distance) parallel to the edge that has one; an edge is of the first family
     where its line across the way lies nearer p than q, and of the second where it lies
     nearer q and is a thin screen's (and of neither, -1, where it is a solid's along
@@ -1361,9 +1372,11 @@ def _directions(edges, model, u: np.ndarray, nearest: int, candidates: np.ndarra
         if edges.wedge[e] >= 2.0 - 1e-9 or abs(_dot(d[e], q)) > math.sin(_PARALLEL):
             continue
         normals = model.plane_normal[edges.plane[e]]
-        along_way = np.abs(np.einsum("ij,j->i", normals, _across(d[e], u))) <= _CROSSING
+        along_way = np.abs(np.einsum("ij,j->i", normals, _across(d[e], u))) <= _ALONG
         if along_way.any():
             normal = normals[np.flatnonzero(along_way)[0]]
+            normal = normal - _dot(normal, u) * u
+            normal /= math.sqrt(_dot(normal, normal))
             q = normal * np.sign(_dot(normal, q))
             break
     p = np.cross(u, q)
@@ -1405,11 +1418,13 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
     The row's directions: q at right angles to the way and to the edge nearest it in
     Fresnel units (the nearest for which every such edge is of one of the families,
     :func:`_directions`), or the normal of a face along the way (at most
-    :data:`_CROSSING` its sine to the way across the edge, :func:`_across`: a block's
+    :data:`_ALONG` its sine to the way across the edge, :func:`_across`: a block's
     top) of the nearest edge parallel to that one that has such a face, and p at right
-    angles to the way and to q. An edge's share (:func:`membership`)
-    is that of the way's distance from it, and, near an end of it that is not the corner
-    of a screen whose other edge is in the row, of the way's distance from that end too:
+    angles to the way and to q. An edge's share (:func:`membership`) is that of the
+    way's distance from it where the way passes it on its clear side (1 where it passes
+    it on its blocked side: the bridge goes round it), and, near an end of it that is
+    not the corner of a screen whose other edge is in the row, of the way's distance
+    from that end too:
     the end's own paths (and the fades of the edge's) take it there, and past the end the
     edge is not in the row. A screen's top and end at its corner are in the row together
     (:class:`Row`'s corners): where the way passes on the screen's side of both, each
@@ -1481,7 +1496,7 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         for side in (0, 1):
             plane = edges.plane[e, side]
             sides = np.flatnonzero(edges.plane[f] == plane)
-            crosses = abs(_dot(model.plane_normal[plane], _across(d[e], u))) > _CROSSING
+            crosses = abs(_dot(model.plane_normal[plane], _across(d[e], u))) > _ALONG
             if len(sides) == 0 or not crosses:
                 continue
             towards = _dot(facing[e, side], apart) > 0.0
@@ -1564,8 +1579,10 @@ def find_row(edges, model, source, listener, wavenumber, tolerance, reflection) 
         for side in (0, 1):
             plane = edges.plane[e, side]
             normal = model.plane_normal[plane]
-            along_way = abs(_dot(normal, _across(d[e], u))) <= _CROSSING
-            if abs(_dot(normal, q)) < math.cos(_PARALLEL) or not along_way:
+            along_way = abs(_dot(normal, _across(d[e], u))) <= _ALONG
+            # A top lies along q and the way, level or pitched along the way, not rolled
+            # towards p.
+            if abs(_dot(normal, p)) > math.sin(_PARALLEL) or not along_way:
                 continue
             for j in range(i + 1, count):
                 f = nodes[j]
