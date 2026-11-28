@@ -1319,25 +1319,46 @@ def test_sound_that_grazes_an_absorbing_top_from_above_loses_what_the_ground_wav
         np.testing.assert_allclose(levels[1] - levels[0], loss, atol=tolerance)
 
 
+#: The two-dimensional wave calculation's level over two screens 10 m apart, the source
+#: 10 m before the first and the listener 5 m past the second, both a centimetre above
+#: the line of the tops (validation/rows_wave.json, "two screens at 0 and 10 | free |
+#: S +0.01 | L +0.01"), 63 to 500 Hz, dB re the free field.
+TWO_SCREENS_GRAZING_WAVE_DB = (-8.19, -8.75, -9.12, -9.40)
+
+
 def test_two_screens_in_a_row_at_grazing_incidence(tmp_path: Path) -> None:
-    # The source and the listener a millimetre above the line of two screens' tops, 10 m
-    # before the first and 5 m past the second, the screens 10 m apart: of the direct
-    # sound less each top's term, the path over both gives back what they take twice.
-    # Two knife edges at grazing incidence leave 1/4 + atan(sqrt(a c / (b (a + b +
-    # c)))) / (2 pi) of the free field at high frequencies, 0.317 or -9.98 dB here. The
-    # product of the two edges' coefficients, each in the other's transition zone (a
-    # known issue), gives 1/4, 2.06 dB less: just below the line, where the path over
-    # both is all there is, the engine is that far below, and just above it between
-    # the two (1.0 to 1.3 dB below from 2 kHz up; it was 7.6 to 9.5 dB below).
+    # The source and the listener a millimetre above the line of two screens' tops, and
+    # a millimetre below it, 10 m before the first and 5 m past the second, the screens
+    # 10 m apart. Two knife edges at grazing incidence leave 1/4 + atan(sqrt(a c / (b (a
+    # + b + c)))) / (2 pi) of the free field at high frequencies, 0.317 or -9.98 dB here.
     grazing = edge_diffraction.grazing_two_screens(tmp_path)
-    assert grazing["closed_form_db"] == pytest.approx(-9.98, abs=0.005)
-    product = 20.0 * math.log10(0.25) - grazing["closed_form_db"]
-    assert product == pytest.approx(-2.06, abs=0.005)
+    closed = grazing["closed_form_db"]
+    assert closed == pytest.approx(-9.98, abs=0.005)
     above, below = (np.array(row["second_order_db"]) for row in grazing["rows"])
-    error = above[5:] - grazing["closed_form_db"]
-    assert np.all(error < -0.8) and np.all(error > -1.5), error
-    error = below[5:] - grazing["closed_form_db"]
-    assert np.all(np.abs(error - product) < 0.1), error
+    # From 63 to 500 Hz the level is the wave calculation's. That is within 0.15 dB of
+    # the exact solution for one screen (rows.REFERENCE_LIMIT_DB), and a millimetre
+    # from the line instead of its centimetre changes the field by less than 0.07 dB
+    # there (8.7 dB times the Fresnel parameter, 0.007 at 500 Hz): within 0.25 dB. The
+    # engine is 0.17 dB below it at most (at 63 Hz, below the line). A 3-D wave
+    # calculation (finite differences, 10 and 20 cm cells, extrapolated) puts the
+    # engine within 0.1 dB of it at 63 and 125 Hz, 5 cm above the line.
+    wave = np.array(TWO_SCREENS_GRAZING_WAVE_DB)
+    for level in (above, below):
+        np.testing.assert_allclose(level[:4], wave, atol=0.25)
+    # Above 500 Hz the level comes down to the closed form as the wave calculation's
+    # does, by the leading term of the Fresnel integrals near grazing incidence, which
+    # goes as one over the square root of the frequency: the wave calculation's excess
+    # over the closed form is 1.79, 1.23, 0.86 and 0.58 dB from 63 to 500 Hz, about
+    # 1/sqrt(2) less an octave up. From 1 to 8 kHz the excess is that at 500 Hz times
+    # sqrt(500 Hz / f) within 0.15 dB (the engine is up to 0.07 dB above that, and
+    # 0.05 dB below it). It was 0.8 to 1.5 dB below the closed form above the line, and
+    # 2.06 dB below it below the line, where the product of the two edges'
+    # coefficients, each in the other's transition zone, gave 1/4.
+    expected = (wave[3] - closed) * 2.0 ** (-np.arange(1, 5) / 2.0)
+    for level in (above, below):
+        np.testing.assert_allclose(level[4:] - closed, expected, atol=0.15)
+    # Across the line the level is continuous, as the field is (within 0.12 dB).
+    np.testing.assert_allclose(above, below, atol=0.15)
     alone = np.array(grazing["rows"][0]["first_order_db"])
     assert np.all(alone[5:] < -30.0)
 
@@ -1421,6 +1442,15 @@ def test_two_screens_with_one_end_level_with_their_tops(tmp_path: Path, swap: bo
     assert np.abs(level(-1e-4) - below).max() < 0.15
 
 
+#: The two-dimensional wave calculation's level (validation/rows.py's fdtd and
+#: point_source) over the scenes of the next test, by the gap between the tops, 63 to
+#: 500 Hz, dB re the free field.
+TOPS_IN_A_ROW_WAVE_DB = {
+    5.0: (-7.36, -7.52, -7.85, -7.96),
+    0.02: (-5.19, -5.44, -5.60, -5.75),
+}
+
+
 @pytest.mark.parametrize("gap", [5.0, 0.02])
 def test_tops_in_a_row_are_one_wave_in_the_bands_that_add_in_energy(
     tmp_path: Path, gap: float
@@ -1431,9 +1461,7 @@ def test_tops_in_a_row_are_one_wave_in_the_bands_that_add_in_energy(
     # top's reflection takes off the incident wave's term what it would add: one wave,
     # in the bands that add in energy too. As two waves they read 6.5 to 9.4 dB above
     # the same bands in pressure; without the path over two lit edges, 4.2 to 5.7 dB
-    # above the free field. The two-dimensional wave calculation (validation/rows.py's)
-    # puts the slotted top at -5.2 to -5.8 dB from 63 to 500 Hz, and the 10 m top
-    # without the slot at -5.2 to -5.7 dB.
+    # above the free field.
     width = 5.0 if gap == 5.0 else 5.0 - gap / 2.0
     second = [
         [(x + width + gap, y, z) for x, y, z in quad]
@@ -1448,7 +1476,26 @@ def test_tops_in_a_row_are_one_wave_in_the_bands_that_add_in_energy(
         levels.append(edge_diffraction.whole_early_stage(room))
     pressure, energy = levels
     assert np.abs(energy[:4] - pressure[:4]).max() < 1.2, energy - pressure
-    assert -8.0 < min(pressure.min(), energy.min()) and max(pressure.max(), energy.max()) < -4.5
+    # From 63 to 500 Hz, in pressure and in energy, the level is the two-dimensional
+    # wave calculation's (validation/rows.py's fdtd and point_source, the scene on its
+    # 2 cm grid: the slot from 5.00 to 5.02 m) within 0.4 dB, the limit the rows module
+    # keeps to in free space (rows.LIMITS). The engine is within 0.09 dB of it over the
+    # two tops, and 0.22 to 0.36 dB above it over the slotted top (the 10 m top without
+    # the slot reads -5.17 to -5.68 dB there).
+    wave = np.array(TOPS_IN_A_ROW_WAVE_DB[gap])
+    for level in (pressure, energy):
+        np.testing.assert_allclose(level[:4], wave, atol=0.4)
+    # Above 500 Hz the level comes down towards the limit at grazing incidence of high
+    # frequencies (-8.51 and -6.18 dB, edge_diffraction.grazing_limit), which a
+    # centimetre above the tops it nears only slowly (the Fresnel parameter of edges 5 m
+    # apart is 0.04 at 8 kHz there): between that limit and the wave calculation's level
+    # at 500 Hz, to the same 0.4 dB. Main read -6.25 to -6.31 dB over the two tops from
+    # 1 to 8 kHz, 1.3 dB above that bound.
+    row = [(10.0, width), (10.0 + width + gap, width)]
+    limit = edge_diffraction.grazing_limit(row, listener[0] - source[0])
+    assert limit == pytest.approx(-8.51 if gap == 5.0 else -6.18, abs=0.01)
+    for level in (pressure, energy):
+        assert np.all(level[4:] > limit) and np.all(level[4:] < wave[3] + 0.4), level
 
 
 def _screen_from(x: float, y: float) -> list:
@@ -1698,8 +1745,8 @@ def test_three_screens_in_a_row_the_last_one_ending_beside_the_way_just_above_th
     # Three screens 5 m apart, the last one ending a centimetre beside the way, the
     # source and the listener 0.1 and 0.3 mm above the tops, within the reach of the
     # rays that test the paths over the edges (they start a tenth of a millimetre off
-    # them): the level is that 3 mm above them within 0.05 dB. The rays that test the
-    # path round the last screen's upright end start just off its corner, above the
+    # them): the level is that a millimetre above them within 0.05 dB. The rays that
+    # test the path round the last screen's upright end start just off its corner, above the
     # tops; from just inside the end, below them, the screens in front hid the path, and
     # the level was 1.5 dB lower at 63 Hz.
     quads = (
@@ -1708,7 +1755,11 @@ def test_three_screens_in_a_row_the_last_one_ending_beside_the_way_just_above_th
         + _screen_from(10.0, 0.01)
     )
     ends = np.array([[-10.0, 0.0, 0.0], [15.0, 0.0, 0.0]])
-    above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 3e-3]))
+    # A millimetre above the tops, not 3 mm: there the field itself is 0.1 dB higher at
+    # 8 kHz (a lone knife edge's field rises by 8.7 dB times the Fresnel parameter near
+    # its boundary, 0.013 for edges 5 m apart at 3 mm), as the engine has it, rising
+    # evenly with the height from a tenth of a millimetre up.
+    above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3]))
     for height in (1e-4, 3e-4):
         level = _past(tmp_path, quads, *(ends + [0.0, 0.0, height]))
         np.testing.assert_allclose(level, above, atol=0.05, err_msg=str(height))
@@ -1863,10 +1914,15 @@ def test_a_path_over_a_screens_top_does_not_reflect_off_a_roof_level_with_it_els
         for way, (a, b) in enumerate(((source, listener), (listener, source))):
             room = edge_diffraction._room(tmp_path, "level", quads, a, b, simulation)
             levels[height, way] = edge_diffraction.whole_early_stage(room)
+    # Up to 1 kHz: above it the field itself rises with the height, by 0.36 dB from 1 mm
+    # to a centimetre at 8 kHz in the engine, where the Fresnel parameter of edges 2 m
+    # apart is 0.07 (a lone knife edge's field rises by 8.7 dB times it near its
+    # boundary); from 1 to 2 mm in every band.
     for height in (1e-3, 2e-3):
         np.testing.assert_allclose(levels[height, 1], levels[height, 0], atol=0.01)
         for way in (0, 1):
-            np.testing.assert_allclose(levels[height, way], levels[1e-2, way], atol=within)
+            np.testing.assert_allclose(levels[height, way][:5], levels[1e-2, way][:5], atol=within)
+            np.testing.assert_allclose(levels[height, way], levels[1e-3, way], atol=within)
 
 
 @pytest.mark.parametrize(

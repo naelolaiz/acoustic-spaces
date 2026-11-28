@@ -1070,6 +1070,43 @@ def grazing_two_screens(folder: Path, heights=(1e-3, -1e-3)) -> dict:
     return out
 
 
+def grazing_limit(row, length: float, step: float = 2e-3, reach: float = 40.0) -> float:
+    """The level (dB re the free field) at grazing incidence, in the limit of high
+    frequencies, past a row of rigid thin screens and flat tops whose edges all lie on
+    the line from the source to the listener, ``length`` m apart. ``row`` lists each
+    screen or top as (distance from the source, width), the width 0 for a screen. There
+    the paraxial field is the same at every frequency, and a heat kernel marches it
+    across the line on a grid of ``step`` m out to ``reach`` m (lengths in units in which
+    the kernel spreads by one over a metre along the way): a screen keeps what is above
+    the line, a rigid top reflects it (the field and its image in the top's plane), and
+    past a top nothing is below the line. One screen gives 1/2, two give
+    1/4 + atan(sqrt(a c / (b (a + b + c)))) / (2 pi) (:func:`grazing_two_screens`)."""
+    z = np.arange(-reach, reach + step / 2.0, step)
+    size = 2 * len(z)
+
+    def spread(u, run: float) -> np.ndarray:
+        kernel = np.exp(-(z**2) / (2.0 * run)) * step / math.sqrt(2.0 * math.pi * run)
+        kernel = np.roll(np.concatenate([kernel, np.zeros_like(kernel)]), -(len(z) // 2))
+        return np.fft.irfft(np.fft.rfft(u, size) * np.fft.rfft(kernel), size)[: len(z)]
+
+    at, u = 0.0, None
+    for x, width in row:
+        u = (
+            np.exp(-(z**2) / (2.0 * x)) / math.sqrt(2.0 * math.pi * x)
+            if u is None
+            else spread(u, x - at)
+        )
+        u = np.where(z >= 0.0, u, 0.0)
+        at = x
+        if width > 0.0:
+            # The rigid top: the field and its image, which spread as one even field.
+            u = spread(u + u[::-1] - np.where(np.abs(z) < step / 2.0, u, 0.0), width)
+            u = np.where(z >= 0.0, u, 0.0)
+            at = x + width
+    u = spread(u, length - at)
+    return float(20.0 * np.log10(u[np.argmin(np.abs(z))] * math.sqrt(2.0 * math.pi * length)))
+
+
 #: Where the source stands above the plane of a 10 m block's top, 10 m before it, and
 #: the listener below it, 5 m past the block (m).
 BEHIND = ((0.01, -0.5), (0.01, -5.0), (0.5, -2.0), (2.0, -2.0))
